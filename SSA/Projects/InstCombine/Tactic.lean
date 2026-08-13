@@ -2,9 +2,9 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Dialects.LLVM.Syntax
-import SSA.Projects.InstCombine.LLVM.SimpSet
+import LeanMLIR.Dialects.LLVM.SimpSet
 import SSA.Projects.InstCombine.Refinement
-import SSA.Projects.InstCombine.ForStd
+import LeanMLIR.Util.ForStd
 import LeanMLIR.ErasedContext
 import LeanMLIR.Tactic
 

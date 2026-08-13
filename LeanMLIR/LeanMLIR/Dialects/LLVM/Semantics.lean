@@ -2,8 +2,8 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Util.Poison
-import SSA.Projects.InstCombine.ForStd
-import SSA.Projects.InstCombine.LLVM.SimpSet
+import LeanMLIR.Util.ForStd
+import LeanMLIR.Dialects.LLVM.SimpSet
 
 --TODO: are any of these imports actually needed in this file?
 import Mathlib.Tactic.Cases
