@@ -38,6 +38,20 @@ inductive MTy (φ : Nat)
   | vector (l: Nat) (elem: MTy φ) : MTy φ
   deriving DecidableEq, Inhabited, Lean.ToExpr
 
+/-! ### Type Formatting
+
+NOTE: stated on `MTy` and placed here, rather than on `(MetaLLVM φ).Ty` further
+down, because `MOp` carries an `MTy φ` and its `deriving Repr` needs these. -/
+
+def MTy.print : MTy φ → String
+  | .bitvec (.concrete w)  => s!"i{w}"
+  | .bitvec (.mvar ⟨i, _⟩) => s!"i$\{%{i}}"
+  | .vector length elem => s!"{print elem}×{length}"
+
+instance : ToString (MTy φ) := ⟨MTy.print⟩
+instance : Repr (MTy φ) where
+  reprPrec ty _ := s!"{ty}"
+
 /-! ### Operations -/
 
 /-- Homogeneous, unary operations -/
@@ -113,6 +127,9 @@ inductive MOp (φ : Nat) : Type
   | icmp    (c : IntPred) (w : Width φ) : MOp φ
   /-- Since the width of the const might not be known, we just store the value as an `Int` -/
   | const (w : Width φ) (val : ℤ) : MOp φ
+  /-- `llvm.mlir.poison`. Carries a full `MTy φ` rather than a `Width φ`, since
+  poison exists at every type, vectors included. -/
+  | poison (t : MTy φ) : MOp φ
 deriving Repr, DecidableEq, Inhabited, Lean.ToExpr
 
 def toStringWithFlags (op : MOp.BinaryOp) : String :=
@@ -155,6 +172,7 @@ instance : ToString (MOp 0) where
      | .select  _w => "select"
      | .icmp  _pred _w => "icmp"
      | .const w val => s!"\"llvm.mlir.constant\"() \{value = {val} : {w}}"
+     | .poison t => s!"\"llvm.mlir.poison\"() : () -> {t}"
 
 /-! ## Dialect -/
 
@@ -257,8 +275,10 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
     (udiv   : ∀ {φ ExactFlag} {w : Width φ},     motive (udiv w ExactFlag))
     (select : ∀ {φ} {w : Width φ},               motive (select w))
     (icmp   : ∀ {φ c} {w : Width φ},             motive (icmp c w))
-    (const  : ∀ {φ v} {w : Width φ},             motive (const w v)) :
+    (const  : ∀ {φ v} {w : Width φ},             motive (const w v))
+    (poison : ∀ {φ} {t : MTy φ},                 motive (poison t)) :
     ∀ {φ} (op : MOp φ), motive op
+  | _, .poison _   => poison
   | _, .neg _      => neg
   | _, .not _      => not
   | _, .trunc _ _ _  => trunc
@@ -306,6 +326,9 @@ namespace LLVM.Op
 
 @[match_pattern] abbrev icmp (c : IntPred)   : Nat → LLVM.Op  := MOp.icmp c ∘ .concrete
 @[match_pattern] abbrev const (w : Nat) (val : ℤ) : LLVM.Op        := MOp.const (.concrete w) val
+/-- Unlike its neighbours this takes a type rather than a width, since poison
+exists at vector types too. -/
+@[match_pattern] abbrev poison : LLVM.Ty → LLVM.Op                 := MOp.poison
 
 /- This operation is separate from the others because it takes in a flag: nneg. -/
 @[match_pattern] abbrev zext (w w': Nat) (flag : NonNegFlag := {nneg := false}) : LLVM.Op :=
@@ -353,6 +376,7 @@ instance : DialectToExpr LLVM where
 
 instance : ToString (MOp φ) where
   toString
+  | .poison _   => "poison"
   | .and _      => "and"
   | .or _ _     => "or"
   | .not _      => "not"
@@ -385,21 +409,11 @@ instance : ToString (MOp φ) where
 instance : ToString LLVM.Op := by unfold LLVM; infer_instance
 instance : Repr LLVM.Op     := by unfold LLVM; infer_instance
 
-/-! ### Type Formatting -/
-
-def MetaLLVM.printType : (MetaLLVM φ).Ty → String
-  | .bitvec (.concrete w)  => s!"i{w}"
-  | .bitvec (.mvar ⟨i, _⟩) => s!"i$\{%{i}}"
-  | .vector length elem => s!"{printType elem}×{length}"
-
-instance : ToString (MetaLLVM φ).Ty := ⟨MetaLLVM.printType⟩
-instance : Repr (MetaLLVM φ).Ty where
-  reprPrec ty _ := s!"{ty}"
-
 instance : ToString LLVM.Ty := by unfold LLVM; infer_instance
 instance : Repr LLVM.Ty     := by unfold LLVM; infer_instance
 
 def MetaLLVM.opName : (MetaLLVM φ).Op → String
+  | .poison _   => "llvm.mlir.poison"
   | .and _      => "llvm.and"
   | .or _ _     => "llvm.or"
   | .not _      => "llvm.not"
@@ -441,7 +455,7 @@ where
 
 instance : DialectPrint (MetaLLVM φ) where
   printOpName := MetaLLVM.opName
-  printTy := MetaLLVM.printType
+  printTy := MTy.print
   printAttributes := MetaLLVM.printAttributes
   dialectName := "llvm"
   printReturn _:= "llvm.return"
@@ -457,7 +471,7 @@ def MOp.sig : MOp φ → List (MTy φ)
   [.bitvec w, .bitvec w]
 | .unary w _ => [.bitvec w]
 | .select w => [.bitvec 1, .bitvec w, .bitvec w]
-| .const _ _ => []
+| .const _ _ | .poison _ => []
 
 @[simp, reducible]
 def MOp.UnaryOp.outTy (w : Width φ) : MOp.UnaryOp φ → MTy φ
@@ -472,6 +486,7 @@ def MOp.outTy : MOp φ → MTy φ
   .bitvec w
 | .unary w op => UnaryOp.outTy w op
 | .icmp _ _ => .bitvec 1
+| .poison t => t
 
 instance {φ} : DialectSignature (MetaLLVM φ) where
   signature op := ⟨op.sig, [], [op.outTy], .pure⟩
@@ -520,6 +535,11 @@ instance : TyDenote LLVM.Ty where
 @[simp_denote] lemma toType_vector (l : Nat) (e : LLVM.Ty) :
     TyDenote.toType (vector l e) = Vector (TyDenote.toType e) l := rfl
 
+/-- The poison value at a type; a vector is poison in every lane. -/
+def poison : (ty : LLVM.Ty) → TyDenote.toType ty
+  | bitvec _ => PoisonOr.poison
+  | vector l e => Vector.replicate l (poison e)
+
 /-- Coerce an integer into a type by splatting it across every lane. -/
 def ofInt (z : ℤ) : (ty : LLVM.Ty) → TyDenote.toType ty
   | bitvec w => .value <| BitVec.ofInt w z
@@ -549,6 +569,7 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
     (TyDenote.toType (β := LLVM.Ty) o.outTy) :=
   match o with
   | LLVM.Op.const _ val    => const? _ val
+  | LLVM.Op.poison t       => LLVM.Ty.poison t
   | LLVM.Op.copy _         =>               (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by simp [DialectSignature.sig, signature]))

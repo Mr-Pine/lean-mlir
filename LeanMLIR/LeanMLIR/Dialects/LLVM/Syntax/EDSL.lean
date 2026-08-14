@@ -36,6 +36,15 @@ def getOutputWidth (opStx : MLIR.AST.Op φ) (op : String) :
     | _ => throw <| .generic s!"The operation {op} must output an integer type"
   | _ => throw <| .generic s!"The operation {op} must have a single output"
 
+/-- The declared result type of a single-result operation. Unlike
+`getOutputWidth` this keeps the whole type, which poison needs since it exists
+at vector types too. -/
+def getOutputTy (opStx : MLIR.AST.Op φ) (op : String) :
+    MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty) := do
+  match opStx.res with
+  | res::[] => mkTy res.2
+  | _ => throw <| .generic s!"The operation {op} must have a single output"
+
 /-- Given a variable of arbitrary type, return its width.
 
 Now that `vector` is also modelled, this throws for any non-bitvec type.
@@ -141,6 +150,13 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     | "llvm.zext"   => mkExprOf <| zext (← unW) (← getOutputWidth opStx "zext") ⟨ opStx.hasAttr "nonNeg" ⟩
     | "llvm.sext"   => mkExprOf <| sext (← unW) (← getOutputWidth opStx "sext")
     | "llvm.trunc"  => mkExprOf <| trunc (← unW) (← getOutputWidth opStx "trunc") (← parseOverflowFlags opStx)
+    -- Poison
+    | "llvm.mlir.poison" =>
+      mkExprOf <| MOp.poison (← getOutputTy opStx "llvm.mlir.poison")
+    -- NOTE: LLVM's `undef` is weaker than `poison` (it may take a different
+    -- value at each use); modelling it as poison is the usual simplification.
+    | "llvm.mlir.undef" =>
+      mkExprOf <| MOp.poison (← getOutputTy opStx "llvm.mlir.undef")
     -- Constant
     | "llvm.mlir.constant" =>
       let ⟨val, ty⟩ ← opStx.getIntAttr "value"
@@ -213,6 +229,8 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
       let w := w.metaInstantiate vals
       let c := toExpr c
       mkApp2 (mkConst ``Op.icmp) c w
+    | .poison t =>
+      mkApp (mkConst ``Op.poison) (MetaLLVM.instantiateTy vals t)
     | .const w val =>
       let w := w.metaInstantiate vals
       let val := toExpr val
