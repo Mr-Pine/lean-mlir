@@ -37,7 +37,7 @@ has the wrong type.
 def getBoolAttr (attr : String) : Except TransformError Bool := do
   let .bool b ← op.getAttr attr
     | .error <| .generic s!"Expected attribute `{attr}` to be of type Bool, but found:\n\
-        \t{attr}"
+        \t{repr <| op.getAttr attr}"
   return b
 
 /--
@@ -56,7 +56,7 @@ def getIntAttr (attr : String) (coeBool : Bool := true) : Except TransformError 
 
   let .int val ty := attrVal
     | .error <| .generic s!"Expected attribute `{attr}` to be of type Int, but found:\n\
-        \t{attr}"
+        \t{repr attrVal}"
   return (val, ty)
 
 /--
@@ -68,7 +68,7 @@ has the wrong type.
 def getTypeAttr (attr : String) : Except TransformError (MLIRType φ) := do
   let .type ty ← op.getAttr attr
     | .error <| .generic s!"Expected attribute `{attr}` to be a type, but found a:\n\
-        \t{attr}"
+        \t{repr <| op.getAttr attr}"
   return (ty)
 
 /-! ## Arguments -/

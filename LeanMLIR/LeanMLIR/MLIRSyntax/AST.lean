@@ -231,8 +231,8 @@ partial def docAttrVal {φ} : AttrValue φ → Format
   | .dict d => docAttrDict d
   | .opaque_ dialect val => f!"#${dialect}<${val}>"
   | .opaqueElements dialect val ty => f!"#opaque< {dialect}, #{val}> : #{repr ty}"
-  | .dense v ty => panic "Dense"
-  | .array ty vs => panic "Array"
+  | .dense v ty => f!"dense<{docAttrVal v}> : {repr ty}"
+  | .array ty vs => f!"array<{repr ty}: {Format.join ((vs.map docAttrVal).intersperse ", ")}>"
   | .unit => "()"
 
 partial def docAttrEntry {φ} : AttrEntry φ → Format
