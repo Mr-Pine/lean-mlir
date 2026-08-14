@@ -126,7 +126,7 @@ def balancedBracketsFnEntry (ctx: ParserContext) (s: ParserState): ParserState :
 
 @[inline]
 def balancedBrackets : Parser :=
-   withAntiquot (mkAntiquot "balancedBrackets" `balancedBrackets) {
+   withAntiquot (mkAntiquot "balancedBrackets" `balanced_brackets) {
        fn := balancedBracketsFnEntry,
        info := mkAtomicInfo "balancedBrackets" : Parser
     }
@@ -368,8 +368,6 @@ info: MLIR.AST.MLIRType.float 32
 end Test
 
 -- === VECTOR TYPE ===
--- TODO: where is vector type syntax defined?
--- | TODO: fix bug that does not allow a trailing times.
 
 -- static-dim-list ::= decimal-literal (`x` decimal-literal)*
 -- | Encoding lookahead with notFollowedBy
@@ -382,24 +380,81 @@ macro_rules
 | `([static_dim_list| $[ $ns:num ]×* ]) => do
       quoteMList (ns.toList.map (⟨·.raw⟩)) (<- `(Nat))
 
--- vector-dim-list := (static-dim-list `x`)? (`[` static-dim-list `]` `x`)?
-declare_syntax_cat vector_dim_list
-syntax (static_dim_list "×" ("[" static_dim_list "]" "×")? )? : vector_dim_list
+-- vector-type         ::= `vector` `<` vector-dim-list vector-element-type `>`
+-- vector-dim-list     ::= (static-dim `x`)*
+-- static-dim          ::= decimal-literal | `[` decimal-literal `]`
 -- vector-element-type ::= float-type | integer-type | index-type
--- vector-type ::= `vector` `<` vector-dim-list vector-element-type `>`
-syntax "vector" "<" vector_dim_list mlir_type ">"  : mlir_type
+--
+-- A bracketed dimension `[n]` is *scalable*: the dimension has `n * vscale`
+-- elements, where `vscale` is a positive integer that is only known at run time
+-- (it is what SVE / RVV style targets set from the hardware vector length).
+-- So `vector<2x[4]xf32>` is a 2-D vector whose outer dimension holds 2 elements
+-- and whose inner dimension holds `4 * vscale` `f32`s.
+--
+-- MLIR writes these types without whitespace (`vector<2x[4]xf32>`), which Lean's
+-- tokenizer cannot split: `2x3` lexes as the numeral `2` followed by the
+-- identifier `x3`. We therefore capture the whole `<...>` with the
+-- `balancedBrackets` parser and decode the resulting string during macro
+-- expansion.
 
-set_option hygiene false in -- allow i to expand
+/-- A single vector dimension: `n` when `scalable = false`, `[n]` when `true`. -/
+private structure VectorDim where
+  size : Nat
+  scalable : Bool
+
+/-- Consume next interger, return in pair with remaining characters. -/
+private def takeNat (cs : List Char) : Option (Nat × List Char) :=
+  let ds := cs.takeWhile Char.isDigit
+  if ds.isEmpty then none
+  else some ((String.ofList ds).toNat!,
+             cs.dropWhile Char.isDigit)
+
+/-- Consume next dimension (scalable or not), return with remaining
+characters. -/
+private def takeDim : List Char → Option (VectorDim × List Char)
+  | '[' :: cs =>
+      match takeNat cs with
+      | some (n, ']' :: rest) => some (⟨n, true⟩, rest)
+      | _ => none
+  | cs => (takeNat cs).map fun (n, rest) => (⟨n, false⟩, rest)
+
+/-- Consume `dim (`x` dim)* `x`` , stopping as soon as the input no longer starts
+with a dimension followed by an `x`. The remainder is the element type. -/
+private partial def takeDims (cs : List Char) (acc : List VectorDim) :
+    List VectorDim × List Char :=
+  match takeDim cs with
+  | some (d, 'x' :: rest) => takeDims rest (d :: acc)
+  | _ => (acc.reverse, cs)
+
+/-- Elaborate the element type by handing its text back to `[mlir_type| ·]`. -/
+private def vectorElemType (s : String) (ref : Syntax) : MacroM (TSyntax `term) := do
+  if s.isEmpty then
+    Macro.throwErrorAt ref "vector type is missing an element type"
+  else if s.startsWith "!" then
+    `([mlir_type| ! $(Lean.quote (s.drop 1).toString):str])
+  else
+    `([mlir_type| $(mkIdent (.mkSimple s)):ident])
+
+syntax "vector" balancedBrackets : mlir_type
+
 macro_rules
-| `([mlir_type| vector < $[$fixed?:static_dim_list ×
-      $[ [ $scaled?:static_dim_list ] × ]? ]? $t:mlir_type  >]) => do
-      let fixedDims <- match fixed? with
-        | some s =>  `([static_dim_list| $s])
-        | none => `((@List.nil Nat))
-      let scaledDims <- match scaled? with
-        | some (some s) => `([static_dim_list| $s])
-        | _ => `((@List.nil Nat))
-      `(builtin.vector $fixedDims $scaledDims [mlir_type| $t])
+| `([mlir_type| vector $b:balancedBrackets ]) => do
+      let .atom _ val := b.raw[0]
+        | Macro.throwErrorAt b "expected balanced brackets to have atom"
+      -- strip the enclosing `<` and `>`
+      let (dims, rest) := takeDims ((val.toList.drop 1).dropLast) []
+      -- `builtin.vector` takes the fixed dimensions and the scalable ones as two
+      -- separate lists, so every scalable dimension has to be a trailing one.
+      let fixed := dims.takeWhile (!·.scalable)
+      let scaled := dims.dropWhile (!·.scalable)
+      if scaled.any (!·.scalable) then
+        Macro.throwErrorAt b s!"vector type '{val}' interleaves scalable and \
+          fixed dimensions, which cannot be represented as a fixed prefix \
+          followed by a scalable suffix"
+      let fixedDims ← quoteMList (fixed.map fun d => Lean.quote d.size) (← `(Nat))
+      let scaledDims ← quoteMList (scaled.map fun d => Lean.quote d.size) (← `(Nat))
+      let t ← vectorElemType (String.ofList rest) b
+      `(MLIRType.vector $fixedDims $scaledDims $t)
 
 syntax "tensor1d" : mlir_type
 macro_rules
@@ -421,15 +476,14 @@ private def staticDimList1 : List Nat := [static_dim_list| 1 × 2]
 /-- info: [1, 2] -/
 #guard_msgs in #reduce staticDimList1
 
+def vectorTy0: MLIRTy := [mlir_type| vector<i32>]        -- builtin.vector [] [] i32
+-- #print vectorTy0
 
---def vectorTy0 := [mlir_type| vector<i32>]
---#print vectorTy0
---
---def vectorTy1 := [mlir_type| vector<2 × i32>]
---#print vectorTy1
---
---def vectorTy2 := [mlir_type| vector<2 × 3 × [ 4 ] × i32>]
---#print vectorTy2
+def vectorTy1: MLIRTy := [mlir_type| vector<2xi32>]      -- builtin.vector [2] [] i32
+-- #print vectorTy1
+
+def vectorTy2: MLIRTy := [mlir_type| vector<2x3x[4]xi32>] -- builtin.vector [2,3] [4] i32
+-- #print vectorTy2
 
 private def tensor1dTest : MLIRTy := [mlir_type| tensor1d]
 

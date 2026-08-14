@@ -64,6 +64,7 @@ inductive MLIRType (φ : Nat) : Type _ where
   | tensor2d: MLIRType φ -- tensor of int values.
   | tensor4d: MLIRType φ -- tensor of int values.
   | index:  MLIRType φ
+  | vector (fixed scalable : List Nat) (elem : MLIRType φ) : MLIRType φ
   | undefined: String → MLIRType φ
   deriving Repr, DecidableEq
 
