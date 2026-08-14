@@ -692,8 +692,11 @@ macro_rules
 syntax "array<" mlir_type ":" sepBy(mlir_attr_val, ",") ">" : mlir_attr_val
 macro_rules
 | `([mlir_attr_val| array< $t:mlir_type : $xs ,* >]) => do
+    -- NOTE: fold from the right so the resulting list preserves source order;
+    -- a left fold with `::` would reverse it (which e.g. flips shufflevector
+    -- masks).
     let initList : TSyntax `term <- `([])
-    let vals: TSyntax `term <- xs.getElems.foldlM (init := initList) fun (xs: TSyntax `term) (x : TSyntax `mlir_attr_val) =>
+    let vals: TSyntax `term <- xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs: TSyntax `term) =>
       `([mlir_attr_val| $x] :: $xs)
     `(AttrValue.array [mlir_type| $t] $vals)
 
@@ -714,8 +717,10 @@ macro_rules
 
 macro_rules
 | `([mlir_attr_val| # $dialect:ident <$xs ,* > ]) => do
+  -- NOTE: fold from the right so the resulting list preserves source order,
+  -- as for `array<…>` above.
   let initList : TSyntax `term  <- `([])
-  let vals : TSyntax `term <- xs.getElems.foldlM (init := initList) fun (xs : TSyntax `term) (x : TSyntax `mlir_attr_val) =>
+  let vals : TSyntax `term <- xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs : TSyntax `term) =>
     `([mlir_attr_val| #$dialect<$x>] :: $xs)
   `(AttrValue.list $vals)
 
