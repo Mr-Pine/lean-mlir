@@ -443,7 +443,7 @@ macro_rules
         | Macro.throwErrorAt b "expected balanced brackets to have atom"
       -- strip the enclosing `<` and `>`
       let (dims, rest) := takeDims ((val.toList.drop 1).dropLast) []
-      -- `builtin.vector` takes the fixed dimensions and the scalable ones as two
+      -- `MLIRType.vector` takes the fixed dimensions and the scalable ones as two
       -- separate lists, so every scalable dimension has to be a trailing one.
       let fixed := dims.takeWhile (!·.scalable)
       let scaled := dims.dropWhile (!·.scalable)
@@ -476,14 +476,41 @@ private def staticDimList1 : List Nat := [static_dim_list| 1 × 2]
 /-- info: [1, 2] -/
 #guard_msgs in #reduce staticDimList1
 
-def vectorTy0: MLIRTy := [mlir_type| vector<i32>]        -- builtin.vector [] [] i32
--- #print vectorTy0
+-- 0-D vector: no dimensions at all
+private def vectorTy0 : MLIRTy := [mlir_type| vector<i32>]
+/-- info: MLIR.AST.MLIRType.vector [] [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
+#guard_msgs in #eval vectorTy0
 
-def vectorTy1: MLIRTy := [mlir_type| vector<2xi32>]      -- builtin.vector [2] [] i32
--- #print vectorTy1
+private def vectorTy1 : MLIRTy := [mlir_type| vector<2xi32>]
+/-- info: MLIR.AST.MLIRType.vector [2] [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
+#guard_msgs in #eval vectorTy1
 
-def vectorTy2: MLIRTy := [mlir_type| vector<2x3x[4]xi32>] -- builtin.vector [2,3] [4] i32
--- #print vectorTy2
+-- fixed dimensions followed by a scalable one
+private def vectorTy2 : MLIRTy := [mlir_type| vector<2x3x[4]xi32>]
+/-- info: MLIR.AST.MLIRType.vector [2, 3] [4] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
+#guard_msgs in #eval vectorTy2
+
+-- purely scalable, as SVE / RVV code tends to be written
+private def vectorTy3 : MLIRTy := [mlir_type| vector<[4]xf32>]
+/-- info: MLIR.AST.MLIRType.vector [] [4] (MLIR.AST.MLIRType.float 32) -/
+#guard_msgs in #eval vectorTy3
+
+private def vectorTy4 : MLIRTy := [mlir_type| vector<8xindex>]
+/-- info: MLIR.AST.MLIRType.vector [8] [] (MLIR.AST.MLIRType.index) -/
+#guard_msgs in #eval vectorTy4
+
+-- dialect types are accepted as element types
+private def vectorTy5 : MLIRTy := [mlir_type| vector<4x!shape.value>]
+/-- info: MLIR.AST.MLIRType.vector [4] [] (MLIR.AST.MLIRType.undefined "shape.value") -/
+#guard_msgs in #eval vectorTy5
+
+-- `MLIRType.vector` keeps fixed and scalable dimensions in separate lists, so a
+-- scalable dimension that is not trailing has to be rejected.
+/-- error: vector type '<[2]x4xf32>' interleaves scalable and fixed dimensions, which cannot be represented as a fixed prefix followed by a scalable suffix -/
+#guard_msgs in #check ([mlir_type| vector<[2]x4xf32>] : MLIRTy)
+
+/-- error: vector type is missing an element type -/
+#guard_msgs in #check ([mlir_type| vector<4x>] : MLIRTy)
 
 private def tensor1dTest : MLIRTy := [mlir_type| tensor1d]
 
@@ -655,6 +682,20 @@ syntax ident : mlir_attr_val
 syntax "[" sepBy(mlir_attr_val, ",") "]" : mlir_attr_val
 syntax "[mlir_attr_val|" mlir_attr_val "]" : term
 syntax "[mlir_attr_val_symbol|" mlir_attr_val_symbol "]" : term
+
+/-- DenseIntElementsAttr -/
+syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
+macro_rules
+| `([mlir_attr_val| dense< $v:mlir_attr_val > : $t:mlir_type]) =>
+    `(AttrValue.dense [mlir_attr_val| $v] [mlir_type| $t])
+
+syntax "array<" mlir_type ":" sepBy(mlir_attr_val, ",") ">" : mlir_attr_val
+macro_rules
+| `([mlir_attr_val| array< $t:mlir_type : $xs ,* >]) => do
+    let initList : TSyntax `term <- `([])
+    let vals: TSyntax `term <- xs.getElems.foldlM (init := initList) fun (xs: TSyntax `term) (x : TSyntax `mlir_attr_val) =>
+      `([mlir_attr_val| $x] :: $xs)
+    `(AttrValue.array [mlir_type| $t] $vals)
 
 macro_rules
 | `([mlir_attr_val| $$($x) ]) => `($x)

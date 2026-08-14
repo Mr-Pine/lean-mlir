@@ -64,6 +64,13 @@ inductive MLIRType (φ : Nat) : Type _ where
   | tensor2d: MLIRType φ -- tensor of int values.
   | tensor4d: MLIRType φ -- tensor of int values.
   | index:  MLIRType φ
+  /-- MLIR's `vector<…>` type. A `scalable` dimension of size `n` holds
+  `n * vscale` elements, where `vscale` is a positive integer that is only fixed
+  at run time by the target; MLIR brackets those dimensions, so
+  `vector<2x[4]xf32>` is `⟨fixed := [2], scalable := [4], elem := f32⟩`.
+  NOTE: MLIR marks scalability per dimension, so it also admits types such as
+  `vector<[2]x4xf32>` that this representation cannot express; the parser
+  rejects those rather than silently reordering the dimensions. -/
   | vector (fixed scalable : List Nat) (elem : MLIRType φ) : MLIRType φ
   | undefined: String → MLIRType φ
   deriving Repr, DecidableEq
@@ -103,6 +110,8 @@ inductive AttrValue where
   | dict: AttrDict -> AttrValue
   | opaque_: (dialect: String) -> (value: String) -> AttrValue
   | opaqueElements: (dialect: String) -> (value: String) -> (type: MLIRType φ) -> AttrValue
+  | dense: AttrValue -> MLIRType φ -> AttrValue
+  | array: MLIRType φ -> List AttrValue -> AttrValue
   | unit: AttrValue
 
 -- https://mlir.llvm.org/docs/LangRef/#attributes
@@ -222,6 +231,8 @@ partial def docAttrVal {φ} : AttrValue φ → Format
   | .dict d => docAttrDict d
   | .opaque_ dialect val => f!"#${dialect}<${val}>"
   | .opaqueElements dialect val ty => f!"#opaque< {dialect}, #{val}> : #{repr ty}"
+  | .dense v ty => panic "Dense"
+  | .array ty vs => panic "Array"
   | .unit => "()"
 
 partial def docAttrEntry {φ} : AttrEntry φ → Format
