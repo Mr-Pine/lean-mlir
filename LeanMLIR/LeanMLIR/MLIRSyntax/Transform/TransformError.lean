@@ -16,7 +16,7 @@ inductive TransformError
   | unsupportedUnaryOp
   | unsupportedBinaryOp (error : String)
   | unsupportedOp (error : String)
-  | unsupportedType
+  | unsupportedType {φ} (type: Option (MLIRType φ))
   | generic (error : String)
 
 namespace TransformError
@@ -32,9 +32,10 @@ instance : Repr (TransformError) where
         f!"Type mismatch: expected '{repr expected}', but 'name' has type '{repr got}'"
     | widthError expected got => f!"Type mismatch: {expected} ≠ {got}"
     | unsupportedUnaryOp => f!"Unsupported unary operation"
-    | unsupportedBinaryOp err => f!"Unsupported binary operation 's!{err}'"
-    | unsupportedOp err => f!"Unsupported operation 's!{err}'"
-    | unsupportedType => f!"Unsupported type"
+    | unsupportedBinaryOp err => f!"Unsupported binary operation '{err}'"
+    | unsupportedOp err => f!"Unsupported operation '{err}'"
+    | unsupportedType (some t) => f!"Unsupported type: {repr t}"
+    | unsupportedType none => f!"Unsupported type"
     | generic err => err
 
 end TransformError

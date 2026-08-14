@@ -66,7 +66,7 @@ instance : DialectParse TestDialect 0 where
   mkTy
     | .undefined "int" => return .int
     | .undefined "int2" => return .int2
-    | _ => throw .unsupportedType
+    | t => throw <| .unsupportedType (some t)
   isValidReturn _ stx := return (stx.name == "return")
   mkExpr Γ opStx := do
     let op : TestDialect.Op ← match opStx.name with

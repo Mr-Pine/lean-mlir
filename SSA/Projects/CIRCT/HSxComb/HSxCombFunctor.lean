@@ -165,22 +165,22 @@ def_denote for HSxComb where
 -- only need to sync with multiple inputs to the comb region (ideally variadic)
 
 def mkTy : MLIR.AST.MLIRType 0 → MLIR.AST.ExceptM HSxComb HSxComb.Ty
-  | MLIR.AST.MLIRType.undefined s => do
+  | t@(MLIR.AST.MLIRType.undefined s) => do
     match s.splitOn "_" with
     | ["Stream", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream (.bitvec w')
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["Stream2", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream2 (.bitvec w')
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["Stream2Token", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream2token (.bitvec w')
-      | _ => throw .unsupportedType
-    | _ => throw .unsupportedType
-  | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
+    | _ => throw <| .unsupportedType (some t)
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy HSxComb 0 where
   mkTy := mkTy

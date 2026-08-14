@@ -10,7 +10,7 @@ namespace RiscvMkExpr
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM RV64 RV64.Ty
   | MLIR.AST.MLIRType.undefined "i64" => do return .bv
   | MLIR.AST.MLIRType.undefined "riscv.reg" => do return .bv
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy RV64 0 where
   mkTy := mkTy

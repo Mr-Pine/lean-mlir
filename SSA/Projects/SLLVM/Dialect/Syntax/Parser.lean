@@ -17,7 +17,7 @@ private abbrev ReaderM := MLIR.AST.ReaderM SLLVM
 def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
   | .int .Signless w => return Ty.bitvec w.toConcrete
   | .undefined "ptr" => return Ty.ptr
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
 instance : TransformTy SLLVM 0 where
   mkTy := mkTy

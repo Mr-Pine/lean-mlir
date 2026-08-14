@@ -220,21 +220,21 @@ def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM DC DC.Ty
     | ["ValueStream", w] =>
       match w.toNat? with
       | some w' => return .valuestream w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (φ := 0) none
     | ["ValueStream2", w] =>
       match w.toNat? with
       | some w' => return .valuestream2 w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (φ := 0) none
     | ["ValueTokenStream", w] =>
     match w.toNat? with
       | some w' => return .valuetokenstream w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (φ := 0) none
     | ["VariadicValueTokenStream", w] =>
     match w.toNat? with
       | some w' => return .variadicvaluetokenstream w'
-      | _ => throw .unsupportedType
-    | _ => throw .unsupportedType
-  | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (φ := 0) none
+    | _ => throw <| .unsupportedType (φ := 0) none
+  | _ => throw <| .unsupportedType (φ := 0) none
 
 instance instTransformTy : MLIR.AST.TransformTy DC 0 where
   mkTy := mkTy

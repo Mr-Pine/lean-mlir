@@ -72,7 +72,7 @@ instance instPrint : DialectPrint Simple where
 instance : DialectParse Simple 0 where
   mkTy
   | .int .Signless 32 => return .int
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
   isValidReturn _Γ opStx := return opStx.name == "return"
 

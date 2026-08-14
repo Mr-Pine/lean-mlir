@@ -17,7 +17,7 @@ private abbrev ReaderM (φ) := AST.ReaderM (MetaLLVM φ)
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty)
   | MLIR.AST.MLIRType.int MLIR.AST.Signedness.Signless w => return .bitvec w
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : AST.TransformTy (MetaLLVM φ) φ := { mkTy }
 instance : AST.TransformTy (LLVM) 0 := { mkTy }

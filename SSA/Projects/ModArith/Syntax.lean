@@ -29,7 +29,7 @@ def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (ModArith q) (ModArith q).T
     return .modLike
   | MLIR.AST.MLIRType.int MLIR.AST.Signedness.Signless _ =>
     return .integer
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy (ModArith q) 0 where
   mkTy := mkTy

@@ -200,7 +200,7 @@ def_denote for DC where
 end Dialect
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM DC DC.Ty
-  | MLIR.AST.MLIRType.undefined s => do
+  | t@(MLIR.AST.MLIRType.undefined s) => do
     match s.splitOn "_" with
     | ["TokenStream"] =>
       return .tokenstream
@@ -209,21 +209,21 @@ def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM DC DC.Ty
     | ["ValueStream", w] =>
       match w.toNat? with
       | some w' => return .valuestream w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["ValueStream2", w] =>
       match w.toNat? with
       | some w' => return .valuestream2 w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["ValueTokenStream", w] =>
     match w.toNat? with
       | some w' => return .valuetokenstream w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["VariadicValueTokenStream", w] =>
     match w.toNat? with
       | some w' => return .variadicvaluetokenstream w'
-      | _ => throw .unsupportedType
-    | _ => throw .unsupportedType
-  | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
+    | _ => throw <| .unsupportedType (some t)
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy DC 0 where
   mkTy := mkTy

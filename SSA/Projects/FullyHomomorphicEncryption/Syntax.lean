@@ -22,7 +22,7 @@ def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (FHE q n) (FHE q n).Ty
     return .integer
   | MLIR.AST.MLIRType.index  => do
     return .index
-  | _ => throw .unsupportedType
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy (FHE q n) 0 where
   mkTy := mkTy

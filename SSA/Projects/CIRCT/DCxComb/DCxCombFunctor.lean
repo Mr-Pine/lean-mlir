@@ -170,7 +170,7 @@ def_denote for DCxComb where
 -- only need to sync with multiple inputs to the comb region (ideally variadic)
 
 def mkTy : MLIR.AST.MLIRType 0 → MLIR.AST.ExceptM DCxComb DCxComb.Ty
-  | MLIR.AST.MLIRType.undefined s => do
+  | t@(MLIR.AST.MLIRType.undefined s) => do
     match s.splitOn "_" with
     | ["TokenStream"] =>
       return .tokenstream
@@ -187,7 +187,7 @@ def mkTy : MLIR.AST.MLIRType 0 → MLIR.AST.ExceptM DCxComb DCxComb.Ty
     | ["ValueTokenStream", w] =>
       match w.toNat? with
       | some w' => return .valuetokenstream w'
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["VariadicValueTokenStream", w] =>
       match w.toNat? with
       | some w' => return .variadicvaluetokenstream w'

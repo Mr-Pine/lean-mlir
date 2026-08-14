@@ -275,22 +275,22 @@ defines a `[handshake_com| ...]` macro to hook into this generic syntax parser
 -/
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM Handshake Handshake.Ty
-  | MLIR.AST.MLIRType.undefined s => do
+  | t@(MLIR.AST.MLIRType.undefined s) => do
     match s.splitOn "_" with
     | ["Stream", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream (.bitvec w')
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["Stream2", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream2 (.bitvec w')
-      | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
     | ["Stream2Token", "BitVec", w] =>
       match w.toNat? with
       | some w' => return .stream2token (.bitvec w')
-      | _ => throw .unsupportedType
-    | _ => throw .unsupportedType
-  | _ => throw .unsupportedType
+      | _ => throw <| .unsupportedType (some t)
+    | _ => throw <| .unsupportedType (some t)
+  | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : MLIR.AST.TransformTy Handshake 0 where
   mkTy := mkTy
