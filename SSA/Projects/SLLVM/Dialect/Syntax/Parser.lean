@@ -9,15 +9,25 @@ import SSA.Projects.SLLVM.Dialect.Basic
 namespace LeanMLIR.SLLVM
 
 -- open Qq Lean Meta Elab.Term Elab Command
+open InstCombine (LLVM)
 open MLIR
 open MLIR.AST
 
 private abbrev ReaderM := MLIR.AST.ReaderM SLLVM
 
-def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
-  | .int .Signless w => return Ty.bitvec w.toConcrete
-  | .undefined "ptr" => return Ty.ptr
+/-- The `LLVM.Ty` (i.e. `SLLVM.Ty.arith`) counterpart of an MLIR type. Split
+out of `mkTy` because vectors recurse through their element type, which is again
+an arithmetic type, never `!ptr`. -/
+def mkArithTy : MLIRType 0 → ExceptM SLLVM LLVM.Ty
+  | .int .Signless w => return .bitvec w.toConcrete
+  -- A fixed-length 1-D vector, as in the LLVM dialect: scalable or
+  -- multi-dimensional vectors have no counterpart in `LLVM.Ty`.
+  | .vector [length] [] elemTy => return .vector length (← mkArithTy elemTy)
   | t => throw <| .unsupportedType (some t)
+
+def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
+  | .undefined "ptr" => return Ty.ptr
+  | t => Ty.arith <$> mkArithTy t
 
 instance : TransformTy SLLVM 0 where
   mkTy := mkTy
@@ -31,6 +41,50 @@ def getOutputWidth (opStx : MLIR.AST.Op 0) :
     | .int _ (.concrete w) => pure w
     | _ => throw <| .generic s!"The operation {opStx.name} must output an integer type"
   | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
+/-- The declared result type of a single-result operation, as an arithmetic
+(`LLVM.Ty`) type. Unlike `getOutputWidth` this keeps the whole type, which
+poison needs since it exists at vector types too. -/
+def getOutputArithTy (opStx : MLIR.AST.Op 0) :
+    ExceptM SLLVM LLVM.Ty := do
+  match opStx.res with
+  | res::[] => mkArithTy res.2
+  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
+/-- The declared type of the `i`-th operand of an operation. -/
+def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
+    ExceptM SLLVM LLVM.Ty := do
+  match opStx.args[i]? with
+  | some (_, t) => mkArithTy t
+  | none => throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
+
+/-- The integers inside a `dense<…>` attribute: either a single value (the
+splat form) or one per lane. -/
+def denseInts : MLIR.AST.AttrValue 0 → ExceptM SLLVM (List Int)
+  | .int v _ => return [v]
+  | .list xs => xs.mapM fun
+      | .int v _ => pure v
+      | _ => throw <| .generic "llvm.mlir.constant: dense elements must be integers"
+  | _ => throw <| .generic
+      "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
+
+/-- The integers of an `array<…>` attribute, as `llvm.shufflevector` writes its
+mask. -/
+def arrayInts (opStx : MLIR.AST.Op 0) (attr : String) :
+    ExceptM SLLVM (List Int) := do
+  let some (.array _ els) := opStx.getAttr? attr
+    | throw <| .generic s!"{opStx.name}: expected an `array<…>` attribute `{attr}`"
+  els.mapM fun
+    | .int v _ => pure v
+    | _ => throw <| .generic s!"{opStx.name}: `{attr}` must hold integers"
+
+/-- The lane count of a `vector<n x i64>` result, which is the shape the AVX-512
+IFMA intrinsics have. -/
+def getVpmaddLanes (opStx : MLIR.AST.Op 0) (op : String) :
+    ExceptM SLLVM Nat := do
+  let .vector l (.bitvec 64) ← getOutputArithTy opStx
+    | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
+  return l
 
 /-- Given a variable of arbitrary type, return its width.
 
@@ -47,6 +101,7 @@ def parseOverflowFlags (op : AST.Op 0) : ReaderM LLVM.NoWrapFlags :=
   | .some y => match y with
     | .opaque_ "llvm.overflow" "nsw" => return ⟨true, false⟩
     | .opaque_ "llvm.overflow" "nuw" => return ⟨false, true⟩
+    | .opaque_ "llvm.overflow" "none" => return ⟨false, false⟩
     | .list [.opaque_ "llvm.overflow" "nuw", .opaque_ "llvm.overflow" "nsw"]
     | .list [.opaque_ "llvm.overflow" "nsw", .opaque_ "llvm.overflow" "nuw"] =>
         return ⟨true, true⟩
@@ -75,6 +130,19 @@ instance : DialectParse SLLVM 0 where
   let getOutputWidth := getOutputWidth opStx
 
   let mkExprOf := opStx.mkExprOf (args? := args) Γ
+
+  /- LLVM's binary arithmetic is elementwise on vectors, so the same op name
+     builds either the scalar or the lane-wise operation depending on what its
+     operands are. Note that this is only used for the *pure* binary operations;
+     divisions and remainders keep their scalar, impure SLLVM treatment. -/
+  let mkBinary (bop : InstCombine.MOp.BinaryOp) :
+      ReaderM (Σ eff returnTy, Expr SLLVM Γ eff returnTy) := do
+    let args ← args.assumeArity 2
+    match args[0].1 with
+    | Ty.bitvec w => mkExprOf <| Op.arith (.binary w bop)
+    | Ty.arith (.vector l (.bitvec (.concrete w))) => mkExprOf <| Op.vectorBinary l w bop
+    | t => throw <| .generic s!"llvm.{bop}: expected bitvector or vector operands, found {t}"
+
   match opStx.name with
     -- new SLLVM operations
     | "ptr.add" => mkExprOf <| .ptradd
@@ -93,19 +161,19 @@ instance : DialectParse SLLVM 0 where
         let w ← getIntWidth args[1]
         mkExprOf <| Op.select w
     -- Binary Operations
-    | "llvm.and"      => mkExprOf <| Op.and (← binW)
-    | "llvm.or"       => mkExprOf <| Op.or (← binW) ⟨opStx.hasAttr "isDisjoint"⟩
-    | "llvm.xor"      => mkExprOf <| Op.xor (← binW)
+    | "llvm.and"      => mkBinary .and
+    | "llvm.or"       => mkBinary (.or ⟨opStx.hasAttr "isDisjoint"⟩)
+    | "llvm.xor"      => mkBinary .xor
     | "llvm.urem"     => mkExprOf <| Op.urem (← binW)
     | "llvm.srem"     => mkExprOf <| Op.srem (← binW)
-    | "llvm.lshr"     => mkExprOf <| Op.lshr (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.ashr"     => mkExprOf <| Op.ashr (← binW) ⟨opStx.hasAttr "isExact"⟩
+    | "llvm.lshr"     => mkBinary (.lshr ⟨opStx.hasAttr "isExact"⟩)
+    | "llvm.ashr"     => mkBinary (.ashr ⟨opStx.hasAttr "isExact"⟩)
     | "llvm.sdiv"     => mkExprOf <| Op.sdiv (← binW) ⟨opStx.hasAttr "isExact"⟩
     | "llvm.udiv"     => mkExprOf <| Op.udiv (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.shl"      => mkExprOf <| Op.shl (← binW) (← parseOverflowFlags opStx)
-    | "llvm.add"      => mkExprOf <| Op.add (← binW) (← parseOverflowFlags opStx)
-    | "llvm.mul"      => mkExprOf <| Op.mul (← binW) (← parseOverflowFlags opStx)
-    | "llvm.sub"      => mkExprOf <| Op.sub (← binW) (← parseOverflowFlags opStx)
+    | "llvm.shl"      => mkBinary (.shl (← parseOverflowFlags opStx))
+    | "llvm.add"      => mkBinary (.add (← parseOverflowFlags opStx))
+    | "llvm.mul"      => mkBinary (.mul (← parseOverflowFlags opStx))
+    | "llvm.sub"      => mkBinary (.sub (← parseOverflowFlags opStx))
     | "llvm.icmp.eq"  => mkExprOf <| Op.icmp .eq (← binW)
     | "llvm.icmp.ne"  => mkExprOf <| Op.icmp .ne (← binW)
     | "llvm.icmp.ugt" => mkExprOf <| Op.icmp .ugt (← binW)
@@ -124,13 +192,53 @@ instance : DialectParse SLLVM 0 where
     | "llvm.zext"   => mkExprOf <| Op.zext (← unW) (← getOutputWidth) ⟨ opStx.hasAttr "nonNeg" ⟩
     | "llvm.sext"   => mkExprOf <| Op.sext (← unW) (← getOutputWidth)
     | "llvm.trunc"  => mkExprOf <| Op.trunc (← unW) (← getOutputWidth) (← parseOverflowFlags opStx)
+    -- Poison
+    | "llvm.mlir.poison" =>
+      mkExprOf <| Op.poison (← getOutputArithTy opStx)
+    -- NOTE: LLVM's `undef` is weaker than `poison` (it may take a different
+    -- value at each use); modelling it as poison is the usual simplification.
+    | "llvm.mlir.undef" =>
+      mkExprOf <| Op.poison (← getOutputArithTy opStx)
     -- Constant
+    -- NOTE: dispatch on the *result* type rather than the attribute's type: the
+    -- two must agree in MLIR, but only the former is what `mkExprOf` will use.
     | "llvm.mlir.constant" => do
-      let ⟨val, ty⟩ ← opStx.getIntAttr "value"
-      let opTy ← mkTy ty
-      let Ty.bitvec w := opTy
-        | throw <| .generic s!"Expected a `bitvec _`, but found: {opTy}"
-      mkExprOf <| Op.const w val
+      match ← getOutputArithTy opStx with
+      | LLVM.Ty.bitvec w =>
+        let ⟨val, _⟩ ← opStx.getIntAttr "value"
+        mkExprOf <| Op.const w val
+      | t =>
+        let some (.dense v _) := opStx.getAttr? "value"
+          | throw <| .generic
+              "llvm.mlir.constant: a non-scalar constant needs a `dense<…>` value"
+        mkExprOf <| Op.constDense t (← denseInts v)
+    -- Vector operations
+    | "llvm.insertelement" =>
+      let .vector l elem ← getOutputArithTy opStx
+        | throw <| .generic "llvm.insertelement: result must be a vector"
+      let .bitvec (.concrete idxW) ← getArgArithTy opStx 2
+        | throw <| .generic "llvm.insertelement: index must be an integer"
+      mkExprOf <| Op.insertelement elem l idxW
+    | "llvm.shufflevector" =>
+      let .vector l elem ← getArgArithTy opStx 0
+        | throw <| .generic "llvm.shufflevector: operands must be vectors"
+      mkExprOf <| Op.shufflevector elem l (← arrayInts opStx "mask")
+    -- AVX-512 IFMA, as the x86vector dialect spells it
+    | "x86vector.avx512.intr.vpmadd52l.uq.512" =>
+      mkExprOf <| Op.vpmadd52 false (← getVpmaddLanes opStx opStx.name)
+    | "x86vector.avx512.intr.vpmadd52h.uq.512" =>
+      mkExprOf <| Op.vpmadd52 true (← getVpmaddLanes opStx opStx.name)
+    -- ... and as a direct call to the LLVM intrinsic, which is how the same
+    -- source lowers when the x86vector dialect is not used.
+    | "llvm.call" =>
+      let some (.symbol callee) := opStx.getAttr? "callee"
+        | throw <| .generic "llvm.call: expected a `callee` symbol attribute"
+      match callee with
+      | "x86_avx512_vpmadd52l_uq_512" =>
+        mkExprOf <| Op.vpmadd52 false (← getVpmaddLanes opStx callee)
+      | "x86_avx512_vpmadd52h_uq_512" =>
+        mkExprOf <| Op.vpmadd52 true (← getVpmaddLanes opStx callee)
+      | _ => throw <| .unsupportedOp s!"llvm.call to {callee}"
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 
