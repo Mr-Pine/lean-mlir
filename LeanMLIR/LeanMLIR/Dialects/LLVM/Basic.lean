@@ -35,6 +35,7 @@ abbrev Width φ := ConcreteOrMVar Nat φ
 
 inductive MTy (φ : Nat)
   | bitvec (w : Width φ) : MTy φ
+  | vector (l: Nat) (elem: MTy φ) : MTy φ
   deriving DecidableEq, Inhabited, Lean.ToExpr
 
 /-! ### Operations -/
@@ -389,6 +390,7 @@ instance : Repr LLVM.Op     := by unfold LLVM; infer_instance
 def MetaLLVM.printType : (MetaLLVM φ).Ty → String
   | .bitvec (.concrete w)  => s!"i{w}"
   | .bitvec (.mvar ⟨i, _⟩) => s!"i$\{%{i}}"
+  | .vector length elem => s!"{printType elem}×{length}"
 
 instance : ToString (MetaLLVM φ).Ty := ⟨MetaLLVM.printType⟩
 instance : Repr (MetaLLVM φ).Ty where
@@ -483,31 +485,55 @@ namespace LLVM.Ty
 @[match_pattern] abbrev bitvec (w : Nat) : LLVM.Ty :=
   MTy.bitvec (.concrete w)
 
+/-- As for `bitvec`: ascribing `LLVM.Ty` (rather than leaving the `MTy φ` that
+`MTy.vector` infers) is what lets instance search find the `LLVM.Ty` instances,
+since `LLVM.Ty` is a `Dialect` projection and not reducibly `MTy 0`. -/
+@[match_pattern] abbrev vector (l : Nat) (e : LLVM.Ty) : LLVM.Ty :=
+  MTy.vector l e
+
+/-- The total number of bits, flattening vectors. -/
 def width : LLVM.Ty → Nat
   | bitvec w => w
+  | vector l e => l * width e
 
+/-- NOTE: this used to be stated for every `ty`, which held while `bitvec` was
+the only constructor. It is false for vectors: `width` flattens them, so
+`.bitvec (width (.vector 4 (.bitvec 32))) = .bitvec 128 ≠ .vector 4 (.bitvec 32)`. -/
 @[simp]
-theorem width_eq (ty : LLVM.Ty) : .bitvec (width ty) = ty := by
-  rcases ty with ⟨w|i⟩
-  · rfl
-  · exact i.elim0
+theorem width_eq (w : Nat) : .bitvec (width (.bitvec w)) = LLVM.Ty.bitvec w := rfl
 
 @[simp] -- TODO: this def should not live here
 def BitVec.width {n : Nat} (_ : BitVec n) : Nat := n
 
+/-- The denotation of an LLVM type. A vector denotes lane-wise, so poison is
+tracked per lane exactly as it is in LLVM: `<4 x i32>` may be poison in one lane
+while the others hold values. -/
+def denote : LLVM.Ty → Type
+  | bitvec w => LLVM.IntW w
+  | vector l e => Vector (denote e) l
+
 instance : TyDenote LLVM.Ty where
-  toType := fun
-    | bitvec w => LLVM.IntW w
+  toType := denote
 
 @[simp_denote] lemma toType_bitvec : TyDenote.toType (Ty.bitvec w) = LLVM.IntW w := rfl
 
+@[simp_denote] lemma toType_vector (l : Nat) (e : LLVM.Ty) :
+    TyDenote.toType (vector l e) = Vector (TyDenote.toType e) l := rfl
+
+/-- Coerce an integer into a type by splatting it across every lane. -/
+def ofInt (z : ℤ) : (ty : LLVM.Ty) → TyDenote.toType ty
+  | bitvec w => .value <| BitVec.ofInt w z
+  | vector l e => Vector.replicate l (ofInt z e)
+
 instance (ty : LLVM.Ty) : Coe ℤ (TyDenote.toType ty) where
-  coe z := match ty with
-    | bitvec w => .value <| BitVec.ofInt w z
+  coe z := ofInt z ty
+
+def inhabitant : (ty : LLVM.Ty) → TyDenote.toType ty
+  | bitvec _ => (default : LLVM.IntW _)
+  | vector l e => Vector.replicate l (inhabitant e)
 
 instance (ty : LLVM.Ty) : Inhabited (TyDenote.toType ty) where
-  default := match ty with
-    | bitvec _ => (default : LLVM.IntW _)
+  default := inhabitant ty
 
 -- TODO: this instance should not live here
 instance : Repr (BitVec n) where

@@ -17,6 +17,11 @@ private abbrev ReaderM (φ) := AST.ReaderM (MetaLLVM φ)
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty)
   | MLIR.AST.MLIRType.int MLIR.AST.Signedness.Signless w => return .bitvec w
+  -- A fixed-length 1-D vector. Scalable dimensions have no counterpart in `MTy`
+  -- (there is no `vscale`), and multi-dimensional vectors would have to nest,
+  -- so both fall through to `unsupportedType` below.
+  | MLIR.AST.MLIRType.vector [length] [] elemTy => do
+      return .vector length (← mkTy elemTy)
   | t => throw <| .unsupportedType (some t)
 
 instance instTransformTy : AST.TransformTy (MetaLLVM φ) φ := { mkTy }
@@ -33,11 +38,11 @@ def getOutputWidth (opStx : MLIR.AST.Op φ) (op : String) :
 
 /-- Given a variable of arbitrary type, return its width.
 
-This relies on the fact that `bitvec _` is the only type currently modelled.
-In future, this might start throwing errors, if the type is not a bitvec.
+Now that `vector` is also modelled, this throws for any non-bitvec type.
 -/
-def getVarWidth {Γ : Ctxt (MetaLLVM φ).Ty} : (Σ t, Γ.Var t) → Width φ
-  | ⟨.bitvec w, _⟩ => w
+def getVarWidth {Γ : Ctxt (MetaLLVM φ).Ty} : (Σ t, Γ.Var t) → ReaderM φ (Width φ)
+  | ⟨.bitvec w, _⟩ => return w
+  | ⟨_, _⟩ => throw <| .generic "expected an operand of bitvector type"
 
 def parseOverflowFlags (op : AST.Op φ) : ReaderM φ LLVM.NoWrapFlags := do
   match op.getAttr? "overflowFlags" with
@@ -86,19 +91,19 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
   let binW : AST.ReaderM (MetaLLVM φ) (Width φ) := do
   -- ^^ NOTE: `binW` is bound with := rather than ← on purpose, to ensure laziness
     let args ← args.assumeArity 2
-    return getVarWidth args[0]
+    getVarWidth args[0]
 
   /- `unW` is the (lazily computed) width, assuming an unary operation -/
   let unW := do
     let args ← args.assumeArity 1
-    return getVarWidth args[0]
+    getVarWidth args[0]
 
   let mkExprOf := opStx.mkExprOf (args? := args) Γ
   match opStx.name with
     -- Ternary Operations
     | "llvm.select" =>
         let args ← args.assumeArity 3
-        let w := getVarWidth args[1]
+        let w ← getVarWidth args[1]
         mkExprOf <| select w
     -- Binary Operations
     | "llvm.and"      => mkExprOf <| and (← binW)
@@ -139,7 +144,8 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     -- Constant
     | "llvm.mlir.constant" =>
       let ⟨val, ty⟩ ← opStx.getIntAttr "value"
-      let opTy@(.bitvec w) ← mkTy ty
+      let .bitvec w ← mkTy ty
+        | throw <| .unsupportedType (some ty)
       mkExprOf <| const w val
     -- Fallback
     | opName => throw <| .unsupportedOp opName
@@ -165,10 +171,16 @@ instance : AST.TransformReturn LLVM 0 := { mkReturn }
 -/
 
 open InstCombine LLVM Qq in
+/-- Instantiate the width metavariables of a `MetaLLVM φ` type, producing the
+`Expr` of the corresponding concrete `LLVM` type. Split out of `instantiate`
+below because vectors make it recursive. -/
+private def MetaLLVM.instantiateTy (vals : Vector Expr φ) : MTy φ → Expr
+  | .bitvec w => mkApp (mkConst ``Ty.bitvec) <| w.metaInstantiate vals
+  | .vector l e => mkApp2 (mkConst ``Ty.vector) (toExpr l) (instantiateTy vals e)
+
+open InstCombine LLVM Qq in
 def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM φ) q(LLVM) where
-  mapTy := fun
-  | .bitvec w =>
-    mkApp (mkConst ``Ty.bitvec) <| w.metaInstantiate vals
+  mapTy := MetaLLVM.instantiateTy vals
   mapOp :=
     fun
     | .binary w binOp =>

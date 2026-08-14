@@ -172,6 +172,13 @@ def CliTest.eval (test : CliTest) (values : Vector ℤ test.context.length)
 -/
 
 open LLVM.Ty in
+/-- Build a value of type `t` out of an optional integer (`none` being poison),
+splatting it across every lane of a vector. -/
+def InstCombine.mkValue (val : Option Int) : (t : LLVM.Ty) → TyDenote.toType t
+  | bitvec w => PoisonOr.ofOption <| Option.map (BitVec.ofInt w) val
+  | MTy.vector n e => Vector.replicate n (mkValue val e)
+
+open LLVM.Ty in
 def InstCombine.mkValuation (ctxt : Context)
   (values : List.Vector (Option Int) ctxt.length): Ctxt.Valuation ctxt :=
 match ctxt, values with
@@ -179,11 +186,7 @@ match ctxt, values with
   | ⟨ty::tys⟩, ⟨val::vals,hlen⟩ =>
     let valsVec : List.Vector (Option Int) tys.length := ⟨vals,by aesop⟩
     let valuation' := mkValuation tys valsVec
-    match ty with
-      | bitvec w =>
-        let newTy : ⟦bitvec w⟧ :=
-          PoisonOr.ofOption <| Option.map (BitVec.ofInt w) val
-        Ctxt.Valuation.cons newTy valuation'
+    Ctxt.Valuation.cons (InstCombine.mkValue val ty) valuation'
 
 def ConcreteCliTest.eval (test : ConcreteCliTest)
     (values : List.Vector (Option Int) test.context.length) :
@@ -214,10 +217,16 @@ def ConcreteCliTest.printSignature (test : ConcreteCliTest) : String :=
   s!"{test.context.toList.reverse} → {test.ty}"
 
 open LLVM.Ty in
-instance {test : ConcreteCliTest} : ToString (toType test.ty) where
-  toString :=
-    match test.ty with
-    | bitvec w => inferInstanceAs (ToString (PoisonOr <| BitVec w)) |>.toString
+/-- Printing follows the denotation: a vector prints as its lanes. -/
+def InstCombine.toStringOf : (t : LLVM.Ty) → ToString (TyDenote.toType t)
+  | bitvec w => inferInstanceAs (ToString (PoisonOr <| BitVec w))
+  | MTy.vector _ e =>
+      let inst := toStringOf e
+      ⟨fun v => "[" ++ String.intercalate ", " (v.toList.map inst.toString) ++ "]"⟩
+
+open LLVM.Ty in
+instance {test : ConcreteCliTest} : ToString (toType test.ty) :=
+  InstCombine.toStringOf test.ty
 
 -- Define an attribute to add up all LLVM tests
 -- https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/.E2.9C.94.20Stateful.2FAggregating.20Macros.3F/near/301067121

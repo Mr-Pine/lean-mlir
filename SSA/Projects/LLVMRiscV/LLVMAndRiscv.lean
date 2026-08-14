@@ -262,6 +262,8 @@ def mkExpr (Γ : Ctxt _) (opStx : MLIR.AST.Op 0) :
           | _ => throw <| .generic s!"A cast operation must output an integer type"
         | _ => throw <| .generic s!"A cast operation must only have one return type"
       | .llvm (.bitvec w) => mkExprOf <| (.castLLVM  w.toConcrete)
+      | .llvm _ =>
+          throw <| .generic s!"A cast operation must have a scalar bitvector operand"
   else
     let llvmParse := InstcombineTransformDialect.mkExpr (ctxtTransformToLLVM  Γ) opStx (← read)
     match llvmParse with
