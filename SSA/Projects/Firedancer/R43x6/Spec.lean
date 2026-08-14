@@ -59,11 +59,14 @@ theorem pl_add_shift_ph (a b : ℕ) : pl a b + 2^43 * ph a b = a * b := by
 theorem pl_lt (a b : ℕ) : pl a b < 2^52 :=
   Nat.mod_lt _ (by norm_num)
 
+/-- The product of two unreduced limbs fits in 94 bits. -/
+theorem mul_limbs_lt {a b : ℕ} (ha : a < 2^47) (hb : b < 2^47) : a * b < 2^94 := by
+  calc a * b ≤ 2^47 * b := Nat.mul_le_mul_right _ (Nat.le_of_lt ha)
+  _ < 2^47 * 2^47 := by omega
+  _ = 2^94 := by norm_num
+
 theorem ph_lt {a b : ℕ} (ha : a < 2^47) (hb : b < 2^47) : ph a b < 2^51 := by
-  have hab : a * b < 2^94 := by
-    calc a * b ≤ 2^47 * b := Nat.mul_le_mul_right _ (Nat.le_of_lt ha)
-    _ < 2^47 * 2^47 := by omega
-    _ = 2^94 := by norm_num
+  have hab : a * b < 2^94 := mul_limbs_lt ha hb
   simp only [ph]
   omega
 
