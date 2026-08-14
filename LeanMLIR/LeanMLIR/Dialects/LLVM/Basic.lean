@@ -134,6 +134,19 @@ inductive MOp (φ : Nat) : Type
   the same reason `poison` does. `vals` is either a single value (MLIR's splat
   form, `dense<0>`) or one value per lane (`dense<[1, 2, 3]>`). -/
   | constDense (t : MTy φ) (vals : List Int) : MOp φ
+  /-- `llvm.insertelement` on a `vector l elem`, with an `idxW`-wide index. -/
+  | insertelement (elem : MTy φ) (l : Nat) (idxW : Width φ) : MOp φ
+  /-- `llvm.shufflevector` over two `vector l elem` operands. The mask is an
+  attribute rather than an operand, so the op carries it; its length is the
+  length of the result. -/
+  | shufflevector (elem : MTy φ) (l : Nat) (mask : List Int) : MOp φ
+  /-- The AVX-512 IFMA intrinsics `x86_avx512_vpmadd52{l,h}_uq_512`, reached
+  through `llvm.call`. `hi` selects the high variant. -/
+  | vpmadd52 (hi : Bool) (l : Nat) : MOp φ
+  /-- A binary operation applied lane-wise to two `vector l (bitvec w)`
+  operands. One constructor covers every `BinaryOp`, as LLVM's arithmetic is
+  elementwise on vectors. -/
+  | vectorBinary (l : Nat) (w : Width φ) (op : MOp.BinaryOp) : MOp φ
 deriving Repr, DecidableEq, Inhabited, Lean.ToExpr
 
 def toStringWithFlags (op : MOp.BinaryOp) : String :=
@@ -178,6 +191,10 @@ instance : ToString (MOp 0) where
      | .const w val => s!"\"llvm.mlir.constant\"() \{value = {val} : {w}}"
      | .poison t => s!"\"llvm.mlir.poison\"() : () -> {t}"
      | .constDense t vals => s!"\"llvm.mlir.constant\"() \{value = dense<{vals}> : {t}}"
+     | .insertelement .. => "\"llvm.insertelement\""
+     | .shufflevector .. => "\"llvm.shufflevector\""
+     | .vpmadd52 hi _ => if hi then "\"llvm.call\" vpmadd52huq" else "\"llvm.call\" vpmadd52luq"
+     | .vectorBinary _ _ op => s!"\"llvm.{op}\""
 
 /-! ## Dialect -/
 
@@ -282,10 +299,18 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
     (icmp   : ∀ {φ c} {w : Width φ},             motive (icmp c w))
     (const  : ∀ {φ v} {w : Width φ},             motive (const w v))
     (poison : ∀ {φ} {t : MTy φ},                 motive (poison t))
-    (constDense : ∀ {φ vs} {t : MTy φ},          motive (constDense t vs)) :
+    (constDense : ∀ {φ vs} {t : MTy φ},          motive (constDense t vs))
+    (insertelement : ∀ {φ l} {e : MTy φ} {w : Width φ}, motive (insertelement e l w))
+    (shufflevector : ∀ {φ l m} {e : MTy φ},      motive (shufflevector e l m))
+    (vpmadd52 : ∀ {φ hi l},                      motive (φ := φ) (vpmadd52 hi l))
+    (vectorBinary : ∀ {φ l o} {w : Width φ},     motive (vectorBinary l w o)) :
     ∀ {φ} (op : MOp φ), motive op
   | _, .poison _   => poison
   | _, .constDense ..  => constDense
+  | _, .insertelement .. => insertelement
+  | _, .shufflevector .. => shufflevector
+  | _, .vpmadd52 ..    => vpmadd52
+  | _, .vectorBinary .. => vectorBinary
   | _, .neg _      => neg
   | _, .not _      => not
   | _, .trunc _ _ _  => trunc
@@ -337,6 +362,13 @@ namespace LLVM.Op
 exists at vector types too. -/
 @[match_pattern] abbrev poison : LLVM.Ty → LLVM.Op                 := MOp.poison
 @[match_pattern] abbrev constDense : LLVM.Ty → List Int → LLVM.Op  := MOp.constDense
+@[match_pattern] abbrev insertelement (e : LLVM.Ty) (l w : Nat) : LLVM.Op :=
+  MOp.insertelement e l (.concrete w)
+@[match_pattern] abbrev shufflevector : LLVM.Ty → Nat → List Int → LLVM.Op :=
+  MOp.shufflevector
+@[match_pattern] abbrev vpmadd52 : Bool → Nat → LLVM.Op := MOp.vpmadd52
+@[match_pattern] abbrev vectorBinary (l w : Nat) (op : MOp.BinaryOp) : LLVM.Op :=
+  MOp.vectorBinary l (.concrete w) op
 
 /- This operation is separate from the others because it takes in a flag: nneg. -/
 @[match_pattern] abbrev zext (w w': Nat) (flag : NonNegFlag := {nneg := false}) : LLVM.Op :=
@@ -386,6 +418,10 @@ instance : ToString (MOp φ) where
   toString
   | .poison _   => "poison"
   | .constDense ..  => "constant"
+  | .insertelement .. => "insertelement"
+  | .shufflevector .. => "shufflevector"
+  | .vpmadd52 ..    => "vpmadd52"
+  | .vectorBinary _ _ op => toString op
   | .and _      => "and"
   | .or _ _     => "or"
   | .not _      => "not"
@@ -424,6 +460,13 @@ instance : Repr LLVM.Ty     := by unfold LLVM; infer_instance
 def MetaLLVM.opName : (MetaLLVM φ).Op → String
   | .poison _   => "llvm.mlir.poison"
   | .constDense ..  => "llvm.mlir.constant"
+  | .insertelement .. => "llvm.insertelement"
+  | .shufflevector .. => "llvm.shufflevector"
+  | .vpmadd52 hi _  =>
+    if hi then "x86vector.avx512.intr.vpmadd52h.uq.512"
+    else "x86vector.avx512.intr.vpmadd52l.uq.512"
+  -- NOTE: `toString` on a `BinaryOp` already yields e.g. "llvm.add"
+  | .vectorBinary _ _ op => toString op
   | .and _      => "llvm.and"
   | .or _ _     => "llvm.or"
   | .not _      => "llvm.not"
@@ -482,6 +525,11 @@ def MOp.sig : MOp φ → List (MTy φ)
 | .unary w _ => [.bitvec w]
 | .select w => [.bitvec 1, .bitvec w, .bitvec w]
 | .const _ _ | .poison _ | .constDense _ _ => []
+| .insertelement e l w => [.vector l e, e, .bitvec w]
+| .shufflevector e l _ => [.vector l e, .vector l e]
+| .vpmadd52 _ l =>
+  [.vector l (.bitvec 64), .vector l (.bitvec 64), .vector l (.bitvec 64)]
+| .vectorBinary l w _ => [.vector l (.bitvec w), .vector l (.bitvec w)]
 
 @[simp, reducible]
 def MOp.UnaryOp.outTy (w : Width φ) : MOp.UnaryOp φ → MTy φ
@@ -498,6 +546,10 @@ def MOp.outTy : MOp φ → MTy φ
 | .icmp _ _ => .bitvec 1
 | .poison t => t
 | .constDense t _ => t
+| .insertelement e l _ => .vector l e
+| .shufflevector e _ mask => .vector mask.length e
+| .vpmadd52 _ l => .vector l (.bitvec 64)
+| .vectorBinary l w _ => .vector l (.bitvec w)
 
 instance {φ} : DialectSignature (MetaLLVM φ) where
   signature op := ⟨op.sig, [], [op.outTy], .pure⟩
@@ -563,6 +615,40 @@ def dense : (ty : LLVM.Ty) → List Int → TyDenote.toType ty
                  | [v] => [v]
                  | _   => [vals.getD i.val 0])
 
+/-- `llvm.insertelement`. Per LLVM, if the index is poison or out of range the
+result is poison -- the whole vector, not just the addressed lane. -/
+def insertelement {l : Nat} {e : LLVM.Ty} {w : Nat}
+    (v : Vector (TyDenote.toType e) l) (x : TyDenote.toType e) (i : LLVM.IntW w) :
+    Vector (TyDenote.toType e) l :=
+  match i with
+  | .poison => Vector.replicate l (poison e)
+  | .value bv =>
+      if h : bv.toNat < l then v.set bv.toNat x else Vector.replicate l (poison e)
+
+/-- `llvm.shufflevector`. Mask element `i` indexes the concatenation of the two
+operands; LLVM writes a poison lane as a negative mask element. -/
+def shufflevector {l : Nat} {e : LLVM.Ty} (mask : List Int)
+    (a b : Vector (TyDenote.toType e) l) : Vector (TyDenote.toType e) mask.length :=
+  Vector.ofFn fun i =>
+    let m := mask.getD i.val (-1)
+    if m < 0 then poison e
+    else if h : m.toNat < l then a[m.toNat]'h
+    else if h' : m.toNat - l < l then b[m.toNat - l]'h'
+    else poison e
+
+/-- One lane of the AVX-512 IFMA intrinsics. The unsigned 52-bit low halves of
+`b` and `c` are multiplied into a 104-bit product; the low variant adds its low
+52 bits to `a`, the high variant adds bits 103:52. -/
+def vpmadd52Lane (hi : Bool) : LLVM.IntW 64 → LLVM.IntW 64 → LLVM.IntW 64 → LLVM.IntW 64
+  | .value av, .value bv, .value cv =>
+      let p := (bv.toNat % 2 ^ 52) * (cv.toNat % 2 ^ 52)
+      .value (av + BitVec.ofNat 64 (if hi then p / 2 ^ 52 else p % 2 ^ 52))
+  | _, _, _ => .poison
+
+def vpmadd52 {l : Nat} (hi : Bool) (a b c : Vector (LLVM.IntW 64) l) :
+    Vector (LLVM.IntW 64) l :=
+  Vector.ofFn fun i => vpmadd52Lane hi (a[i.val]'i.isLt) (b[i.val]'i.isLt) (c[i.val]'i.isLt)
+
 /-- Coerce an integer into a type by splatting it across every lane. -/
 def ofInt (z : ℤ) : (ty : LLVM.Ty) → TyDenote.toType ty
   | bitvec w => .value <| BitVec.ofInt w z
@@ -587,6 +673,23 @@ end LLVM.Ty
 
 /-! ### Operation Semantics -/
 
+/-- The semantics of a binary operation, shared by the scalar `binary` and the
+lane-wise `vectorBinary` so the two cannot drift apart. -/
+def binaryDenote {w : Nat} : MOp.BinaryOp → LLVM.IntW w → LLVM.IntW w → LLVM.IntW w
+  | .and       => fun x y => LLVM.and x y
+  | .or flag   => fun x y => LLVM.or x y flag
+  | .xor       => fun x y => LLVM.xor x y
+  | .shl fs    => fun x y => LLVM.shl x y fs
+  | .lshr flag => fun x y => LLVM.lshr x y flag
+  | .ashr flag => fun x y => LLVM.ashr x y flag
+  | .urem      => fun x y => LLVM.urem x y
+  | .srem      => fun x y => LLVM.srem x y
+  | .add fs    => fun x y => LLVM.add x y fs
+  | .mul fs    => fun x y => LLVM.mul x y fs
+  | .sub fs    => fun x y => LLVM.sub x y fs
+  | .sdiv flag => fun x y => LLVM.sdiv x y flag
+  | .udiv flag => fun x y => LLVM.udiv x y flag
+
 @[simp]
 def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig o)) :
     (TyDenote.toType (β := LLVM.Ty) o.outTy) :=
@@ -594,6 +697,23 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
   | LLVM.Op.const _ val    => const? _ val
   | LLVM.Op.poison t       => LLVM.Ty.poison t
   | LLVM.Op.constDense t vs => LLVM.Ty.dense t vs
+  | LLVM.Op.insertelement _ _ _ =>
+      LLVM.Ty.insertelement (op.getN 0 (by simp [DialectSignature.sig, signature]))
+                            (op.getN 1 (by simp [DialectSignature.sig, signature]))
+                            (op.getN 2 (by simp [DialectSignature.sig, signature]))
+  | LLVM.Op.shufflevector _ _ mask =>
+      LLVM.Ty.shufflevector mask (op.getN 0 (by simp [DialectSignature.sig, signature]))
+                                 (op.getN 1 (by simp [DialectSignature.sig, signature]))
+  | LLVM.Op.vectorBinary l w bop =>
+      -- the ascriptions force `⟦sig[i]⟧` to reduce to a `Vector`, which is what
+      -- lets `GetElem` fire below
+      let a : Vector (LLVM.IntW w) l := op.getN 0 (by simp [DialectSignature.sig, signature])
+      let b : Vector (LLVM.IntW w) l := op.getN 1 (by simp [DialectSignature.sig, signature])
+      Vector.ofFn fun i => binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)
+  | LLVM.Op.vpmadd52 hi _ =>
+      LLVM.Ty.vpmadd52 hi (op.getN 0 (by simp [DialectSignature.sig, signature]))
+                          (op.getN 1 (by simp [DialectSignature.sig, signature]))
+                          (op.getN 2 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.copy _         =>               (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by simp [DialectSignature.sig, signature]))

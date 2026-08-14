@@ -55,6 +55,31 @@ def denseInts : MLIR.AST.AttrValue φ → MLIR.AST.ExceptM (MetaLLVM φ) (List I
   | _ => throw <| .generic
       "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
 
+/-- The declared type of the `i`-th operand of an operation. -/
+def getArgTy (opStx : MLIR.AST.Op φ) (op : String) (i : Nat) :
+    MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty) := do
+  match opStx.args[i]? with
+  | some (_, t) => mkTy t
+  | none => throw <| .generic s!"{op}: expected at least {i + 1} operand(s)"
+
+/-- The integers of an `array<…>` attribute, as `llvm.shufflevector` writes its
+mask. -/
+def arrayInts (opStx : MLIR.AST.Op φ) (op attr : String) :
+    MLIR.AST.ExceptM (MetaLLVM φ) (List Int) := do
+  let some (.array _ els) := opStx.getAttr? attr
+    | throw <| .generic s!"{op}: expected an `array<…>` attribute `{attr}`"
+  els.mapM fun
+    | .int v _ => pure v
+    | _ => throw <| .generic s!"{op}: `{attr}` must hold integers"
+
+/-- The lane count of a `vector<n x i64>` result, which is the shape the AVX-512
+IFMA intrinsics have. -/
+def getVpmaddLanes (opStx : MLIR.AST.Op φ) (op : String) :
+    MLIR.AST.ExceptM (MetaLLVM φ) Nat := do
+  let .vector l (.bitvec (.concrete 64)) ← getOutputTy opStx op
+    | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
+  return l
+
 /-- Given a variable of arbitrary type, return its width.
 
 Now that `vector` is also modelled, this throws for any non-bitvec type.
@@ -118,6 +143,18 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     getVarWidth args[0]
 
   let mkExprOf := opStx.mkExprOf (args? := args) Γ
+
+  /- LLVM's binary arithmetic is elementwise on vectors, so the same op name
+     builds either the scalar or the lane-wise operation depending on what its
+     operands are. -/
+  let mkBinary (bop : InstCombine.MOp.BinaryOp) := do
+    let args ← args.assumeArity 2
+    match args[0].1 with
+    | .bitvec w => mkExprOf <| MOp.binary w bop
+    | .vector l (.bitvec w) => mkExprOf <| MOp.vectorBinary l w bop
+    | _ =>
+      throw <| .generic s!"llvm.{bop}: expected bitvector or vector operands"
+
   match opStx.name with
     -- Ternary Operations
     | "llvm.select" =>
@@ -125,19 +162,19 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
         let w ← getVarWidth args[1]
         mkExprOf <| select w
     -- Binary Operations
-    | "llvm.and"      => mkExprOf <| and (← binW)
-    | "llvm.or"       => mkExprOf <| or (← binW) ⟨opStx.hasAttr "isDisjoint"⟩
-    | "llvm.xor"      => mkExprOf <| xor (← binW)
-    | "llvm.urem"     => mkExprOf <| urem (← binW)
-    | "llvm.srem"     => mkExprOf <| srem (← binW)
-    | "llvm.lshr"     => mkExprOf <| lshr (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.ashr"     => mkExprOf <| ashr (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.sdiv"     => mkExprOf <| sdiv (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.udiv"     => mkExprOf <| udiv (← binW) ⟨opStx.hasAttr "isExact"⟩
-    | "llvm.shl"      => mkExprOf <| shl (← binW) (← parseOverflowFlags opStx)
-    | "llvm.add"      => mkExprOf <| add (← binW) (← parseOverflowFlags opStx)
-    | "llvm.mul"      => mkExprOf <| mul (← binW) (← parseOverflowFlags opStx)
-    | "llvm.sub"      => mkExprOf <| sub (← binW) (← parseOverflowFlags opStx)
+    | "llvm.and"      => mkBinary .and
+    | "llvm.or"       => mkBinary (.or ⟨opStx.hasAttr "isDisjoint"⟩)
+    | "llvm.xor"      => mkBinary .xor
+    | "llvm.urem"     => mkBinary .urem
+    | "llvm.srem"     => mkBinary .srem
+    | "llvm.lshr"     => mkBinary (.lshr ⟨opStx.hasAttr "isExact"⟩)
+    | "llvm.ashr"     => mkBinary (.ashr ⟨opStx.hasAttr "isExact"⟩)
+    | "llvm.sdiv"     => mkBinary (.sdiv ⟨opStx.hasAttr "isExact"⟩)
+    | "llvm.udiv"     => mkBinary (.udiv ⟨opStx.hasAttr "isExact"⟩)
+    | "llvm.shl"      => mkBinary (.shl (← parseOverflowFlags opStx))
+    | "llvm.add"      => mkBinary (.add (← parseOverflowFlags opStx))
+    | "llvm.mul"      => mkBinary (.mul (← parseOverflowFlags opStx))
+    | "llvm.sub"      => mkBinary (.sub (← parseOverflowFlags opStx))
     | "llvm.icmp.eq"  => mkExprOf <| icmp .eq (← binW)
     | "llvm.icmp.ne"  => mkExprOf <| icmp .ne (← binW)
     | "llvm.icmp.ugt" => mkExprOf <| icmp .ugt (← binW)
@@ -180,6 +217,33 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
           | throw <| .generic
               "llvm.mlir.constant: a non-scalar constant needs a `dense<…>` value"
         mkExprOf <| MOp.constDense t (← denseInts v)
+    -- Vector operations
+    | "llvm.insertelement" =>
+      let .vector l elem ← getOutputTy opStx "llvm.insertelement"
+        | throw <| .generic "llvm.insertelement: result must be a vector"
+      let .bitvec idxW ← getArgTy opStx "llvm.insertelement" 2
+        | throw <| .generic "llvm.insertelement: index must be an integer"
+      mkExprOf <| MOp.insertelement elem l idxW
+    | "llvm.shufflevector" =>
+      let .vector l elem ← getArgTy opStx "llvm.shufflevector" 0
+        | throw <| .generic "llvm.shufflevector: operands must be vectors"
+      mkExprOf <| MOp.shufflevector elem l (← arrayInts opStx "llvm.shufflevector" "mask")
+    -- AVX-512 IFMA, as the x86vector dialect spells it
+    | "x86vector.avx512.intr.vpmadd52l.uq.512" =>
+      mkExprOf <| MOp.vpmadd52 false (← getVpmaddLanes opStx opStx.name)
+    | "x86vector.avx512.intr.vpmadd52h.uq.512" =>
+      mkExprOf <| MOp.vpmadd52 true (← getVpmaddLanes opStx opStx.name)
+    -- ... and as a direct call to the LLVM intrinsic, which is how the same
+    -- source lowers when the x86vector dialect is not used.
+    | "llvm.call" =>
+      let some (.symbol callee) := opStx.getAttr? "callee"
+        | throw <| .generic "llvm.call: expected a `callee` symbol attribute"
+      match callee with
+      | "x86_avx512_vpmadd52l_uq_512" =>
+        mkExprOf <| MOp.vpmadd52 false (← getVpmaddLanes opStx callee)
+      | "x86_avx512_vpmadd52h_uq_512" =>
+        mkExprOf <| MOp.vpmadd52 true (← getVpmaddLanes opStx callee)
+      | _ => throw <| .unsupportedOp s!"llvm.call to {callee}"
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 
@@ -250,6 +314,16 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
       mkApp (mkConst ``Op.poison) (MetaLLVM.instantiateTy vals t)
     | .constDense t elems =>
       mkApp2 (mkConst ``Op.constDense) (MetaLLVM.instantiateTy vals t) (toExpr elems)
+    | .insertelement e l w =>
+      mkApp3 (mkConst ``Op.insertelement) (MetaLLVM.instantiateTy vals e) (toExpr l)
+        (w.metaInstantiate vals)
+    | .shufflevector e l mask =>
+      mkApp3 (mkConst ``Op.shufflevector) (MetaLLVM.instantiateTy vals e) (toExpr l)
+        (toExpr mask)
+    | .vpmadd52 hi l =>
+      mkApp2 (mkConst ``Op.vpmadd52) (toExpr hi) (toExpr l)
+    | .vectorBinary l w bop =>
+      mkApp3 (mkConst ``Op.vectorBinary) (toExpr l) (w.metaInstantiate vals) (toExpr bop)
     | .const w val =>
       let w := w.metaInstantiate vals
       let val := toExpr val

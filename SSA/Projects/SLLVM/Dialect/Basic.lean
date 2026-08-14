@@ -108,6 +108,14 @@ open InstCombine.LLVM SLLVMOp
 @[match_pattern] nonrec abbrev Op.poison (t : LLVM.Ty) : SLLVM.Op := arith <| Op.poison t
 @[match_pattern] nonrec abbrev Op.constDense (t : LLVM.Ty) (vals : List Int) : SLLVM.Op :=
   arith <| Op.constDense t vals
+@[match_pattern] nonrec abbrev Op.insertelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
+  arith <| Op.insertelement e l w
+@[match_pattern] nonrec abbrev Op.shufflevector (e : LLVM.Ty) (l : Nat) (mask : List Int) :
+    SLLVM.Op := arith <| Op.shufflevector e l mask
+@[match_pattern] nonrec abbrev Op.vpmadd52 (hi : Bool) (l : Nat) : SLLVM.Op :=
+  arith <| Op.vpmadd52 hi l
+@[match_pattern] nonrec abbrev Op.vectorBinary (l w : Nat) (bop : InstCombine.MOp.BinaryOp) :
+    SLLVM.Op := arith <| Op.vectorBinary l w bop
 
 @[match_pattern] nonrec abbrev Op.udiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.udiv w flag
 @[match_pattern] nonrec abbrev Op.sdiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.sdiv w flag
@@ -159,6 +167,16 @@ def_signature for SLLVM
   | Op.const w _val  => () -> bitvec w
   | Op.poison t      => () -> Ty.arith t
   | Op.constDense t _vals => () -> Ty.arith t
+  | Op.insertelement e l w =>
+      (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
+  | Op.shufflevector e l mask =>
+      (Ty.arith (.vector l e), Ty.arith (.vector l e)) -> Ty.arith (.vector mask.length e)
+  | Op.vectorBinary l w _bop =>
+      (Ty.arith (.vector l (LLVM.Ty.bitvec w)), Ty.arith (.vector l (LLVM.Ty.bitvec w)))
+        -> Ty.arith (.vector l (LLVM.Ty.bitvec w))
+  | Op.vpmadd52 _hi l =>
+      (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
+       Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
 
 attribute [local irreducible] EffectM
 -- ^^ This is needed so that `EffectM` doesn't get unfolded in the `def_denote` macro
@@ -198,6 +216,12 @@ def_denote for SLLVM
   | Op.const _w val => [LLVM.const? _ val]ₕ
   | Op.poison t     => [LLVM.Ty.poison t]ₕ
   | Op.constDense t vals => [LLVM.Ty.dense t vals]ₕ
+  | Op.insertelement .. => fun v x i => [LLVM.Ty.insertelement v x i]ₕ
+  | Op.shufflevector _e _l mask => fun a b => [LLVM.Ty.shufflevector mask a b]ₕ
+  | Op.vpmadd52 hi _l => fun a b c => [LLVM.Ty.vpmadd52 hi a b c]ₕ
+  | Op.vectorBinary _l _w bop =>
+      fun a b => [Vector.ofFn fun i =>
+        InstCombine.binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)]ₕ
 
 /-! ### Printing -/
 section Print
