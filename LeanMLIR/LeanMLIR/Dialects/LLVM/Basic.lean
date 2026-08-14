@@ -130,6 +130,10 @@ inductive MOp (φ : Nat) : Type
   /-- `llvm.mlir.poison`. Carries a full `MTy φ` rather than a `Width φ`, since
   poison exists at every type, vectors included. -/
   | poison (t : MTy φ) : MOp φ
+  /-- `llvm.mlir.constant` with a `dense<…>` value. Carries a full `MTy φ` for
+  the same reason `poison` does. `vals` is either a single value (MLIR's splat
+  form, `dense<0>`) or one value per lane (`dense<[1, 2, 3]>`). -/
+  | constDense (t : MTy φ) (vals : List Int) : MOp φ
 deriving Repr, DecidableEq, Inhabited, Lean.ToExpr
 
 def toStringWithFlags (op : MOp.BinaryOp) : String :=
@@ -173,6 +177,7 @@ instance : ToString (MOp 0) where
      | .icmp  _pred _w => "icmp"
      | .const w val => s!"\"llvm.mlir.constant\"() \{value = {val} : {w}}"
      | .poison t => s!"\"llvm.mlir.poison\"() : () -> {t}"
+     | .constDense t vals => s!"\"llvm.mlir.constant\"() \{value = dense<{vals}> : {t}}"
 
 /-! ## Dialect -/
 
@@ -276,9 +281,11 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
     (select : ∀ {φ} {w : Width φ},               motive (select w))
     (icmp   : ∀ {φ c} {w : Width φ},             motive (icmp c w))
     (const  : ∀ {φ v} {w : Width φ},             motive (const w v))
-    (poison : ∀ {φ} {t : MTy φ},                 motive (poison t)) :
+    (poison : ∀ {φ} {t : MTy φ},                 motive (poison t))
+    (constDense : ∀ {φ vs} {t : MTy φ},          motive (constDense t vs)) :
     ∀ {φ} (op : MOp φ), motive op
   | _, .poison _   => poison
+  | _, .constDense ..  => constDense
   | _, .neg _      => neg
   | _, .not _      => not
   | _, .trunc _ _ _  => trunc
@@ -329,6 +336,7 @@ namespace LLVM.Op
 /-- Unlike its neighbours this takes a type rather than a width, since poison
 exists at vector types too. -/
 @[match_pattern] abbrev poison : LLVM.Ty → LLVM.Op                 := MOp.poison
+@[match_pattern] abbrev constDense : LLVM.Ty → List Int → LLVM.Op  := MOp.constDense
 
 /- This operation is separate from the others because it takes in a flag: nneg. -/
 @[match_pattern] abbrev zext (w w': Nat) (flag : NonNegFlag := {nneg := false}) : LLVM.Op :=
@@ -377,6 +385,7 @@ instance : DialectToExpr LLVM where
 instance : ToString (MOp φ) where
   toString
   | .poison _   => "poison"
+  | .constDense ..  => "constant"
   | .and _      => "and"
   | .or _ _     => "or"
   | .not _      => "not"
@@ -414,6 +423,7 @@ instance : Repr LLVM.Ty     := by unfold LLVM; infer_instance
 
 def MetaLLVM.opName : (MetaLLVM φ).Op → String
   | .poison _   => "llvm.mlir.poison"
+  | .constDense ..  => "llvm.mlir.constant"
   | .and _      => "llvm.and"
   | .or _ _     => "llvm.or"
   | .not _      => "llvm.not"
@@ -471,7 +481,7 @@ def MOp.sig : MOp φ → List (MTy φ)
   [.bitvec w, .bitvec w]
 | .unary w _ => [.bitvec w]
 | .select w => [.bitvec 1, .bitvec w, .bitvec w]
-| .const _ _ | .poison _ => []
+| .const _ _ | .poison _ | .constDense _ _ => []
 
 @[simp, reducible]
 def MOp.UnaryOp.outTy (w : Width φ) : MOp.UnaryOp φ → MTy φ
@@ -487,6 +497,7 @@ def MOp.outTy : MOp φ → MTy φ
 | .unary w op => UnaryOp.outTy w op
 | .icmp _ _ => .bitvec 1
 | .poison t => t
+| .constDense t _ => t
 
 instance {φ} : DialectSignature (MetaLLVM φ) where
   signature op := ⟨op.sig, [], [op.outTy], .pure⟩
@@ -540,6 +551,18 @@ def poison : (ty : LLVM.Ty) → TyDenote.toType ty
   | bitvec _ => PoisonOr.poison
   | vector l e => Vector.replicate l (poison e)
 
+/-- The value of a `dense<…>` constant at a type. MLIR writes these either as a
+splat (`dense<0>`, one value standing for every lane) or as one value per lane
+(`dense<[1, 2, 3]>`); a short list splats its head, a long one is read
+positionally. -/
+def dense : (ty : LLVM.Ty) → List Int → TyDenote.toType ty
+  | bitvec w, vals => .value <| BitVec.ofInt w (vals.headD 0)
+  | vector l e, vals =>
+      Vector.ofFn fun (i : Fin l) =>
+        dense e (match vals with
+                 | [v] => [v]
+                 | _   => [vals.getD i.val 0])
+
 /-- Coerce an integer into a type by splatting it across every lane. -/
 def ofInt (z : ℤ) : (ty : LLVM.Ty) → TyDenote.toType ty
   | bitvec w => .value <| BitVec.ofInt w z
@@ -570,6 +593,7 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
   match o with
   | LLVM.Op.const _ val    => const? _ val
   | LLVM.Op.poison t       => LLVM.Ty.poison t
+  | LLVM.Op.constDense t vs => LLVM.Ty.dense t vs
   | LLVM.Op.copy _         =>               (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by simp [DialectSignature.sig, signature]))

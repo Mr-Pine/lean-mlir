@@ -106,6 +106,8 @@ open InstCombine.LLVM SLLVMOp
 @[match_pattern] nonrec abbrev Op.const (w : Nat) (val : Int) : SLLVM.Op := arith <| Op.const w val
 @[match_pattern] nonrec abbrev Op.select (w : Nat) : SLLVM.Op := arith <| Op.select w
 @[match_pattern] nonrec abbrev Op.poison (t : LLVM.Ty) : SLLVM.Op := arith <| Op.poison t
+@[match_pattern] nonrec abbrev Op.constDense (t : LLVM.Ty) (vals : List Int) : SLLVM.Op :=
+  arith <| Op.constDense t vals
 
 @[match_pattern] nonrec abbrev Op.udiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.udiv w flag
 @[match_pattern] nonrec abbrev Op.sdiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.sdiv w flag
@@ -156,6 +158,7 @@ def_signature for SLLVM
   | Op.select w      => (bitvec 1, bitvec w, bitvec w) -> bitvec w
   | Op.const w _val  => () -> bitvec w
   | Op.poison t      => () -> Ty.arith t
+  | Op.constDense t _vals => () -> Ty.arith t
 
 attribute [local irreducible] EffectM
 -- ^^ This is needed so that `EffectM` doesn't get unfolded in the `def_denote` macro
@@ -194,6 +197,7 @@ def_denote for SLLVM
   | Op.select _w    => fun c x y => [LLVM.select c x y]ₕ
   | Op.const _w val => [LLVM.const? _ val]ₕ
   | Op.poison t     => [LLVM.Ty.poison t]ₕ
+  | Op.constDense t vals => [LLVM.Ty.dense t vals]ₕ
 
 /-! ### Printing -/
 section Print

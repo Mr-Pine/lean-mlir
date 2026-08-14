@@ -45,6 +45,16 @@ def getOutputTy (opStx : MLIR.AST.Op φ) (op : String) :
   | res::[] => mkTy res.2
   | _ => throw <| .generic s!"The operation {op} must have a single output"
 
+/-- The integers inside a `dense<…>` attribute: either a single value (the
+splat form) or one per lane. -/
+def denseInts : MLIR.AST.AttrValue φ → MLIR.AST.ExceptM (MetaLLVM φ) (List Int)
+  | .int v _ => return [v]
+  | .list xs => xs.mapM fun
+      | .int v _ => pure v
+      | _ => throw <| .generic "llvm.mlir.constant: dense elements must be integers"
+  | _ => throw <| .generic
+      "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
+
 /-- Given a variable of arbitrary type, return its width.
 
 Now that `vector` is also modelled, this throws for any non-bitvec type.
@@ -158,11 +168,18 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     | "llvm.mlir.undef" =>
       mkExprOf <| MOp.poison (← getOutputTy opStx "llvm.mlir.undef")
     -- Constant
+    -- NOTE: dispatch on the *result* type rather than the attribute's type: the
+    -- two must agree in MLIR, but only the former is what `mkExprOf` will use.
     | "llvm.mlir.constant" =>
-      let ⟨val, ty⟩ ← opStx.getIntAttr "value"
-      let .bitvec w ← mkTy ty
-        | throw <| .unsupportedType (some ty)
-      mkExprOf <| const w val
+      match ← getOutputTy opStx "llvm.mlir.constant" with
+      | .bitvec w =>
+        let ⟨val, _⟩ ← opStx.getIntAttr "value"
+        mkExprOf <| const w val
+      | t =>
+        let some (.dense v _) := opStx.getAttr? "value"
+          | throw <| .generic
+              "llvm.mlir.constant: a non-scalar constant needs a `dense<…>` value"
+        mkExprOf <| MOp.constDense t (← denseInts v)
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 
@@ -231,6 +248,8 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
       mkApp2 (mkConst ``Op.icmp) c w
     | .poison t =>
       mkApp (mkConst ``Op.poison) (MetaLLVM.instantiateTy vals t)
+    | .constDense t elems =>
+      mkApp2 (mkConst ``Op.constDense) (MetaLLVM.instantiateTy vals t) (toExpr elems)
     | .const w val =>
       let w := w.metaInstantiate vals
       let val := toExpr val
