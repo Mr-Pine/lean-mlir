@@ -72,6 +72,16 @@ theorem and_value (a b : BitVec w) :
 theorem add_value (a b : BitVec w) :
     LLVM.add (.value a) (.value b) ⟨false, false⟩ = .value (a + b) := rfl
 
+theorem add_poison_left (b : LLVM.IntW w) (f : LLVM.NoWrapFlags) :
+    LLVM.add .poison b f = .poison := rfl
+
+theorem add_poison_right (a : LLVM.IntW w) (f : LLVM.NoWrapFlags) :
+    LLVM.add a .poison f = .poison := by
+    unfold LLVM.add
+    simp
+
+
+
 theorem mul_value (a b : BitVec w) :
     LLVM.mul (.value a) (.value b) ⟨false, false⟩ = .value (a * b) := rfl
 
