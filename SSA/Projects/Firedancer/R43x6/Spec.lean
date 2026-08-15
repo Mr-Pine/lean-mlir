@@ -144,7 +144,7 @@ theorem limb_lt (x y : ℕ → ℕ) (hx : ∀ i < 6, x i < 2^47) (hy : ∀ i < 6
   have hph : ∀ i < 6, ∀ j < 6, ph (x i) (y j) < 2^51 :=
     fun i hi j hj => ph_lt (hx i hi) (hy j hj)
   interval_cases k <;>
-  · simp only [limb, Nat.reduceAdd, col, limbBound]
+  · simp only [limb, col, limbBound]
     have := hpl 0 0; have := hpl 0 1; have := hpl 0 2; have := hpl 0 3
     have := hpl 0 4; have := hpl 0 5; have := hpl 1 0; have := hpl 1 1
     have := hpl 1 2; have := hpl 1 3; have := hpl 1 4; have := hpl 1 5
