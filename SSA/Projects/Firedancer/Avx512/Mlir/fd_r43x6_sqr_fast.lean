@@ -11,10 +11,10 @@ The program below is the MLIR translation of `fd_r43x6_sqr_fast` from
 build artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_sqr_fast.mlir`.
 -/
 
-namespace Firedancer.R43x6
+namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
-def sqrFast := [sllvm|
+def fd_r43x6_sqr_fast := [sllvm|
 {
   ^bb0(%arg0: vector<8xi64>):
     %0 = "llvm.mlir.poison"() : () -> vector<8xi64>
@@ -181,4 +181,4 @@ def sqrFast := [sllvm|
 }
 ]
 
-end Firedancer.R43x6
+end Firedancer.Avx512
