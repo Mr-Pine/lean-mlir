@@ -20,11 +20,6 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-def Bounded (b: Nat) (x: Vector (BitVec 64) 8) : Prop :=
-  ∀ (i: Nat) (hi: i < 8), (x[i]'hi).toNat < b
-
-abbrev Unreduced := Bounded (2 ^ 47)
-
 
 def toBitVecValue (w: Nat) {n: Nat} (v: Vector Nat n): Vector (PoisonOr (BitVec w)) n :=
   v.map (fun i => PoisonOr.value <| BitVec.ofNat w i)
