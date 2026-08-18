@@ -23,6 +23,7 @@ import SSA.Projects.Scf.ScfFunctor
 import SSA.Projects.LeanMlirCommon.LeanMlirCommon
 import SSA.Projects.SLLVM.SLLVM
 import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_sqr_fast
+import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_mul_fast
 
 
 -- EXPERIMENTAL

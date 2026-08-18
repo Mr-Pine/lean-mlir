@@ -1,10 +1,8 @@
 import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_sqr_fast
 import SSA.Projects.Firedancer.Avx512.Denote.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.R43x6
+import SSA.Projects.Firedancer.Avx512.Spec.Common
 import SSA.Projects.Firedancer.MLIR.Poison
 import SSA.Projects.Firedancer.Ed25519
-import Mathlib.Data.ZMod.Basic
-import Mathlib.Tactic.Ring
 import Mathlib.Tactic.IntervalCases
 
 /-!
@@ -47,35 +45,13 @@ open InstCombine (LLVM)
 /-! ## The ℕ-level specification
 
 Every product formed by the implementation is split by the `vpmadd52lo`/`hi`
-pair into
-
-    pl a b = (a·b) % 2^52          -- vpmadd52luq
-    ph a b = (a·b) / 2^52 * 2^9    -- vpmadd52huq, prescaled by 2^9
-
-so that `pl a b + 2^43·(ph a b) = a·b` (note `2^52 = 2^43·2^9`). Grouping by
-scale factor `2^43k` gives twelve column sums, and the fold uses
-`2^258 ≡ 152 (mod p)` to produce the six output limbs
+pair into `pl`/`ph` (see `Spec/Common.lean`), so that
+`pl a b + 2^43·(ph a b) = a·b`. Grouping by scale factor `2^43k` gives twelve
+column sums, and the fold uses `2^258 ≡ 152 (mod p)` to produce the six output
+limbs
 
     sqLimb k = sqCol k + 152·sqCol (k+6),   k = 0,…,5.
 -/
-
-/-- Low 52 bits of a limb product, as `vpmadd52luq` computes them. -/
-def pl (a b : ℕ) : ℕ := a * b % 2^52
-
-/-- High bits of a limb product, prescaled by `2^9` (the `wwl_shl(…, 9)`
-applied to every `vpmadd52huq` result), so that `pl a b + 2^43 * ph a b = a*b`. -/
-def ph (a b : ℕ) : ℕ := a * b / 2^52 * 2^9
-
-theorem pl_add_shift_ph (a b : ℕ) : pl a b + 2^43 * ph a b = a * b := by
-  simp only [pl, ph]
-  omega
-
-theorem pl_lt (a b : ℕ) : pl a b < 2^52 :=
-  Nat.mod_lt _ (by norm_num)
-
-/-- Decode limbs into the natural number they represent: `Σ_{k<6} l k · 2^(43k)`. -/
-def pack (l : ℕ → ℕ) : ℕ :=
-  l 0 + 2^43 * l 1 + 2^86 * l 2 + 2^129 * l 3 + 2^172 * l 4 + 2^215 * l 5
 
 /-- The column sums of the squaring: `sqCol x k` is the coefficient of
 `2^(43k)` before folding, read off the lanes of `sqrFastResult`. For `k < 6`
@@ -202,20 +178,6 @@ output limb uses more than 457 `pl`s, 456 off-diagonal `ph`s and 153 diagonal
 `sqLimb_lt_of_bounds` is that count; the four rows of the table in
 `fd_r43x6.h` (`u44/u45/u46/u47` in, `u61/u61/u62/u62` out) are instances. -/
 
-/-- `ph a b < B * 2^9` whenever `a * b < B * 2^52`. -/
-private theorem ph_lt_of_mul_lt {a b B : ℕ} (h : a * b < B * 2^52) :
-    ph a b < B * 2^9 := by
-  have hdiv : a * b / 2^52 < B := Nat.div_lt_of_lt_mul (by omega)
-  simp only [ph]
-  omega
-
-/-- `ph_lt_of_mul_lt` in the form the operand bounds supply it. -/
-private theorem ph_lt_bound {a b u v B : ℕ} (ha : a < u) (hb : b < v)
-    (h : u * v ≤ B * 2^52) : ph a b < B * 2^9 :=
-  ph_lt_of_mul_lt (by
-    have hm : a * b < u * v := Nat.mul_lt_mul_of_lt_of_lt ha hb
-    omega)
-
 set_option maxHeartbeats 1000000 in
 /-- Every output limb, in terms of an off-diagonal `ph` bound `Bo` and a
 diagonal one `Bd`. -/
@@ -296,128 +258,11 @@ theorem sqLimb_lt_two_pow_63 (x : ℕ → ℕ) (hx : ∀ i < 6, x i < 2^47)
   have := sqLimb_lt_u47 x hx k hk
   omega
 
-/-! ## `BitVec`/ℕ transfer
-
-A lane is built only from operations that wrap mod `2^64`, so each is a
-`BitVec.ofNat` homomorphism. These lemmas push `ofNat` outward until a whole
-lane is a single `ofNat`. Only `toNat_shl1` and `hi_eq` need bounds; the rest
-hold unconditionally. -/
-
-/-- `<<<` on `BitVec` is LeanMLIR's shift-by-`BitVec`, i.e. shift by `k.toNat`. -/
-private theorem ofNat_shl (a : Nat) (k : BitVec 64) :
-    (BitVec.ofNat 64 a) <<< k = BitVec.ofNat 64 (a * 2 ^ k.toNat) := by
-  show (BitVec.ofNat 64 a) <<< k.toNat = _
-  apply BitVec.eq_of_toNat_eq
-  simp [BitVec.toNat_shiftLeft, Nat.shiftLeft_eq, Nat.mod_mul_mod]
-
-/-- The `<<< 7` of the `za + 152*zb` fold. -/
-private theorem ofNat_shl7 (a : Nat) :
-    (BitVec.ofNat 64 a) <<< (7 : BitVec 64) = BitVec.ofNat 64 (a * 128) := by
-  rw [ofNat_shl, show (7 : BitVec 64).toNat = 7 from rfl]
-  norm_num
-
-/-! Numeric literals in a lane are `BitVec.ofNat`, but reach the goal as
-`Nat.cast` or as `OfNat` and so do not match it syntactically. -/
-
-private theorem natCast_bv (n : Nat) : ((n : Nat) : BitVec 64) = BitVec.ofNat 64 n := rfl
-
-private theorem bv_zero : (0 : BitVec 64) = BitVec.ofNat 64 0 := rfl
-
-/-- The `* 24` of the `za + 152*zb` fold (`152 = 128 + 24`). -/
-private theorem ofNat_mul24 (a : Nat) :
-    (BitVec.ofNat 64 a) * (24 : BitVec 64) = BitVec.ofNat 64 (a * 24) := by
-  rw [show (24 : BitVec 64) = BitVec.ofNat 64 24 from rfl, ← BitVec.ofNat_mul]
-
-/-- The pre-multiply doubling of the off-diagonal terms. -/
-private theorem toNat_shl1 (a : BitVec 64) (ha : a.toNat < 2^47) :
-    (a <<< (1 : BitVec 64)).toNat = 2 * a.toNat := by
-  show (a <<< (1 : BitVec 64).toNat).toNat = _
-  simp [BitVec.toNat_shiftLeft, Nat.shiftLeft_eq]
-  omega
-
-/-- `vpmadd52lo` is `pl`, unconditionally: both truncate mod `2^52`. -/
-private theorem lo_eq (a b : BitVec 64) :
-    mulLo52 a b = BitVec.ofNat 64 (pl a.toNat b.toNat) := by
-  simp [mulLo52, pl, Nat.mod_mul_mod]
-
-/-- `vpmadd52hi` followed by `wwl_shl(…,9)` is `ph`. Unlike `lo_eq` this needs
-the operand bounds: otherwise the implicit truncation to 52 bits is lossy. -/
-private theorem hi_eq (a b : BitVec 64) (ha : a.toNat < 2^52) (hb : b.toNat < 2^52) :
-    mulHi52 a b <<< (9 : BitVec 64) = BitVec.ofNat 64 (ph a.toNat b.toNat) := by
-  rw [mulHi52, ofNat_shl, ph, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb,
-      show (9 : BitVec 64).toNat = 9 from rfl]
-
-/-- A lane below `2^63` reads back as itself, rather than as a negative. -/
-private theorem ofNat_toInt {n : Nat} (h : n < 2^63) :
-    (BitVec.ofNat 64 n).toInt = (n : Int) := by
-  have h64 : n < 2^64 := by omega
-  have ht : (BitVec.ofNat 64 n).toNat = n := by rw [BitVec.toNat_ofNat]; omega
-  rw [BitVec.toInt_eq_toNat_of_lt (by rw [ht]; omega), ht]
-
-
-/-! `R43x6.UNN` bounds `BitVec.toInt` on both sides; the lane arithmetic works
-in `toNat`. These convert in each direction. The two-sided bound is essential:
-an upper bound on `toInt` alone admits negative lanes, on which the
-specification is false. -/
-
-private theorem toNat_lt_of_bounds {a : BitVec 64} {N : ℕ} (hN : N ≤ 2^62)
-    (hu : a.toInt ≤ (N : Int) - 1) (hl : (0:Int) ≤ a.toInt) : a.toNat < N := by
-  have hlt : a.toNat < 2^64 := a.isLt
-  have hb := BitVec.toInt_eq_toNat_bmod a
-  rw [Int.bmod] at hb
-  split at hb <;> omega
-
-/-- An input limb of a `UNN n` vector, as a natural. -/
-private theorem unn_toNat (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
-    (hx : R43x6.UNN n x) (i : ℕ) (hi : i < 8) : (x[i]'hi).toNat < 2^n :=
-  toNat_lt_of_bounds (Nat.pow_le_pow_right (by omega) hn)
-    (by have := hx.1 i hi; push_cast; omega) (hx.2 i hi)
-
-/-- An output lane, back in `toInt` form. -/
-private theorem lane_toInt_bound {n N : ℕ} (hN : N ≤ 2^62) (h : n < N) :
-    (0:Int) ≤ (BitVec.ofNat 64 n).toInt ∧ (BitVec.ofNat 64 n).toInt ≤ (N:Int) - 1 := by
-  have h63 : n < 2^63 := by omega
-  rw [ofNat_toInt h63]
-  omega
-
-/-! The lane-7 products, which `h7` eliminates. -/
-
-private theorem pl_zero : pl 0 0 = 0 := by simp [pl]
-
-private theorem ph_zero : ph 0 0 = 0 := by simp [ph]
-
-/-- An input limb is below `2^63`, so it too reads back as a natural. -/
-private theorem toInt_of_lt {a : BitVec 64} (h : a.toNat < 2^47) :
-    a.toInt = (a.toNat : Int) :=
-  BitVec.toInt_eq_toNat_of_lt (by omega)
-
-/-- `decode'` on a literal vector: the low six lanes with radix-`2^43` weights. -/
-private theorem decode'_lit (a b c d e f g h : BitVec 64) :
-    R43x6.decode' #v[a,b,c,d,e,f,g,h] = a.toInt + 2^43 * b.toInt + 2^86 * c.toInt
-      + 2^129 * d.toInt + 2^172 * e.toInt + 2^215 * f.toInt := by
-  simp [R43x6.decode', R43x6.decode, LimbRepresentations.decode,
-    LimbRepresentations.placeValues, R43x6.limbCount, R43x6.baseBits, R43x6.limbWidth,
-    show (Vector.range 6 : Vector Nat 6) = #v[0,1,2,3,4,5] from rfl, Vector.sum]
-  ring
-
 /-! ## The lanes -/
-
-/-- The input limbs as naturals, in the `ℕ → ℕ` form `sqLimb` takes. -/
-def limbNat (x : Vector (BitVec 64) 8) : ℕ → ℕ
-  | 0 => x[0].toNat
-  | 1 => x[1].toNat
-  | 2 => x[2].toNat
-  | 3 => x[3].toNat
-  | 4 => x[4].toNat
-  | 5 => x[5].toNat
-  | _ => 0
 
 /-- The result vector predicted by the ℕ-level specification. -/
 def sqrVec (x : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  #v[BitVec.ofNat 64 (sqLimb (limbNat x) 0), BitVec.ofNat 64 (sqLimb (limbNat x) 1),
-     BitVec.ofNat 64 (sqLimb (limbNat x) 2), BitVec.ofNat 64 (sqLimb (limbNat x) 3),
-     BitVec.ofNat 64 (sqLimb (limbNat x) 4), BitVec.ofNat 64 (sqLimb (limbNat x) 5),
-     0, 0]
+  limbVec (sqLimb (limbNat x))
 
 set_option maxHeartbeats 4000000 in
 /-- **Lane derivation**: on an unreduced input with lane 7 zero, every output
@@ -451,14 +296,14 @@ theorem sqrFastResult_eq (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7
   -- Lanes 6 and 7 are identically zero and close on the first `simp only`, so
   -- the later steps are `try`ed and the six real lanes share one script.
   interval_cases i <;>
-    · simp only [sqrFastResult, sqrVec, Vector.getElem_map, Vector.getElem_mk,
+    · simp only [sqrFastResult, sqrVec, limbVec, Vector.getElem_map, Vector.getElem_mk,
         List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ]
       try congr 1
       try simp only [lo_eq, hi_eq, s0, s1, s2, s3, s4, s7, t0, t1, t2, t3, t4, t5, t7,
         toNat_shl1, b0, b1, b2, b3, b4, b7',
         natCast_bv, bv_zero, ← BitVec.ofNat_add, ofNat_mul24, ofNat_shl7]
       try congr 1
-      try simp only [sqLimb, sqCol, limbNat, b7, Nat.mul_zero, pl_zero, ph_zero]
+      try simp only [sqLimb, sqCol, limbNat, b7, Nat.mul_zero, pl_zero_right, ph_zero_right]
       try ring
 
 abbrev sqrValue (x: Vector (BitVec 64) 8) := (fd_r43x6_sqr_fast.denote
@@ -499,21 +344,11 @@ private theorem sqrIsSqrThm (x : Vector (BitVec 64) 8)
     rw [decode'_lit, toInt_of_lt b0, toInt_of_lt b1, toInt_of_lt b2,
       toInt_of_lt b3, toInt_of_lt b4, toInt_of_lt b5]
     simp [limbNat]
-  rw [sqrVec, decode'_lit, hdx,
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 0 (by omega)),
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 1 (by omega)),
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 2 (by omega)),
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 3 (by omega)),
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 4 (by omega)),
-    ofNat_toInt (sqLimb_lt_two_pow_63 _ hbnd 5 (by omega))]
-  -- 3. both sides are now casts of `pack`, so `pack_sqLimb_zmod` applies
-  rw [show ((sqLimb (limbNat x) 0 : Int) + 2^43 * sqLimb (limbNat x) 1
-        + 2^86 * sqLimb (limbNat x) 2 + 2^129 * sqLimb (limbNat x) 3
-        + 2^172 * sqLimb (limbNat x) 4 + 2^215 * sqLimb (limbNat x) 5)
-      = ((pack (sqLimb (limbNat x)) : ℕ) : Int) from by simp [pack]; try ring,
+  rw [sqrVec, decode'_limbVec _ (sqLimb_lt_two_pow_63 _ hbnd), hdx,
     show ((limbNat x 0 : Int) + 2^43 * limbNat x 1 + 2^86 * limbNat x 2
         + 2^129 * limbNat x 3 + 2^172 * limbNat x 4 + 2^215 * limbNat x 5)
       = ((pack (limbNat x) : ℕ) : Int) from by simp [pack]; try ring]
+  -- 3. both sides are now casts of `pack`, so `pack_sqLimb_zmod` applies
   push_cast
   exact pack_sqLimb_zmod (limbNat x)
 
@@ -530,7 +365,6 @@ private theorem sqrValue_eq (x : Vector (BitVec 64) 8)
   rw [sqrValue, denote_fd_r43x6_sqr_fast, sqrFastResult_eq x hx h7]
   simp only [HVector.head, Vector.getValues_map_value]
 
-set_option maxHeartbeats 1000000 in
 /-- Two-sided lane bounds from a ceiling `N` on the ℕ-level limbs. -/
 private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2^62)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0)
@@ -538,37 +372,8 @@ private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N �
     R43x6.BoundedUpper ((N : Int) - 1) (sqrValue x).getValue
       ∧ R43x6.BoundedLower 0 (sqrValue x).getValue := by
   have hv : (sqrValue x).getValue = sqrVec x := by rw [sqrValue_eq x hx h7]; rfl
-  have key : ∀ k, k < 6 →
-      (0:Int) ≤ (BitVec.ofNat 64 (sqLimb (limbNat x) k)).toInt
-      ∧ (BitVec.ofNat 64 (sqLimb (limbNat x) k)).toInt ≤ (N:Int) - 1 :=
-    fun k hk => lane_toInt_bound hN (hb k hk)
-  have hN1 : 1 ≤ N := by have := hb 0 (by omega); omega
-  have hz : ((0 : BitVec 64)).toInt = 0 := rfl
-  rw [hv]
-  -- Lanes 0-5 are the specified limbs; lanes 6 and 7 are the zero literal.
-  refine ⟨fun i hi => ?_, fun i hi => ?_⟩
-  · interval_cases i
-    · exact (key 0 (by omega)).2
-    · exact (key 1 (by omega)).2
-    · exact (key 2 (by omega)).2
-    · exact (key 3 (by omega)).2
-    · exact (key 4 (by omega)).2
-    · exact (key 5 (by omega)).2
-    · show (0 : BitVec 64).toInt ≤ _
-      rw [hz]; omega
-    · show (0 : BitVec 64).toInt ≤ _
-      rw [hz]; omega
-  · interval_cases i
-    · exact (key 0 (by omega)).1
-    · exact (key 1 (by omega)).1
-    · exact (key 2 (by omega)).1
-    · exact (key 3 (by omega)).1
-    · exact (key 4 (by omega)).1
-    · exact (key 5 (by omega)).1
-    · show (0 : BitVec 64).toInt ≥ _
-      rw [hz]
-    · show (0 : BitVec 64).toInt ≥ _
-      rw [hz]
+  rw [hv, sqrVec]
+  exact limbVec_bounds _ N (by omega) hb
 
 private theorem output_u44 (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u44_u61 x := by
