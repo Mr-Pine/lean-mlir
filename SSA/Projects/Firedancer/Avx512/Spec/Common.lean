@@ -1,10 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Denote.Common
+import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.R43x6
 import Mathlib.Data.ZMod.Basic
 import Mathlib.Tactic.Ring
+import Mathlib.Tactic.IntervalCases
 
 /-!
 # Shared ℕ-level machinery for the `fd_r43x6` specifications
@@ -82,8 +83,7 @@ theorem ph_zero_right (a : ℕ) : ph a 0 = 0 := by simp [ph]
 
 A lane is built only from operations that wrap mod `2^64`, so each is a
 `BitVec.ofNat` homomorphism. These lemmas push `ofNat` outward until a whole
-lane is a single `ofNat`. Only `toNat_shl1` and `hi_eq` need bounds; the rest
-hold unconditionally. -/
+lane is a single `ofNat`. -/
 
 /-- `<<<` on `BitVec` is LeanMLIR's shift-by-`BitVec`, i.e. shift by `k.toNat`. -/
 theorem ofNat_shl (a : Nat) (k : BitVec 64) :
@@ -109,25 +109,6 @@ theorem bv_zero : (0 : BitVec 64) = BitVec.ofNat 64 0 := rfl
 theorem ofNat_mul24 (a : Nat) :
     (BitVec.ofNat 64 a) * (24 : BitVec 64) = BitVec.ofNat 64 (a * 24) := by
   rw [show (24 : BitVec 64) = BitVec.ofNat 64 24 from rfl, ← BitVec.ofNat_mul]
-
-/-- The pre-multiply doubling of off-diagonal terms (`fd_r43x6_sqr_fast`). -/
-theorem toNat_shl1 (a : BitVec 64) (ha : a.toNat < 2^47) :
-    (a <<< (1 : BitVec 64)).toNat = 2 * a.toNat := by
-  show (a <<< (1 : BitVec 64).toNat).toNat = _
-  simp [BitVec.toNat_shiftLeft, Nat.shiftLeft_eq]
-  omega
-
-/-- `vpmadd52lo` is `pl`, unconditionally: both truncate mod `2^52`. -/
-theorem lo_eq (a b : BitVec 64) :
-    mulLo52 a b = BitVec.ofNat 64 (pl a.toNat b.toNat) := by
-  simp [mulLo52, pl, Nat.mod_mul_mod]
-
-/-- `vpmadd52hi` followed by `wwl_shl(…,9)` is `ph`. Unlike `lo_eq` this needs
-the operand bounds: otherwise the implicit truncation to 52 bits is lossy. -/
-theorem hi_eq (a b : BitVec 64) (ha : a.toNat < 2^52) (hb : b.toNat < 2^52) :
-    mulHi52 a b <<< (9 : BitVec 64) = BitVec.ofNat 64 (ph a.toNat b.toNat) := by
-  rw [mulHi52, ofNat_shl, ph, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb,
-      show (9 : BitVec 64).toNat = 9 from rfl]
 
 /-- A lane below `2^63` reads back as itself, rather than as a negative. -/
 theorem ofNat_toInt {n : Nat} (h : n < 2^63) :

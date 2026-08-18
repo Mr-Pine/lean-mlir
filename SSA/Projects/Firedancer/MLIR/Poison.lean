@@ -34,7 +34,7 @@ def getValues (v : Vector (PoisonOr α) n) : PoisonOr (Vector α n) :=
 
 /-- Reading back a vector that was built by injecting plain values yields
 exactly those values, and in particular is not poison. This is the shape every
-`Avx512/Denote/` theorem produces, so it is what connects a denotation theorem
+`Avx512/Proof/` theorem produces, so it is what connects a denotation theorem
 to a specification stated over `BitVec`s. -/
 @[simp] theorem getValues_map_value (v : Vector α n) :
     (@Vector.map α (no_index _) n PoisonOr.value v).getValues = .value v := by

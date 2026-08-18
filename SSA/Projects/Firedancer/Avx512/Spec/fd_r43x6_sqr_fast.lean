@@ -1,22 +1,18 @@
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Denote.fd_r43x6_sqr_fast
 import SSA.Projects.Firedancer.Avx512.Spec.Common
 import SSA.Projects.Firedancer.MLIR.Poison
 import SSA.Projects.Firedancer.Ed25519
 import Mathlib.Tactic.IntervalCases
 
 /-!
-# `fd_r43x6_sqr_fast` squares its input in `ZMod p`
+# What `fd_r43x6_sqr_fast` is specified to compute
 
-Denoting the lifted SLLVM program and decoding the six output limbs yields the
-square of the decoded input in `GF(2^255 - 19)`.
+The ℕ-level model of the squaring, and its two properties: decoding the
+output limbs gives the square in `GF(2^255 - 19)` (`pack_sqLimb_zmod`), and
+each limb stays under the width the `fd_r43x6.h` table promises
+(`sqLimb_lt_u4x`).
 
-The proof composes three layers:
-
-* `denote_fd_r43x6_sqr_fast` (`Avx512/Denote/`): the denotation is the lane
-  expression `sqrFastResult`;
-* `pack_sqLimb_zmod`: ring correctness of the ℕ-level limbs `sqLimb`;
-* `sqrFastResult_eq`: each output lane is `BitVec.ofNat 64` of `sqLimb`.
+Nothing here mentions the program: `Avx512/Proof/fd_r43x6_sqr_fast.lean`
+derives the denotation *into* `sqrVec` and combines it with these two.
 
 `fd_r43x6_sqr_fast` is *not* `fd_r43x6_mul_fast x x`: doubling of the
 off-diagonal partial products happens *before* the multiplications rather than
@@ -263,159 +259,5 @@ theorem sqLimb_lt_two_pow_63 (x : ℕ → ℕ) (hx : ∀ i < 6, x i < 2^47)
 /-- The result vector predicted by the ℕ-level specification. -/
 def sqrVec (x : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   limbVec (sqLimb (limbNat x))
-
-set_option maxHeartbeats 4000000 in
-/-- **Lane derivation**: on an unreduced input with lane 7 zero, every output
-lane of `fd_r43x6_sqr_fast` is the corresponding ℕ-level limb reduced mod
-`2^64`. The reduction is the identity, by `sqLimb_lt_two_pow_63`. -/
-theorem sqrFastResult_eq (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    sqrFastResult x = (sqrVec x).map PoisonOr.value := by
-  have b0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0 (by omega)
-  have b1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1 (by omega)
-  have b2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2 (by omega)
-  have b3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3 (by omega)
-  have b4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4 (by omega)
-  have b5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5 (by omega)
-  have b7 : x[7].toNat = 0 := by rw [h7]; rfl
-  have b7' : x[7].toNat < 2^47 := by omega
-  have s0 : 2 * x[0].toNat < 2^52 := by omega
-  have s1 : 2 * x[1].toNat < 2^52 := by omega
-  have s2 : 2 * x[2].toNat < 2^52 := by omega
-  have s3 : 2 * x[3].toNat < 2^52 := by omega
-  have s4 : 2 * x[4].toNat < 2^52 := by omega
-  have s7 : 2 * x[7].toNat < 2^52 := by omega
-  have t0 : x[0].toNat < 2^52 := by omega
-  have t1 : x[1].toNat < 2^52 := by omega
-  have t2 : x[2].toNat < 2^52 := by omega
-  have t3 : x[3].toNat < 2^52 := by omega
-  have t4 : x[4].toNat < 2^52 := by omega
-  have t5 : x[5].toNat < 2^52 := by omega
-  have t7 : x[7].toNat < 2^52 := by omega
-  apply Vector.ext
-  intro i hi
-  -- Lanes 6 and 7 are identically zero and close on the first `simp only`, so
-  -- the later steps are `try`ed and the six real lanes share one script.
-  interval_cases i <;>
-    · simp only [sqrFastResult, sqrVec, limbVec, Vector.getElem_map, Vector.getElem_mk,
-        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ]
-      try congr 1
-      try simp only [lo_eq, hi_eq, s0, s1, s2, s3, s4, s7, t0, t1, t2, t3, t4, t5, t7,
-        toNat_shl1, b0, b1, b2, b3, b4, b7',
-        natCast_bv, bv_zero, ← BitVec.ofNat_add, ofNat_mul24, ofNat_shl7]
-      try congr 1
-      try simp only [sqLimb, sqCol, limbNat, b7, Nat.mul_zero, pl_zero_right, ph_zero_right]
-      try ring
-
-abbrev sqrValue (x: Vector (BitVec 64) 8) := (fd_r43x6_sqr_fast.denote
-          (Ctxt.Valuation.singleton (x.map PoisonOr.value))).head.getValues
-
-abbrev sqrIsSqr (x: Vector (BitVec 64) 8) := (fun l => (R43x6.decode' l : ZMod p)) <$> sqrValue x
-      = .value ((R43x6.decode' x : ZMod p)^2)
-
-private def output_bounds_u44_u61 (x: Vector (BitVec 64) 8) := R43x6.U44 x → R43x6.U61 (sqrValue x).getValue
-private def output_bounds_u45_u61 (x: Vector (BitVec 64) 8) := R43x6.U45 x → R43x6.U61 (sqrValue x).getValue
-private def output_bounds_u46_u62 (x: Vector (BitVec 64) 8) := R43x6.U46 x → R43x6.U62 (sqrValue x).getValue
-private def output_bounds_u47_u62 (x: Vector (BitVec 64) 8) := R43x6.U47 x → R43x6.U62 (sqrValue x).getValue
-
-set_option maxHeartbeats 1000000 in
-private theorem sqrIsSqrThm (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h6 : x[6] = 0) (h7 : x[7] = 0) :
-    sqrIsSqr x := by
-  have b0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0 (by omega)
-  have b1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1 (by omega)
-  have b2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2 (by omega)
-  have b3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3 (by omega)
-  have b4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4 (by omega)
-  have b5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5 (by omega)
-  have hbnd : ∀ i < 6, limbNat x i < 2^47 := by
-    intro i hi
-    interval_cases i <;> simpa [limbNat] using ‹_›
-  -- 1. denotation to lanes to specified limbs; the poison layer collapses
-  rw [sqrIsSqr, sqrValue, denote_fd_r43x6_sqr_fast, sqrFastResult_eq x hx h7]
-  simp only [HVector.head, Vector.getValues_map_value, PoisonOr.map_value,
-    PoisonOr.value_inj]
-  -- 2. decode both sides into explicit sums
-  have hx8 : x = #v[x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7]] := by
-    apply Vector.ext; intro i hi; interval_cases i <;> rfl
-  have hdx : R43x6.decode' x = (limbNat x 0 : Int) + 2^43 * limbNat x 1
-      + 2^86 * limbNat x 2 + 2^129 * limbNat x 3 + 2^172 * limbNat x 4
-      + 2^215 * limbNat x 5 := by
-    conv_lhs => rw [hx8]
-    rw [decode'_lit, toInt_of_lt b0, toInt_of_lt b1, toInt_of_lt b2,
-      toInt_of_lt b3, toInt_of_lt b4, toInt_of_lt b5]
-    simp [limbNat]
-  rw [sqrVec, decode'_limbVec _ (sqLimb_lt_two_pow_63 _ hbnd), hdx,
-    show ((limbNat x 0 : Int) + 2^43 * limbNat x 1 + 2^86 * limbNat x 2
-        + 2^129 * limbNat x 3 + 2^172 * limbNat x 4 + 2^215 * limbNat x 5)
-      = ((pack (limbNat x) : ℕ) : Int) from by simp [pack]; try ring]
-  -- 3. both sides are now casts of `pack`, so `pack_sqLimb_zmod` applies
-  push_cast
-  exact pack_sqLimb_zmod (limbNat x)
-
-/-! ## Output bounds
-
-The four rows of the `fd_r43x6.h` table, each `sqLimb_lt_u4x` transported
-through `sqrFastResult_eq`: output lane `k < 6` is the specified limb, lanes 6
-and 7 are zero, and none is read back as negative. -/
-
-/-- The program's result, with the poison layer discharged. -/
-private theorem sqrValue_eq (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    sqrValue x = .value (sqrVec x) := by
-  rw [sqrValue, denote_fd_r43x6_sqr_fast, sqrFastResult_eq x hx h7]
-  simp only [HVector.head, Vector.getValues_map_value]
-
-/-- Two-sided lane bounds from a ceiling `N` on the ℕ-level limbs. -/
-private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2^62)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0)
-    (hb : ∀ k < 6, sqLimb (limbNat x) k < N) :
-    R43x6.BoundedUpper ((N : Int) - 1) (sqrValue x).getValue
-      ∧ R43x6.BoundedLower 0 (sqrValue x).getValue := by
-  have hv : (sqrValue x).getValue = sqrVec x := by rw [sqrValue_eq x hx h7]; rfl
-  rw [hv, sqrVec]
-  exact limbVec_bounds _ N (by omega) hb
-
-private theorem output_u44 (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u44_u61 x := by
-  intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^61 := fun k hk =>
-    sqLimb_lt_u44 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 44 (by omega) hin _ (by omega)) k hk
-  exact_mod_cast output_bounds_of x (2^61) (by omega) hx h7 hb
-
-private theorem output_u45 (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u45_u61 x := by
-  intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^61 := fun k hk =>
-    sqLimb_lt_u45 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 45 (by omega) hin _ (by omega)) k hk
-  exact_mod_cast output_bounds_of x (2^61) (by omega) hx h7 hb
-
-private theorem output_u46 (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u46_u62 x := by
-  intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^62 := fun k hk =>
-    sqLimb_lt_u46 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 46 (by omega) hin _ (by omega)) k hk
-  exact_mod_cast output_bounds_of x (2^62) (by omega) hx h7 hb
-
-private theorem output_u47 (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u47_u62 x := by
-  intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^62 := fun k hk =>
-    sqLimb_lt_u47 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 47 (by omega) hin _ (by omega)) k hk
-  exact_mod_cast output_bounds_of x (2^62) (by omega) hx h7 hb
-
-/-- **Specification of `fd_r43x6_sqr_fast`**: on an unreduced input whose two
-high lanes are zero, the six output limbs decode to the square of the decoded
-input in `GF(2^255 - 19)`, and the four input/output width guarantees of
-`fd_r43x6.h` hold. -/
-theorem spec_fd_r43x6_sqr_fast (x : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (h6 : x[6] = 0) (h7 : x[7] = 0) :
-    sqrIsSqr x ∧ output_bounds_u44_u61 x ∧ output_bounds_u45_u61 x
-      ∧ output_bounds_u46_u62 x ∧ output_bounds_u47_u62 x :=
-  ⟨sqrIsSqrThm x hx h6 h7, output_u44 x hx h7, output_u45 x hx h7,
-    output_u46 x hx h7, output_u47 x hx h7⟩
 
 end Firedancer.Avx512

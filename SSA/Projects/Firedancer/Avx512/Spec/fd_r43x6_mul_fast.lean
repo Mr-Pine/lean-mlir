@@ -1,22 +1,17 @@
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Denote.fd_r43x6_mul_fast
 import SSA.Projects.Firedancer.Avx512.Spec.Common
-import SSA.Projects.Firedancer.MLIR.Poison
 import SSA.Projects.Firedancer.Ed25519
 import Mathlib.Tactic.IntervalCases
 
 /-!
-# `fd_r43x6_mul_fast` multiplies its inputs in `ZMod p`
+# What `fd_r43x6_mul_fast` is specified to compute
 
-Denoting the lifted SLLVM program and decoding the six output limbs yields the
-product of the decoded inputs in `GF(2^255 - 19)`.
+The ℕ-level model of the multiplication, and its two properties: decoding the
+output limbs gives the product in `GF(2^255 - 19)` (`pack_limb_zmod`), and
+each limb stays under the width the `fd_r43x6.h` table promises
+(`limb_lt_u4x`).
 
-The proof composes three layers:
-
-* `denote_fd_r43x6_mul_fast` (`Avx512/Denote/`): the denotation is the lane
-  expression `mulFastResult`;
-* `pack_limb_zmod`: ring correctness of the ℕ-level limbs `limb`;
-* `mulFastResult_eq`: each output lane is `BitVec.ofNat 64` of `limb`.
+Nothing here mentions the program: `Avx512/Proof/fd_r43x6_mul_fast.lean`
+derives the denotation *into* `mulVec` and combines it with these two.
 
 ## Hypotheses
 
@@ -286,194 +281,5 @@ theorem limb_lt_two_pow_63 (x y : ℕ → ℕ)
 /-- The result vector predicted by the ℕ-level specification. -/
 def mulVec (x y : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   limbVec (limb (limbNat x) (limbNat y))
-
-set_option maxHeartbeats 8000000 in
-/-- **Lane derivation**: on unreduced inputs with lanes 6 and 7 of `y` zero,
-every output lane of `fd_r43x6_mul_fast` is the corresponding ℕ-level limb
-reduced mod `2^64`. The reduction is the identity, by `limb_lt_two_pow_63`. -/
-theorem mulFastResult_eq (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) :
-    mulFastResult x y = (mulVec x y).map PoisonOr.value := by
-  have bx0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0 (by omega)
-  have bx1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1 (by omega)
-  have bx2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2 (by omega)
-  have bx3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3 (by omega)
-  have bx4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4 (by omega)
-  have bx5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5 (by omega)
-  have by0 : y[0].toNat < 2^47 := unn_toNat y 47 (by omega) hy 0 (by omega)
-  have by1 : y[1].toNat < 2^47 := unn_toNat y 47 (by omega) hy 1 (by omega)
-  have by2 : y[2].toNat < 2^47 := unn_toNat y 47 (by omega) hy 2 (by omega)
-  have by3 : y[3].toNat < 2^47 := unn_toNat y 47 (by omega) hy 3 (by omega)
-  have by4 : y[4].toNat < 2^47 := unn_toNat y 47 (by omega) hy 4 (by omega)
-  have by5 : y[5].toNat < 2^47 := unn_toNat y 47 (by omega) hy 5 (by omega)
-  have b6 : y[6].toNat = 0 := by rw [hy6]; rfl
-  have b7 : y[7].toNat = 0 := by rw [hy7]; rfl
-  have tx0 : x[0].toNat < 2^52 := by omega
-  have tx1 : x[1].toNat < 2^52 := by omega
-  have tx2 : x[2].toNat < 2^52 := by omega
-  have tx3 : x[3].toNat < 2^52 := by omega
-  have tx4 : x[4].toNat < 2^52 := by omega
-  have tx5 : x[5].toNat < 2^52 := by omega
-  have ty0 : y[0].toNat < 2^52 := by omega
-  have ty1 : y[1].toNat < 2^52 := by omega
-  have ty2 : y[2].toNat < 2^52 := by omega
-  have ty3 : y[3].toNat < 2^52 := by omega
-  have ty4 : y[4].toNat < 2^52 := by omega
-  have ty5 : y[5].toNat < 2^52 := by omega
-  have ty6 : y[6].toNat < 2^52 := by omega
-  have ty7 : y[7].toNat < 2^52 := by omega
-  apply Vector.ext
-  intro i hi
-  interval_cases i <;>
-    · simp only [mulFastResult, mulVec, limbVec, Vector.getElem_map, Vector.getElem_mk,
-        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ]
-      try congr 1
-      try simp only [lo_eq, hi_eq,
-        tx0, tx1, tx2, tx3, tx4, tx5, ty0, ty1, ty2, ty3, ty4, ty5, ty6, ty7,
-        natCast_bv, bv_zero, ← BitVec.ofNat_add, ofNat_mul24, ofNat_shl7]
-      try congr 1
-      try simp only [limb, col, limbNat, b6, b7, pl_zero_right, ph_zero_right]
-      try ring
-
-abbrev mulValue (x y : Vector (BitVec 64) 8) := (fd_r43x6_mul_fast.denote
-          (Ctxt.Valuation.ofPair (y.map PoisonOr.value) (x.map PoisonOr.value))).head.getValues
-
-abbrev mulIsMul (x y : Vector (BitVec 64) 8) :=
-    (fun l => (R43x6.decode' l : ZMod p)) <$> mulValue x y
-      = .value ((R43x6.decode' x : ZMod p) * (R43x6.decode' y : ZMod p))
-
-private def output_bounds_u44_u62 (x y : Vector (BitVec 64) 8) :=
-  R43x6.U44 x → R43x6.U44 y → R43x6.U62 (mulValue x y).getValue
-private def output_bounds_u45_u62 (x y : Vector (BitVec 64) 8) :=
-  R43x6.U45 x → R43x6.U45 y → R43x6.U62 (mulValue x y).getValue
-private def output_bounds_u46_u62 (x y : Vector (BitVec 64) 8) :=
-  R43x6.U46 x → R43x6.U46 y → R43x6.U62 (mulValue x y).getValue
-private def output_bounds_u47_u63 (x y : Vector (BitVec 64) 8) :=
-  R43x6.U47 x → R43x6.U47 y → R43x6.U63 (mulValue x y).getValue
-
-/-- The limbs of an unreduced input, bounded as naturals. -/
-private theorem limbNat_lt (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) :
-    ∀ i < 6, limbNat x i < 2^47 := by
-  intro i hi
-  interval_cases i <;>
-    simpa [limbNat] using unn_toNat x 47 (by omega) hx _ (by omega)
-
-set_option maxHeartbeats 1000000 in
-private theorem mulIsMulThm (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) :
-    mulIsMul x y := by
-  have hbx : ∀ i < 6, limbNat x i < 2^47 := limbNat_lt x hx
-  have hby : ∀ i < 6, limbNat y i < 2^47 := limbNat_lt y hy
-  -- 1. denotation to lanes to specified limbs; the poison layer collapses
-  rw [mulIsMul, mulValue, denote_fd_r43x6_mul_fast, mulFastResult_eq x y hx hy hy6 hy7]
-  simp only [HVector.head, Vector.getValues_map_value, PoisonOr.map_value,
-    PoisonOr.value_inj]
-  -- 2. decode both sides into casts of `pack`
-  have hdecode : ∀ (v : Vector (BitVec 64) 8), R43x6.Unreduced v →
-      R43x6.decode' v = ((pack (limbNat v) : ℕ) : Int) := by
-    intro v hv
-    have hv8 : v = #v[v[0],v[1],v[2],v[3],v[4],v[5],v[6],v[7]] := by
-      apply Vector.ext; intro i hi; interval_cases i <;> rfl
-    have hb : ∀ i < 6, limbNat v i < 2^47 := limbNat_lt v hv
-    conv_lhs => rw [hv8]
-    rw [decode'_lit,
-      toInt_of_lt (by simpa [limbNat] using hb 0 (by omega)),
-      toInt_of_lt (by simpa [limbNat] using hb 1 (by omega)),
-      toInt_of_lt (by simpa [limbNat] using hb 2 (by omega)),
-      toInt_of_lt (by simpa [limbNat] using hb 3 (by omega)),
-      toInt_of_lt (by simpa [limbNat] using hb 4 (by omega)),
-      toInt_of_lt (by simpa [limbNat] using hb 5 (by omega))]
-    push_cast [pack, limbNat]
-    try ring
-  rw [mulVec, decode'_limbVec _ (limb_lt_two_pow_63 _ _ hbx hby),
-    hdecode x hx, hdecode y hy]
-  -- 3. both sides are now casts of `pack`, so `pack_limb_zmod` applies
-  push_cast
-  exact pack_limb_zmod (limbNat x) (limbNat y)
-
-/-! ## Output bounds
-
-The four rows of the `fd_r43x6.h` table, each `limb_lt_u4x` transported
-through `mulFastResult_eq`: output lane `k < 6` is the specified limb, lanes 6
-and 7 are zero, and none is read back as negative. -/
-
-/-- The program's result, with the poison layer discharged. -/
-private theorem mulValue_eq (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) :
-    mulValue x y = .value (mulVec x y) := by
-  rw [mulValue, denote_fd_r43x6_mul_fast, mulFastResult_eq x y hx hy hy6 hy7]
-  simp only [HVector.head, Vector.getValues_map_value]
-
-/-- Two-sided lane bounds from a ceiling `N` on the ℕ-level limbs. -/
-private theorem output_bounds_of (x y : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2^63)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0)
-    (hb : ∀ k < 6, limb (limbNat x) (limbNat y) k < N) :
-    R43x6.BoundedUpper ((N : Int) - 1) (mulValue x y).getValue
-      ∧ R43x6.BoundedLower 0 (mulValue x y).getValue := by
-  have hv : (mulValue x y).getValue = mulVec x y := by
-    rw [mulValue_eq x y hx hy hy6 hy7]; rfl
-  rw [hv, mulVec]
-  exact limbVec_bounds _ N hN hb
-
-private theorem output_u44 (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) : output_bounds_u44_u62 x y := by
-  intro hinx hiny
-  have hb : ∀ k < 6, limb (limbNat x) (limbNat y) k < 2^62 := fun k hk =>
-    limb_lt_u44 _ _
-      (fun i hi => by interval_cases i <;> exact unn_toNat x 44 (by omega) hinx _ (by omega))
-      (fun i hi => by interval_cases i <;> exact unn_toNat y 44 (by omega) hiny _ (by omega))
-      k hk
-  exact_mod_cast output_bounds_of x y (2^62) (by omega) hx hy hy6 hy7 hb
-
-private theorem output_u45 (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) : output_bounds_u45_u62 x y := by
-  intro hinx hiny
-  have hb : ∀ k < 6, limb (limbNat x) (limbNat y) k < 2^62 := fun k hk =>
-    limb_lt_u45 _ _
-      (fun i hi => by interval_cases i <;> exact unn_toNat x 45 (by omega) hinx _ (by omega))
-      (fun i hi => by interval_cases i <;> exact unn_toNat y 45 (by omega) hiny _ (by omega))
-      k hk
-  exact_mod_cast output_bounds_of x y (2^62) (by omega) hx hy hy6 hy7 hb
-
-private theorem output_u46 (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) : output_bounds_u46_u62 x y := by
-  intro hinx hiny
-  have hb : ∀ k < 6, limb (limbNat x) (limbNat y) k < 2^62 := fun k hk =>
-    limb_lt_u46 _ _
-      (fun i hi => by interval_cases i <;> exact unn_toNat x 46 (by omega) hinx _ (by omega))
-      (fun i hi => by interval_cases i <;> exact unn_toNat y 46 (by omega) hiny _ (by omega))
-      k hk
-  exact_mod_cast output_bounds_of x y (2^62) (by omega) hx hy hy6 hy7 hb
-
-private theorem output_u47 (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) : output_bounds_u47_u63 x y := by
-  intro hinx hiny
-  have hb : ∀ k < 6, limb (limbNat x) (limbNat y) k < 2^63 := fun k hk =>
-    limb_lt_u47 _ _
-      (fun i hi => by interval_cases i <;> exact unn_toNat x 47 (by omega) hinx _ (by omega))
-      (fun i hi => by interval_cases i <;> exact unn_toNat y 47 (by omega) hiny _ (by omega))
-      k hk
-  exact_mod_cast output_bounds_of x y (2^63) (by omega) hx hy hy6 hy7 hb
-
-/-- **Specification of `fd_r43x6_mul_fast`**: on unreduced inputs whose `y`
-high lanes are zero, the six output limbs decode to the product of the decoded
-inputs in `GF(2^255 - 19)`, and the four input/output width guarantees of
-`fd_r43x6.h` hold. -/
-theorem spec_fd_r43x6_mul_fast (x y : Vector (BitVec 64) 8)
-    (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
-    (hy6 : y[6] = 0) (hy7 : y[7] = 0) :
-    mulIsMul x y ∧ output_bounds_u44_u62 x y ∧ output_bounds_u45_u62 x y
-      ∧ output_bounds_u46_u62 x y ∧ output_bounds_u47_u63 x y :=
-  ⟨mulIsMulThm x y hx hy hy6 hy7, output_u44 x y hx hy hy6 hy7,
-    output_u45 x y hx hy hy6 hy7, output_u46 x y hx hy hy6 hy7,
-    output_u47 x y hx hy hy6 hy7⟩
 
 end Firedancer.Avx512
