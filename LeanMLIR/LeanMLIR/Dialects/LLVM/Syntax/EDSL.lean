@@ -108,23 +108,13 @@ def parseOverflowFlags (op : AST.Op φ) : ReaderM φ LLVM.NoWrapFlags := do
           | 3 => return { nsw := true, nuw := true}
           | s => throw <| .generic s!"The overflow flag with predicate {s} is not allowed. \
             We currently support nsw (no signed wrap) and nuw (no unsigned wrap)"
-/--
-Maps integer predicate codes (as defined in the MLIR LLVM dialect) to their corresponding
-`LLVM.IntPred` constructors.
-This reflects MLIR’s encoding of predicates as numeric values in attributes-/
+/-- The `predicate` attribute of a generic-form `llvm.icmp`. The mapping itself
+is `LLVM.IntPred.ofMLIRPredicate?`, which documents why MLIR's numbering is not
+this inductive's. -/
 def parseIcmpPredicate (n : Int) : AST.ReaderM (MetaLLVM φ) (LLVM.IntPred) := do
-  match n with
-  | 0 => return .eq
-  | 1 => return .ne
-  | 8 => return .ugt
-  | 9 => return .uge
-  | 6 => return .ult
-  | 7 => return .ule
-  | 4 => return .sgt
-  | 5 => return .sge
-  | 2 => return .slt
-  | 3 => return .sle
-  | _ => throw <| .generic s!"The icmp predicate {n} is not supported"
+  match LLVM.IntPred.ofMLIRPredicate? n with
+  | some c => return c
+  | none => throw <| .generic s!"The icmp predicate {n} is not supported"
 
 open InstCombine.MOp in
 def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :

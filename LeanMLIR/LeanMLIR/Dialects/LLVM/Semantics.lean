@@ -468,6 +468,29 @@ instance : ToString IntPred where
   | .slt => "slt"
   | .sle => "sle"
 
+/-- The condition code of MLIR's `llvm.icmp`, which carries it as an integer
+attribute (`<{predicate = 6 : i64}>`) rather than in the operation's name.
+
+The numbering is MLIR's own `ICmpPredicate`, which is **not** the numbering of
+LLVM IR's `CmpInst::Predicate` that this inductive follows: MLIR is 0-based and
+orders the signed comparisons before the unsigned ones, where LLVM starts at 32
+and puts the unsigned ones first. So the two have to be mapped, not cast.
+Verified by compiling all ten comparisons through
+`clang | mlir-translate --import-llvm | mlir-opt --mlir-print-op-generic`; the
+round trip is pinned in `SLLVM/Tests/Icmp.lean`. -/
+def IntPred.ofMLIRPredicate? : Int → Option IntPred
+  | 0 => some .eq
+  | 1 => some .ne
+  | 2 => some .slt
+  | 3 => some .sle
+  | 4 => some .sgt
+  | 5 => some .sge
+  | 6 => some .ult
+  | 7 => some .ule
+  | 8 => some .ugt
+  | 9 => some .uge
+  | _ => none
+
 
 /--
 The ‘icmp’ instruction takes three operands.

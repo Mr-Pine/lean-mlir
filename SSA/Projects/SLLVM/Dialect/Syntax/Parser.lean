@@ -215,6 +215,14 @@ instance : DialectParse SLLVM 0 where
     | "llvm.icmp.sge" => mkExprOf <| Op.icmp .sge (← binW)
     | "llvm.icmp.slt" => mkExprOf <| Op.icmp .slt (← binW)
     | "llvm.icmp.sle" => mkExprOf <| Op.icmp .sle (← binW)
+    -- ... and the generic form, which is the only one MLIR itself emits: the
+    -- op is always named `llvm.icmp` and the condition code rides in an
+    -- attribute.  `ofMLIRPredicate?` is where the numbering is documented.
+    | "llvm.icmp" =>
+      let ⟨n, _⟩ ← opStx.getIntAttr "predicate"
+      let some c := LLVM.IntPred.ofMLIRPredicate? n
+        | throw <| .generic s!"llvm.icmp: unsupported predicate {n}"
+      mkExprOf <| Op.icmp c (← binW)
     -- Unary Operations
     | "llvm.not"    => mkExprOf <| Op.not (← unW)
     | "llvm.neg"    => mkExprOf <| Op.neg (← unW)
