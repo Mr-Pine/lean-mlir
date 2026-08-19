@@ -381,7 +381,7 @@ open LeanMLIR.SingleReturnCompat (Com Expr)
     (ty_eq := rfl)
     (eff_le := by constructor)
     (args := .cons input .nil)
-    (regArgs := HVector.cons body HVector.nil)
+    (regArgs := Regions.cons body Regions.nil)
 
 @[simp_denote] def if_ {Γ : Ctxt _} {t t': Arith.Ty}
   (cond : Var Γ Arith.Ty.bool) (v : Var Γ t) (then_ else_ : Com ScfArith ⟨[t]⟩ .impure t') :
@@ -391,7 +391,7 @@ open LeanMLIR.SingleReturnCompat (Com Expr)
     (ty_eq := rfl)
     (eff_le := by constructor)
     (args := .cons cond <| .cons v .nil)
-    (regArgs := HVector.cons then_ <| HVector.cons else_ <| HVector.nil)
+    (regArgs := Regions.cons then_ <| Regions.cons else_ <| Regions.nil)
 
 @[simp_denote]
 def run {Γ : Ctxt _} {t : Arith.Ty} (v : Var Γ t) (body : Com ScfArith ⟨[t]⟩ .impure t) :
@@ -401,7 +401,7 @@ def run {Γ : Ctxt _} {t : Arith.Ty} (v : Var Γ t) (body : Com ScfArith ⟨[t]�
     (ty_eq := rfl)
     (eff_le := by constructor)
     (args := .cons v .nil)
-    (regArgs := HVector.cons body <| HVector.nil)
+    (regArgs := Regions.cons body <| Regions.nil)
 
 @[simp_denote] def for_ {Γ : Ctxt Arith.Ty} {t : Arith.Ty}
     (start step : Var Γ Arith.Ty.int)
@@ -412,7 +412,7 @@ def run {Γ : Ctxt _} {t : Arith.Ty} (v : Var Γ t) (body : Com ScfArith ⟨[t]�
     (ty_eq := rfl)
     (eff_le := by constructor)
     (args := .cons start <| .cons step <| .cons niter <| .cons v .nil)
-    (regArgs := HVector.cons body <| HVector.nil)
+    (regArgs := Regions.cons body <| Regions.nil)
 
 
 /-- 'if' condition of a true variable evaluates to the then region body. -/

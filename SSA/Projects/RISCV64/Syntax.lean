@@ -688,7 +688,7 @@ def add {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def sub {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -696,7 +696,7 @@ def sub {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def and {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -704,7 +704,7 @@ def and {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def or {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -712,7 +712,7 @@ def or {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def xor  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -720,7 +720,7 @@ def xor  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def sll  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -728,7 +728,7 @@ def sll  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def sra  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -736,7 +736,7 @@ def sra  {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def mul {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -744,7 +744,7 @@ def mul {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def div {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -752,7 +752,7 @@ def div {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def divu {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -760,7 +760,7 @@ def divu {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def remu {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -768,7 +768,7 @@ def remu {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 def rem {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :=
   Expr.mk
@@ -776,6 +776,6 @@ def rem {Γ : Ctxt _} (e₁ e₂: Ctxt.Var Γ .bv) : Expr RV64 Γ .pure [.bv]  :
     (eff_le := by constructor)
     (ty_eq := by rfl)
     (args := .cons e₁ <| .cons e₂ .nil)
-    (regArgs := HVector.nil)
+    (regArgs := Regions.nil)
 
 end RISCVExpr

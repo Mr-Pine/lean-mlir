@@ -150,15 +150,16 @@ Note: this prints the entire let-binding, i.e.:
 - The type annotation
 -/
 partial def Expr.print (e : Expr d Γ eff t) : Format :=
+  let regArgs := e.regArgs.toHVector
   let regions :=
-    match h : e.regArgs.length with
+    match h : regArgs.length with
     | 0 => f!""
     | 1 =>
-      let reg := e.regArgs.getN 0 (by grind)
+      let reg := regArgs.getN 0 (by grind)
       f!" ({reg.print})"
     | _ =>
       let regs :=
-        e.regArgs.mapToList (Format.align true ++ Com.print ·)
+        regArgs.mapToList (Format.align true ++ Com.print ·)
         |> f!", ".joinSep
         |> Format.nest 2
       f!" ({regs})"

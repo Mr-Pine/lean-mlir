@@ -267,15 +267,18 @@ def add {Γ : Ctxt _} (e₁ e₂ : Var Γ int) : Expr SimpleReg Γ .pure [int] :
     (args := .cons e₁ <| .cons e₂ .nil)
     (regArgs := .nil)
 
+/-- `iterate` is declared pure, and since regions now carry their operation's
+declared effect rather than being unconditionally impure, its body is a *pure*
+`Com`. -/
 @[simp_denote]
-def iterate {Γ : Ctxt _} (k : Nat) (input : Var Γ int) (body : Com SimpleReg ⟨[int]⟩ .impure [int]) :
+def iterate {Γ : Ctxt _} (k : Nat) (input : Var Γ int) (body : Com SimpleReg ⟨[int]⟩ .pure [int]) :
     Expr SimpleReg Γ .pure [int] :=
   Expr.mk
     (op := Op.iterate k)
     (eff_le := by constructor)
     (ty_eq := rfl)
     (args := .cons input .nil)
-    (regArgs := HVector.cons body HVector.nil)
+    (regArgs := Regions.cons body Regions.nil)
 
 attribute [local simp] Ctxt.cons
 

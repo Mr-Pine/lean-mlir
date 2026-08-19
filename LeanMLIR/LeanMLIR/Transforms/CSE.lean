@@ -233,11 +233,12 @@ def State.cseArgList
 instance : Inhabited (
           {lets : Lets d Γstart .pure Γ} →
           State d lets →
+          {effR : EffectKind} →
           {ts : RegionSignature d.Ty} →
-          (rs : HVector (fun t => Com d t.1 .impure t.2) ts) →
-          { rs' : HVector (fun t => Com d t.1 .impure t.2) ts // HVector.denote rs =
-            HVector.denote rs' }) where
-  default := fun _s _ts rs => ⟨rs, rfl⟩
+          (rs : Regions d effR ts) →
+          { rs' : Regions d effR ts // Regions.denote rs =
+            Regions.denote rs' }) where
+  default := fun _s _effR _ts rs => ⟨rs, rfl⟩
 
 /-- Default instance for `partial def` to compile. -/
 instance : Inhabited (
@@ -257,11 +258,11 @@ def State.cseRegionArgList
   {Γstart Γ : Ctxt d.Ty}
   {lets : Lets d Γstart .pure Γ}
   (_ : State d lets)
+  {effR : EffectKind}
   {ts : RegionSignature d.Ty}
-  (rs : HVector ((fun t => Com d t.1 .impure t.2)) <| ts) :
-  {rs' : HVector ((fun t => Com d t.1 .impure t.2)) <| ts //
-    HVector.denote rs = HVector.denote rs' } :=
-  let _ := HVector.map (fun _Γα com => Com.denote com) rs
+  (rs : Regions d effR ts) :
+  {rs' : Regions d effR ts //
+    Regions.denote rs = Regions.denote rs' } :=
   match ts, rs with
   | _, .nil => ⟨.nil, by
       simp
@@ -270,7 +271,10 @@ def State.cseRegionArgList
     -- 2023: Need to create a fresh state to CSE the region.
     -- Apr 2024: Bail out, to not try to CSE on regions since we now impose that
     -- all regions are impure.
-    --   Improve this to be able to perform the rewrite when the region can be pure.
+    -- Aug 2026: regions now carry their operation's declared effect rather than
+    -- being unconditionally impure, so the reason for this bail-out is gone.
+    -- It is kept because CSE-ing into regions was never implemented, not
+    -- because the effect prevents it.
     ⟨.cons region rs, by rfl⟩
     /-
     let cseState := State.empty Lets.nil

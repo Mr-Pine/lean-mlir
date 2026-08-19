@@ -277,7 +277,7 @@ theorem Expr.denote_eq_of_region_denote_eq {ty} (op : d.Op)
     (ty_eq : ty = DialectSignature.returnTypes op)
     (eff' : DialectSignature.effectKind op ≤ eff)
     (args : HVector (Var Γ) (DialectSignature.sig op))
-    (regArgs regArgs' : HVector (fun t => Com d t.1 EffectKind.impure t.2)
+    (regArgs regArgs' : Regions d (DialectSignature.effectKind op)
       (DialectSignature.regSig op))
     (hregArgs' : regArgs'.denote = regArgs.denote) :
   (Expr.mk op ty_eq eff' args regArgs').denote = (Expr.mk op ty_eq eff' args regArgs).denote := by
@@ -294,16 +294,16 @@ theorem Expr.denote_eq_of_region_denote_eq {ty} (op : d.Op)
 mutual
 
 def rewritePeepholeRecursivelyRegArgs (fuel : ℕ)
-    (pr : PeepholeRewrite d Γ t) {ts :  List (Ctxt d.Ty × List d.Ty)}
-    (args : HVector (fun t => Com d t.1 EffectKind.impure t.2) ts)
-    : { out : HVector (fun t => Com d t.1 EffectKind.impure t.2) ts // out.denote = args.denote} :=
+    (pr : PeepholeRewrite d Γ t) {effR : EffectKind} {ts :  List (Ctxt d.Ty × List d.Ty)}
+    (args : Regions d effR ts)
+    : { out : Regions d effR ts // out.denote = args.denote} :=
   match ts with
   | .nil =>
     match args with
-    | .nil => ⟨HVector.nil, rfl⟩
+    | .nil => ⟨.nil, rfl⟩
   | .cons .. =>
     match args with
-    | .cons (a := a) (as := as) com coms =>
+    | .cons com coms =>
       let ⟨com', hcom'⟩ := rewritePeepholeRecursively fuel pr com
       let ⟨coms', hcoms'⟩ := (rewritePeepholeRecursivelyRegArgs fuel pr coms)
       ⟨.cons com' coms', by simp [hcom', hcoms']⟩

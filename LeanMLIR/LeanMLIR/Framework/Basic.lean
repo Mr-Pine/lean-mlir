@@ -93,7 +93,7 @@ class DialectDenote (d : Dialect) [TyDenote d.Ty] [DialectSignature d] where
   denote : (op : d.Op) → HVector toType (DialectSignature.sig op) →
     (HVector (fun t : Ctxt d.Ty × List d.Ty =>
       t.1.Valuation
-      → EffectKind.impure.toMonad d.m (HVector toType t.2))
+      → (DialectSignature.effectKind op).toMonad d.m (HVector toType t.2))
             (DialectSignature.regSig op)) →
     ((DialectSignature.effectKind op).toMonad d.m
       (HVector toType <| DialectSignature.returnTypes op))
@@ -152,10 +152,22 @@ inductive Expr : (Γ : Ctxt d.Ty) → (eff : EffectKind) → (ty : List d.Ty) �
     (ty_eq : ty = DialectSignature.returnTypes op)
     (eff_le : DialectSignature.effectKind op ≤ eff)
     (args : HVector (Var Γ) <| DialectSignature.sig op)
-    /- For now, assume that regions are impure.
-       We keep it this way to minimize the total amount of disruption in our definitions.
-       We shall change this once the rest of the file goes through. -/
-    (regArgs : HVector (fun t : Ctxt d.Ty × List d.Ty => Com t.1 .impure t.2)
+    /- Regions carry the *declared* effect of `op`, not the effect of the
+       enclosing `Expr`. Those differ: `eff_le` lets a pure operation sit inside
+       an impure `Com`, so typing regions at `eff` would hand a pure operation
+       impure regions, which cannot be run purely. `effectKind op` instead lines
+       up with `DialectDenote.denote`, whose result is at that same effect and
+       which `Expr.denote` widens with `liftEffect heff`. An operation whose
+       regions are pure therefore stays pure.
+
+       This is why `Regions` is an inductive in this `mutual` block rather than
+       the `HVector` it used to be: `HVector`'s element function is a *parameter*,
+       and a nested inductive's parameters may not mention a constructor's own
+       binders -- which `op` is. The kernel rejects it outright:
+       "invalid nested inductive datatype 'HVector', nested inductive datatypes
+       parameters cannot contain local variables". Making `Regions` mutually
+       recursive rather than nested lifts that restriction. -/
+    (regArgs : Regions (DialectSignature.effectKind op)
       (DialectSignature.regSig op)) : Expr Γ eff ty
 
 /-- A very simple intrinsically typed program: a sequence of let bindings.
@@ -166,16 +178,61 @@ the body are impure!
 inductive Com : Ctxt d.Ty → EffectKind → List d.Ty → Type where
   | rets {Γ} {tys} {eff : EffectKind} (vs : HVector Γ.Var tys) : Com Γ eff tys
   | var (e : Expr Γ eff ty) (body : Com (ty ++ Γ) eff β) : Com Γ eff β
+
+/-- The region arguments of an operation: one `Com` per entry of its
+`RegionSignature`, all at effect `eff`.
+
+The effect is an *index* rather than a parameter, so that `Expr.mk` may
+instantiate it at `DialectSignature.effectKind op` -- a term mentioning the
+constructor's own `op`, which a nested inductive's parameters could not. -/
+inductive Regions : EffectKind → RegionSignature d.Ty → Type where
+  | nil {eff} : Regions eff []
+  | cons {eff} {t : Ctxt d.Ty × List d.Ty} {ts : RegionSignature d.Ty}
+      (r : Com t.1 eff t.2) (rs : Regions eff ts) : Regions eff (t :: ts)
 end
+
+/-! ### Regions
+
+`Regions` exists as its own inductive only to satisfy the kernel's restriction
+on nested inductives (see the comment on `Expr.mk`'s `regArgs`). It is
+otherwise just an `HVector` of `Com`s, so rather than reimplement that API,
+convert. -/
+
+/-- `Regions` as the `HVector` it is, so that `HVector`'s API applies. -/
+def Regions.toHVector {d : Dialect} [DialectSignature d] {eff : EffectKind} :
+    {l : RegionSignature d.Ty} →
+    Regions d eff l → HVector (fun t => Com d t.1 eff t.2) l
+  | _, .nil => .nil
+  | _, .cons r rs => .cons r (Regions.toHVector rs)
+
+/-- The inverse of `Regions.toHVector`, for building region arguments. -/
+def Regions.ofHVector {d : Dialect} [DialectSignature d] {eff : EffectKind} :
+    {l : RegionSignature d.Ty} →
+    HVector (fun t => Com d t.1 eff t.2) l → Regions d eff l
+  | _, .nil => .nil
+  | _, .cons r rs => .cons r (Regions.ofHVector rs)
+
+@[simp] theorem Regions.toHVector_nil {d : Dialect} [DialectSignature d]
+    {eff : EffectKind} : (Regions.nil : Regions d eff []).toHVector = .nil := rfl
+
+@[simp] theorem Regions.toHVector_cons {d : Dialect} [DialectSignature d]
+    {eff : EffectKind} {t : Ctxt d.Ty × List d.Ty} {ts : RegionSignature d.Ty}
+    (r : Com d t.1 eff t.2) (rs : Regions d eff ts) :
+    (Regions.cons r rs).toHVector = .cons r rs.toHVector := rfl
+
+@[simp] theorem Regions.ofHVector_nil {d : Dialect} [DialectSignature d]
+    {eff : EffectKind} :
+    (Regions.ofHVector (d := d) (eff := eff) .nil) = .nil := rfl
+
+@[simp] theorem Regions.ofHVector_cons {d : Dialect} [DialectSignature d]
+    {eff : EffectKind} {t : Ctxt d.Ty × List d.Ty} {ts : RegionSignature d.Ty}
+    (r : Com d t.1 eff t.2) (rs : HVector (fun t => Com d t.1 eff t.2) ts) :
+    Regions.ofHVector (.cons r rs) = .cons r (Regions.ofHVector rs) := rfl
 
 /-! ### `Expr` output context -/
 /-- The context immediately *after* this expression. -/
 abbrev Expr.outContext (_ : Expr d Γ eff ts) : Ctxt d.Ty :=
   ts ++ Γ
-
-/-! ### Regions -/
-abbrev Regions (regSig : RegionSignature d.Ty) : Type :=
-  HVector (fun t => Com d t.1 .impure t.2) regSig
 
 /-! ### Lets -/
 
@@ -192,11 +249,11 @@ mutual -- DecEq
 
 variable {d} [DialectSignature d]
 
-protected instance HVector.decidableEqReg [DecidableEq d.Op] [DecidableEq d.Ty] :
-    ∀ {l : RegionSignature d.Ty}, DecidableEq (HVector (fun t => Com d t.1 .impure t.2) l)
-  | _, .nil, .nil => isTrue rfl
-  | _, .cons x₁ v₁, .cons x₂ v₂ =>
-    letI := HVector.decidableEqReg v₁ v₂
+protected instance Regions.decidableEq [DecidableEq d.Op] [DecidableEq d.Ty] :
+    ∀ {eff : EffectKind} {l : RegionSignature d.Ty}, DecidableEq (Regions d eff l)
+  | _, _, .nil, .nil => isTrue rfl
+  | _, _, .cons x₁ v₁, .cons x₂ v₂ =>
+    letI := Regions.decidableEq v₁ v₂
     letI := Com.decidableEq x₁ x₂
     decidable_of_iff (x₁ = x₂ ∧ v₁ = v₂) (by simp)
 
@@ -206,7 +263,7 @@ protected instance Expr.decidableEq [DecidableEq d.Op] [DecidableEq d.Ty] :
     if ho : op₁ = op₂ then by
       subst ho
       letI := HVector.decidableEq arg₁ arg₂
-      letI := HVector.decidableEqReg regArgs₁ regArgs₂
+      letI := Regions.decidableEq regArgs₁ regArgs₂
       exact decidable_of_iff (arg₁ = arg₂ ∧ regArgs₁ = regArgs₂) (by simp)
     else isFalse (by simp_all)
 
@@ -265,7 +322,7 @@ def Com.rec' {Γ} (com : Com d Γ eff t) : motive com :=
     (motive_1 := fun _ _ _ _ => PUnit)
     (motive_2 := fun _ eff' t' c =>
       (h₁ : eff = eff') → (h₂ : t = t') → motive (h₁ ▸ h₂ ▸ c))
-    (motive_3 := fun _ _ => PUnit)
+    (motive_3 := fun _ _ _ => PUnit)
     (fun _ _ _ _ _ _ => ⟨⟩) -- `Expr.mk` case
     (fun v h₁ h₂ => -- `Com.rets` case
       cast (by subst h₁ h₂; rfl) <| rets (h₂ ▸ v))
@@ -315,7 +372,7 @@ def Expr.args {Γ ts} (e : Expr d Γ eff ts) :
   Expr.casesOn e (fun _ _ _ args _ => args)
 
 def Expr.regArgs {Γ ts} (e : Expr d Γ eff ts) :
-    Regions d (DialectSignature.regSig e.op) :=
+    Regions d (DialectSignature.effectKind e.op) (DialectSignature.regSig e.op) :=
   Expr.casesOn e (fun _ _ _ _ regArgs => regArgs)
 
 /-- `e.returnVars` is the vector of variables in `e.outContext` which are bound by `e`. -/
@@ -458,11 +515,11 @@ variable [TyDenote d.Ty] [DialectDenote d] [DecidableEq d.Ty] [Monad d.m] [Lawfu
 
 mutual
 
-def HVector.denote :
-    {l : RegionSignature d.Ty} → (T : HVector (fun t => Com d t.1 .impure t.2) l) →
-    HVector (fun t => t.1.Valuation → EffectKind.impure.toMonad d.m (HVector toType t.2)) l
+def Regions.denote {eff : EffectKind} :
+    {l : RegionSignature d.Ty} → (T : Regions d eff l) →
+    HVector (fun t => t.1.Valuation → eff.toMonad d.m (HVector toType t.2)) l
   | _, .nil => HVector.nil
-  | _, .cons v vs => HVector.cons (v.denote) (HVector.denote vs)
+  | _, .cons v vs => HVector.cons (v.denote) (Regions.denote vs)
 
 def Expr.denote {ty} (e : Expr d Γ eff ty) (V : Valuation Γ) :
     eff.toMonad d.m (e.outContext.Valuation) :=
@@ -541,13 +598,13 @@ Moreover, recall that `simp only` **does not** generate equation lemmas.
 Hence, we build the equation lemmas by invoking the correct Lean meta magic,
 so that `simp only` (which we use in `simp_peephole`) can find them!
 
-This allows `simp only [HVector.denote]` to correctly simplify `HVector.denote`
+This allows `simp only [Regions.denote]` to correctly simplify `Regions.denote`
 args, since there now are equation lemmas for it.
 -/
 /--
-info: some #[`HVector.denote.eq_1, `HVector.denote.eq_2]
+info: some #[`Regions.denote.eq_1, `Regions.denote.eq_2]
 -/
-#guard_msgs in #eval Lean.Meta.getEqnsFor? ``HVector.denote
+#guard_msgs in #eval Lean.Meta.getEqnsFor? ``Regions.denote
 /--
 info: some #[`Expr.denote.eq_1]
 -/
@@ -589,15 +646,14 @@ section Lemmas
     (Valuation.comap (e.denote V) e.contextHom) = V := by
   funext t v; simp [Expr.denote_unfold, Id.map_eq']
 
-@[simp] theorem HVector.denote_nil
-    (T : HVector (fun (t : Ctxt d.Ty × List d.Ty) => Com d t.1 .impure t.2) []) :
-    HVector.denote T = HVector.nil := by
+@[simp] theorem Regions.denote_nil {eff : EffectKind} (T : Regions d eff []) :
+    Regions.denote T = HVector.nil := by
   cases T; rfl
 
-@[simp] theorem HVector.denote_cons
-    {t : _ × _} {ts : RegionSignature _}
-    (a : Com d t.1 .impure t.2) (as : Regions _ ts) :
-    HVector.denote (.cons a as) = .cons (a.denote) (as.denote) :=
+@[simp] theorem Regions.denote_cons
+    {t : _ × _} {ts : RegionSignature _} {eff : EffectKind}
+    (a : Com d t.1 eff t.2) (as : Regions d eff ts) :
+    Regions.denote (.cons a as) = .cons (a.denote) (as.denote) :=
   rfl
 
 @[simp] theorem Com.denote_rets {eff : EffectKind} (Γ : Ctxt d.Ty) (vs : HVector Γ.Var ts) :
@@ -1116,17 +1172,17 @@ def Expr.changeDialect : Expr d Γ eff ty → Expr d' (Γ.map f.mapTy) eff (f.ma
       (f.preserves_returnTypes _).symm,
       f.preserves_effectKind _ ▸ effLe,
       f.preserves_sig _ ▸ args.map' f.mapTy fun _ => Var.toMap (f:=f.mapTy),
-      f.preserves_regSig _ ▸
-        HVector.changeDialect regs
+      f.preserves_effectKind _ ▸ f.preserves_regSig _ ▸
+        Regions.changeDialect regs
     ⟩
 termination_by e => sizeOf e
 
-/-- Inline of `HVector.map'` for the termination checker -/
-def HVector.changeDialect : ∀ {regSig : RegionSignature d.Ty},
-    HVector (fun t => Com d t.fst eff t.snd) regSig
-    → HVector (fun t => Com d' t.fst eff t.snd) (f.mapTy <$> regSig : RegionSignature _)
+/-- Inline of a `map` over `Regions` for the termination checker -/
+def Regions.changeDialect : ∀ {regSig : RegionSignature d.Ty},
+    Regions d eff regSig
+    → Regions d' eff (f.mapTy <$> regSig : RegionSignature _)
   | _, .nil        => .nil
-  | t::_, .cons a as  => .cons a.changeDialect (HVector.changeDialect as)
+  | _::_, .cons a as  => .cons a.changeDialect (Regions.changeDialect as)
 termination_by _ vs => sizeOf vs
 
 end
@@ -1151,8 +1207,8 @@ section Lemmas
       <| (body.changeDialect f).changeVars (Hom.id.castCodomain h) := by
   simp only [changeDialect]
 
-@[simp] theorem HVector.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
-    HVector.changeDialect (eff := eff) f nil = nil := by simp [HVector.changeDialect]
+@[simp] theorem Regions.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
+    Regions.changeDialect (eff := eff) f .nil = .nil := by simp [Regions.changeDialect]
 
 end Lemmas
 

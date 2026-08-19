@@ -196,7 +196,7 @@ def transformExprLLVM (e : Expr (InstCombine.MetaLLVM 0) (ctxtTransformToLLVM Γ
           (eff_le := eff_le1)
           (ty_eq := by cases ty_eq1; rfl)
           (args := args')
-          (regArgs := HVector.nil)
+          (regArgs := Regions.nil)
 
 /--
   This function is analogous to `transformExprLLVM`. It lifts an expression
@@ -230,7 +230,7 @@ def transformExprRISCV (e : Expr RISCV64.RV64 (ctxtTransformToRiscV Γ) eff ty) 
           (eff_le := eff_le1)
           (ty_eq := by cases ty_eq1; rfl)
           (args := args')
-          (regArgs := HVector.nil)
+          (regArgs := Regions.nil)
 
 instance : MLIR.AST.TransformTy LLVMPlusRiscV 0 where
   mkTy tStx := do

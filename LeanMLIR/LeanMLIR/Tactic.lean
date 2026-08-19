@@ -42,7 +42,7 @@ attribute [simp_denote]
   Expr.denote_castPureToEff
   /- Unfold denotation -/
   Com.ret
-  Com.denote_var Com.denote_rets Expr.denoteOp HVector.denote
+  Com.denote_var Com.denote_rets Expr.denoteOp Regions.denote
   Expr.op_mk Expr.args_mk Expr.regArgs_mk
   Expr.op_castPureToEff Expr.args_castPureToEff
   /- `toPure`: a pure operation sitting in an impure `Com`, as every
@@ -89,16 +89,16 @@ variable {d : Dialect} {instSig : DialectSignature d}
   {instTyDenote : TyDenote d.Ty} {instDenote : DialectDenote d}
   {instMonad : Monad d.m}
 
-@[simp_denote] theorem HVector.denote_nil'
-    (T : HVector (fun (t : Ctxt d.Ty × List d.Ty) => Com d t.1 .impure t.2) []) :
-    HVector.denote T = HVector.nil := by
-  cases T; simp [HVector.denote]
+@[simp_denote] theorem Regions.denote_nil' {eff : EffectKind}
+    (T : Regions d eff []) :
+    Regions.denote T = HVector.nil := by
+  cases T; simp [Regions.denote]
 
-@[simp_denote] theorem HVector.denote_cons'
+@[simp_denote] theorem Regions.denote_cons' {eff : EffectKind}
     (t : Ctxt d.Ty × List d.Ty) (ts : List (Ctxt d.Ty × List d.Ty))
-    (a : Com d t.1 .impure t.2) (as : HVector (fun t => Com d t.1 .impure t.2) ts) :
-    HVector.denote (.cons a as) = .cons (a.denote) (as.denote) := by
-  simp [HVector.denote]
+    (a : Com d t.1 eff t.2) (as : Regions d eff ts) :
+    Regions.denote (.cons a as) = .cons (a.denote) (as.denote) := by
+  simp [Regions.denote]
 
 end
 

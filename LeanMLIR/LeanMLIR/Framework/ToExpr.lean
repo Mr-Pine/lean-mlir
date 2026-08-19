@@ -133,23 +133,20 @@ partial def Expr.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} :
       dE, sig, effE, ΓE, tyE, op, ty_eq, eff_le, args, regArgs
     ]
 
-partial def Regions.toExprAux {regSig : RegionSignature d.Ty}
-    (regs : HVector (fun (t : _ × _) => Com d t.1 EffectKind.impure t.2) regSig) :
-    Lean.Expr :=
-  let α := q(Ctxt ($dE).Ty × List ($dE).Ty)
-  let A :=
-    q(fun (t : Ctxt ($dE).Ty × List ($dE).Ty) => Com $dE t.1 EffectKind.impure t.2)
+partial def Regions.toExprAux {eff : EffectKind} {regSig : RegionSignature d.Ty}
+    (regs : Regions d eff regSig) : Lean.Expr :=
+  let effE : Q(EffectKind) := Lean.toExpr eff
   match regSig, regs with
   | [], .nil =>
-    mkApp2 (.const ``HVector.nil [0,0]) α A
+    mkAppN (mkConst ``Regions.nil) #[dE, sig, effE]
   | a::as, .cons x xs =>
     let pToExpr (a) := Prod.foldToExpr <| a.map f.mapCtxt f.mapList
-    let a := pToExpr a
-    let as := (as.map pToExpr).foldToExpr
+    let aE := pToExpr a
+    let asE := (as.map pToExpr).foldToExpr
 
     let x := x.toExprAux
     let xs := Regions.toExprAux xs
-    mkApp6 (.const ``HVector.cons [0,0]) α A as a x xs
+    mkAppN (mkConst ``Regions.cons) #[dE, sig, effE, aE, asE, x, xs]
 
 end
 
