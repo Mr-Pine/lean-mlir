@@ -45,6 +45,9 @@ attribute [simp_denote]
   Com.denote_var Com.denote_rets Expr.denoteOp HVector.denote
   Expr.op_mk Expr.args_mk Expr.regArgs_mk
   Expr.op_castPureToEff Expr.args_castPureToEff
+  /- `toPure`: a pure operation sitting in an impure `Com`, as every
+     instruction of a region that ends in a store does -/
+  Expr.op_toPure Expr.args_toPure Expr.regArgs_toPure
   /- Effect massaging -/
   EffectKind.liftEffect_rfl
   Id.pure_eq' Id.bind_eq' id_eq

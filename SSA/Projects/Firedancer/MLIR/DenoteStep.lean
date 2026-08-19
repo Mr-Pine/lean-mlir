@@ -70,6 +70,38 @@ theorem Com.denote_var_pure_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty}
     simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
       Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
 
+/-- The impure counterpart of `Com.denote_var_pure`.
+
+A region that ends in a store parses as one `.impure` `Com`, so *every*
+instruction in it -- including all the arithmetic -- is an `Expr … .impure …`
+carrying `eff_le : .pure ≤ .impure`. `Com.denote_var_pure` does not apply, but
+the denotation still collapses: `Expr.denote` of a pure-op expression is
+`pure (…)`, and `pure x >>= f = f x`. -/
+theorem Com.denote_var_pureOp {Γ : Ctxt d.Ty} {ts' ts : List d.Ty}
+    (e : Expr d Γ .impure ts') (h : e.HasPureOp)
+    (body : Com d e.outContext .impure ts) (V : Γ.Valuation) :
+    (Com.var e body).denote V = body.denote ((e.toPure h).denoteOpPure V ++ V) := by
+  simp only [Com.denote_var, Expr.denote_unfold]
+  rw [← Expr.pure_denoteOp_toPure e h]
+  simp only [map_pure, pure_bind, Expr.denoteOpPure]
+
+/-- As `Com.denote_var_pureOp`, for the single-result case, pushing the value
+into the valuation as a `Valuation.cons`. -/
+theorem Com.denote_var_pureOp_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty}
+    (e : Expr d Γ .impure [t]) (h : e.HasPureOp)
+    (body : Com d e.outContext .impure ts) (V : Γ.Valuation) :
+    (Com.var e body).denote V = body.denote ((e.toPure h).denoteOp1 V ::ᵥ V) := by
+  rw [Com.denote_var_pureOp e h]
+  congr 1
+  show (e.toPure h).denoteOpPure V ++ V = ((e.toPure h).denoteOpPure V).head ::ᵥ V
+  generalize (e.toPure h).denoteOpPure V = w
+  cases w
+  case cons a as =>
+    cases as
+    show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
+    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
+      Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+
 open Lean Meta Elab Tactic in
 /-- One step of `denote_step_all`: if the main goal has the shape
 `(Com.var e body).denote V = rhs`, introduce `v<i> : _` together with
@@ -93,8 +125,31 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) :
     let e := comArgs[comArgs.size - 2]!
     let body := comArgs[comArgs.size - 1]!
     -- stepEq : (Com.var e body).denote V = body.denote (e.denoteOp1 V ::ᵥ V)
-    let stepEq ← mkAppM ``Com.denote_var_pure_single #[e, body, V]
-    let tVal ← mkAppM ``Expr.denoteOp1 #[e, V]
+    --
+    -- A `Com` that ends in a store is `.impure` throughout, so its arithmetic
+    -- instructions are impure-typed expressions carrying pure *operations*.
+    -- Try the pure lemma first; if the expression is impure-typed, fall back to
+    -- `Com.denote_var_pureOp_single`, which needs a purity proof for the op and
+    -- steps through `e.toPure`. Both leave a pure `Expr.denoteOp1` behind, so
+    -- everything downstream is unaffected.
+    let mkStep : MetaM (Option (Lean.Expr × Lean.Expr)) := do
+      try
+        let stepEq ← mkAppM ``Com.denote_var_pure_single #[e, body, V]
+        let tVal ← mkAppM ``Expr.denoteOp1 #[e, V]
+        return some (stepEq, tVal)
+      catch _ =>
+        try
+          let hProof ← mkDecideProof (← mkAppM ``Expr.HasPureOp #[e])
+          let stepEq ← mkAppM ``Com.denote_var_pureOp_single #[e, hProof, body, V]
+          -- The `hv<i>` this leaves behind reads `(e.toPure h).denoteOp1 V`
+          -- rather than the pure path's `e.denoteOp1 V`. `simp_denote` carries
+          -- `Expr.op_toPure` and friends so that the projections still reduce to
+          -- those of the underlying `Expr.mk`, which is what keeps every
+          -- downstream tactic working unchanged.
+          let tVal ← mkAppM ``Expr.denoteOp1 #[← mkAppM ``Expr.toPure #[e, hProof], V]
+          return some (stepEq, tVal)
+        catch _ => return none
+    let some (stepEq, tVal) ← mkStep | return none
     let vName := baseName.appendAfter (toString i)
     let hName := Name.mkSimple ("h" ++ vName.toString)
     -- newType : ∀ v, v = e.denoteOp1 V → body.denote (v ::ᵥ V) = rhs
