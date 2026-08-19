@@ -214,7 +214,8 @@ class DialectParse (d : Dialect) (φ : outParam Nat) [DialectSignature d]
   so that we can add the `TransformTy` instance.
   -/
   --
-  mkExpr [TransformTy d φ] : (Γ : Ctxt d.Ty) → (opStx : Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
+  mkExpr [TransformTy d φ] : (Γ : Ctxt d.Ty) → (opStx : Op φ) →
+    (regions : List (ParsedRegion d)) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
 
 
 variable {d}

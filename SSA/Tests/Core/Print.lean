@@ -68,7 +68,7 @@ instance : DialectParse TestDialect 0 where
     | .undefined "int2" => return .int2
     | t => throw <| .unsupportedType (some t)
   isValidReturn _ stx := return (stx.name == "return")
-  mkExpr Γ opStx := do
+  mkExpr Γ opStx _regions := do
     let op : TestDialect.Op ← match opStx.name with
       | "noop"     => pure .noop
       | "unpair"   => pure .unPair

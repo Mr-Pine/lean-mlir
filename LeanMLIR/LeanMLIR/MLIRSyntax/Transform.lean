@@ -70,8 +70,21 @@ end Monads
 class TransformTy (d : Dialect) (φ : outParam Nat) [DialectSignature d]  where
   mkTy   : MLIRType φ → ExceptM d d.Ty
 
+/-- A region of an operation, already transformed into a `Com`.
+
+`mkExpr` receives these ready-made rather than a callback that builds them,
+for two reasons. Termination: a callback passed through this (opaque) class
+field could be applied to anything, so nothing could be proven to decrease,
+whereas `mkComHelper` recursing directly into `opStx.regions` is structurally
+smaller. And totality: `mkCom` cannot be `partial`, because the `whnf`-based
+elaborator in `MLIRSyntax/EDSL.lean` -- still used by FHE, ModArith and RISCV64
+-- has to unfold it. -/
+abbrev ParsedRegion (d : Dialect) [DialectSignature d] : Type :=
+  Σ (Γ : Ctxt d.Ty) (eff : EffectKind) (ty : List d.Ty), Com d Γ eff ty
+
 class TransformExpr (d : Dialect) (φ : outParam Nat) [DialectSignature d] [TransformTy d φ]  where
-  mkExpr   : (Γ : Ctxt d.Ty) → (opStx : AST.Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
+  mkExpr   : (Γ : Ctxt d.Ty) → (opStx : AST.Op φ) → (regions : List (ParsedRegion d)) →
+    ReaderM d (Σ eff ty, Expr d Γ eff ty)
 
 /-- NOTE: You probably don't wan't to implement this class directly, consider
 implementing `LeanMLIR.DialectParse` instead! -/
@@ -171,15 +184,33 @@ private def declareBindings [TransformTy d φ] (Γ : Ctxt d.Ty) (vals : List (Ty
     return Γ''
   ) (.ofCtxt Γ)
 
+/-- Build a region into a `Com`. Passed to `mkComHelper` as ordinary data
+rather than being called through the `TransformExpr` instance: that keeps the
+recursion below *structural*, which matters because `mkCom` has to reduce under
+`whnf` for the elaborator in `MLIRSyntax/EDSL.lean` (used by FHE, ModArith and
+RISCV64). Neither `partial` nor well-founded recursion reduces there. -/
+private abbrev MkRegion (d : Dialect) [DialectSignature d] (φ : Nat) : Type :=
+  MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
+
+private def mkRegions [TransformTy d φ] (mkRegion : MkRegion d φ) :
+    List (MLIR.AST.Region φ) → ExceptM d (List (ParsedRegion d))
+  | [] => return []
+  | r :: rs => do
+      let r ← mkRegion r
+      let rs ← mkRegions mkRegion rs
+      return r :: rs
+
 private def mkComHelper
   [TransformTy d φ] [instTransformExpr : TransformExpr d φ] [instTransformReturn :
     TransformReturn d φ]
+  (mkRegion : MkRegion d φ)
   (Γ : Ctxt d.Ty) :
     List (MLIR.AST.Op φ) → BuilderM d (Σ eff ty, Com d Γ eff ty)
   | [retStx] => do
       instTransformReturn.mkReturn Γ retStx
   | var::rest => do
-    let ⟨_eff₁, ty₁, expr⟩ ← (instTransformExpr.mkExpr Γ var)
+    let regions ← mkRegions mkRegion var.regions
+    let ⟨_eff₁, ty₁, expr⟩ ← (instTransformExpr.mkExpr Γ var regions)
     let numExpectedReturns := ty₁.length
     if var.res.length != numExpectedReturns then
       throw <| .generic
@@ -188,18 +219,32 @@ private def mkComHelper
       let _ ← (var.res.zip ty₁).foldlM (init:=Γ) fun Γ ⟨var, ty⟩ => do
         let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
         return Γ'
-      let ⟨_eff₂, ty₂, body⟩ ← mkComHelper (ty₁ ++ Γ) rest
+      let ⟨_eff₂, ty₂, body⟩ ← mkComHelper mkRegion (ty₁ ++ Γ) rest
       return ⟨_, ty₂, Com.letSup expr body⟩
   | [] => throw <| .generic "Ill-formed (empty) block"
+
+/-- `mkCom`, with an explicit bound on how deeply regions may nest.
+
+The bound is what keeps this structurally recursive, and so reducible. It is
+not a real restriction: MLIR nesting is a handful of levels at most, and
+exceeding it is a clear error rather than a wrong answer. -/
+private def mkComAux [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
+    Nat → MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
+  | 0, _ => throw <| .generic "Region nesting is too deep"
+  | fuel+1, reg =>
+    match reg.ops with
+    | [] => throw <| .generic "Ill-formed region (empty)"
+    | coms => BuilderM.runWithEmptyMapping <| do
+      let Γ ← declareBindings ∅ reg.args
+      let com ← mkComHelper (mkComAux fuel) Γ coms
+      return ⟨Γ, com⟩
+
+/-- The maximum region nesting depth `mkCom` will accept. -/
+def maxRegionDepth : Nat := 64
 
 def mkCom [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ]
   (reg : MLIR.AST.Region φ) :
   ExceptM d (Σ (Γ : Ctxt d.Ty) (eff : EffectKind) (ty : _), Com d Γ eff ty) :=
-  match reg.ops with
-  | [] => throw <| .generic "Ill-formed region (empty)"
-  | coms => BuilderM.runWithEmptyMapping <| do
-    let Γ ← declareBindings ∅ reg.args
-    let com ← mkComHelper Γ coms
-    return ⟨Γ, com⟩
+  mkComAux maxRegionDepth reg
 
 end MLIR.AST

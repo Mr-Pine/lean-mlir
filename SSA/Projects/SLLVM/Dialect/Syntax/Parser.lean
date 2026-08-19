@@ -133,7 +133,8 @@ def parseOverflowFlags (op : AST.Op 0) : ReaderM LLVM.NoWrapFlags :=
 instance : DialectParse SLLVM 0 where
   isValidReturn Γ opStx := return opStx.name == "llvm.return"
 
-  mkExpr (Γ : Ctxt SLLVM.Ty) (opStx : MLIR.AST.Op 0) := do
+  mkExpr (Γ : Ctxt SLLVM.Ty) (opStx : MLIR.AST.Op 0)
+      (regions : List (MLIR.AST.ParsedRegion SLLVM)) := do
   let args ← opStx.parseArgs Γ
 
   /- `binW` is the (lazily computed) width, assuming a binary operation -/

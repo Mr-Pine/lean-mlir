@@ -192,7 +192,7 @@ def mkReturn (Γ : Ctxt (ModArith q).Ty) (opStx : MLIR.AST.Op 0)
 
 
 instance : MLIR.AST.TransformExpr (ModArith q) 0 where
-  mkExpr := mkExpr
+  mkExpr Γ opStx _regions := mkExpr Γ opStx
 
 instance : MLIR.AST.TransformReturn (ModArith q) 0 where
   mkReturn := mkReturn

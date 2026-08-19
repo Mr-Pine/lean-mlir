@@ -656,7 +656,7 @@ def mkExpr (Γ : Ctxt _) (opStx : MLIR.AST.Op 0) :
     | _ => throw <| .unsupportedOp s!"wrong number of arguments, more than 2 arguemnts  {repr opStx}"
 
 instance : MLIR.AST.TransformExpr (RV64) 0 where
-  mkExpr := mkExpr
+  mkExpr Γ opStx _regions := mkExpr Γ opStx
 
 def mkReturn (Γ : Ctxt _) (opStx : MLIR.AST.Op 0) : MLIR.AST.ReaderM (RV64)
     (Σ eff ty, Com RV64 Γ eff ty) :=

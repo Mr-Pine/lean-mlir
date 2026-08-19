@@ -276,7 +276,7 @@ def mkExpr (Γ : Ctxt _) (opStx : MLIR.AST.Op 0) :
         return ⟨eff, .riscv <$> ty, v⟩
 
 instance : MLIR.AST.TransformExpr (LLVMPlusRiscV) 0   where
-  mkExpr := mkExpr
+  mkExpr Γ opStx _regions := mkExpr Γ opStx
 
 @[simp_denote]
 def transformVarLLVM (v : Ctxt.Var (ctxtTransformToLLVM Γ) ty) :

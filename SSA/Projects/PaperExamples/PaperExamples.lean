@@ -76,7 +76,7 @@ instance : DialectParse Simple 0 where
 
   isValidReturn _Γ opStx := return opStx.name == "return"
 
-  mkExpr Γ opStx := do opStx.mkExprOf Γ <|← match opStx.name with
+  mkExpr Γ opStx _regions := do opStx.mkExprOf Γ <|← match opStx.name with
     | "add"   => return .add
     | "const" => do
         let ⟨val, _type⟩ ← opStx.getIntAttr "value"

@@ -373,7 +373,7 @@ def mkReturn (Γ : Ctxt DCxComb.Ty) (opStx : MLIR.AST.Op 0) :
     return ⟨.pure, [ty], Com.ret v⟩
 
 instance : MLIR.AST.TransformExpr (DCxComb) 0 where
-  mkExpr := mkExpr
+  mkExpr Γ opStx _regions := mkExpr Γ opStx
 
 instance : AST.TransformReturn DCxComb 0 := { mkReturn }
 

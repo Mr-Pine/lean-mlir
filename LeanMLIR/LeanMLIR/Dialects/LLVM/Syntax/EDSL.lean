@@ -243,8 +243,10 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 
-instance : AST.TransformExpr (MetaLLVM φ) φ := { mkExpr }
-instance : AST.TransformExpr LLVM 0 := { mkExpr }
+instance : AST.TransformExpr (MetaLLVM φ) φ :=
+  { mkExpr := fun Γ opStx _regions => mkExpr Γ opStx }
+instance : AST.TransformExpr LLVM 0 :=
+  { mkExpr := fun Γ opStx _regions => mkExpr Γ opStx }
 
 def mkReturn (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     MLIR.AST.ReaderM (MetaLLVM φ) (Σ eff ty, Com (MetaLLVM φ) Γ eff ty) := do

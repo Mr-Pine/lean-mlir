@@ -174,7 +174,7 @@ def mkExpr (Γ : Ctxt (FHE q n).Ty) (opStx : MLIR.AST.Op 0) :
   | _ => throw <| .unsupportedOp s!"unsupported operation {repr opStx}"
 
 instance : MLIR.AST.TransformExpr (FHE q n) 0 where
-  mkExpr := mkExpr
+  mkExpr Γ opStx _regions := mkExpr Γ opStx
 
 def mkReturn (Γ : Ctxt (FHE q n).Ty) (opStx : MLIR.AST.Op 0) : MLIR.AST.ReaderM (FHE q n)
     (Σ eff ty, Com (FHE q n) Γ eff ty) :=
