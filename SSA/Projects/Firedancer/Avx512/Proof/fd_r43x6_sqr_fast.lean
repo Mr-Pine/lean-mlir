@@ -461,10 +461,10 @@ private theorem sqrIsSqrThm (x : Vector (BitVec 64) 8)
   rw [sqrVec, decode'_limbVec _ (sqLimb_lt_two_pow_63 _ hbnd), hdx,
     show ((limbNat x 0 : Int) + 2^43 * limbNat x 1 + 2^86 * limbNat x 2
         + 2^129 * limbNat x 3 + 2^172 * limbNat x 4 + 2^215 * limbNat x 5)
-      = ((pack (limbNat x) : ℕ) : Int) from by simp [pack]; try ring]
-  -- 3. both sides are now casts of `pack`, so `pack_sqLimb_zmod` applies
+      = ((decodeNat (limbNat x) : ℕ) : Int) from by simp [decodeNat_eq]; try ring]
+  -- 3. both sides are now casts of `decodeNat`, so `decodeLimbs_sqLimb_zmod` applies
   push_cast
-  exact pack_sqLimb_zmod (limbNat x)
+  exact decodeLimbs_sqLimb_zmod (limbNat x)
 
 /-! ## Output bounds
 

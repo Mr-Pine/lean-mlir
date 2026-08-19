@@ -18,8 +18,8 @@ Every `fd_r43x6` multiply-like operation splits its limb products with the
 
 so that `pl a b + 2^43·(ph a b) = a·b` (note `2^52 = 2^43·2^9`), and then
 folds the resulting radix-`2^43` columns with `2^258 ≡ 152 (mod p)`. This
-file holds the split, the `pack` decoding of six limbs, bounds on `pl`/`ph`,
-and the `BitVec`/ℕ transfer lemmas that read a lane expression built from
+file holds the split, bounds on `pl`/`ph`, and the `BitVec`/ℕ transfer
+lemmas that read a lane expression built from
 `mulLo52`/`mulHi52` back as a single `BitVec.ofNat` of a `pl`/`ph` sum.
 
 The per-operation column sums (`sqCol`/`col`) and their ring/bounds theorems
@@ -29,6 +29,22 @@ live in the respective `Avx512/Spec/fd_r43x6_*.lean` files.
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
+
+/-! ## Limb functions indexed by `ℕ`
+
+The column sums below take their limbs as `ℕ → ℕ` with limbs beyond 5 zero by
+convention, rather than as the `Fin R43x6.limbCount → ℕ` of the
+representation. `decodeNat` is `R43x6.decodeLimbs` for that form, and the only
+thing standing between the two. -/
+
+/-- `R43x6.decodeLimbs` for a limb function indexed by `ℕ`. -/
+def decodeNat {R : Type*} [CommSemiring R] (l : ℕ → R) : R :=
+  R43x6.decodeLimbs (fun i : Fin R43x6.limbCount => l i)
+
+@[simp] theorem decodeNat_eq {R : Type*} [CommSemiring R] (l : ℕ → R) :
+    decodeNat l = l 0 + 2^43 * l 1 + 2^86 * l 2 + 2^129 * l 3 + 2^172 * l 4
+      + 2^215 * l 5 := by
+  simp [decodeNat, R43x6.limbCount]
 
 /-! ## The `pl`/`ph` split -/
 
@@ -45,10 +61,6 @@ theorem pl_add_shift_ph (a b : ℕ) : pl a b + 2^43 * ph a b = a * b := by
 
 theorem pl_lt (a b : ℕ) : pl a b < 2^52 :=
   Nat.mod_lt _ (by norm_num)
-
-/-- Decode limbs into the natural number they represent: `Σ_{k<6} l k · 2^(43k)`. -/
-def pack (l : ℕ → ℕ) : ℕ :=
-  l 0 + 2^43 * l 1 + 2^86 * l 2 + 2^129 * l 3 + 2^172 * l 4 + 2^215 * l 5
 
 /-! ## Bounds on `ph`
 
@@ -133,7 +145,9 @@ theorem toNat_lt_of_bounds {a : BitVec 64} {N : ℕ} (hN : N ≤ 2^62)
 theorem unn_toNat (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
     (hx : R43x6.UNN n x) (i : ℕ) (hi : i < 8) : (x[i]'hi).toNat < 2^n :=
   toNat_lt_of_bounds (Nat.pow_le_pow_right (by omega) hn)
-    (by have := hx.1 i hi; push_cast; omega) (hx.2 i hi)
+    (by have := hx.1 ⟨i, hi⟩; simp only [LimbRepresentations.toInts] at this
+        push_cast; omega)
+    (hx.2 ⟨i, hi⟩)
 
 /-- An output lane, back in `toInt` form. -/
 theorem lane_toInt_bound {n N : ℕ} (hN : N ≤ 2^63) (h : n < N) :
@@ -151,10 +165,8 @@ theorem toInt_of_lt {a : BitVec 64} (h : a.toNat < 2^47) :
 theorem decode'_lit (a b c d e f g h : BitVec 64) :
     R43x6.decode' #v[a,b,c,d,e,f,g,h] = a.toInt + 2^43 * b.toInt + 2^86 * c.toInt
       + 2^129 * d.toInt + 2^172 * e.toInt + 2^215 * f.toInt := by
-  simp [R43x6.decode', R43x6.decode, LimbRepresentations.decode,
-    LimbRepresentations.placeValues, R43x6.limbCount, R43x6.baseBits, R43x6.limbWidth,
-    show (Vector.range 6 : Vector Nat 6) = #v[0,1,2,3,4,5] from rfl, Vector.sum]
-  ring
+  rw [R43x6.decode'_eq]
+  simp
 
 /-- The input limbs of a vector as naturals, in the `ℕ → ℕ` form the column
 sums take. -/
@@ -177,14 +189,14 @@ def limbVec (l : ℕ → ℕ) : Vector (BitVec 64) 8 :=
   #v[BitVec.ofNat 64 (l 0), BitVec.ofNat 64 (l 1), BitVec.ofNat 64 (l 2),
      BitVec.ofNat 64 (l 3), BitVec.ofNat 64 (l 4), BitVec.ofNat 64 (l 5), 0, 0]
 
-/-- Decoding `limbVec` is `pack`, provided no lane reads back negative. -/
+/-- Decoding `limbVec` is `decodeNat`, provided no lane reads back negative. -/
 theorem decode'_limbVec (l : ℕ → ℕ) (hb : ∀ k < 6, l k < 2^63) :
-    R43x6.decode' (limbVec l) = ((pack l : ℕ) : Int) := by
+    R43x6.decode' (limbVec l) = ((decodeNat l : ℕ) : Int) := by
   rw [limbVec, decode'_lit,
     ofNat_toInt (hb 0 (by omega)), ofNat_toInt (hb 1 (by omega)),
     ofNat_toInt (hb 2 (by omega)), ofNat_toInt (hb 3 (by omega)),
     ofNat_toInt (hb 4 (by omega)), ofNat_toInt (hb 5 (by omega))]
-  push_cast [pack]
+  push_cast [decodeNat_eq]
   try ring
 
 /-- Two-sided lane bounds on `limbVec` from a ceiling `N` on the ℕ-level
@@ -199,28 +211,28 @@ theorem limbVec_bounds (l : ℕ → ℕ) (N : ℕ) (hN : N ≤ 2^63)
     fun k hk => lane_toInt_bound hN (hb k hk)
   have hN1 : 1 ≤ N := by have := hb 0 (by omega); omega
   have hz : ((0 : BitVec 64)).toInt = 0 := rfl
-  refine ⟨fun i hi => ?_, fun i hi => ?_⟩
-  · interval_cases i
-    · exact (key 0 (by omega)).2
-    · exact (key 1 (by omega)).2
-    · exact (key 2 (by omega)).2
-    · exact (key 3 (by omega)).2
-    · exact (key 4 (by omega)).2
-    · exact (key 5 (by omega)).2
-    · show (0 : BitVec 64).toInt ≤ _
-      rw [hz]; omega
-    · show (0 : BitVec 64).toInt ≤ _
-      rw [hz]; omega
-  · interval_cases i
-    · exact (key 0 (by omega)).1
-    · exact (key 1 (by omega)).1
-    · exact (key 2 (by omega)).1
-    · exact (key 3 (by omega)).1
-    · exact (key 4 (by omega)).1
-    · exact (key 5 (by omega)).1
-    · show (0 : BitVec 64).toInt ≥ _
-      rw [hz]
-    · show (0 : BitVec 64).toInt ≥ _
-      rw [hz]
+  refine ⟨fun i => ?_, fun i => ?_⟩ <;>
+    simp only [LimbRepresentations.toInts, limbVec] <;>
+    fin_cases i
+  · exact (key 0 (by omega)).2
+  · exact (key 1 (by omega)).2
+  · exact (key 2 (by omega)).2
+  · exact (key 3 (by omega)).2
+  · exact (key 4 (by omega)).2
+  · exact (key 5 (by omega)).2
+  · show (0 : BitVec 64).toInt ≤ _
+    rw [hz]; omega
+  · show (0 : BitVec 64).toInt ≤ _
+    rw [hz]; omega
+  · exact (key 0 (by omega)).1
+  · exact (key 1 (by omega)).1
+  · exact (key 2 (by omega)).1
+  · exact (key 3 (by omega)).1
+  · exact (key 4 (by omega)).1
+  · exact (key 5 (by omega)).1
+  · show (0 : BitVec 64).toInt ≥ _
+    rw [hz]
+  · show (0 : BitVec 64).toInt ≥ _
+    rw [hz]
 
 end Firedancer.Avx512

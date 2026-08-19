@@ -790,9 +790,9 @@ theorem quadSqr_limbs (a b c : Vector (BitVec 64) 8)
 /-- **Correctness.** In each of the four QUAD lanes, the limbs the kernel
 produces decode to the square of the decoded input in `GF(2^255 - 19)`. -/
 theorem quadSqr_zmod (a b c : Vector (BitVec 64) 8) (j : ℕ) :
-    ((pack (quadSqrLimb a b c j) : ℕ) : ZMod p)
-      = ((pack (quadLimb a b c j) : ℕ) : ZMod p) ^ 2 :=
-  pack_quadSqrLimb_zmod a b c j
+    ((decodeNat (quadSqrLimb a b c j) : ℕ) : ZMod p)
+      = ((decodeNat (quadLimb a b c j) : ℕ) : ZMod p) ^ 2 :=
+  decodeLimbs_quadSqrLimb_zmod a b c j
 
 /-! ## Output bounds
 

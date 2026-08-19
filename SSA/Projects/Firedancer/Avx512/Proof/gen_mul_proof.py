@@ -159,9 +159,9 @@ private theorem mulIsMulThm (x y : Vector (BitVec 64) 8)
   rw [mulIsMul, mulValue, denote_fd_r43x6_mul_fast x y hx hy hy6 hy7]
   simp only [HVector.head, Vector.getValues_map_value, PoisonOr.map_value,
     PoisonOr.value_inj]
-  -- 2. decode both sides into casts of `pack`
+  -- 2. decode both sides into casts of `decodeNat`
   have hdecode : ∀ (v : Vector (BitVec 64) 8), R43x6.Unreduced v →
-      R43x6.decode' v = ((pack (limbNat v) : ℕ) : Int) := by
+      R43x6.decode' v = ((decodeNat (limbNat v) : ℕ) : Int) := by
     intro v hv
     have hv8 : v = #v[v[0],v[1],v[2],v[3],v[4],v[5],v[6],v[7]] := by
       apply Vector.ext; intro i hi; interval_cases i <;> rfl
@@ -174,13 +174,13 @@ private theorem mulIsMulThm (x y : Vector (BitVec 64) 8)
       toInt_of_lt (by simpa [limbNat] using hb 3 (by omega)),
       toInt_of_lt (by simpa [limbNat] using hb 4 (by omega)),
       toInt_of_lt (by simpa [limbNat] using hb 5 (by omega))]
-    push_cast [pack, limbNat]
+    push_cast [decodeNat_eq, limbNat]
     try ring
   rw [mulVec, decode'_limbVec _ (limb_lt_two_pow_63 _ _ hbx hby),
     hdecode x hx, hdecode y hy]
-  -- 3. both sides are now casts of `pack`, so `pack_limb_zmod` applies
+  -- 3. both sides are now casts of `decodeNat`, so `decodeLimbs_limb_zmod` applies
   push_cast
-  exact pack_limb_zmod (limbNat x) (limbNat y)
+  exact decodeLimbs_limb_zmod (limbNat x) (limbNat y)
 
 /-! ## Output bounds
 

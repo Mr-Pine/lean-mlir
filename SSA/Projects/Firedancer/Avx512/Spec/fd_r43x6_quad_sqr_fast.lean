@@ -88,10 +88,10 @@ Per element, this is the scalar theorem. -/
 
 /-- **Ring correctness**, elementwise: the limbs `quadSqrLimb` predicts for
 element `j` decode to the square of the decoded input in `GF(2^255 - 19)`. -/
-theorem pack_quadSqrLimb_zmod (a b c : Vector (BitVec 64) 8) (j : ℕ) :
-    ((pack (quadSqrLimb a b c j) : ℕ) : ZMod p)
-      = ((pack (quadLimb a b c j) : ℕ) : ZMod p) ^ 2 :=
-  pack_sqLimb_zmod _
+theorem decodeLimbs_quadSqrLimb_zmod (a b c : Vector (BitVec 64) 8) (j : ℕ) :
+    ((decodeNat (quadSqrLimb a b c j) : ℕ) : ZMod p)
+      = ((decodeNat (quadLimb a b c j) : ℕ) : ZMod p) ^ 2 :=
+  decodeLimbs_sqLimb_zmod _
 
 /-! ## Bounds
 

@@ -6,7 +6,7 @@ import Mathlib.Tactic.IntervalCases
 # What `fd_r43x6_mul_fast` is specified to compute
 
 The ℕ-level model of the multiplication, and its two properties: decoding the
-output limbs gives the product in `GF(2^255 - 19)` (`pack_limb_zmod`), and
+output limbs gives the product in `GF(2^255 - 19)` (`decodeLimbs_limb_zmod`), and
 each limb stays under the width the `fd_r43x6.h` table promises
 (`limb_lt_u4x`).
 
@@ -90,12 +90,12 @@ set_option exponentiation.threshold 600 in
 /-- The twelve columns decode to the full product: each of the thirty-six
 products appears exactly once, at the weight `2^(43(i+j))` of its column. -/
 theorem cols_mul (x y : ℕ → ℕ) :
-    (pack x) * (pack y) =
+    (decodeNat x) * (decodeNat y) =
       col x y 0 + 2^43 * col x y 1 + 2^86 * col x y 2 + 2^129 * col x y 3
       + 2^172 * col x y 4 + 2^215 * col x y 5 + 2^258 * col x y 6
       + 2^301 * col x y 7 + 2^344 * col x y 8 + 2^387 * col x y 9
       + 2^430 * col x y 10 + 2^473 * col x y 11 := by
-  simp only [pack, col]
+  simp only [decodeNat_eq, col]
   -- The thirty-six products formed by the implementation.
   have h00 := pl_add_shift_ph (x 0) (y 0)
   have h01 := pl_add_shift_ph (x 0) (y 1)
@@ -156,15 +156,15 @@ theorem cols_mul (x y : ℕ → ℕ) :
 
 /-- **Ring correctness**: decoding the output limbs of `fd_r43x6_mul_fast`
 yields the product of the decoded inputs modulo `p = 2^255 - 19`. -/
-theorem pack_limb_modEq (x y : ℕ → ℕ) :
-    pack (limb x y) ≡ (pack x) * (pack y) [MOD p] := by
+theorem decodeLimbs_limb_modEq (x y : ℕ → ℕ) :
+    decodeNat (limb x y) ≡ (decodeNat x) * (decodeNat y) [MOD p] := by
   -- The high columns contribute a multiple of `p`, since `2^258 - 152 = 8·p`.
-  have hsplit : pack (limb x y)
+  have hsplit : decodeNat (limb x y)
       + p * (8 * (col x y 6 + 2^43 * col x y 7 + 2^86 * col x y 8
           + 2^129 * col x y 9 + 2^172 * col x y 10 + 2^215 * col x y 11))
-      = (pack x) * (pack y) := by
+      = (decodeNat x) * (decodeNat y) := by
     rw [cols_mul]
-    simp only [pack, limb, p]
+    simp only [decodeNat_eq, limb, p]
     generalize col x y 0 = c0; generalize col x y 1 = c1
     generalize col x y 2 = c2; generalize col x y 3 = c3
     generalize col x y 4 = c4; generalize col x y 5 = c5
@@ -177,10 +177,10 @@ theorem pack_limb_modEq (x y : ℕ → ℕ) :
   rw [Nat.add_mul_mod_self_left]
 
 /-- Ring correctness, stated in `ZMod p`. -/
-theorem pack_limb_zmod (x y : ℕ → ℕ) :
-    ((pack (limb x y) : ℕ) : ZMod p)
-      = ((pack x : ℕ) : ZMod p) * ((pack y : ℕ) : ZMod p) := by
-  have h := pack_limb_modEq x y
+theorem decodeLimbs_limb_zmod (x y : ℕ → ℕ) :
+    ((decodeNat (limb x y) : ℕ) : ZMod p)
+      = ((decodeNat x : ℕ) : ZMod p) * ((decodeNat y : ℕ) : ZMod p) := by
+  have h := decodeLimbs_limb_modEq x y
   have := (ZMod.natCast_eq_natCast_iff _ _ _).mpr h
   simpa [Nat.cast_mul] using this
 

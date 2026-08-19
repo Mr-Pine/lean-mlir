@@ -7,7 +7,7 @@ import Mathlib.Tactic.IntervalCases
 # What `fd_r43x6_sqr_fast` is specified to compute
 
 The ℕ-level model of the squaring, and its two properties: decoding the
-output limbs gives the square in `GF(2^255 - 19)` (`pack_sqLimb_zmod`), and
+output limbs gives the square in `GF(2^255 - 19)` (`decodeLimbs_sqLimb_zmod`), and
 each limb stays under the width the `fd_r43x6.h` table promises
 (`sqLimb_lt_u4x`).
 
@@ -88,12 +88,12 @@ set_option exponentiation.threshold 600 in
 /-- The twelve columns decode to the full square: each of the twenty-one
 products appears exactly once, at the weight `2^(43(i+j))` of its column. -/
 theorem sqCols_sq (x : ℕ → ℕ) :
-    (pack x) ^ 2 =
+    (decodeNat x) ^ 2 =
       sqCol x 0 + 2^43 * sqCol x 1 + 2^86 * sqCol x 2 + 2^129 * sqCol x 3
       + 2^172 * sqCol x 4 + 2^215 * sqCol x 5 + 2^258 * sqCol x 6
       + 2^301 * sqCol x 7 + 2^344 * sqCol x 8 + 2^387 * sqCol x 9
       + 2^430 * sqCol x 10 + 2^473 * sqCol x 11 := by
-  simp only [pack, sqCol]
+  simp only [decodeNat_eq, sqCol]
   -- The twenty-one products formed by the implementation.
   have d0 := pl_add_shift_ph (x 0) (x 0)
   have d1 := pl_add_shift_ph (x 1) (x 1)
@@ -138,15 +138,15 @@ theorem sqCols_sq (x : ℕ → ℕ) :
 
 /-- **Ring correctness**: decoding the output limbs of `fd_r43x6_sqr_fast`
 yields the square of the decoded input modulo `p = 2^255 - 19`. -/
-theorem pack_sqLimb_modEq (x : ℕ → ℕ) :
-    pack (sqLimb x) ≡ (pack x) ^ 2 [MOD p] := by
+theorem decodeLimbs_sqLimb_modEq (x : ℕ → ℕ) :
+    decodeNat (sqLimb x) ≡ (decodeNat x) ^ 2 [MOD p] := by
   -- The high columns contribute a multiple of `p`, since `2^258 - 152 = 8·p`.
-  have hsplit : pack (sqLimb x)
+  have hsplit : decodeNat (sqLimb x)
       + p * (8 * (sqCol x 6 + 2^43 * sqCol x 7 + 2^86 * sqCol x 8
           + 2^129 * sqCol x 9 + 2^172 * sqCol x 10 + 2^215 * sqCol x 11))
-      = (pack x) ^ 2 := by
+      = (decodeNat x) ^ 2 := by
     rw [sqCols_sq]
-    simp only [pack, sqLimb, p]
+    simp only [decodeNat_eq, sqLimb, p]
     generalize sqCol x 0 = c0; generalize sqCol x 1 = c1
     generalize sqCol x 2 = c2; generalize sqCol x 3 = c3
     generalize sqCol x 4 = c4; generalize sqCol x 5 = c5
@@ -159,9 +159,9 @@ theorem pack_sqLimb_modEq (x : ℕ → ℕ) :
   rw [Nat.add_mul_mod_self_left]
 
 /-- Ring correctness, stated in `ZMod p`. -/
-theorem pack_sqLimb_zmod (x : ℕ → ℕ) :
-    ((pack (sqLimb x) : ℕ) : ZMod p) = ((pack x : ℕ) : ZMod p) ^ 2 := by
-  have h := pack_sqLimb_modEq x
+theorem decodeLimbs_sqLimb_zmod (x : ℕ → ℕ) :
+    ((decodeNat (sqLimb x) : ℕ) : ZMod p) = ((decodeNat x : ℕ) : ZMod p) ^ 2 := by
+  have h := decodeLimbs_sqLimb_modEq x
   have := (ZMod.natCast_eq_natCast_iff _ _ _).mpr h
   simpa [Nat.cast_pow] using this
 

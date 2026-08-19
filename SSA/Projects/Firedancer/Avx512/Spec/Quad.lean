@@ -50,7 +50,7 @@ def vlane (v : Vector (BitVec 64) 8) : ℕ → ℕ
   | _ => 0
 
 /-- The limb function of the field element in lane `j` of the QUAD `(a,b,c)`,
-in the `ℕ → ℕ` form `pack` and the column sums take. -/
+in the `ℕ → ℕ` form `decodeNat` and the column sums take. -/
 def quadLimb (a b c : Vector (BitVec 64) 8) (j : ℕ) : ℕ → ℕ
   | 0 => vlane a j
   | 1 => vlane b j
@@ -193,7 +193,8 @@ theorem quadVec_bounds (l : ℕ → ℕ → ℕ) (m n N : ℕ) (hN : N ≤ 2 ^ 6
       (0 : Int) ≤ (BitVec.ofNat 64 v).toInt
         ∧ (BitVec.ofNat 64 v).toInt ≤ (N : Int) - 1 :=
     fun v hv => lane_toInt_bound hN hv
-  refine ⟨fun i hi => ?_, fun i hi => ?_⟩ <;> interval_cases i
+  refine ⟨fun i => ?_, fun i => ?_⟩ <;>
+    simp only [LimbRepresentations.toInts, quadVec] <;> fin_cases i
   · exact (key _ (hb 0 (by omega)).1).2
   · exact (key _ (hb 1 (by omega)).1).2
   · exact (key _ (hb 2 (by omega)).1).2

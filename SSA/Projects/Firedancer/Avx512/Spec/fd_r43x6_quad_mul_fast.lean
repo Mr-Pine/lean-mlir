@@ -15,7 +15,7 @@ import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_mul_fast
 and that is exactly what this file says: the ℕ-level model is the *scalar*
 `limb` of `Spec/fd_r43x6_mul_fast.lean`, applied at each of the four lanes of
 the QUAD layout (`Spec/Quad.lean`). Ring correctness and the width table come
-straight from the scalar file — `pack_limb_zmod` and `limb_lt_u4x` are used
+straight from the scalar file — `decodeLimbs_limb_zmod` and `limb_lt_u4x` are used
 unchanged, four times.
 
 The implementation is *not* four calls to `fd_r43x6_mul_fast`, though: it is a
@@ -80,11 +80,11 @@ Per element, this is the scalar theorem. -/
 /-- **Ring correctness**, elementwise: the limbs `quadMulLimb` predicts for
 element `j` decode to the product of the two decoded inputs in
 `GF(2^255 - 19)`. -/
-theorem pack_quadMulLimb_zmod (a b c d e f : Vector (BitVec 64) 8) (j : ℕ) :
-    ((pack (quadMulLimb a b c d e f j) : ℕ) : ZMod p)
-      = ((pack (quadLimb a b c j) : ℕ) : ZMod p)
-        * ((pack (quadLimb d e f j) : ℕ) : ZMod p) :=
-  pack_limb_zmod _ _
+theorem decodeLimbs_quadMulLimb_zmod (a b c d e f : Vector (BitVec 64) 8) (j : ℕ) :
+    ((decodeNat (quadMulLimb a b c d e f j) : ℕ) : ZMod p)
+      = ((decodeNat (quadLimb a b c j) : ℕ) : ZMod p)
+        * ((decodeNat (quadLimb d e f j) : ℕ) : ZMod p) :=
+  decodeLimbs_limb_zmod _ _
 
 /-! ## Bounds
 
