@@ -104,3 +104,32 @@ instance : MonadLift MemorySSAM EffectM where
 
 instance : HasUB MemorySSAM where
   throwUB := StateT.lift PoisonOr.poison
+
+/-! ### Lemmas
+
+The same `run` lemmas `EffectM` has above; without them, `simp` cannot see
+through a `do`-block of memory operations. -/
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_pure {α} (x : α) (m) : StateT.run (pure x : MemorySSAM α) m = .value (x, m) := rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_ub {α} (m) : StateT.run (throwUB : MemorySSAM α) m = .poison := rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_bind {α β} (x : MemorySSAM α) (f : α → MemorySSAM β) (m) :
+    StateT.run (x >>= f : MemorySSAM β) m
+      = StateT.run x m >>= (fun p => StateT.run (f p.1) p.2) :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_map {α β} (f : α → β) (x : MemorySSAM α) (m) :
+    StateT.run (f <$> x : MemorySSAM β) m = (fun p => (f p.1, p.2)) <$> StateT.run x m := rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_getThe (m : MemoryState) :
+    StateT.run (getThe MemoryState : MemorySSAM MemoryState) m = .value (m, m) := rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_modifyThe (f : MemoryState → MemoryState) (m : MemoryState) :
+    StateT.run (modifyThe MemoryState f : MemorySSAM PUnit) m = .value (⟨⟩, f m) := rfl

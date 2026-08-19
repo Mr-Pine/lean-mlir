@@ -31,11 +31,14 @@ of (side-effecting) UB.
 inductive SLLVMOp where
   | arith (o : LLVM.Op)
   | ptradd
-  | load (w : Nat)
-  | store (w : Nat)
+  /-- `load`/`store` carry the *type* loaded or stored, not just a width, so
+  that vector types (`load <8 x i64>`) are expressible. The flat, in-memory bit
+  pattern is given by `LLVM.Ty.flatten` / `LLVM.Ty.unflatten`. -/
+  | load (t : LLVM.Ty)
+  | store (t : LLVM.Ty)
   | alloca (w : Nat)
-  | loadPure (w : Nat)
-  | storePure (w : Nat)
+  | loadPure (t : LLVM.Ty)
+  | storePure (t : LLVM.Ty)
   deriving DecidableEq, Lean.ToExpr
 
 inductive SLLVMTy where
@@ -135,10 +138,10 @@ open Ty in
 def_signature for SLLVM
   -- New operations
   | .ptradd          => (ptr, bitvec 64) -> ptr
-  | .load w          => (ptr) -[.impure]-> bitvec w
-  | .loadPure w      => (mem, ptr) -> [mem, bitvec w]
-  | .store w         => (ptr, bitvec w) -[.impure]-> []
-  | .storePure w     => (mem, ptr, bitvec w) -> [mem]
+  | .load t          => (ptr) -[.impure]-> Ty.arith t
+  | .loadPure t      => (mem, ptr) -> [mem, Ty.arith t]
+  | .store t         => (ptr, Ty.arith t) -[.impure]-> []
+  | .storePure t     => (mem, ptr, Ty.arith t) -> [mem]
   | .alloca _w       => () -[.impure]-> ptr
   -- LLVM operations with modified effect signature
   | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
@@ -184,10 +187,10 @@ attribute [local irreducible] EffectM
 def_denote for SLLVM
   -- New operations
   | .ptradd   => fun p x => [SLLVM.ptradd p x]ₕ
-  | .load w   => fun p   => ([·]ₕ) <$> SLLVM.load p w
-  | .loadPure w => fun m p => HVector.ofPair <| SLLVM.loadPure m p w
-  | .store _  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p x
-  | .storePure _ => fun m p x => [SLLVM.storePure m p x]ₕ
+  | .load t   => fun p   => ([·]ₕ) <$> SLLVM.load p t
+  | .loadPure t => fun m p => HVector.ofPair <| SLLVM.loadPure m p t
+  | .store t  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
+  | .storePure t => fun m p x => [SLLVM.storePure m p t x]ₕ
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
@@ -231,9 +234,9 @@ instance : DialectPrint SLLVM where
   printOpName
     | .arith llvmOp => printOpName llvmOp
     | .storePure _
-    | .store _w   => "ptr.store"
+    | .store _t   => "ptr.store"
     | .loadPure _
-    | .load _w    => "ptr.load"
+    | .load _t    => "ptr.load"
     | .ptradd     => "ptr.add"
     | .alloca _w  => "ptr.alloca"
   printAttributes

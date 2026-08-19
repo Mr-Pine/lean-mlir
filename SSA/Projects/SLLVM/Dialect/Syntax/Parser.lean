@@ -25,8 +25,10 @@ def mkArithTy : MLIRType 0 → ExceptM SLLVM LLVM.Ty
   | .vector [length] [] elemTy => return .vector length (← mkArithTy elemTy)
   | t => throw <| .unsupportedType (some t)
 
+/-- `!ptr` is SLLVM's own spelling; `!llvm.ptr` is what `mlir-translate
+--import-llvm` emits, and is the only one that appears in lifted code. -/
 def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
-  | .undefined "ptr" => return Ty.ptr
+  | .undefined "ptr" | .undefined "llvm.ptr" => return Ty.ptr
   | t => Ty.arith <$> mkArithTy t
 
 instance : TransformTy SLLVM 0 where
@@ -57,6 +59,24 @@ def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
   match opStx.args[i]? with
   | some (_, t) => mkArithTy t
   | none => throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
+
+/-- The arithmetic type of an already-parsed operand. Unlike `getArgArithTy`
+this reads the type off the context variable rather than off the syntax, which
+is what `llvm.store` needs: its stored value may be of any arithmetic type. -/
+def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → ReaderM LLVM.Ty
+  | ⟨Ty.arith t, _⟩ => return t
+  | ⟨t, _⟩ => throw <| .generic s!"{opName}: expected an arithmetic operand, but found: {t}"
+
+/-- `llvm.load`/`llvm.store` carry an `ordering` attribute; `0` is
+`not_atomic`, and atomics are not modelled. `alignment`, `tbaa` and
+`nontemporal` are accepted and ignored -- this memory model has no alignment
+constraints and no alias-metadata semantics. -/
+def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
+  match opStx.getAttr? "ordering" with
+  | none => return ()
+  | some (.int 0 _) => return ()
+  | some _ => throw <| .generic s!"{opStx.name}: atomic accesses are not modelled \
+      (expected `ordering = 0`, i.e. non-atomic)"
 
 /-- The integers inside a `dense<…>` attribute: either a single value (the
 splat form) or one per lane. -/
@@ -146,10 +166,21 @@ instance : DialectParse SLLVM 0 where
   match opStx.name with
     -- new SLLVM operations
     | "ptr.add" => mkExprOf <| .ptradd
-    | "ptr.load" => mkExprOf <| .load (← getOutputWidth)
+    | "ptr.load" => mkExprOf <| .load (← getOutputArithTy opStx)
     | "ptr.store" => do
         let args ← args.assumeArity 2
-        mkExprOf <| .store (← getIntWidth args[1])
+        mkExprOf <| .store (← argArithTy opStx.name args[1])
+    -- The same two operations under the names MLIR actually emits. Note the
+    -- operand order: MLIR writes `llvm.store (value, ptr)` where SLLVM's
+    -- signature is `(ptr, value)`, so the operands are swapped back here.
+    | "llvm.load" => do
+        checkNotAtomic opStx
+        mkExprOf <| .load (← getOutputArithTy opStx)
+    | "llvm.store" => do
+        checkNotAtomic opStx
+        let args ← args.assumeArity 2
+        let t ← argArithTy opStx.name args[0]
+        opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [args[1], args[0]])) Γ <| .store t
     | "ptr.alloca" =>
         let t ← opStx.getTypeAttr "elem_type"
         let .int _ w := t

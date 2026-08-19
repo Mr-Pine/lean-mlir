@@ -2,6 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
+import LeanMLIR.Dialects.LLVM.Basic
 import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
 import SSA.Projects.SLLVM.Dialect.Semantics.EffectM
 import SSA.Projects.SLLVM.Dialect.Semantics.ArithSemantics
@@ -12,6 +13,7 @@ namespace LeanMLIR
 /-! ## Instructions -/
 namespace SLLVM
 open BitVec
+open InstCombine (LLVM)
 
 /-- A memorySSA'd state, which tracks:
 * the content of memory blocks
@@ -30,52 +32,121 @@ def getLiveBlockOrUB (p : Pointer) : MemorySSAM LiveBlock := do
     | throwUB
   return block
 
+/-! ### Splicing a value into a block -/
+
 /--
-`load p n` will load `n` bits from the location pointed to by `p`.
+`spliceBits bytes off x` overwrites the range `[off, off + w)` of `bytes` with
+`x`, leaving every other bit alone.
+
+This is a *replacement*, not an accumulation: the destination range is masked
+out before `x` is placed into it. (An earlier version `|||`-ed `x` into `bytes`
+without a mask and shifted it the wrong way, so a store could only ever set
+bits, and a store at a non-zero offset was shifted off the bottom of the block
+and lost entirely.)
+-/
+def spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) : BitVec n :=
+  let mask := ((BitVec.allOnes w).setWidth n) <<< off
+  (bytes &&& ~~~mask) ||| ((x.setWidth n) <<< off)
+
+@[simp_sllvm]
+theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) (i : Nat) :
+    (spliceBits bytes off x).getLsbD i
+      = if off ≤ i ∧ i < off + w ∧ i < n then x.getLsbD (i - off) else bytes.getLsbD i := by
+  simp only [spliceBits, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
+    BitVec.getLsbD_shiftLeft, BitVec.getLsbD_setWidth, BitVec.getLsbD_allOnes]
+  by_cases h3 : i < n
+  · by_cases h1 : off ≤ i
+    · by_cases h2 : i < off + w
+      · rw [if_pos ⟨h1, h2, h3⟩]
+        simp [h3, show ¬(i < off) by omega, show i - off < n by omega,
+          show i - off < w by omega]
+      · -- `i` is past the spliced range, so the mask bit is clear and `x` has no
+        -- bit there either: both disjuncts reduce to `bytes.getLsbD i`.
+        rw [if_neg (by omega)]
+        simp [h3, show ¬(i < off) by omega, BitVec.getLsbD_of_ge x (i - off) (by omega)]
+        omega
+    · rw [if_neg (by omega)]
+      simp [h3, show i < off by omega]
+  · rw [if_neg (by omega)]
+    simp [h3, BitVec.getLsbD_of_ge bytes i (by omega)]
+
+/-- The spliced-in value reads back exactly, provided it fits. -/
+theorem extractLsb'_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w)
+    (h : off + w ≤ n) :
+    (spliceBits bytes off x).extractLsb' off w = x := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', getLsbD_spliceBits, hi, decide_true, Bool.true_and]
+  rw [if_pos (by omega)]
+  simp
+
+/-- A range disjoint from the spliced-in one is untouched. -/
+theorem extractLsb'_spliceBits_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
+    (x : BitVec w) (h : off' + w' ≤ off ∨ off + w ≤ off') :
+    (spliceBits bytes off x).extractLsb' off' w' = bytes.extractLsb' off' w' := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', getLsbD_spliceBits, hi, decide_true, Bool.true_and]
+  rw [if_neg (by omega)]
+
+/-! ### load / store -/
+
+/--
+`load p t` will load a value of type `t` from the location pointed to by `p`.
 
 Raises UB if:
 - `p` is poison
 - The block pointed to by `p.id` has not been allocated yet or has been freed already
 - The range of bits to be read is out of range of the block pointed to by `p.id`
 
-**SIMPLIFICATION**: we don't model alignment constraints at all
+The bits read are decoded with `LLVM.Ty.unflatten`, so this handles vector types
+(`load <8 x i64>`) as well as scalars: a vector is laid out with lane `0` in the
+low bits, as LLVM does.
+
+**SIMPLIFICATION**: we don't model alignment constraints at all, and a load
+never produces poison from uninitialised memory.
 -/
-def load (p : SLLVM.Ptr) (w : Nat) : MemorySSAM (LLVM.IntW w) := do
+def load (p : SLLVM.Ptr) (t : LLVM.Ty) : MemorySSAM (TyDenote.toType t) := do
   let p ← p.getOrUB
   let block ← getLiveBlockOrUB p
-  throwUBIf <| p.offsetInBits + w > block.lengthInBits
-  return .value <| block.bytes.extractLsb' p.offsetInBits w
+  throwUBIf <| p.offsetInBits + LLVM.Ty.width t > block.lengthInBits
+  return LLVM.Ty.unflatten t
+    (block.bytes.extractLsb' p.offsetInBits (LLVM.Ty.width t))
 
 /--
 A wrapper around `load` which makes the operation pure, operating against the
 state in a (memory)SSA variable.
 -/
-def loadPure (m : MemorySSAState) (p : SLLVM.Ptr) (w : Nat) : MemorySSAState × LLVM.IntW w :=
+def loadPure (m : MemorySSAState) (p : SLLVM.Ptr) (t : LLVM.Ty) :
+    MemorySSAState × TyDenote.toType t :=
   match m with
-  | .poison => (.poison, .poison)
+  | .poison => (.poison, LLVM.Ty.poison t)
   | .value m =>
-    match (load p w).run m with
-    | .poison => (.poison, .poison)
+    match (load p t).run m with
+    | .poison => (.poison, LLVM.Ty.poison t)
     | .value ⟨x, m⟩ => ⟨.value m, x⟩
 
 /--
-`store p x` will store the value `x` at the location pointed to by `p`.
+`store p t x` will store the value `x` of type `t` at the location pointed to
+by `p`.
 
 Raises UB if:
 - `p` is poison
+- `x` is poison in any lane (we model stores of fully-defined values only)
 - The block pointed to by `p.id` has not been allocated yet or has been freed already
 - The range of bits to be written is out of range of the block pointed to by `p.id`
 
-**SIMPLIFICATION**: we don't model alignment constraints at all
+**SIMPLIFICATION**: we don't model alignment constraints at all, and we ignore
+alias metadata (`tbaa`) entirely.
 -/
-def store (p : SLLVM.Ptr) (x : LLVM.IntW w) : MemorySSAM Unit := do
+def store (p : SLLVM.Ptr) (t : LLVM.Ty) (x : TyDenote.toType t) : MemorySSAM Unit := do
   let p ← p.getOrUB
-  let x ← x.getOrUB
+  let x ← (LLVM.Ty.flatten t x).getOrUB
   let block ← getLiveBlockOrUB p
-  throwUBIf <| p.offsetInBits + w > block.lengthInBits
-  let bytes := block.bytes ||| (x.zeroExtend _ >>> p.offsetInBits)
+  throwUBIf <| p.offsetInBits + LLVM.Ty.width t > block.lengthInBits
   modifyThe MemoryState fun m => { m with
-    mem := m.mem.insert p.id (.live { block with bytes })
+    mem := m.mem.insert p.id <| .live
+      { block with bytes := spliceBits block.bytes p.offsetInBits x }
   }
   return ()
 
@@ -83,9 +154,10 @@ def store (p : SLLVM.Ptr) (x : LLVM.IntW w) : MemorySSAM Unit := do
 A wrapper around `store` which makes the operation pure, operating against the
 state in a (memory)SSA variable.
 -/
-def storePure (m : MemorySSAState) (p : SLLVM.Ptr) (x : LLVM.IntW w) : MemorySSAState := do
+def storePure (m : MemorySSAState) (p : SLLVM.Ptr) (t : LLVM.Ty) (x : TyDenote.toType t) :
+    MemorySSAState := do
   let m ← m
-  Prod.snd <$> (store p x).run m
+  Prod.snd <$> (store p t x).run m
 
 /--
 Allocate the next available block of `w` bits on the stack.
