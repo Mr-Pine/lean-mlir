@@ -298,6 +298,15 @@ def append {as bs} : HVector A as → HVector A bs → HVector A (as ++ bs)
   | .nil, ys => ys
   | x ::ₕ xs, ys => x ::ₕ (append xs ys)
 
+/-- Reverse an `HVector`, reversing its type-level index list with it.
+
+Needed because block arguments enter a `Ctxt` in reverse declaration order: an
+operand list in source order has to be reversed before it can become a
+valuation of the callee's context. -/
+def reverse {A : α → Type*} : {as : List α} → HVector A as → HVector A as.reverse
+  | [], .nil => .nil
+  | _::_, .cons x xs => (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil)
+
 instance : HAppend (HVector A as) (HVector A bs) (HVector A (as ++ bs)) where
   hAppend := append
 

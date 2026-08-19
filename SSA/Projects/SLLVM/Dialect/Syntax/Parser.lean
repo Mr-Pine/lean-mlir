@@ -53,6 +53,14 @@ def getOutputArithTy (opStx : MLIR.AST.Op 0) :
   | res::[] => mkArithTy res.2
   | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
 
+/-- The declared result type of a single-result operation, as a full
+`SLLVM.Ty`. `getOutputArithTy` gives only the arithmetic half, which a call's
+result type need not be. -/
+def getOutputTy (opStx : MLIR.AST.Op 0) : ExceptM SLLVM SLLVM.Ty := do
+  match opStx.res with
+  | res::[] => mkTy res.2
+  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
 /-- The declared type of the `i`-th operand of an operation. -/
 def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
     ExceptM SLLVM LLVM.Ty := do
@@ -284,7 +292,33 @@ instance : DialectParse SLLVM 0 where
         mkExprOf <| Op.vpmadd52 false (← getVpmaddLanes opStx callee)
       | "x86_avx512_vpmadd52h_uq_512" =>
         mkExprOf <| Op.vpmadd52 true (← getVpmaddLanes opStx callee)
-      | _ => throw <| .unsupportedOp s!"llvm.call to {callee}"
+      | _ =>
+        -- Any other callee is an ordinary call: its body is the region, which
+        -- the elaborator bound to the symbol before the transform ran.
+        let some region := regions[0]?
+          | throw <| .unsupportedOp s!"llvm.call to {callee}: the callee's body \
+              is not bound. Supply it with `with @{callee} := …`."
+        let ⟨Γr, effR, tyR, com⟩ := region
+        let retTy ← getOutputTy opStx
+        let argTys := args.types
+        -- Reversed: block arguments enter a `Ctxt` in reverse declaration
+        -- order, so a callee declared `^bb0(%a, %b)` has context `[b, a]`.
+        if hΓ : Γr = Ctxt.ofList argTys.reverse then
+          if hty : tyR = [retTy] then
+            let com : Com SLLVM (Ctxt.ofList argTys.reverse) effR [retTy] :=
+              hty ▸ hΓ ▸ com
+            return ⟨effR, [retTy], Expr.mk
+              (op := SLLVMOp.call callee argTys retTy effR)
+              (ty_eq := rfl)
+              (eff_le := EffectKind.le_refl _)
+              (args := args.toHVector)
+              (regArgs := Regions.cons com Regions.nil)⟩
+          else
+            throw <| .generic s!"llvm.call to {callee}: the callee returns \
+              {repr tyR}, but the call site expects {repr [retTy]}"
+        else
+          throw <| .generic s!"llvm.call to {callee}: the callee takes \
+              {repr Γr}, but the call site passes {repr argTys}"
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 

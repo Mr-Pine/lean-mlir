@@ -28,6 +28,12 @@ of (side-effecting) UB.
 
 /-! ### Dialect definition -/
 
+inductive SLLVMTy where
+  | arith (t : LLVM.Ty)
+  | ptr
+  | mem
+  deriving DecidableEq, Lean.ToExpr
+
 inductive SLLVMOp where
   | arith (o : LLVM.Op)
   | ptradd
@@ -39,12 +45,12 @@ inductive SLLVMOp where
   | alloca (w : Nat)
   | loadPure (t : LLVM.Ty)
   | storePure (t : LLVM.Ty)
-  deriving DecidableEq, Lean.ToExpr
-
-inductive SLLVMTy where
-  | arith (t : LLVM.Ty)
-  | ptr
-  | mem
+  /-- `llvm.call`. `Com` has no symbol table, so the callee's body travels with
+  the call as its region argument; `callee` is carried for printing and
+  round-tripping only and has no semantic role. The effect is the callee's:
+  calling a pure function is pure, which is what regions carrying their
+  operation's declared effect buys. -/
+  | call (callee : String) (argTys : List SLLVMTy) (retTy : SLLVMTy) (eff : EffectKind)
   deriving DecidableEq, Lean.ToExpr
 
 def SLLVM : Dialect where
@@ -184,6 +190,11 @@ def_signature for SLLVM
   | Op.vpmadd52 _hi l =>
       (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
        Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
+  -- The one operation with a region: the callee's body. `${…}` is
+  -- `def_signature`'s antiquotation for an argument list that is a term rather
+  -- than a literal tuple, which a call needs since its arity is not fixed.
+  | SLLVMOp.call _callee argTys retTy eff =>
+      { ${Ctxt.ofList argTys.reverse} → [retTy] } → ${argTys} -[eff]-> retTy
 
 attribute [local irreducible] EffectM
 -- ^^ This is needed so that `EffectM` doesn't get unfolded in the `def_denote` macro
@@ -230,6 +241,12 @@ def_denote for SLLVM
   | Op.vectorBinary _l _w bop =>
       fun a b => [Vector.ofFn fun i =>
         InstCombine.binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)]ₕ
+  -- A call is its region applied to its arguments -- the same shape as
+  -- `Scf.run`, generalised to any arity. The `reverse` is load bearing: block
+  -- arguments enter a `Ctxt` in reverse declaration order, so without it the
+  -- k-th operand would bind to the callee's k-th-from-last parameter. A
+  -- non-commutative callee is what catches that; see `Tests/Call.lean`.
+  | .call .. => fun args f => f (Ctxt.Valuation.ofHVector args.reverse)
 
 /-! ### Printing -/
 section Print
@@ -244,6 +261,7 @@ instance : DialectPrint SLLVM where
     | .load _t    => "ptr.load"
     | .ptradd     => "ptr.add"
     | .alloca _w  => "ptr.alloca"
+    | .call ..    => "llvm.call"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"

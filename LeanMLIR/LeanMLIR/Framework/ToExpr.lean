@@ -63,7 +63,11 @@ protected def List.foldToExpr {α : Q(Type)} : List Q($α) → Q(List $α) :=
   List.foldr (fun a as => q($a :: $as)) q([])
 /-- Obtain an Lean expression of a product, from a product of Lean expressions. -/
 protected def Prod.foldToExpr {α β : Q(Type)} : Q($α) × Q($β) → Q($α × $β) :=
-  Function.uncurry <| mkApp4 (.const ``Prod [1,1]) α β
+  -- NOTE: `Prod.mk`, not `Prod`. This built the *type* constructor until
+  -- regions became reachable, at which point it produced `@Prod α β a b` and
+  -- failed with "function expected". Nothing exercised it before: `Regions`
+  -- was only ever `.nil`.
+  Function.uncurry <| mkApp4 (.const ``Prod.mk [0,0]) α β
 
 namespace DialectMetaMorphism
 
