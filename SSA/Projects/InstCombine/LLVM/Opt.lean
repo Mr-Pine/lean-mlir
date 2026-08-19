@@ -1,4 +1,5 @@
 import Cli
+import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.LLVMRiscV.ParseAndTransform
 import SSA.Projects.RISCV64.ParseAndTransform
 
@@ -26,10 +27,25 @@ def wellformed (fileName : String ) : IO UInt32 := do
       IO.println s!"{Com.printModule c}"
       return 0
 
+/-- Parse with the **SLLVM** dialect rather than `LLVM`.
+
+This is the only front end that accepts memory operations, so it is what a
+region containing `llvm.load`/`llvm.store` has to be checked against. -/
+def wellformedSllvm (fileName : String) : IO UInt32 := do
+    let icom? ← Com.parseFromFile LeanMLIR.SLLVM fileName
+    match icom? with
+    | none => return 1
+    | some (Sigma.mk Γ ⟨eff, ⟨retTy, _c⟩⟩) => do
+      IO.println s!"ok: {reprStr Γ.toList} -[{reprStr eff}]-> {reprStr retTy}"
+      return 0
+
 def runMainCmd (args : Cli.Parsed) : IO UInt32 := do
   let fileName := args.positionalArg! "file" |>.as! String
   if args.hasFlag "verbose" then -- in this case we just mirror the llvm program again and checked that it is wellformed.
     let code ← verbose_flag fileName
+    return code
+  if args.hasFlag "sllvm" then -- parsing with the SLLVM dialect (the one with memory)
+    let code ← wellformedSllvm fileName
     return code
   if args.hasFlag "riscv" then -- parsing as riscv
     let code ←  parseAsRiscv fileName
@@ -56,6 +72,7 @@ def mainCmd := `[Cli|
     FLAGS:
       verbose; "Prints verbose output for debugging using the Repr typeclass to print."
       passriscv64; "Lowering pass to a RISC-V 64 SSA-assembly IR"
+      sllvm; "Parse the file with the SLLVM dialect, which models memory"
       riscv; "Allows to parse a file as a RISC-V 64 SSA-assembly IR"
       passriscv64_optimized; "Allows to parse a file as a RISC-V 64 SSA-assembly IR"
       passriscv64_optimized_const; "Allows to parse a file as a RISC-V 64 SSA-assembly IR, including rewrites with constant matching"
