@@ -322,5 +322,64 @@ instance : DialectParse SLLVM 0 where
     -- Fallback
     | opName => throw <| .unsupportedOp opName
 
+/-! ## Binding a call's callee
+
+MLIR's `llvm.call` names a symbol and carries no inline region, so the callee's
+body has to be attached to the operation before the (pure) transform runs. That
+happens here, on the evaluated AST: region antiquotations do not elaborate, so
+this cannot be done at the syntax level. -/
+
+open MLIR.AST in
+/-- Attach each bound region to the `llvm.call`s that name it.
+
+Only calls that do not already carry a region are rewritten, so an inline
+region always wins over a binding. Recurses into nested regions, so a call
+inside a callee can be bound too. -/
+private partial def bindCallees (table : List (String × Region 0)) (reg : Region 0) :
+    Region 0 :=
+  { reg with ops := reg.ops.map goOp }
+where
+  goOp (op : Op 0) : Op 0 :=
+    let op := { op with regions := op.regions.map (bindCallees table) }
+    if op.name != "llvm.call" || !op.regions.isEmpty then op
+    else match op.getAttr? "callee" with
+      | some (.symbol callee) =>
+          match table.lookup callee with
+          | some r => { op with regions := [r] }
+          | none   => op
+      | _ => op
+
+/-- A `with` binding: `@name := ‹term : MLIR.AST.Region 0›`. -/
+syntax sllvmCallee := "@" ident " := " term
+
+open Lean Elab Term Qq in
+/-- Evaluate a bound term to the AST region it denotes. -/
+private def elabRegionTerm (t : Term) : TermElabM (MLIR.AST.Region 0) := do
+  let e ← elabTermEnsuringTypeQ t q(MLIR.AST.Region 0)
+  synthesizeSyntheticMVarsNoPostponing
+  SSA.evalExprOfTypeRegion 0 (← instantiateMVars e)
+
+open Lean Elab Term in
+private def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
+    TermElabM (List (String × MLIR.AST.Region 0)) :=
+  bs.toList.mapM fun b => do
+    match b with
+    | `(sllvmCallee| @$name:ident := $t) =>
+        return (name.getId.toString, ← elabRegionTerm t)
+    | _ => throwUnsupportedSyntax
+
 elab "[sllvm| " reg:mlir_region "]" : term =>
   SSA.elabIntoCom' reg SLLVM
+
+/-- `[sllvm| ‹region› with @f := fRegion]` binds the bodies of the symbols the
+region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
+`[mlir_region| … ]` produces. MLIR's `llvm.call` carries no inline region, so
+this is how a lifted call site gets its callee. -/
+elab "[sllvm| " reg:mlir_region " with " bs:sllvmCallee,+ "]" : term => do
+  let table ← elabCalleeTable bs.getElems
+  SSA.elabIntoCom' reg SLLVM (pre := bindCallees table)
+
+/-- `[sllvm| … ]` from an already-built `MLIR.AST.Region 0`, so a region can be
+written once and used both as a `Com` and as a callee binding. -/
+elab "[sllvm_of| " t:term "]" : term => do
+  SSA.elabIntoCom'OfRegion (← elabRegionTerm t) SLLVM
