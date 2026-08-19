@@ -224,6 +224,12 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
       let .bitvec idxW ← getArgTy opStx "llvm.insertelement" 2
         | throw <| .generic "llvm.insertelement: index must be an integer"
       mkExprOf <| MOp.insertelement elem l idxW
+    | "llvm.extractelement" =>
+      let .vector l elem ← getArgTy opStx "llvm.extractelement" 0
+        | throw <| .generic "llvm.extractelement: operand must be a vector"
+      let .bitvec idxW ← getArgTy opStx "llvm.extractelement" 1
+        | throw <| .generic "llvm.extractelement: index must be an integer"
+      mkExprOf <| MOp.extractelement elem l idxW
     | "llvm.shufflevector" =>
       let .vector l elem ← getArgTy opStx "llvm.shufflevector" 0
         | throw <| .generic "llvm.shufflevector: operands must be vectors"
@@ -316,6 +322,9 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
       mkApp2 (mkConst ``Op.constDense) (MetaLLVM.instantiateTy vals t) (toExpr elems)
     | .insertelement e l w =>
       mkApp3 (mkConst ``Op.insertelement) (MetaLLVM.instantiateTy vals e) (toExpr l)
+        (w.metaInstantiate vals)
+    | .extractelement e l w =>
+      mkApp3 (mkConst ``Op.extractelement) (MetaLLVM.instantiateTy vals e) (toExpr l)
         (w.metaInstantiate vals)
     | .shufflevector e l mask =>
       mkApp3 (mkConst ``Op.shufflevector) (MetaLLVM.instantiateTy vals e) (toExpr l)

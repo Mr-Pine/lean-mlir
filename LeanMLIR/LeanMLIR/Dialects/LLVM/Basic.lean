@@ -136,6 +136,10 @@ inductive MOp (φ : Nat) : Type
   | constDense (t : MTy φ) (vals : List Int) : MOp φ
   /-- `llvm.insertelement` on a `vector l elem`, with an `idxW`-wide index. -/
   | insertelement (elem : MTy φ) (l : Nat) (idxW : Width φ) : MOp φ
+  /-- `llvm.extractelement` off a `vector l elem`, with an `idxW`-wide index.
+  The inverse of `insertelement`, and the way a value leaves the vector domain:
+  `fd_r43x6_extract_limbs` is six of these. -/
+  | extractelement (elem : MTy φ) (l : Nat) (idxW : Width φ) : MOp φ
   /-- `llvm.shufflevector` over two `vector l elem` operands. The mask is an
   attribute rather than an operand, so the op carries it; its length is the
   length of the result. -/
@@ -192,6 +196,7 @@ instance : ToString (MOp 0) where
      | .poison t => s!"\"llvm.mlir.poison\"() : () -> {t}"
      | .constDense t vals => s!"\"llvm.mlir.constant\"() \{value = dense<{vals}> : {t}}"
      | .insertelement .. => "\"llvm.insertelement\""
+     | .extractelement .. => "\"llvm.extractelement\""
      | .shufflevector .. => "\"llvm.shufflevector\""
      | .vpmadd52 hi _ => if hi then "\"llvm.call\" vpmadd52huq" else "\"llvm.call\" vpmadd52luq"
      | .vectorBinary _ _ op => s!"\"llvm.{op}\""
@@ -301,6 +306,7 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
     (poison : ∀ {φ} {t : MTy φ},                 motive (poison t))
     (constDense : ∀ {φ vs} {t : MTy φ},          motive (constDense t vs))
     (insertelement : ∀ {φ l} {e : MTy φ} {w : Width φ}, motive (insertelement e l w))
+    (extractelement : ∀ {φ l} {e : MTy φ} {w : Width φ}, motive (extractelement e l w))
     (shufflevector : ∀ {φ l m} {e : MTy φ},      motive (shufflevector e l m))
     (vpmadd52 : ∀ {φ hi l},                      motive (φ := φ) (vpmadd52 hi l))
     (vectorBinary : ∀ {φ l o} {w : Width φ},     motive (vectorBinary l w o)) :
@@ -308,6 +314,7 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
   | _, .poison _   => poison
   | _, .constDense ..  => constDense
   | _, .insertelement .. => insertelement
+  | _, .extractelement .. => extractelement
   | _, .shufflevector .. => shufflevector
   | _, .vpmadd52 ..    => vpmadd52
   | _, .vectorBinary .. => vectorBinary
@@ -364,6 +371,8 @@ exists at vector types too. -/
 @[match_pattern] abbrev constDense : LLVM.Ty → List Int → LLVM.Op  := MOp.constDense
 @[match_pattern] abbrev insertelement (e : LLVM.Ty) (l w : Nat) : LLVM.Op :=
   MOp.insertelement e l (.concrete w)
+@[match_pattern] abbrev extractelement (e : LLVM.Ty) (l w : Nat) : LLVM.Op :=
+  MOp.extractelement e l (.concrete w)
 @[match_pattern] abbrev shufflevector : LLVM.Ty → Nat → List Int → LLVM.Op :=
   MOp.shufflevector
 @[match_pattern] abbrev vpmadd52 : Bool → Nat → LLVM.Op := MOp.vpmadd52
@@ -419,6 +428,7 @@ instance : ToString (MOp φ) where
   | .poison _   => "poison"
   | .constDense ..  => "constant"
   | .insertelement .. => "insertelement"
+  | .extractelement .. => "extractelement"
   | .shufflevector .. => "shufflevector"
   | .vpmadd52 ..    => "vpmadd52"
   | .vectorBinary _ _ op => toString op
@@ -461,6 +471,7 @@ def MetaLLVM.opName : (MetaLLVM φ).Op → String
   | .poison _   => "llvm.mlir.poison"
   | .constDense ..  => "llvm.mlir.constant"
   | .insertelement .. => "llvm.insertelement"
+  | .extractelement .. => "llvm.extractelement"
   | .shufflevector .. => "llvm.shufflevector"
   | .vpmadd52 hi _  =>
     if hi then "x86vector.avx512.intr.vpmadd52h.uq.512"
@@ -526,6 +537,7 @@ def MOp.sig : MOp φ → List (MTy φ)
 | .select w => [.bitvec 1, .bitvec w, .bitvec w]
 | .const _ _ | .poison _ | .constDense _ _ => []
 | .insertelement e l w => [.vector l e, e, .bitvec w]
+| .extractelement e l w => [.vector l e, .bitvec w]
 | .shufflevector e l _ => [.vector l e, .vector l e]
 | .vpmadd52 _ l =>
   [.vector l (.bitvec 64), .vector l (.bitvec 64), .vector l (.bitvec 64)]
@@ -547,6 +559,7 @@ def MOp.outTy : MOp φ → MTy φ
 | .poison t => t
 | .constDense t _ => t
 | .insertelement e l _ => .vector l e
+| .extractelement e _ _ => e
 | .shufflevector e _ mask => .vector mask.length e
 | .vpmadd52 _ l => .vector l (.bitvec 64)
 | .vectorBinary l w _ => .vector l (.bitvec w)
@@ -754,6 +767,19 @@ def insertelement {l : Nat} {e : LLVM.Ty} {w : Nat}
   | .value bv =>
       if h : bv.toNat < l then v.set bv.toNat x else Vector.replicate l (poison e)
 
+/-- `llvm.extractelement`. Per LLVM, if the index is poison or out of range the
+result is poison.
+
+Note the asymmetry with `insertelement`, which poisons the *whole vector* in
+that case: here the result is a single element, so there is nothing wider to
+poison. At a nested vector element type `poison` is still lane-wise, which is
+what `LLVM.Ty.poison` already does. -/
+def extractelement {l : Nat} {e : LLVM.Ty} {w : Nat}
+    (v : Vector (TyDenote.toType e) l) (i : LLVM.IntW w) : TyDenote.toType e :=
+  match i with
+  | .poison => poison e
+  | .value bv => if h : bv.toNat < l then v[bv.toNat]'h else poison e
+
 /-- `llvm.shufflevector`. Mask element `i` indexes the concatenation of the two
 operands; LLVM writes a poison lane as a negative mask element. -/
 def shufflevector {l : Nat} {e : LLVM.Ty} (mask : List Int)
@@ -830,6 +856,9 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
       LLVM.Ty.insertelement (op.getN 0 (by simp [DialectSignature.sig, signature]))
                             (op.getN 1 (by simp [DialectSignature.sig, signature]))
                             (op.getN 2 (by simp [DialectSignature.sig, signature]))
+  | LLVM.Op.extractelement _ _ _ =>
+      LLVM.Ty.extractelement (op.getN 0 (by simp [DialectSignature.sig, signature]))
+                             (op.getN 1 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.shufflevector _ _ mask =>
       LLVM.Ty.shufflevector mask (op.getN 0 (by simp [DialectSignature.sig, signature]))
                                  (op.getN 1 (by simp [DialectSignature.sig, signature]))

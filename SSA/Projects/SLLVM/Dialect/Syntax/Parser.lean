@@ -250,6 +250,12 @@ instance : DialectParse SLLVM 0 where
       let .bitvec (.concrete idxW) ← getArgArithTy opStx 2
         | throw <| .generic "llvm.insertelement: index must be an integer"
       mkExprOf <| Op.insertelement elem l idxW
+    | "llvm.extractelement" =>
+      let .vector l elem ← getArgArithTy opStx 0
+        | throw <| .generic "llvm.extractelement: operand must be a vector"
+      let .bitvec (.concrete idxW) ← getArgArithTy opStx 1
+        | throw <| .generic "llvm.extractelement: index must be an integer"
+      mkExprOf <| Op.extractelement elem l idxW
     | "llvm.shufflevector" =>
       let .vector l elem ← getArgArithTy opStx 0
         | throw <| .generic "llvm.shufflevector: operands must be vectors"

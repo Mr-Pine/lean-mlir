@@ -113,6 +113,8 @@ open InstCombine.LLVM SLLVMOp
   arith <| Op.constDense t vals
 @[match_pattern] nonrec abbrev Op.insertelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
   arith <| Op.insertelement e l w
+@[match_pattern] nonrec abbrev Op.extractelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
+  arith <| Op.extractelement e l w
 @[match_pattern] nonrec abbrev Op.shufflevector (e : LLVM.Ty) (l : Nat) (mask : List Int) :
     SLLVM.Op := arith <| Op.shufflevector e l mask
 @[match_pattern] nonrec abbrev Op.vpmadd52 (hi : Bool) (l : Nat) : SLLVM.Op :=
@@ -172,6 +174,8 @@ def_signature for SLLVM
   | Op.constDense t _vals => () -> Ty.arith t
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
+  | Op.extractelement e l w =>
+      (Ty.arith (.vector l e), bitvec w) -> Ty.arith e
   | Op.shufflevector e l mask =>
       (Ty.arith (.vector l e), Ty.arith (.vector l e)) -> Ty.arith (.vector mask.length e)
   | Op.vectorBinary l w _bop =>
@@ -220,6 +224,7 @@ def_denote for SLLVM
   | Op.poison t     => [LLVM.Ty.poison t]ₕ
   | Op.constDense t vals => [LLVM.Ty.dense t vals]ₕ
   | Op.insertelement .. => fun v x i => [LLVM.Ty.insertelement v x i]ₕ
+  | Op.extractelement .. => fun v i => [LLVM.Ty.extractelement v i]ₕ
   | Op.shufflevector _e _l mask => fun a b => [LLVM.Ty.shufflevector mask a b]ₕ
   | Op.vpmadd52 hi _l => fun a b c => [LLVM.Ty.vpmadd52 hi a b c]ₕ
   | Op.vectorBinary _l _w bop =>
