@@ -102,7 +102,7 @@ theorem quadLimb_quadVec (l : ℕ → ℕ → ℕ) (j : ℕ) (hj : j < 4) (k : �
 
 /-! ## The concatenated result
 
-The extraction probe returns the kernel's three result vectors as one 24-lane
+`quadCat` glues the kernel's three result vectors into one 24-lane
 value (see `Mlir/fd_r43x6_quad_*.lean`), so the specification predicts that
 shape too. `sliceNM` projects a third back out; each is definitionally the
 vector it was built from, so the eight-lane lemmas above still apply to it. -/

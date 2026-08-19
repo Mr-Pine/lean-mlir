@@ -9,7 +9,12 @@ Usage: gen_quad_sqr_proof.py [--upto N]   (truncate after %N, close with sorry)
 """
 import re, sys
 
-UPTO = int(sys.argv[2]) if len(sys.argv) >= 3 and sys.argv[1] == '--upto' else None
+ARGV = sys.argv[1:]
+UPTO = int(ARGV[1]) if len(ARGV) >= 2 and ARGV[0] == '--upto' else None
+
+# The valuation the derivation reads its block arguments from; every `simp only`
+# that unfolds a block argument has to name it.
+VAL = 'quadValMem'
 
 def el(i): return i % 4
 
@@ -127,9 +132,11 @@ val[111] = [f"({val[89][j]}) + ({val[87][j]})" for j in range(8)]
 val[112] = [f"({val[111][j]}) + ({val[109][j]})" for j in range(8)]
 val[113] = [f"({val[112][j]}) + ({val[110][j]})" for j in range(8)]
 val[114] = [f"({val[113][j]}) + ({val[88][j]})" for j in range(8)]    # z25
-val[115] = val[104] + val[108]
-val[116] = val[114] + [None] * 8
-val[117] = val[115] + val[114]
+
+# The 24 lanes of the kernel's result: the three output vectors, in the order
+# `quadCat` concatenates them. The kernel never forms this vector -- it writes
+# the three separately -- but the `lane_*` lemmas are indexed by it.
+RESULT_LANES = val[104] + val[108] + val[114]
 
 # --------------------------------------------------------------------- naming
 # Every value under the name `fd_r43x6_inl.h` gives it. Suffixes mark the
@@ -154,7 +161,7 @@ NAME = {42:'x05', 43:'x12', 44:'x34', 45:'x41', 46:'x23', 47:'x52', 48:'x4z',
         105:'zb14_shl7', 106:'z14_part', 107:'zb14_mul24', 108:'z14',
         109:'zb25_shl7', 110:'zb25_mul24', 111:'za25_a', 112:'za25_b',
         113:'za25_c', 114:'z25',
-        115:'z03_z14', 116:'z25_wide', 117:'z'}
+        }
 
 # what each instruction reads, so the tactic unfolds exactly those
 SRC = {49:[], 50:[], 51:[42], 52:[43],
@@ -170,7 +177,7 @@ SRC = {49:[], 50:[], 51:[42], 52:[43],
        101:[94], 102:[83,101], 103:[94], 104:[102,103],
        105:[97], 106:[86,105], 107:[97], 108:[106,107],
        109:[100], 110:[100], 111:[89,87], 112:[111,109], 113:[112,110],
-       114:[113,88], 115:[104,108], 116:[114], 117:[115,116]}
+       114:[113,88]}
 
 def uses(i):
     names = [NAME[k] for k in SRC.get(i, []) if k in NAME]
@@ -213,7 +220,6 @@ DOC = {
  94:"columns 6 and 9", 97:"columns 7 and 10", 100:"columns 8 and 11",
  104:"`za03 + 152*zb03`, limbs 0 and 3 of all four elements",
  108:"limbs 1 and 4", 114:"limbs 2 and 5",
- 117:"the three results concatenated, as the extraction probe returns them",
 }
 
 # Which arithmetic-normalising lemmas each lane actually needs, calibrated
@@ -245,7 +251,7 @@ def emit_lane_lemmas():
     emit("keeps the last step of the derivation a rewrite rather than a")
     emit("twenty-four-fold re-normalisation of the whole result. -/")
     emit()
-    for i, expr in enumerate(val[117]):
+    for i, expr in enumerate(RESULT_LANES):
         j, k = i % 4, limb_of[i]
         emit(f"private theorem lane_{i} (a b c : Vector (BitVec 64) 8) :")
         emit(f"    {concrete(expr)}")
@@ -275,7 +281,7 @@ def step(i, tac):
         emit(f"  let {NAME[i]} := toBitVecValue 64 #v[{', '.join(lanes)}]")
     unf = sorted(set(uses(i)) | {NAME[i]})
     if tac.startswith("quad_vecbin"):
-        unf = ["quadVal3"] + unf
+        unf = [VAL] + unf
     emit(f"  have h{NAME[i]} : v{i} = {NAME[i]} := by {tac} hv{i} with {', '.join(unf)}")
     emit(f"  subst h{NAME[i]}")
     # `hv<i>` is now `<name> = <denotation>`, spent; retiring it keeps the
@@ -283,31 +289,76 @@ def step(i, tac):
     emit(f"  denote_clear v {i} {i}")
 
 TAIL = r"""
+/-! ## What the kernel writes
+
+The derivation above says the region *is* three whole-vector stores. Combining
+it with `Proof/Mem.lean` turns that into a statement about memory. Everything
+about the *values* -- ring correctness and the width table -- follows below,
+on the three vectors the kernel writes. -/
+
+/-- **The kernel's effect on memory.** Given three live, big-enough
+destinations, the region runs without UB and leaves exactly the three
+specified vectors behind. No aliasing hypothesis is needed: if two
+destinations coincide the later write wins, which is what the nested
+`writeVec`s say. -/
+theorem run_fd_r43x6_quad_sqr_fast (a b c : Vector (BitVec 64) 8)
+    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
+    (p₀ p₁ p₂ : Pointer) (s : GlobalState)
+    (h₀ : Fits s.mem p₀ 512)
+    (h₁ : Fits (s.mem.writeVec p₀ (quadSqrVec03 a b c)) p₁ 512)
+    (h₂ : Fits ((s.mem.writeVec p₀ (quadSqrVec03 a b c)).writeVec p₁
+      (quadSqrVec14 a b c)) p₂ 512) :
+    (fd_r43x6_quad_sqr_fast.denote
+        (quadValMem (.value p₀) (.value p₁) (.value p₂) a b c)).run s
+      = .value (HVector.nil,
+          { s with mem := ((s.mem.writeVec p₀ (quadSqrVec03 a b c)).writeVec p₁
+              (quadSqrVec14 a b c)).writeVec p₂ (quadSqrVec25 a b c) }) := by
+  rw [denote_fd_r43x6_quad_sqr_fast a b c ha hb hc]
+  exact run_storeVec3 h₀ h₁ h₂
+
+/-- **Correctness, against memory.** Given three live, big-enough and pairwise
+distinct destinations, the region runs without UB and each pointer afterwards
+addresses the vector the specification predicts for it.
+
+The distinctness hypotheses are an assumption about the *caller*: the kernel's
+pointer parameters carry `nocapture noundef writeonly` and not `noalias`, so
+nothing in the IR rules out aliasing. At the one call site,
+`FD_R43X6_QUAD_SQR_FAST` passes `&_R03, &_R14, &_R25` -- three distinct
+locals. -/
+theorem fd_r43x6_quad_sqr_fast_readback (a b c : Vector (BitVec 64) 8)
+    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
+    (p₀ p₁ p₂ : Pointer) (s : GlobalState)
+    (h₀ : Fits s.mem p₀ 512) (h₁ : Fits s.mem p₁ 512) (h₂ : Fits s.mem p₂ 512)
+    (d₀₁ : p₀.id ≠ p₁.id) (d₀₂ : p₀.id ≠ p₂.id) (d₁₂ : p₁.id ≠ p₂.id) :
+    let m' := ((s.mem.writeVec p₀ (quadSqrVec03 a b c)).writeVec p₁
+      (quadSqrVec14 a b c)).writeVec p₂ (quadSqrVec25 a b c)
+    (fd_r43x6_quad_sqr_fast.denote
+          (quadValMem (.value p₀) (.value p₁) (.value p₂) a b c)).run s
+        = .value (HVector.nil, { s with mem := m' })
+      ∧ (SLLVM.load (.value p₀) QVecTy).run m'
+          = .value ((quadSqrVec03 a b c).map PoisonOr.value, m')
+      ∧ (SLLVM.load (.value p₁) QVecTy).run m'
+          = .value ((quadSqrVec14 a b c).map PoisonOr.value, m')
+      ∧ (SLLVM.load (.value p₂) QVecTy).run m'
+          = .value ((quadSqrVec25 a b c).map PoisonOr.value, m') := by
+  refine ⟨run_fd_r43x6_quad_sqr_fast a b c ha hb hc p₀ p₁ p₂ s h₀
+      (fits_splice h₁) (fits_splice (fits_splice h₂)), ?_⟩
+  exact storeVec3_readback h₀ h₁ h₂ d₀₁ d₀₂ d₁₂
+
 /-! ## What the kernel computes
 
-The derivation above lands on `quadSqrVec`; combining it with the ring
-correctness and width table of `Spec/fd_r43x6_quad_sqr_fast.lean` gives the
-kernel's contract. Everything below is stated per QUAD lane `j < 4`, since the
-kernel is four independent multiplies. -/
+The three vectors the kernel writes are `quadSqrVec03/14/25`. What follows is
+about those and is independent of how they reach memory: the ring correctness
+and the width table of `Spec/fd_r43x6_quad_sqr_fast.lean`, transported onto the
+kernel's three outputs. Everything is stated per QUAD lane `j < 4`, since the
+kernel is four independent squarings. -/
 
-/-- The program's 24-lane result. -/
-abbrev quadSqrResult (a b c : Vector (BitVec 64) 8) :
-    Vector (PoisonOr (BitVec 64)) 24 :=
-  (fd_r43x6_quad_sqr_fast.denote (quadVal3 a b c)).head
-
-/-- The result, with the poison layer discharged. -/
-theorem quadSqrResult_eq (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c) :
-    quadSqrResult a b c = (quadSqrVec a b c).map PoisonOr.value := by
-  rw [quadSqrResult, denote_fd_r43x6_quad_sqr_fast a b c ha hb hc]
-  simp only [HVector.head]
-
-/-- Reading element `j` back out of the result recovers the specified limbs. -/
+/-- Reading element `j` back out of the three result vectors recovers the
+specified limbs. -/
 theorem quadSqr_limbs (a b c : Vector (BitVec 64) 8)
     (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
     (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadLimb (slice03 (quadSqrVec a b c)) (slice14 (quadSqrVec a b c))
-        (slice25 (quadSqrVec a b c)) j k
+    quadLimb (quadSqrVec03 a b c) (quadSqrVec14 a b c) (quadSqrVec25 a b c) j k
       = quadSqrLimb a b c j k :=
   quadLimb_slice_quadVec24 _ j hj k hk
     (fun i hi k' hk' => by
@@ -323,39 +374,38 @@ theorem quadSqr_zmod (a b c : Vector (BitVec 64) 8) (j : ℕ) :
 
 /-! ## Output bounds
 
-The `fd_r43x6.h` width table, transported through the denotation onto each
-third of the 24-lane result. -/
+The `fd_r43x6.h` width table, on each of the three vectors the kernel writes. -/
 
 private theorem quadSqr_bounds_of (a b c : Vector (BitVec 64) 8) (N : ℕ)
     (hN : N ≤ 2 ^ 63)
     (hb : ∀ j < 4, ∀ k < 6, quadSqrLimb a b c j k < N) :
-    (R43x6.BoundedUpper ((N : Int) - 1) (slice03 (quadSqrVec a b c))
-      ∧ R43x6.BoundedLower 0 (slice03 (quadSqrVec a b c)))
-    ∧ (R43x6.BoundedUpper ((N : Int) - 1) (slice14 (quadSqrVec a b c))
-      ∧ R43x6.BoundedLower 0 (slice14 (quadSqrVec a b c)))
-    ∧ (R43x6.BoundedUpper ((N : Int) - 1) (slice25 (quadSqrVec a b c))
-      ∧ R43x6.BoundedLower 0 (slice25 (quadSqrVec a b c))) := by
+    (R43x6.BoundedUpper ((N : Int) - 1) (quadSqrVec03 a b c)
+      ∧ R43x6.BoundedLower 0 (quadSqrVec03 a b c))
+    ∧ (R43x6.BoundedUpper ((N : Int) - 1) (quadSqrVec14 a b c)
+      ∧ R43x6.BoundedLower 0 (quadSqrVec14 a b c))
+    ∧ (R43x6.BoundedUpper ((N : Int) - 1) (quadSqrVec25 a b c)
+      ∧ R43x6.BoundedLower 0 (quadSqrVec25 a b c)) := by
   refine ⟨?_, ?_, ?_⟩ <;>
-    simp only [quadSqrVec, quadVec24, slice03_quadCat, slice14_quadCat, slice25_quadCat] <;>
+    simp only [quadSqrVec03, quadSqrVec14, quadSqrVec25] <;>
     exact quadVec_bounds _ _ _ N hN
       (fun j hj => ⟨hb j hj _ (by omega), hb j hj _ (by omega)⟩)
 
-/-- **`u47` in, `u62` out**, on every third of the result. -/
+/-- **`u47` in, `u62` out**, on every vector the kernel writes. -/
 theorem quadSqr_u47_u62 (a b c : Vector (BitVec 64) 8)
     (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c) :
-    R43x6.U62 (slice03 (quadSqrVec a b c))
-      ∧ R43x6.U62 (slice14 (quadSqrVec a b c))
-      ∧ R43x6.U62 (slice25 (quadSqrVec a b c)) := by
+    R43x6.U62 (quadSqrVec03 a b c)
+      ∧ R43x6.U62 (quadSqrVec14 a b c)
+      ∧ R43x6.U62 (quadSqrVec25 a b c) := by
   have := quadSqr_bounds_of a b c (2 ^ 62) (by omega)
     (fun j hj k hk => quadSqrLimb_lt_u47 a b c ha hb hc j hj k hk)
   exact_mod_cast this
 
-/-- **`u44` in, `u61` out**, on every third of the result. -/
+/-- **`u44` in, `u61` out**, on every vector the kernel writes. -/
 theorem quadSqr_u44_u61 (a b c : Vector (BitVec 64) 8)
     (ha : R43x6.U44 a) (hb : R43x6.U44 b) (hc : R43x6.U44 c) :
-    R43x6.U61 (slice03 (quadSqrVec a b c))
-      ∧ R43x6.U61 (slice14 (quadSqrVec a b c))
-      ∧ R43x6.U61 (slice25 (quadSqrVec a b c)) := by
+    R43x6.U61 (quadSqrVec03 a b c)
+      ∧ R43x6.U61 (quadSqrVec14 a b c)
+      ∧ R43x6.U61 (quadSqrVec25 a b c) := by
   have := quadSqr_bounds_of a b c (2 ^ 61) (by omega)
     (fun j hj k hk => quadSqrLimb_lt_u44 a b c ha hb hc j hj k hk)
   exact_mod_cast this
@@ -372,15 +422,16 @@ Released under Apache 2.0 license as described in the file LICENSE.
 NOTE: generated by `gen_quad_sqr_proof.py`; edit that and regenerate.
 -/
 import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_quad_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
+import SSA.Projects.Firedancer.Avx512.Proof.Mem
 import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_quad_sqr_fast
 
 /-!
 # `fd_r43x6_quad_sqr_fast` squares four field elements at once
 
-Denoting the lifted region and reading its 24-lane result back through the
-QUAD layout gives, in each of the four lanes, the square of the decoded input
-in `GF(2^255 - 19)`, within the widths `fd_r43x6.h` promises.
+This is the kernel lifted **verbatim** -- three `!llvm.ptr` out-parameters and
+three `llvm.store`s, with no extraction probe. The derivation shows the region
+denotes to exactly three whole-vector stores of the specified results;
+`Proof/Mem.lean` turns that into a statement about memory.
 
 Every intermediate is introduced as a `let` at the point the program computes
 it, under the name `fd_r43x6_inl.h` gives it, so the derivation reads against
@@ -414,24 +465,29 @@ alike -- a `vpmadd52h` lane is `phRaw u v` only when both operands are already
 below `2^52`, and `u47` inputs are, doubled or not. -/
 ''')
 emit('local macro "quad_shuffle " h:term " with " ns:Lean.Parser.Tactic.simpLemma,* : tactic =>')
-emit('  `(tactic| denote_shuffle $h with quadVal3, quadLimb, vlane, $ns,*)')
+emit(f'  `(tactic| denote_shuffle $h with {VAL}, quadLimb, vlane, $ns,*)')
 emit()
 emit('local macro "quad_madd52 " h:term " with " ns:Lean.Parser.Tactic.simpLemma,* : tactic =>')
-emit('  `(tactic| quad_vpmadd52 $h with quadVal3,')
+emit(f'  `(tactic| quad_vpmadd52 $h with {VAL},')
 emit("      " + ", ".join(f"$(Lean.mkIdent `{b}):term" for b in BOUNDS) + ", $ns,*)")
 emit()
 emit()
 
 emit('set_option maxHeartbeats 40000000 in')
 emit('set_option maxRecDepth 100000 in')
-emit('/-- **Limb derivation**: on unreduced inputs the denotation *is* the')
-emit('specified `quadSqrVec`, every one of the 118 instructions carried through at')
-emit('the N level. -/')
+emit('/-- **Limb derivation**: on unreduced inputs the region denotes to exactly')
+emit('three whole-vector stores, of the three vectors the specification predicts,')
+emit('through the three pointer parameters in declaration order. All 115')
+emit('instructions are carried through at the N level. -/')
 emit('theorem denote_fd_r43x6_quad_sqr_fast (a b c : Vector (BitVec 64) 8)')
-emit('    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c) :')
-emit('    fd_r43x6_quad_sqr_fast.denote (quadVal3 a b c) =')
-emit('      ([(quadSqrVec a b c).map PoisonOr.value]ₕ :')
-emit('        HVector TyDenote.toType [QTy24]) := by')
+emit('    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)')
+emit('    (p₀ p₁ p₂ : SLLVM.Ptr) :')
+emit('    fd_r43x6_quad_sqr_fast.denote (quadValMem p₀ p₁ p₂ a b c) =')
+emit('      (do storeVec p₀ ((quadSqrVec03 a b c).map PoisonOr.value)')
+emit('          storeVec p₁ ((quadSqrVec14 a b c).map PoisonOr.value)')
+emit('          storeVec p₂ ((quadSqrVec25 a b c).map PoisonOr.value)')
+emit('          pure (HVector.nil :')
+emit('            HVector TyDenote.toType ([] : List SLLVM.Ty))) := by')
 for v, hyp in zip(VECS, ("ha", "hb", "hc")):
     emit(f"  have b{v} : ∀ (i : ℕ) (h : i < 8),")
     emit(f"      ({v}[i]'h).toNat % 4503599627370496 = ({v}[i]'h).toNat := fun i h =>")
@@ -498,32 +554,28 @@ SHUF = {81, 82, 84, 85, 87, 88, 89, 90, 91, 93, 95, 96, 98, 99}
 for i in range(81, 115):
     step(i, "quad_shuffle" if i in SHUF else "quad_vecbin")
 emit()
-emit('  -- the concatenation the extraction probe adds')
 if not stop(115):
-    step(115, "quad_shuffle")
-    step(116, "quad_shuffle")
-    step(117, "quad_shuffle")
-    emit()
-    emit('  -- and that vector is the one the specification predicts. The')
-    emit('  -- arithmetic is the `lane_*` lemmas above: the derivation ends with')
-    emit('  -- its `let`s zeta-unfolded to lanes while the specification still')
-    emit('  -- reads `quadSqrLimb ... j`, and re-deriving that correspondence')
-    emit('  -- inside a twenty-four-way case split does not fit in any sensible')
-    emit('  -- heartbeat budget. Here it is a rewrite.')
-    emit('  simp_peephole')
-    emit('  try congr 1')
-    emit('  apply Vector.ext')
-    emit('  intro i hi')
-    emit('  interval_cases i')
-    emit('  all_goals simp only [quadSqrVec, quadVec24_eq, quadSqrLimb, toBitVecValue,')
-    # the `lane_*` lemmas are stated over `a[j].toNat`, so the derivation's
-    # side has to be reduced to lanes too; the specification's side keeps
-    # `quadLimb ... j` partially applied and is untouched by these
-    emit('    z, X, quadLimb, vlane,')
-    emit('    Vector.getElem_map, Vector.getElem_mk, List.getElem_toArray,')
-    emit('    List.getElem_cons_zero, List.getElem_cons_succ,')
-    emit('    lane_0, lane_1, lane_2, lane_3, lane_4, lane_5, lane_6, lane_7, lane_8, lane_9, lane_10, lane_11, lane_12, lane_13, lane_14, lane_15, lane_16, lane_17, lane_18, lane_19, lane_20, lane_21, lane_22, lane_23]')
-
+    emit('  -- the three stores. `denote_step_all` stops at %114: a store has an')
+    emit('  -- impure operation, so there is nothing left to push into the')
+    emit('  -- valuation. What remains is to identify the three stored values with')
+    emit('  -- the specification, which is the `lane_*` lemmas above, and then to')
+    emit('  -- read the stores off the denotation.')
+    for name, spec, lo in (('z03', 'quadSqrVec03', 0),
+                           ('z14', 'quadSqrVec14', 8),
+                           ('z25', 'quadSqrVec25', 16)):
+        emit(f'  have e{name} : {name} = ({spec} a b c).map PoisonOr.value := by')
+        emit('    apply Vector.ext')
+        emit('    intro i hi')
+        emit('    interval_cases i')
+        emit(f'    all_goals simp only [{spec}, quadVec, quadSqrLimb, toBitVecValue,')
+        emit(f'      {name}, X, quadLimb, vlane,')
+        emit('      Vector.getElem_map, Vector.getElem_mk, List.getElem_toArray,')
+        emit('      List.getElem_cons_zero, List.getElem_cons_succ,')
+        emit('      ' + ', '.join(f'lane_{lo + k}' for k in range(8)) + ']')
+    emit('  simp only [Com.denote_var, Expr.denote_unfold, Expr.denoteOp,')
+    emit('    EffectKind.liftEffect_rfl, simp_denote, storeVec, quadValMem,')
+    emit('    Function.comp_def, Ctxt.Valuation.nil_append, map_eq_pure_bind,')
+    emit('    bind_assoc, pure_bind, Ctxt.Valuation.cons_last, ez03, ez14, ez25]')
 emit(TAIL)
 
 print("\n".join(out))

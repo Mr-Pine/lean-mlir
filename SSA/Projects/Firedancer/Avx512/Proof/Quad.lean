@@ -7,13 +7,10 @@ import SSA.Projects.Firedancer.Avx512.Spec.Quad
 /-!
 # Shared scaffolding for the `fd_r43x6_quad_*` proofs
 
-The quad kernels take three or six `vector<8xi64>` block arguments and return
-one 24-lane vector. This file fixes the valuations that feed them and the
-readback of the 24-lane result.
-
-Block arguments enter a `Ctxt` in *reverse* declaration order (`%arg0` is the
-deepest variable), which is why `quadVal3`/`quadVal6` list their arguments
-backwards.
+The quad kernels take three or six `vector<8xi64>` block arguments, ahead of
+three `!llvm.ptr` out-parameters, and write their three results through those
+pointers. This file fixes the QUAD layout and the readback of a result vector;
+the valuations that feed the kernels live in `Proof/Mem.lean`.
 -/
 
 namespace Firedancer.Avx512
@@ -22,28 +19,6 @@ open InstCombine (LLVM)
 
 /-- The dialect type of an 8-lane 64-bit vector. -/
 abbrev QTy : SLLVM.Ty := SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64)))
-/-- The dialect type of the 24-lane result. -/
-abbrev QTy24 : SLLVM.Ty := SLLVM.Ty.arith (.vector 24 (.bitvec (.concrete 64)))
-
-/-- Valuation for a three-argument quad kernel (`fd_r43x6_quad_sqr_fast`).
-
-Built as an explicit `Valuation.cons` chain rather than with
-`Valuation.ofHVector`: the `@[simp]` lemma `Valuation.ofHVector_apply` rewrites
-a lookup on an `ofHVector` into an `HVector` index, for which there are no
-reduction lemmas in the per-opcode simp sets, so the operand of a `vpmadd52`
-would get stuck. On a `cons` chain `Valuation.cons_zero` and
-`Valuation.cons_eval` reduce the lookup all the way. -/
-def quadVal3 (a b c : Vector (BitVec 64) 8) :
-    Ctxt.Valuation (Ctxt.ofList [QTy, QTy, QTy]) :=
-  c.map PoisonOr.value ::ᵥ b.map PoisonOr.value ::ᵥ a.map PoisonOr.value ::ᵥ
-    Ctxt.Valuation.nil
-
-/-- Valuation for a six-argument quad kernel (`fd_r43x6_quad_mul_fast`). -/
-def quadVal6 (a b c d e f : Vector (BitVec 64) 8) :
-    Ctxt.Valuation (Ctxt.ofList [QTy, QTy, QTy, QTy, QTy, QTy]) :=
-  f.map PoisonOr.value ::ᵥ e.map PoisonOr.value ::ᵥ d.map PoisonOr.value ::ᵥ
-  c.map PoisonOr.value ::ᵥ b.map PoisonOr.value ::ᵥ a.map PoisonOr.value ::ᵥ
-    Ctxt.Valuation.nil
 
 /-- `BitVec.toNat_ofNat` reintroduces a `% 2^64` that is always vacuous on a
 lane read back out of a 64-bit vector. The default simp set cancels it; under
