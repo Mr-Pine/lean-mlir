@@ -569,10 +569,16 @@ since `LLVM.Ty` is a `Dialect` projection and not reducibly `MTy 0`. -/
 @[match_pattern] abbrev vector (l : Nat) (e : LLVM.Ty) : LLVM.Ty :=
   MTy.vector l e
 
-/-- The total number of bits, flattening vectors. -/
+/-- The total number of bits, flattening vectors.
+
+NOTE the multiplication is written `width e * l` rather than `l * width e`.
+`Nat.mul` recurses on its *second* argument, so with this order
+`width (vector (n+1) e) = width (vector n e) + width e` holds definitionally,
+which is what lets `BitVec.packLanes` below build the flat encoding by plain
+`BitVec.append` with no `BitVec.cast` anywhere. -/
 def width : LLVM.Ty → Nat
   | bitvec w => w
-  | vector l e => l * width e
+  | vector l e => width e * l
 
 /-- NOTE: this used to be stated for every `ty`, which held while `bitvec` was
 the only constructor. It is false for vectors: `width` flattens them, so
@@ -597,6 +603,129 @@ instance : TyDenote LLVM.Ty where
 
 @[simp_denote] lemma toType_vector (l : Nat) (e : LLVM.Ty) :
     TyDenote.toType (vector l e) = Vector (TyDenote.toType e) l := rfl
+
+/-! ### Flat, in-memory encoding
+
+A value has to become a plain bitvector to be written to memory. LLVM lays a
+vector out with lane `0` at the *lowest* address, i.e. in the low bits, and that
+is what `flattenBV` produces; `unflatten` reads it back.
+
+Poison is deliberately kept out of the encoding: `Defined` says every scalar
+lane holds a value, and only then is there anything to store. `SLLVM`'s memory
+model stores fully-defined values only (storing poison raises UB), so this split
+is exactly the distinction it needs. -/
+
+/-- Pack `n` lanes of width `we` into one bitvector, lane `0` in the low bits.
+
+There is no `BitVec.cast` here: `width` multiplies as `width e * l` precisely so
+that `we * (n+1)` reduces to `we * n + we`, which is the width `append` gives. -/
+def _root_.BitVec.packLanes {we : Nat} : {n : Nat} → Vector (BitVec we) n → BitVec (we * n)
+  | 0,   _ => 0#(we * 0)
+  | _+1, v => BitVec.packLanes v.tail ++ v[0]
+
+/-- Lane `i` of a packed bitvector is the `i`-th input lane. -/
+theorem _root_.BitVec.extractLsb'_packLanes {we : Nat} :
+    ∀ {n : Nat} (v : Vector (BitVec we) n) (i : Nat) (h : i < n),
+      (BitVec.packLanes v).extractLsb' (i * we) we = v[i]
+  | 0,   _, _,   h => absurd h (by omega)
+  | _+1, v, 0,   _ => by
+      simpa [BitVec.packLanes] using
+        (BitVec.extractLsb'_append_eq_right (a := BitVec.packLanes v.tail) (b := v[0]))
+  | n+1, v, i+1, h => by
+      have hi : i < n := by omega
+      have key : (BitVec.packLanes v).extractLsb' ((i + 1) * we) we
+          = (BitVec.packLanes v.tail).extractLsb' (i * we) we := by
+        have hunfold : (BitVec.packLanes v).extractLsb' ((i + 1) * we) we
+            = (BitVec.packLanes v.tail ++ v[0]).extractLsb' ((i + 1) * we) we := rfl
+        rw [hunfold, show (i + 1) * we = i * we + we from Nat.succ_mul i we,
+          BitVec.extractLsb'_append_eq_of_le (Nat.le_add_left we (i * we))]
+        congr 1
+        omega
+      rw [key, BitVec.extractLsb'_packLanes v.tail i hi]
+      simp [Nat.add_comm]
+
+/-! `TyDenote.toType (bitvec w)` and `TyDenote.toType (vector l e)` reduce to
+`LLVM.IntW w` and `Vector _ l`, but only by unfolding `denote`, which instance
+search will not do. These two identity functions put the reduced type in head
+position so that `DecidableEq` and `GetElem` are found. -/
+
+@[reducible] def ofBitvec {w : Nat} (x : TyDenote.toType (bitvec w)) : LLVM.IntW w := x
+@[reducible] def ofVector {l : Nat} {e : LLVM.Ty} (v : TyDenote.toType (vector l e)) :
+    Vector (TyDenote.toType e) l := v
+
+/-- Every scalar lane of the value holds a value rather than poison. -/
+def Defined : (t : LLVM.Ty) → TyDenote.toType t → Prop
+  | bitvec _, x => ofBitvec x ≠ .poison
+  | vector l e, v => ∀ i : Fin l, Defined e (ofVector v)[i]
+
+instance decidableDefined : (t : LLVM.Ty) → (x : TyDenote.toType t) → Decidable (Defined t x)
+  | bitvec _, x => inferInstanceAs (Decidable (ofBitvec x ≠ .poison))
+  | vector l e, v =>
+      have : ∀ i : Fin l, Decidable (Defined e (ofVector v)[i]) :=
+        fun i => decidableDefined e _
+      inferInstanceAs (Decidable (∀ i : Fin l, Defined e (ofVector v)[i]))
+
+/-- The flat, in-memory bit pattern of a value. A poison lane contributes `0`;
+that junk is only ever reachable when `Defined` fails, which is where `flatten`
+raises poison instead. -/
+def flattenBV : (t : LLVM.Ty) → TyDenote.toType t → BitVec (width t)
+  | bitvec _, x => (ofBitvec x).toOption.getD 0
+  | vector l e, v =>
+      BitVec.packLanes (Vector.ofFn fun (i : Fin l) => flattenBV e (ofVector v)[i])
+
+/-- The flat, in-memory encoding of a value: poison unless every lane is
+defined. -/
+def flatten (t : LLVM.Ty) (x : TyDenote.toType t) : LLVM.IntW (width t) :=
+  if Defined t x then .value (flattenBV t x) else .poison
+
+/-- Read a value of type `t` back out of its flat, in-memory encoding. -/
+def unflatten : (t : LLVM.Ty) → BitVec (width t) → TyDenote.toType t
+  | bitvec _, x => .value x
+  | vector l e, x =>
+      Vector.ofFn fun (i : Fin l) => unflatten e (x.extractLsb' (i.val * width e) (width e))
+
+/-- Reading back what was written gives the original value. -/
+theorem unflatten_flattenBV : ∀ (t : LLVM.Ty) (x : TyDenote.toType t), Defined t x →
+    unflatten t (flattenBV t x) = x
+  | bitvec _, x, h => by
+      simp only [Defined] at h
+      rcases hx : ofBitvec x with _ | b
+      · exact absurd hx h
+      · show (PoisonOr.value ((ofBitvec x).toOption.getD 0) : LLVM.IntW _) = ofBitvec x
+        rw [hx]; rfl
+  | vector l e, v, h => by
+      simp only [Defined] at h
+      show (Vector.ofFn _ : Vector (TyDenote.toType e) l) = ofVector v
+      ext i hi
+      simp only [flattenBV, Vector.getElem_ofFn]
+      rw [BitVec.extractLsb'_packLanes _ i hi, Vector.getElem_ofFn]
+      exact unflatten_flattenBV e _ (h ⟨i, hi⟩)
+
+/-- **The layout, pinned down.** Lane `i` of a flattened vector occupies bits
+`[i * width e, (i+1) * width e)` -- LLVM's little-endian in-memory order, with
+lane `0` lowest.
+
+This does *not* follow from `unflatten_flattenBV`: a store and a load share the
+encoding, so any self-consistent lane order round-trips, and the round-trip
+theorem would hold just as well with lane `0` in the high bits. What this lemma
+adds is agreement with a *differently typed* access to the same bytes -- what a
+constant-index `getelementptr`, or a comparison against a C implementation,
+depends on. -/
+theorem extractLsb'_flattenBV_vector {l : Nat} {e : LLVM.Ty}
+    (v : TyDenote.toType (vector l e)) (i : Nat) (h : i < l) :
+    (flattenBV (vector l e) v).extractLsb' (i * width e) (width e)
+      = flattenBV e ((ofVector v)[i]'h) := by
+  rw [flattenBV, BitVec.extractLsb'_packLanes _ i h, Vector.getElem_ofFn]
+  rfl
+
+/-- The round trip, in the form the memory model uses it. -/
+theorem unflatten_flatten (t : LLVM.Ty) (x : TyDenote.toType t) (b : BitVec (width t))
+    (h : flatten t x = .value b) : unflatten t b = x := by
+  unfold flatten at h
+  split at h
+  · rw [← PoisonOr.value_inj.mp h]
+    exact unflatten_flattenBV t x ‹_›
+  · exact absurd h (PoisonOr.poison_ne_value b)
 
 /-- The poison value at a type; a vector is poison in every lane. -/
 def poison : (ty : LLVM.Ty) → TyDenote.toType ty
