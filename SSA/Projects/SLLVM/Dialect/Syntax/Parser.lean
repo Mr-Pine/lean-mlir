@@ -364,7 +364,10 @@ where
     else match op.getAttr? "callee" with
       | some (.symbol callee) =>
           match table.lookup callee with
-          | some r => { op with regions := [r] }
+          -- Recurse into the region being attached, too: a bound callee's own
+          -- calls (`fd_long_if` inside `fd_r43x6_is_nonzero`) need their
+          -- bodies as much as the caller's do.
+          | some r => { op with regions := [bindCallees table r] }
           | none   => op
       | _ => op
 
