@@ -53,9 +53,14 @@ def argumentList : Parser :=
   leading_parser concreteArgumentList <|> antiquotArgumentList
 
 /-- An mlir function type: `( term,* ) → term`,
-with optional effect annotation on the arrow -/
+with optional effect annotation on the arrow.
+
+The return position admits the same `${…}` antiquotation as the argument list,
+for an operation whose *return arity* is not fixed -- a `term` in return
+position is a single type (wrapped into a singleton list), where `${ts}` is a
+term of type `List Ty`, used as the return type list verbatim. -/
 def function : Parser :=
-  leading_parser argumentList >> arrow >> termParser
+  leading_parser argumentList >> arrow >> (antiquotArgumentList <|> termParser)
 
 /-- An mlir function type: `( term,* ) → term`, without effect annotation. -/
 def plainFunction : Parser :=
@@ -191,14 +196,19 @@ def parseSignature (ref : TSyntax ``LeanMLIR.Parser.signature) : m Term :=
 
     isListLiteral (e : Term) : Bool :=
       e.raw.isOfKind `«term[_]»
-    mkReturnType (ret : Term) : m Term := do
-      if isListLiteral ret then
-        return ret
+    mkReturnType (ret : Syntax) : m Term := do
+      if ret.isOfKind ``antiquotArgumentList then
+        -- `-> ${ts}`: the antiquoted term is the return type list itself.
+        return ⟨ret[2]⟩
       else
-        `([$ret])
+        let ret : Term := ⟨ret⟩
+        if isListLiteral ret then
+          return ret
+        else
+          `([$ret])
 
     mkSignature (argumentTypes : TSyntax ``argumentList) (regions : Array Term)
-        (returnType : Term) (effectKind : Term) :
+        (returnType : Syntax) (effectKind : Term) :
         m Term := do
       let argumentTypes ← parseArgumentList argumentTypes
       let returnType ← mkReturnType returnType

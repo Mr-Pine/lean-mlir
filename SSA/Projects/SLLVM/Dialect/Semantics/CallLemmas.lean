@@ -24,13 +24,13 @@ open LeanMLIR
 in reverse declaration order, so the operand list has to be turned around before
 it becomes a valuation of the callee's context. -/
 @[simp_denote] theorem denoteOp_call {Γ : Ctxt SLLVM.Ty} {eff : EffectKind}
-    {callee : String} {argTys : List SLLVM.Ty} {retTy : SLLVM.Ty}
+    {callee : String} {argTys retTys : List SLLVM.Ty}
     (args : HVector (Ctxt.Var Γ) argTys)
-    (com : Com SLLVM (Ctxt.ofList argTys.reverse) eff [retTy])
+    (com : Com SLLVM (Ctxt.ofList argTys.reverse) eff retTys)
     (V : Ctxt.Valuation Γ) :
     Expr.denoteOp
       (Expr.mk (d := SLLVM) (Γ := Γ) (eff := eff)
-        (SLLVMOp.call callee argTys retTy eff) rfl (EffectKind.le_refl _) args
+        (SLLVMOp.call callee argTys retTys eff) rfl (EffectKind.le_refl _) args
         (Regions.cons com Regions.nil)) V
       = com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse) := by
   cases eff <;>

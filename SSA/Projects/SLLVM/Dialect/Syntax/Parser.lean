@@ -303,23 +303,26 @@ instance : DialectParse SLLVM 0 where
           | throw <| .unsupportedOp s!"llvm.call to {callee}: the callee's body \
               is not bound. Supply it with `with @{callee} := …`."
         let ⟨Γr, effR, tyR, com⟩ := region
-        let retTy ← getOutputTy opStx
+        -- The result list, not a single result: a void call (`-> ()`) has
+        -- none, which is the shape of a callee returning through pointer
+        -- out-parameters.
+        let retTys ← opStx.res.mapM (fun r => mkTy r.2)
         let argTys := args.types
         -- Reversed: block arguments enter a `Ctxt` in reverse declaration
         -- order, so a callee declared `^bb0(%a, %b)` has context `[b, a]`.
         if hΓ : Γr = Ctxt.ofList argTys.reverse then
-          if hty : tyR = [retTy] then
-            let com : Com SLLVM (Ctxt.ofList argTys.reverse) effR [retTy] :=
+          if hty : tyR = retTys then
+            let com : Com SLLVM (Ctxt.ofList argTys.reverse) effR retTys :=
               hty ▸ hΓ ▸ com
-            return ⟨effR, [retTy], Expr.mk
-              (op := SLLVMOp.call callee argTys retTy effR)
+            return ⟨effR, retTys, Expr.mk
+              (op := SLLVMOp.call callee argTys retTys effR)
               (ty_eq := rfl)
               (eff_le := EffectKind.le_refl _)
               (args := args.toHVector)
               (regArgs := Regions.cons com Regions.nil)⟩
           else
             throw <| .generic s!"llvm.call to {callee}: the callee returns \
-              {repr tyR}, but the call site expects {repr [retTy]}"
+              {repr tyR}, but the call site expects {repr retTys}"
         else
           throw <| .generic s!"llvm.call to {callee}: the callee takes \
               {repr Γr}, but the call site passes {repr argTys}"

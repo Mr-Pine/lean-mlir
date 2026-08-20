@@ -49,8 +49,9 @@ inductive SLLVMOp where
   the call as its region argument; `callee` is carried for printing and
   round-tripping only and has no semantic role. The effect is the callee's:
   calling a pure function is pure, which is what regions carrying their
-  operation's declared effect buys. -/
-  | call (callee : String) (argTys : List SLLVMTy) (retTy : SLLVMTy) (eff : EffectKind)
+  operation's declared effect buys. The return is a *list* so that a void call
+  (`retTys = []`) is expressible. -/
+  | call (callee : String) (argTys : List SLLVMTy) (retTys : List SLLVMTy) (eff : EffectKind)
   deriving DecidableEq, Lean.ToExpr
 
 def SLLVM : Dialect where
@@ -196,10 +197,11 @@ def_signature for SLLVM
       (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
        Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
   -- The one operation with a region: the callee's body. `${…}` is
-  -- `def_signature`'s antiquotation for an argument list that is a term rather
-  -- than a literal tuple, which a call needs since its arity is not fixed.
-  | SLLVMOp.call _callee argTys retTy eff =>
-      { ${Ctxt.ofList argTys.reverse} → [retTy] } → ${argTys} -[eff]-> retTy
+  -- `def_signature`'s antiquotation for an argument or return list that is a
+  -- term rather than a literal, which a call needs since neither arity is
+  -- fixed.
+  | SLLVMOp.call _callee argTys retTys eff =>
+      { ${Ctxt.ofList argTys.reverse} → retTys } → ${argTys} -[eff]-> ${retTys}
 
 attribute [local irreducible] EffectM
 -- ^^ This is needed so that `EffectM` doesn't get unfolded in the `def_denote` macro
