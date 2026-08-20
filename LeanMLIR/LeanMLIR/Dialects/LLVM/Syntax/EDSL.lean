@@ -74,7 +74,7 @@ def arrayInts (opStx : MLIR.AST.Op φ) (op attr : String) :
 
 /-- The lane count of a `vector<n x i64>` result, which is the shape the AVX-512
 IFMA intrinsics have. -/
-def getVpmaddLanes (opStx : MLIR.AST.Op φ) (op : String) :
+def getVectorLaneCount (opStx : MLIR.AST.Op φ) (op : String) :
     MLIR.AST.ExceptM (MetaLLVM φ) Nat := do
   let .vector l (.bitvec (.concrete 64)) ← getOutputTy opStx op
     | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
@@ -226,9 +226,11 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
       mkExprOf <| MOp.shufflevector elem l (← arrayInts opStx "llvm.shufflevector" "mask")
     -- AVX-512 IFMA, as the x86vector dialect spells it
     | "x86vector.avx512.intr.vpmadd52l.uq.512" =>
-      mkExprOf <| MOp.vpmadd52 false (← getVpmaddLanes opStx opStx.name)
+      mkExprOf <| MOp.vpmadd52 false (← getVectorLaneCount opStx opStx.name)
     | "x86vector.avx512.intr.vpmadd52h.uq.512" =>
-      mkExprOf <| MOp.vpmadd52 true (← getVpmaddLanes opStx opStx.name)
+      mkExprOf <| MOp.vpmadd52 true (← getVectorLaneCount opStx opStx.name)
+    | "x86vector.avx512.intr.vpermi2var.q.512" =>
+      mkExprOf <| MOp.vpermi2var (← getVectorLaneCount opStx opStx.name)
     -- ... and as a direct call to the LLVM intrinsic, which is how the same
     -- source lowers when the x86vector dialect is not used.
     | "llvm.call" =>
@@ -236,9 +238,11 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
         | throw <| .generic "llvm.call: expected a `callee` symbol attribute"
       match callee with
       | "x86_avx512_vpmadd52l_uq_512" =>
-        mkExprOf <| MOp.vpmadd52 false (← getVpmaddLanes opStx callee)
+        mkExprOf <| MOp.vpmadd52 false (← getVectorLaneCount opStx callee)
       | "x86_avx512_vpmadd52h_uq_512" =>
-        mkExprOf <| MOp.vpmadd52 true (← getVpmaddLanes opStx callee)
+        mkExprOf <| MOp.vpmadd52 true (← getVectorLaneCount opStx callee)
+      | "x86_avx512_vpermi2var_q_512" =>
+        mkExprOf <| MOp.vpermi2var (← getVectorLaneCount opStx callee)
       | _ => throw <| .unsupportedOp s!"llvm.call to {callee}"
     -- Fallback
     | opName => throw <| .unsupportedOp opName
@@ -323,6 +327,8 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
         (toExpr mask)
     | .vpmadd52 hi l =>
       mkApp2 (mkConst ``Op.vpmadd52) (toExpr hi) (toExpr l)
+    | .vpermi2var l =>
+      mkApp (mkConst ``Op.vpermi2var) (toExpr l)
     | .vectorBinary l w bop =>
       mkApp3 (mkConst ``Op.vectorBinary) (toExpr l) (w.metaInstantiate vals) (toExpr bop)
     | .const w val =>

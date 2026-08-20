@@ -125,6 +125,8 @@ open InstCombine.LLVM SLLVMOp
     SLLVM.Op := arith <| Op.shufflevector e l mask
 @[match_pattern] nonrec abbrev Op.vpmadd52 (hi : Bool) (l : Nat) : SLLVM.Op :=
   arith <| Op.vpmadd52 hi l
+@[match_pattern] nonrec abbrev Op.vpermi2var (l : Nat) : SLLVM.Op :=
+  arith <| Op.vpermi2var l
 @[match_pattern] nonrec abbrev Op.vectorBinary (l w : Nat) (bop : InstCombine.MOp.BinaryOp) :
     SLLVM.Op := arith <| Op.vectorBinary l w bop
 
@@ -190,6 +192,9 @@ def_signature for SLLVM
   | Op.vpmadd52 _hi l =>
       (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
        Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
+  | Op.vpermi2var l =>
+      (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
+       Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
   -- The one operation with a region: the callee's body. `${…}` is
   -- `def_signature`'s antiquotation for an argument list that is a term rather
   -- than a literal tuple, which a call needs since its arity is not fixed.
@@ -238,6 +243,7 @@ def_denote for SLLVM
   | Op.extractelement .. => fun v i => [LLVM.Ty.extractelement v i]ₕ
   | Op.shufflevector _e _l mask => fun a b => [LLVM.Ty.shufflevector mask a b]ₕ
   | Op.vpmadd52 hi _l => fun a b c => [LLVM.Ty.vpmadd52 hi a b c]ₕ
+  | Op.vpermi2var _l => fun a idx b => [LLVM.Ty.vpermi2var a idx b]ₕ
   | Op.vectorBinary _l _w bop =>
       fun a b => [Vector.ofFn fun i =>
         InstCombine.binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)]ₕ

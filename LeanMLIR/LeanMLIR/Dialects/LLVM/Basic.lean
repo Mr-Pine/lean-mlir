@@ -147,6 +147,12 @@ inductive MOp (φ : Nat) : Type
   /-- The AVX-512 IFMA intrinsics `x86_avx512_vpmadd52{l,h}_uq_512`, reached
   through `llvm.call`. `hi` selects the high variant. -/
   | vpmadd52 (hi : Bool) (l : Nat) : MOp φ
+  /-- The AVX-512 intrinsic `x86_avx512_vpermi2var_q_512` (`vpermi2q`): a full
+  two-table lane permutation. Operands are `(a, idx, b)`, in the intrinsic's
+  order; lane `i` of the result is lane `idx[i]` of the concatenation `a ++ b`.
+  Unlike `shufflevector` the indices are an *operand*, so a permutation can be
+  computed at runtime -- which is why no shuffle mask can express it. -/
+  | vpermi2var (l : Nat) : MOp φ
   /-- A binary operation applied lane-wise to two `vector l (bitvec w)`
   operands. One constructor covers every `BinaryOp`, as LLVM's arithmetic is
   elementwise on vectors. -/
@@ -199,6 +205,7 @@ instance : ToString (MOp 0) where
      | .extractelement .. => "\"llvm.extractelement\""
      | .shufflevector .. => "\"llvm.shufflevector\""
      | .vpmadd52 hi _ => if hi then "\"llvm.call\" vpmadd52huq" else "\"llvm.call\" vpmadd52luq"
+     | .vpermi2var _ => "\"llvm.call\" vpermi2var"
      | .vectorBinary _ _ op => s!"\"llvm.{op}\""
 
 /-! ## Dialect -/
@@ -309,6 +316,7 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
     (extractelement : ∀ {φ l} {e : MTy φ} {w : Width φ}, motive (extractelement e l w))
     (shufflevector : ∀ {φ l m} {e : MTy φ},      motive (shufflevector e l m))
     (vpmadd52 : ∀ {φ hi l},                      motive (φ := φ) (vpmadd52 hi l))
+    (vpermi2var : ∀ {φ l},                       motive (φ := φ) (vpermi2var l))
     (vectorBinary : ∀ {φ l o} {w : Width φ},     motive (vectorBinary l w o)) :
     ∀ {φ} (op : MOp φ), motive op
   | _, .poison _   => poison
@@ -317,6 +325,7 @@ def deepCasesOn {motive : ∀ {φ}, MOp φ → Sort*}
   | _, .extractelement .. => extractelement
   | _, .shufflevector .. => shufflevector
   | _, .vpmadd52 ..    => vpmadd52
+  | _, .vpermi2var ..  => vpermi2var
   | _, .vectorBinary .. => vectorBinary
   | _, .neg _      => neg
   | _, .not _      => not
@@ -376,6 +385,7 @@ exists at vector types too. -/
 @[match_pattern] abbrev shufflevector : LLVM.Ty → Nat → List Int → LLVM.Op :=
   MOp.shufflevector
 @[match_pattern] abbrev vpmadd52 : Bool → Nat → LLVM.Op := MOp.vpmadd52
+@[match_pattern] abbrev vpermi2var : Nat → LLVM.Op := MOp.vpermi2var
 @[match_pattern] abbrev vectorBinary (l w : Nat) (op : MOp.BinaryOp) : LLVM.Op :=
   MOp.vectorBinary l (.concrete w) op
 
@@ -431,6 +441,7 @@ instance : ToString (MOp φ) where
   | .extractelement .. => "extractelement"
   | .shufflevector .. => "shufflevector"
   | .vpmadd52 ..    => "vpmadd52"
+  | .vpermi2var _   => "vpermi2var"
   | .vectorBinary _ _ op => toString op
   | .and _      => "and"
   | .or _ _     => "or"
@@ -476,6 +487,7 @@ def MetaLLVM.opName : (MetaLLVM φ).Op → String
   | .vpmadd52 hi _  =>
     if hi then "x86vector.avx512.intr.vpmadd52h.uq.512"
     else "x86vector.avx512.intr.vpmadd52l.uq.512"
+  | .vpermi2var _   => "x86vector.avx512.intr.vpermi2var.q.512"
   -- NOTE: `toString` on a `BinaryOp` already yields e.g. "llvm.add"
   | .vectorBinary _ _ op => toString op
   | .and _      => "llvm.and"
@@ -541,6 +553,8 @@ def MOp.sig : MOp φ → List (MTy φ)
 | .shufflevector e l _ => [.vector l e, .vector l e]
 | .vpmadd52 _ l =>
   [.vector l (.bitvec 64), .vector l (.bitvec 64), .vector l (.bitvec 64)]
+| .vpermi2var l =>
+  [.vector l (.bitvec 64), .vector l (.bitvec 64), .vector l (.bitvec 64)]
 | .vectorBinary l w _ => [.vector l (.bitvec w), .vector l (.bitvec w)]
 
 @[simp, reducible]
@@ -562,6 +576,7 @@ def MOp.outTy : MOp φ → MTy φ
 | .extractelement e _ _ => e
 | .shufflevector e _ mask => .vector mask.length e
 | .vpmadd52 _ l => .vector l (.bitvec 64)
+| .vpermi2var l => .vector l (.bitvec 64)
 | .vectorBinary l w _ => .vector l (.bitvec w)
 
 instance {φ} : DialectSignature (MetaLLVM φ) where
@@ -804,6 +819,26 @@ def vpmadd52 {l : Nat} (hi : Bool) (a b c : Vector (LLVM.IntW 64) l) :
     Vector (LLVM.IntW 64) l :=
   Vector.ofFn fun i => vpmadd52Lane hi (a[i.val]'i.isLt) (b[i.val]'i.isLt) (c[i.val]'i.isLt)
 
+/-- One lane of `vpermi2var`: the index selects a lane of the concatenated
+tables `a ++ b`. Per Intel, only the low `log2 (2l)` index bits are read --
+for the 8-lane `q.512` form the low three bits pick the lane and bit 3 the
+table -- which is `% (2·l)` whenever `l` is a power of two. A poison index
+poisons the lane; a poison element in the *unselected* table does not, since
+only the selected lane is read. -/
+def vpermi2varLane {l : Nat} (a b : Vector (LLVM.IntW 64) l) : LLVM.IntW 64 → LLVM.IntW 64
+  | .poison => .poison
+  | .value k =>
+      let j := k.toNat % (2 * l)
+      if h : j < l then a[j]
+      else if h' : j - l < l then b[j - l]
+      else .poison
+
+/-- The AVX-512 intrinsic `vpermi2q`. Operands in the intrinsic's order:
+the indices are the *middle* operand. -/
+def vpermi2var {l : Nat} (a idx b : Vector (LLVM.IntW 64) l) :
+    Vector (LLVM.IntW 64) l :=
+  Vector.ofFn fun i => vpermi2varLane a b (idx[i.val]'i.isLt)
+
 /-- Coerce an integer into a type by splatting it across every lane. -/
 def ofInt (z : ℤ) : (ty : LLVM.Ty) → TyDenote.toType ty
   | bitvec w => .value <| BitVec.ofInt w z
@@ -872,6 +907,10 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
       LLVM.Ty.vpmadd52 hi (op.getN 0 (by simp [DialectSignature.sig, signature]))
                           (op.getN 1 (by simp [DialectSignature.sig, signature]))
                           (op.getN 2 (by simp [DialectSignature.sig, signature]))
+  | LLVM.Op.vpermi2var _ =>
+      LLVM.Ty.vpermi2var (op.getN 0 (by simp [DialectSignature.sig, signature]))
+                         (op.getN 1 (by simp [DialectSignature.sig, signature]))
+                         (op.getN 2 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.copy _         =>               (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by simp [DialectSignature.sig, signature]))
   | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by simp [DialectSignature.sig, signature]))

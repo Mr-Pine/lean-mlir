@@ -108,7 +108,7 @@ def arrayInts (opStx : MLIR.AST.Op 0) (attr : String) :
 
 /-- The lane count of a `vector<n x i64>` result, which is the shape the AVX-512
 IFMA intrinsics have. -/
-def getVpmaddLanes (opStx : MLIR.AST.Op 0) (op : String) :
+def getVectorLaneCount (opStx : MLIR.AST.Op 0) (op : String) :
     ExceptM SLLVM Nat := do
   let .vector l (.bitvec 64) ← getOutputArithTy opStx
     | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
@@ -279,9 +279,11 @@ instance : DialectParse SLLVM 0 where
       mkExprOf <| Op.shufflevector elem l (← arrayInts opStx "mask")
     -- AVX-512 IFMA, as the x86vector dialect spells it
     | "x86vector.avx512.intr.vpmadd52l.uq.512" =>
-      mkExprOf <| Op.vpmadd52 false (← getVpmaddLanes opStx opStx.name)
+      mkExprOf <| Op.vpmadd52 false (← getVectorLaneCount opStx opStx.name)
     | "x86vector.avx512.intr.vpmadd52h.uq.512" =>
-      mkExprOf <| Op.vpmadd52 true (← getVpmaddLanes opStx opStx.name)
+      mkExprOf <| Op.vpmadd52 true (← getVectorLaneCount opStx opStx.name)
+    | "x86vector.avx512.intr.vpermi2var.q.512" =>
+      mkExprOf <| Op.vpermi2var (← getVectorLaneCount opStx opStx.name)
     -- ... and as a direct call to the LLVM intrinsic, which is how the same
     -- source lowers when the x86vector dialect is not used.
     | "llvm.call" =>
@@ -289,9 +291,11 @@ instance : DialectParse SLLVM 0 where
         | throw <| .generic "llvm.call: expected a `callee` symbol attribute"
       match callee with
       | "x86_avx512_vpmadd52l_uq_512" =>
-        mkExprOf <| Op.vpmadd52 false (← getVpmaddLanes opStx callee)
+        mkExprOf <| Op.vpmadd52 false (← getVectorLaneCount opStx callee)
       | "x86_avx512_vpmadd52h_uq_512" =>
-        mkExprOf <| Op.vpmadd52 true (← getVpmaddLanes opStx callee)
+        mkExprOf <| Op.vpmadd52 true (← getVectorLaneCount opStx callee)
+      | "x86_avx512_vpermi2var_q_512" =>
+        mkExprOf <| Op.vpermi2var (← getVectorLaneCount opStx callee)
       | _ =>
         -- Any other callee is an ordinary call: its body is the region, which
         -- the elaborator bound to the symbol before the transform ran.
