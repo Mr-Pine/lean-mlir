@@ -27,7 +27,9 @@ in `Proof/Mem.lean`. The program is `.impure` throughout and returns nothing.
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
-def fd_r43x6_quad_mul_fast := [sllvm|
+/-- The region as an AST value, so it can be written once and used both as the
+`Com` below and as the callee binding in `Mlir/fd_r43x6_ge_is_eq.lean`. -/
+def fd_r43x6_quad_mul_fastRegion : MLIR.AST.Region 0 := [mlir_region|
 {
   ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: vector<8xi64>, %arg4: vector<8xi64>, %arg5: vector<8xi64>, %arg6: vector<8xi64>, %arg7: vector<8xi64>, %arg8: vector<8xi64>):
     %0 = "llvm.mlir.poison"() : () -> vector<8xi64>
@@ -126,5 +128,7 @@ def fd_r43x6_quad_mul_fast := [sllvm|
     "llvm.return"() : () -> ()
 }
 ]
+
+def fd_r43x6_quad_mul_fast := [sllvm_of| fd_r43x6_quad_mul_fastRegion]
 
 end Firedancer.Avx512

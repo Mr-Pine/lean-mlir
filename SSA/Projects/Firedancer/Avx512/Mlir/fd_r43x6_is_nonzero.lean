@@ -20,11 +20,10 @@ artifact. The last one to go was the `nsw` quoting (6.1) -- while `nsw` was a
 reserved token, every flag had to be rewritten before it could be quoted.
 
 The program below is the MLIR translation of `fd_r43x6_is_nonzero` from
-`firedancer/src/ballet/ed25519/avx512/fd_r43x6.h`, taken from the build
-artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_is_nonzero.mlir`, which
-is checked in beside this file **verbatim** -- the `.mlir` and the region below
-differ in nothing but indentation. Its one callee is
-`Avx512/Mlir/fd_long_if.lean`, likewise verbatim, and proven in
+`firedancer/src/ballet/ed25519/avx512/fd_r43x6.h`, taken **verbatim** from the
+build artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_is_nonzero.mlir`
+-- the artifact and the region below differ in nothing but indentation. Its
+one callee is `Avx512/Mlir/fd_long_if.lean`, likewise verbatim, and proven in
 `Avx512/Proof/fd_long_if.lean`.
 
 `%79` is the result, the `i32` the C returns.
@@ -54,9 +53,12 @@ range `CarryPre` of `Spec/fd_r43x6_is_nonzero.lean`.
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
-/-- `fd_r43x6_is_nonzero`, as the compiler emits it: the six limb extracts, both
-carry chains, and the call at `%60` still a call. -/
-def fd_r43x6_is_nonzero := [sllvm|
+/-- The region as an AST value, so it can be written once and used both as the
+`Com` below and as the callee binding in `Mlir/fd_r43x6_ge_is_eq.lean`. The
+`fd_long_if` call inside is *not* bound here -- the artifact carries no
+region, and `bindCallees` recurses, so whoever binds this region binds its
+callee too. -/
+def fd_r43x6_is_nonzeroRegion : MLIR.AST.Region 0 := [mlir_region|
   {
     ^bb0(%arg0: vector<8xi64>):
       %0 = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> i64
@@ -140,7 +142,11 @@ def fd_r43x6_is_nonzero := [sllvm|
       %78 = "llvm.icmp"(%77, %0) <{predicate = 1 : i64}> : (i64, i64) -> i1
       %79 = "llvm.zext"(%78) : (i1) -> i32
       "llvm.return"(%79) : (i32) -> ()
-  }
-with @fd_long_if := fd_long_ifRegion]
+  }]
+
+/-- `fd_r43x6_is_nonzero`, as the compiler emits it: the six limb extracts, both
+carry chains, and the call at `%60` still a call. -/
+def fd_r43x6_is_nonzero :=
+  [sllvm_of| fd_r43x6_is_nonzeroRegion with @fd_long_if := fd_long_ifRegion]
 
 end Firedancer.Avx512

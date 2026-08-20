@@ -387,3 +387,9 @@ elab "[sllvm| " reg:mlir_region " with " bs:sllvmCallee,+ "]" : term => do
 written once and used both as a `Com` and as a callee binding. -/
 elab "[sllvm_of| " t:term "]" : term => do
   SSA.elabIntoCom'OfRegion (← elabRegionTerm t) SLLVM
+
+/-- `[sllvm_of| r with @f := fRegion]`: `[sllvm_of| r]` with callee bindings,
+for a lifted region that both *is* a callee and *has* callees of its own. -/
+elab "[sllvm_of| " t:term " with " bs:sllvmCallee,+ "]" : term => do
+  let table ← elabCalleeTable bs.getElems
+  SSA.elabIntoCom'OfRegion (bindCallees table (← elabRegionTerm t)) SLLVM
