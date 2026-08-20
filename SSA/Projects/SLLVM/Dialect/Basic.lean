@@ -262,7 +262,16 @@ def_denote for SLLVM
   -- arguments enter a `Ctxt` in reverse declaration order, so without it the
   -- k-th operand would bind to the callee's k-th-from-last parameter. A
   -- non-commutative callee is what catches that; see `Tests/Call.lean`.
-  | .call .. => fun args f => f (Ctxt.Valuation.ofHVector args.reverse)
+  | SLLVMOp.call _ _ _ .pure => fun args f => f (Ctxt.Valuation.ofHVector args.reverse)
+  -- An impure call additionally deallocates the callee's frame on return:
+  -- every block allocated during the call -- id at least the counter's value
+  -- at entry -- is dead afterwards, as it is when a real callee returns. A
+  -- pointer into the frame that escaped the call is dangling from here on.
+  | SLLVMOp.call _ _ _ .impure => fun args f => do
+      let alloc ← getThe AllocState
+      let r ← f (Ctxt.Valuation.ofHVector args.reverse)
+      modifyThe MemoryState (MemoryState.killFrom alloc.nextFreeBlock)
+      return r
 
 /-! ### Printing -/
 section Print

@@ -162,8 +162,12 @@ def storePure (m : MemorySSAState) (p : SLLVM.Ptr) (t : LLVM.Ty) (x : TyDenote.t
 /--
 Allocate the next available block of `w` bits on the stack.
 
-Note: we currently only ever model a single function body, so there is no
-mechanism yet to de-allocate a block of memory.
+A block lives until the call that allocated it returns: the denotation of
+`llvm.call` snapshots `nextFreeBlock` and marks the blocks allocated past it
+dead again on return (`MemoryState.killFrom`), as a real execution
+deallocates the callee's frame at its `llvm.return`. Within a single region
+nothing is freed -- the lifetime intrinsics denote to nothing, since with a
+monotonic block counter there is no slot reuse for them to advise on.
 -/
 def alloca (w : Nat) : EffectM SLLVM.Ptr := do
   let blockId : BlockId ← modifyGetThe AllocState fun s =>
@@ -176,3 +180,14 @@ def alloca (w : Nat) : EffectM SLLVM.Ptr := do
       }
     }
   return ptr
+
+/-- Mark dead every block with id at least `n₀`: the *frame* of a call that
+was entered at `nextFreeBlock = n₀`. Ids come from that monotonic counter and
+`alloca` is the only allocator, so `n₀ ≤ id` says exactly "allocated during
+the call" -- no per-block provenance is needed until a second allocator (a
+heap `alloc`) exists. Dead, not removed: a pointer that escaped the callee
+then takes the freed-already UB path on use, and the counter never reuses the
+slot anyway. -/
+def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) :
+    MemoryState :=
+  { mem := s.mem.map fun id b => if n₀ ≤ id.id then .dead else b }

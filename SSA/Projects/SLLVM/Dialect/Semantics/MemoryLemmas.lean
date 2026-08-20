@@ -76,6 +76,26 @@ theorem fits_splice {m : MemoryState} {p q : Pointer} {w n : Nat} {x : BitVec w}
     exact getElem?_splice_self hblk
   · exact ⟨block, by rw [getElem?_splice_ne hpq, hblk], hlen⟩
 
+/-! ## Frame deallocation
+
+An impure call ends by `MemoryState.killFrom n₀`, the deallocation of its
+frame. These two say what that does per block: nothing below `n₀` -- the
+lemma a load after a call needs, since caller blocks predate the call's
+counter snapshot -- and death at or above it. -/
+
+/-- Killing a frame leaves every block allocated before it alone. -/
+theorem getElem?_killFrom_of_lt {m : MemoryState} {n₀ : Nat} {q : BlockId}
+    (h : q.id < n₀) : (m.killFrom n₀)[q]? = m[q]? := by
+  have hn : ¬ n₀ ≤ q.id := by omega
+  simp only [MemoryState.getElem?_eq, MemoryState.killFrom, Std.HashMap.getElem?_map]
+  simp [hn]
+
+/-- Every block of the frame is dead afterwards. -/
+theorem getElem?_killFrom_of_le {m : MemoryState} {n₀ : Nat} {q : BlockId}
+    (h : n₀ ≤ q.id) : (m.killFrom n₀)[q]? = m[q]?.map fun _ => .dead := by
+  simp only [MemoryState.getElem?_eq, MemoryState.killFrom, Std.HashMap.getElem?_map]
+  simp [h]
+
 /-! ## `store` -/
 
 theorem run_store {t : LLVM.Ty} {x : TyDenote.toType t} {b : BitVec (LLVM.Ty.width t)}
