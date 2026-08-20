@@ -102,4 +102,21 @@ private def runVec (x : Vector (PoisonOr (BitVec 64)) 4) :
 -- Storing a vector with a poison lane is UB, as storing a poison scalar is.
 #guard (runVec #v[.value 1, .poison, .value 3, .value 4]).isNone
 
+/-! ## `llvm.alloca`'s count operand
+
+`Op.alloca` allocates a single element, so the MLIR spelling is accepted only
+when its count operand is visibly the constant 1 -- anything else is refused
+at elaboration, not silently dropped. -/
+
+/--
+error: llvm.alloca: the count operand %c is not the constant 1, which is the only count Op.alloca can represent
+-/
+#guard_msgs in
+example := [sllvm| {
+  ^entry():
+    %c = "llvm.mlir.constant"() <{value = 2 : i32}> : () -> (i32)
+    %p = "llvm.alloca"(%c) <{alignment = 64 : i64, elem_type = i64}> : (i32) -> (!llvm.ptr)
+    "llvm.return"() : () -> ()
+}]
+
 end LeanMLIR.SLLVM.Tests

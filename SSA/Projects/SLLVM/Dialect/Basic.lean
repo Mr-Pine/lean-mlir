@@ -45,6 +45,12 @@ inductive SLLVMOp where
   | alloca (w : Nat)
   | loadPure (t : LLVM.Ty)
   | storePure (t : LLVM.Ty)
+  /-- `llvm.intr.lifetime.start` / `.end` (`start` selects which). Stack
+  coloring metadata: the model gives them no semantics at all -- they denote
+  to nothing -- but the compiler brackets every `alloca` with them, so they
+  have to parse for a region to stay verbatim. The `size` attribute is
+  accepted and discarded. -/
+  | lifetime (start : Bool)
   /-- `llvm.call`. `Com` has no symbol table, so the callee's body travels with
   the call as its region argument; `callee` is carried for printing and
   round-tripping only and has no semantic role. The effect is the callee's:
@@ -154,6 +160,7 @@ def_signature for SLLVM
   | .store t         => (ptr, Ty.arith t) -[.impure]-> []
   | .storePure t     => (mem, ptr, Ty.arith t) -> [mem]
   | .alloca _w       => () -[.impure]-> ptr
+  | .lifetime _      => (ptr) -[.impure]-> []
   -- LLVM operations with modified effect signature
   | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
   | Op.srem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
@@ -214,6 +221,7 @@ def_denote for SLLVM
   | .store t  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
   | .storePure t => fun m p x => [SLLVM.storePure m p t x]ₕ
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
+  | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -269,6 +277,7 @@ instance : DialectPrint SLLVM where
     | .load _t    => "ptr.load"
     | .ptradd     => "ptr.add"
     | .alloca _w  => "ptr.alloca"
+    | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call ..    => "llvm.call"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp

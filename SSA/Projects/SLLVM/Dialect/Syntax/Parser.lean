@@ -195,6 +195,18 @@ instance : DialectParse SLLVM 0 where
         let .int _ w := t
           | throw <| .generic s!"Expected value of attribute `elem_type` to be an integer type"
         mkExprOf <| .alloca w.toConcrete
+    -- The same operation as MLIR emits it: `llvm.alloca %count x T`, with any
+    -- arithmetic element type. `Op.alloca` allocates a *single* element, so
+    -- the count operand is dropped -- for the scalar locals the compiler
+    -- emits it is always the constant 1, and nothing else is expressible.
+    | "llvm.alloca" =>
+        let t ← mkArithTy (← opStx.getTypeAttr "elem_type")
+        opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ
+          <| .alloca (LLVM.Ty.width t)
+    -- Stack-coloring metadata: no semantics here, but part of the artifact, so
+    -- they parse (and denote to nothing) rather than having to be stripped.
+    | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true
+    | "llvm.intr.lifetime.end"   => mkExprOf <| SLLVMOp.lifetime false
     -- Ternary Operations
     | "llvm.select" =>
         let args ← args.assumeArity 3
@@ -356,6 +368,30 @@ where
           | none   => op
       | _ => op
 
+open MLIR.AST in
+/-- The one semantic assumption the `llvm.alloca` parse arm makes, checked:
+`Op.alloca` allocates a single element, so every `llvm.alloca`'s count operand
+must be visibly the constant 1. Checked on the region AST because the count is
+an SSA operand -- `mkExpr` sees one operation at a time and cannot follow it
+to its defining constant. Each region is its own scope: a bound callee's `%0`
+is not its caller's. -/
+private partial def allocaCountsAreOne (reg : Region 0) : Except String Unit := do
+  let _ ← reg.ops.foldlM (init := ([] : List SSAVal)) fun ones op => do
+    op.regions.forM allocaCountsAreOne
+    if op.name == "llvm.mlir.constant" then
+      match op.getAttr? "value", op.res with
+      | some (.int 1 _), [(name, _)] => return name :: ones
+      | _, _ => return ones
+    else if op.name == "llvm.alloca" then
+      match op.args with
+      | (count, _) :: _ =>
+          if ones.contains count then return ones
+          else throw s!"llvm.alloca: the count operand %{SSAValToString count} is \
+              not the constant 1, which is the only count Op.alloca can represent"
+      | [] => return ones
+    else
+      return ones
+
 /-- A `with` binding: `@name := ‹term : MLIR.AST.Region 0›`. -/
 syntax sllvmCallee := "@" ident " := " term
 
@@ -376,7 +412,7 @@ private def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
     | _ => throwUnsupportedSyntax
 
 elab "[sllvm| " reg:mlir_region "]" : term =>
-  SSA.elabIntoCom' reg SLLVM
+  SSA.elabIntoCom' reg SLLVM (check := allocaCountsAreOne)
 
 /-- `[sllvm| ‹region› with @f := fRegion]` binds the bodies of the symbols the
 region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
@@ -384,15 +420,16 @@ region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
 this is how a lifted call site gets its callee. -/
 elab "[sllvm| " reg:mlir_region " with " bs:sllvmCallee,+ "]" : term => do
   let table ← elabCalleeTable bs.getElems
-  SSA.elabIntoCom' reg SLLVM (pre := bindCallees table)
+  SSA.elabIntoCom' reg SLLVM (pre := bindCallees table) (check := allocaCountsAreOne)
 
 /-- `[sllvm| … ]` from an already-built `MLIR.AST.Region 0`, so a region can be
 written once and used both as a `Com` and as a callee binding. -/
 elab "[sllvm_of| " t:term "]" : term => do
-  SSA.elabIntoCom'OfRegion (← elabRegionTerm t) SLLVM
+  SSA.elabIntoCom'OfRegion (← elabRegionTerm t) SLLVM (check := allocaCountsAreOne)
 
 /-- `[sllvm_of| r with @f := fRegion]`: `[sllvm_of| r]` with callee bindings,
 for a lifted region that both *is* a callee and *has* callees of its own. -/
 elab "[sllvm_of| " t:term " with " bs:sllvmCallee,+ "]" : term => do
   let table ← elabCalleeTable bs.getElems
   SSA.elabIntoCom'OfRegion (bindCallees table (← elabRegionTerm t)) SLLVM
+    (check := allocaCountsAreOne)
