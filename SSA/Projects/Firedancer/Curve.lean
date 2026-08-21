@@ -74,6 +74,11 @@ def y (P : Point) : ZMod p := P.Y * P.Z⁻¹
 agree. The notion `FD_R43X6_GE_IS_EQ` decides. -/
 def SamePoint (P Q : Point) : Prop := P.x = Q.x ∧ P.y = Q.y
 
+/-- Equality in `ZMod p` is decidable, so `SamePoint` is: a specification can
+say `if P.SamePoint Q then … else …` and still be executable. -/
+instance (P Q : Point) : Decidable (P.SamePoint Q) :=
+  inferInstanceAs (Decidable (P.x = Q.x ∧ P.y = Q.y))
+
 theorem samePoint_equivalence : Equivalence SamePoint where
   refl _ := ⟨rfl, rfl⟩
   symm h := ⟨h.1.symm, h.2.symm⟩
