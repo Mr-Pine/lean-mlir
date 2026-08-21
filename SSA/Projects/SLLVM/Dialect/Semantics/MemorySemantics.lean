@@ -186,8 +186,20 @@ was entered at `nextFreeBlock = n₀`. Ids come from that monotonic counter and
 `alloca` is the only allocator, so `n₀ ≤ id` says exactly "allocated during
 the call" -- no per-block provenance is needed until a second allocator (a
 heap `alloc`) exists. Dead, not removed: a pointer that escaped the callee
-then takes the freed-already UB path on use, and the counter never reuses the
-slot anyway. -/
+takes the freed-already UB path on use -- until the caller's next `alloca`
+reuses the id, at which point it aliases the new block, as a dangling stack
+pointer does. -/
 def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) :
     MemoryState :=
   { mem := s.mem.map fun id b => if n₀ ≤ id.id then .dead else b }
+
+/-- Run `body` as a function: snapshot the counter, run, kill the frame --
+every block allocated since the snapshot -- and restore the counter. After it
+the stack is as it was on entry up to the blocks the body wrote through its
+arguments, which is what `GlobalState.Equiv` captures. -/
+def runFunction {α : Type} (body : EffectM α) : EffectM α := do
+  let alloc ← getThe AllocState
+  let r ← body
+  modifyThe MemoryState (MemoryState.killFrom alloc.nextFreeBlock)
+  modifyThe AllocState fun _ => alloc
+  return r

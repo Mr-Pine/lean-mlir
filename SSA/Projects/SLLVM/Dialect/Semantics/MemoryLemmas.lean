@@ -96,6 +96,58 @@ theorem getElem?_killFrom_of_le {m : MemoryState} {n₀ : Nat} {q : BlockId}
   simp only [MemoryState.getElem?_eq, MemoryState.killFrom, Std.HashMap.getElem?_map]
   simp [h]
 
+/-- The live block at `q`, if any. A dead block and no block at all are the
+same to every access, so this is all of a memory that a program can observe. -/
+def _root_.LeanMLIR.MemoryState.live? (m : MemoryState) (q : BlockId) : Option LiveBlock :=
+  match m[q]? with
+  | some (.live b) => some b
+  | _ => none
+
+theorem live?_killFrom_of_lt {m : MemoryState} {n₀ : Nat} {q : BlockId}
+    (h : q.id < n₀) : (m.killFrom n₀).live? q = m.live? q := by
+  simp only [MemoryState.live?, getElem?_killFrom_of_lt h]
+
+theorem live?_killFrom_of_le {m : MemoryState} {n₀ : Nat} {q : BlockId}
+    (h : n₀ ≤ q.id) : (m.killFrom n₀).live? q = none := by
+  simp only [MemoryState.live?, getElem?_killFrom_of_le h]
+  cases m[q]? <;> rfl
+
+/-- Two states no program can tell apart: the same counter and the same live
+blocks. This is what a function that "does not touch the stack" preserves --
+its frame is dead on return, not absent. -/
+def _root_.LeanMLIR.GlobalState.Equiv (s s' : GlobalState) : Prop :=
+  s.alloc = s'.alloc ∧ ∀ q, s.mem.live? q = s'.mem.live? q
+
+instance : HasEquiv GlobalState := ⟨GlobalState.Equiv⟩
+
+theorem GlobalState.equiv_def {s s' : GlobalState} :
+    s ≈ s' ↔ s.alloc = s'.alloc ∧ ∀ q, s.mem.live? q = s'.mem.live? q := Iff.rfl
+
+@[refl] theorem GlobalState.Equiv.refl (s : GlobalState) : s ≈ s := ⟨rfl, fun _ => rfl⟩
+
+@[symm] theorem GlobalState.Equiv.symm {s s' : GlobalState} (h : s ≈ s') : s' ≈ s :=
+  ⟨h.1.symm, fun q => (h.2 q).symm⟩
+
+@[trans] theorem GlobalState.Equiv.trans {s s' s'' : GlobalState} (h : s ≈ s') (h' : s' ≈ s'') :
+    s ≈ s'' :=
+  ⟨h.1.trans h'.1, fun q => (h.2 q).trans (h'.2 q)⟩
+
+/-- `s` is *well-formed* when no block at or above its counter is live, the
+invariant `alloca` and `killFrom` keep. -/
+def _root_.LeanMLIR.GlobalState.WF (s : GlobalState) : Prop :=
+  ∀ q : BlockId, s.alloc.nextFreeBlock ≤ q.id → s.mem.live? q = none
+
+/-- The state a function returns to (`run_runFunction`) is equivalent to the one
+it was entered in, provided its body left the blocks below the entry counter
+live-for-live as it found them. -/
+theorem GlobalState.killFrom_equiv {s : GlobalState} (m : MemoryState) (hs : s.WF)
+    (hframe : ∀ q : BlockId, q.id < s.alloc.nextFreeBlock → m.live? q = s.mem.live? q) :
+    ({ alloc := s.alloc, mem := m.killFrom s.alloc.nextFreeBlock } : GlobalState) ≈ s := by
+  refine ⟨rfl, fun q => ?_⟩
+  by_cases hq : q.id < s.alloc.nextFreeBlock
+  · exact (live?_killFrom_of_lt hq).trans (hframe q hq)
+  · exact (live?_killFrom_of_le (not_lt.mp hq)).trans (hs q (not_lt.mp hq)).symm
+
 /-! ## `store` -/
 
 theorem run_store {t : LLVM.Ty} {x : TyDenote.toType t} {b : BitVec (LLVM.Ty.width t)}

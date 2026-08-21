@@ -38,11 +38,11 @@ it becomes a valuation of the callee's context. -/
     DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
 
 /-- **Denotation of an impure call**: the callee's denotation applied to the
-call's arguments, followed by the deallocation of the callee's frame -- every
-block allocated during the call, i.e. with id at least the counter's value at
-entry, is dead in the state the call returns (`MemoryState.killFrom`). A
-pointer into the frame that escaped the call takes the freed-already UB path
-on use, exactly as a real dangling stack pointer would misbehave. -/
+call's arguments, run as a function (`runFunction`): the callee's frame --
+every block allocated during the call, i.e. with id at least the counter's
+value at entry -- is dead in the state the call returns and the counter is
+restored. A pointer into the frame that escaped the call takes the
+freed-already UB path on use, as a real dangling stack pointer would. -/
 @[simp_denote] theorem denoteOp_call_impure {Γ : Ctxt SLLVM.Ty}
     {callee : String} {argTys retTys : List SLLVM.Ty}
     (args : HVector (Ctxt.Var Γ) argTys)
@@ -52,11 +52,7 @@ on use, exactly as a real dangling stack pointer would misbehave. -/
       (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
         (SLLVMOp.call callee argTys retTys .impure) rfl (EffectKind.le_refl _) args
         (Regions.cons com Regions.nil)) V
-      = (do
-          let alloc ← getThe AllocState
-          let r ← com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)
-          modifyThe MemoryState (MemoryState.killFrom alloc.nextFreeBlock)
-          return r : EffectM _) := by
+      = runFunction (com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)) := by
   simp [Expr.denoteOp, Regions.denote, EffectKind.liftEffect,
     DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
 

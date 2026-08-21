@@ -131,6 +131,14 @@ def callUsesOwnSlot : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 6
 
 #guard runImpure callUsesOwnSlot == some 7#64
 
+/-- And the counter is back where it was: the frame is popped, not leaked. -/
+private def counterAfter (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :
+    Option Nat := do
+  let r ← ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption
+  pure r.2.alloc.nextFreeBlock
+
+#guard counterAfter callUsesOwnSlot == some 0
+
 /-- But a pointer into the frame that *escapes* the call is dangling: loading
 through it afterwards is UB, exactly as a returned stack address is in C. -/
 def callEscapesSlot : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] :=
