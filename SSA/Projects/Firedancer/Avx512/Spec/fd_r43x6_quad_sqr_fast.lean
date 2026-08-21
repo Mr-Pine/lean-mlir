@@ -50,37 +50,19 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
+open Quad
+
 /-- The four elements' output limbs: `quadSqrLimb … j k` is limb `k` of the
 square of element `j` of the input QUAD, i.e. the scalar `sqLimb` applied
 lanewise. -/
-def quadSqrLimb (a b c : Vector (BitVec 64) 8) : ℕ → ℕ → ℕ :=
-  fun j k => sqLimb (quadLimb a b c j) k
+def quadSqrLimb (x : Quad) : QuadFunc :=
+  fun j k => sqLimb (quadLimb x.v03 x.v14 x.v25 j) k
 
-/-- The three result vectors predicted by the specification. -/
-def quadSqrVec03 (a b c : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadSqrLimb a b c) 0 3
-def quadSqrVec14 (a b c : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadSqrLimb a b c) 1 4
-def quadSqrVec25 (a b c : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadSqrLimb a b c) 2 5
-
-/-- The complete result predicted for `fd_r43x6_quad_sqr_fast`: the three
-output vectors concatenated, as the lifted region returns them. -/
-def quadSqrVec (a b c : Vector (BitVec 64) 8) : Vector (BitVec 64) 24 :=
-  quadVec24 (quadSqrLimb a b c)
-
-/-! The three thirds of that result. Output bounds are stated per third,
-since `R43x6.UNN` is a predicate on eight-lane vectors. -/
-
-@[simp] theorem slice03_quadSqrVec (a b c : Vector (BitVec 64) 8) :
-    slice03 (quadSqrVec a b c) = quadSqrVec03 a b c := by
-  rw [quadSqrVec, quadVec24, slice03_quadCat]; rfl
-@[simp] theorem slice14_quadSqrVec (a b c : Vector (BitVec 64) 8) :
-    slice14 (quadSqrVec a b c) = quadSqrVec14 a b c := by
-  rw [quadSqrVec, quadVec24, slice14_quadCat]; rfl
-@[simp] theorem slice25_quadSqrVec (a b c : Vector (BitVec 64) 8) :
-    slice25 (quadSqrVec a b c) = quadSqrVec25 a b c := by
-  rw [quadSqrVec, quadVec24, slice25_quadCat]; rfl
+/-- The result QUAD predicted by the specification. -/
+def quadSqrResult (x : Quad) : Quad where
+  v03 := quadVec (quadSqrLimb x) 0 3
+  v14 := quadVec (quadSqrLimb x) 1 4
+  v25 := quadVec (quadSqrLimb x) 2 5
 
 /-! ## Ring correctness
 
@@ -88,10 +70,11 @@ Per element, this is the scalar theorem. -/
 
 /-- **Ring correctness**, elementwise: the limbs `quadSqrLimb` predicts for
 element `j` decode to the square of the decoded input in `GF(2^255 - 19)`. -/
-theorem decodeLimbs_quadSqrLimb_zmod (a b c : Vector (BitVec 64) 8) (j : ℕ) :
-    ((decodeNat (quadSqrLimb a b c j) : ℕ) : ZMod p)
-      = ((decodeNat (quadLimb a b c j) : ℕ) : ZMod p) ^ 2 :=
-  decodeLimbs_sqLimb_zmod _
+theorem decodeLimbs_quadSqrLimb_zmod (x : Quad) (j : Fin 4) :
+    ((decodeNat (quadSqrLimb x j) : ℕ) : ZMod p)
+      = ((decodeNat (laneFunc (x.vector j)) : ℕ) : ZMod p) ^ 2 := by
+  rw [laneFunc_vector]
+  exact decodeLimbs_sqLimb_zmod _
 
 /-! ## Bounds
 
@@ -99,49 +82,35 @@ The four rows of the `fd_r43x6.h` width table for squaring
 (`u44/u45/u46/u47` in, `u61/u61/u62/u62` out), lifted lanewise. -/
 
 /-- The scalar width table, applied at every lane of the QUAD. -/
-private theorem quadSqrLimb_lt_of (a b c : Vector (BitVec 64) 8)
+private theorem quadSqrLimb_lt_of (x : Quad)
     (n N : ℕ) (hn : n ≤ 62)
-    (scalar : ∀ x : ℕ → ℕ, (∀ i < 6, x i < 2 ^ n) → ∀ k < 6, sqLimb x k < N)
-    (ha : R43x6.UNN n a) (hb : R43x6.UNN n b) (hc : R43x6.UNN n c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < N :=
-  scalar _ (fun i hi => quadLimb_lt a b c n hn ha hb hc j hj i hi) k hk
+    (scalar : ∀ a : Fin 6 → ℕ, (∀ i, a i < 2 ^ n) → ∀ k, sqLimb a k < N)
+    (h03 : R43x6.UNN n x.v03) (h14 : R43x6.UNN n x.v14) (h25 : R43x6.UNN n x.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadSqrLimb x j k < N :=
+  scalar _ (fun i => quadLimb_lt x n hn h03 h14 h25 j i) k
 
 /-- **`u44` in, `u61` out.** -/
-theorem quadSqrLimb_lt_u44 (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U44 a) (hb : R43x6.U44 b) (hc : R43x6.U44 c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < 2 ^ 61 :=
-  quadSqrLimb_lt_of a b c 44 (2 ^ 61) (by omega) sqLimb_lt_u44 ha hb hc j hj k hk
-
-/-- **`u45` in, `u61` out.** -/
-theorem quadSqrLimb_lt_u45 (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U45 a) (hb : R43x6.U45 b) (hc : R43x6.U45 c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < 2 ^ 61 :=
-  quadSqrLimb_lt_of a b c 45 (2 ^ 61) (by omega) sqLimb_lt_u45 ha hb hc j hj k hk
-
-/-- **`u46` in, `u62` out.** -/
-theorem quadSqrLimb_lt_u46 (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U46 a) (hb : R43x6.U46 b) (hc : R43x6.U46 c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < 2 ^ 62 :=
-  quadSqrLimb_lt_of a b c 46 (2 ^ 62) (by omega) sqLimb_lt_u46 ha hb hc j hj k hk
+theorem quadSqrLimb_lt_u44 (x : Quad)
+    (h03 : R43x6.U44 x.v03) (h14 : R43x6.U44 x.v14) (h25 : R43x6.U44 x.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadSqrLimb x j k < 2 ^ 61 :=
+  quadSqrLimb_lt_of x 44 (2 ^ 61) (by omega) sqLimb_lt_u44 h03 h14 h25 j k
 
 /-- **`u47` in, `u62` out.** -/
-theorem quadSqrLimb_lt_u47 (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < 2 ^ 62 :=
-  quadSqrLimb_lt_of a b c 47 (2 ^ 62) (by omega) sqLimb_lt_u47 ha hb hc j hj k hk
+theorem quadSqrLimb_lt_u47 (x : Quad)
+    (h03 : R43x6.U47 x.v03) (h14 : R43x6.U47 x.v14) (h25 : R43x6.U47 x.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadSqrLimb x j k < 2 ^ 62 :=
+  quadSqrLimb_lt_of x 47 (2 ^ 62) (by omega) sqLimb_lt_u47 h03 h14 h25 j k
 
 /-- The bound the `BitVec.toInt` transfer needs: below `2^63`, a lane is not
 read back as negative. -/
-theorem quadSqrLimb_lt_two_pow_63 (a b c : Vector (BitVec 64) 8)
-    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadSqrLimb a b c j k < 2 ^ 63 := by
-  have := quadSqrLimb_lt_u47 a b c ha hb hc j hj k hk
+theorem quadSqrLimb_lt_two_pow_63 (x : Quad)
+    (h03 : R43x6.U47 x.v03) (h14 : R43x6.U47 x.v14) (h25 : R43x6.U47 x.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadSqrLimb x j k < 2 ^ 63 := by
+  have := quadSqrLimb_lt_u47 x h03 h14 h25 j k
   omega
 
 end Firedancer.Avx512

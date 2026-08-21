@@ -70,12 +70,12 @@ theorem denote_fd_r43x6_sqr_fast (x : Vector (BitVec 64) 8)
         (Ctxt.Valuation.singleton (x.map PoisonOr.value)) =
       ([(sqrVec x).map PoisonOr.value]ₕ :
         HVector TyDenote.toType [SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64)))]) := by
-  have u0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0 (by omega)
-  have u1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1 (by omega)
-  have u2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2 (by omega)
-  have u3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3 (by omega)
-  have u4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4 (by omega)
-  have u5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5 (by omega)
+  have u0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0
+  have u1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1
+  have u2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2
+  have u3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3
+  have u4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4
+  have u5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5
   -- Bounds in literal form: simp's `Nat.reducePow` normalises `2^52` to it.
   have s0 : 2 * x[0].toNat < 4503599627370496 := by omega
   have s1 : 2 * x[1].toNat < 4503599627370496 := by omega
@@ -415,7 +415,7 @@ theorem denote_fd_r43x6_sqr_fast (x : Vector (BitVec 64) 8)
     simp only [sqrVec, limbVec]
     denote_vecbin hv159
     all_goals try congr 1
-    all_goals try simp only [sqLimb, sqCol, limbNat, ph, pl]
+    all_goals try simp [sqLimb, sqCol, limbNat, ph, pl]
     all_goals try ring_nf
   subst v159Value
   simp_peephole
@@ -435,15 +435,13 @@ set_option maxHeartbeats 1000000 in
 private theorem sqrIsSqrThm (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
     sqrIsSqr x := by
-  have b0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0 (by omega)
-  have b1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1 (by omega)
-  have b2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2 (by omega)
-  have b3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3 (by omega)
-  have b4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4 (by omega)
-  have b5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5 (by omega)
-  have hbnd : ∀ i < 6, limbNat x i < 2^47 := by
-    intro i hi
-    interval_cases i <;> simpa [limbNat] using ‹_›
+  have b0 : x[0].toNat < 2^47 := unn_toNat x 47 (by omega) hx 0
+  have b1 : x[1].toNat < 2^47 := unn_toNat x 47 (by omega) hx 1
+  have b2 : x[2].toNat < 2^47 := unn_toNat x 47 (by omega) hx 2
+  have b3 : x[3].toNat < 2^47 := unn_toNat x 47 (by omega) hx 3
+  have b4 : x[4].toNat < 2^47 := unn_toNat x 47 (by omega) hx 4
+  have b5 : x[5].toNat < 2^47 := unn_toNat x 47 (by omega) hx 5
+  have hbnd : ∀ (i: Fin 6), limbNat x i < 2^47 := limbNat_lt x 47 (by omega) hx
   -- 1. denotation to lanes to specified limbs; the poison layer collapses
   rw [sqrIsSqr, sqrValue, denote_fd_r43x6_sqr_fast x hx h7]
   simp only [HVector.head, Vector.getValues_map_value, PoisonOr.map_value,
@@ -482,7 +480,7 @@ private theorem sqrValue_eq (x : Vector (BitVec 64) 8)
 /-- Two-sided lane bounds from a ceiling `N` on the ℕ-level limbs. -/
 private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2^62)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0)
-    (hb : ∀ k < 6, sqLimb (limbNat x) k < N) :
+    (hb : ∀ k, sqLimb (limbNat x) k < N) :
     R43x6.BoundedUpper ((N : Int) - 1) (sqrValue x).getValue
       ∧ R43x6.BoundedLower 0 (sqrValue x).getValue := by
   have hv : (sqrValue x).getValue = sqrVec x := by rw [sqrValue_eq x hx h7]; rfl
@@ -492,33 +490,29 @@ private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N �
 private theorem output_u44 (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u44_u61 x := by
   intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^61 := fun k hk =>
-    sqLimb_lt_u44 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 44 (by omega) hin _ (by omega)) k hk
+  have hb : ∀ k, sqLimb (limbNat x) k < 2^61 := fun k =>
+    sqLimb_lt_u44 _ (limbNat_lt x 44 (by omega) hin) k
   exact_mod_cast output_bounds_of x (2^61) (by omega) hx h7 hb
 
 private theorem output_u45 (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u45_u61 x := by
   intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^61 := fun k hk =>
-    sqLimb_lt_u45 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 45 (by omega) hin _ (by omega)) k hk
+  have hb : ∀ k, sqLimb (limbNat x) k < 2^61 := fun k =>
+    sqLimb_lt_u45 _ (limbNat_lt x 45 (by omega) hin) k
   exact_mod_cast output_bounds_of x (2^61) (by omega) hx h7 hb
 
 private theorem output_u46 (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u46_u62 x := by
   intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^62 := fun k hk =>
-    sqLimb_lt_u46 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 46 (by omega) hin _ (by omega)) k hk
+  have hb : ∀ k, sqLimb (limbNat x) k < 2^62 := fun k =>
+    sqLimb_lt_u46 _ (limbNat_lt x 46 (by omega) hin) k
   exact_mod_cast output_bounds_of x (2^62) (by omega) hx h7 hb
 
 private theorem output_u47 (x : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) : output_bounds_u47_u62 x := by
   intro hin
-  have hb : ∀ k < 6, sqLimb (limbNat x) k < 2^62 := fun k hk =>
-    sqLimb_lt_u47 _ (fun i hi => by
-      interval_cases i <;> exact unn_toNat x 47 (by omega) hin _ (by omega)) k hk
+  have hb : ∀ k, sqLimb (limbNat x) k < 2^62 := fun k =>
+    sqLimb_lt_u47 _ (limbNat_lt x 47 (by omega) hin) k
   exact_mod_cast output_bounds_of x (2^62) (by omega) hx h7 hb
 
 /-- **Specification of `fd_r43x6_sqr_fast`**: on an unreduced input whose two

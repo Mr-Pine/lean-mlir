@@ -45,8 +45,8 @@ denotation of an `llvm.store` has. -/
 def storeVec (p : SLLVM.Ptr) (v : Vector (PoisonOr (BitVec 64)) 8) : EffectM Unit :=
   SLLVM.store p QVecTy v
 
-/-- Valuation for a kernel with three pointer out-parameters and three vector
-inputs, in the order `fd_r43x6_quad_sqr_fast` declares them. Block arguments
+/-- Valuation for a kernel with three pointer out-parameters and a quad input,
+in the order `fd_r43x6_quad_sqr_fast` declares them. Block arguments
 enter a `Ctxt` in *reverse* declaration order (`%arg0` is the deepest
 variable), so the list reads backwards: the three vectors first, then the three
 pointers.
@@ -57,17 +57,16 @@ a lookup on an `ofHVector` into an `HVector` index, for which there are no
 reduction lemmas in the per-opcode simp sets, so the operand of a `vpmadd52`
 would get stuck. On a `cons` chain `Valuation.cons_last` and
 `Valuation.cons_toCons` reduce the lookup all the way. -/
-def quadValMem (p₀ p₁ p₂ : SLLVM.Ptr) (a b c : Vector (BitVec 64) 8) :
+def quadValMem (p₀ p₁ p₂ : SLLVM.Ptr) (x: Quad) :
     Ctxt.Valuation (Ctxt.ofList [QTy, QTy, QTy, PTy, PTy, PTy]) :=
-  c.map PoisonOr.value ::ᵥ b.map PoisonOr.value ::ᵥ a.map PoisonOr.value ::ᵥ
+  x.v25.map PoisonOr.value ::ᵥ x.v14.map PoisonOr.value ::ᵥ x.v03.map PoisonOr.value ::ᵥ
     p₂ ::ᵥ p₁ ::ᵥ p₀ ::ᵥ Ctxt.Valuation.nil
 
-/-- As `quadValMem`, for a kernel with six vector inputs
-(`fd_r43x6_quad_mul_fast`). -/
-def quadValMem6 (p₀ p₁ p₂ : SLLVM.Ptr) (a b c d e f : Vector (BitVec 64) 8) :
+/-- As `quadValMem`, for a kernel with two quad inputs and three pointers. -/
+def quadDualValMem (p₀ p₁ p₂ : SLLVM.Ptr) (x y: Quad) :
     Ctxt.Valuation (Ctxt.ofList [QTy, QTy, QTy, QTy, QTy, QTy, PTy, PTy, PTy]) :=
-  f.map PoisonOr.value ::ᵥ e.map PoisonOr.value ::ᵥ d.map PoisonOr.value ::ᵥ
-  c.map PoisonOr.value ::ᵥ b.map PoisonOr.value ::ᵥ a.map PoisonOr.value ::ᵥ
+    y.v25.map PoisonOr.value ::ᵥ y.v14.map PoisonOr.value ::ᵥ y.v03.map PoisonOr.value ::ᵥ
+    x.v25.map PoisonOr.value ::ᵥ x.v14.map PoisonOr.value ::ᵥ x.v03.map PoisonOr.value ::ᵥ
     p₂ ::ᵥ p₁ ::ᵥ p₀ ::ᵥ Ctxt.Valuation.nil
 
 /-! ## A fully-defined vector flattens -/

@@ -40,38 +40,18 @@ product stays inside one lane, and nothing is ignored.
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
+open Quad
 
 /-- The four elements' output limbs: `quadMulLimb … j k` is limb `k` of the
 product of element `j` of the two input QUADs, i.e. the scalar `limb` applied
 lanewise. -/
-def quadMulLimb (a b c d e f : Vector (BitVec 64) 8) : ℕ → ℕ → ℕ :=
-  fun j k => limb (quadLimb a b c j) (quadLimb d e f j) k
+def quadMulLimb (x y : Quad) : Fin 4 → Fin 6 → ℕ :=
+  fun j k => limb (quadLimb x.v03 x.v14 x.v25 j) (quadLimb y.v03 y.v14 y.v25 j) k
 
-/-- The three result vectors predicted by the specification. -/
-def quadMulVec03 (a b c d e f : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadMulLimb a b c d e f) 0 3
-def quadMulVec14 (a b c d e f : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadMulLimb a b c d e f) 1 4
-def quadMulVec25 (a b c d e f : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
-  quadVec (quadMulLimb a b c d e f) 2 5
-
-/-- The complete result predicted for `fd_r43x6_quad_mul_fast`: the three
-output vectors concatenated, as the lifted region returns them. -/
-def quadMulVec (a b c d e f : Vector (BitVec 64) 8) : Vector (BitVec 64) 24 :=
-  quadVec24 (quadMulLimb a b c d e f)
-
-/-! The three thirds of that result. Output bounds are stated per third,
-since `R43x6.UNN` is a predicate on eight-lane vectors. -/
-
-@[simp] theorem slice03_quadMulVec (a b c d e f : Vector (BitVec 64) 8) :
-    slice03 (quadMulVec a b c d e f) = quadMulVec03 a b c d e f := by
-  rw [quadMulVec, quadVec24, slice03_quadCat]; rfl
-@[simp] theorem slice14_quadMulVec (a b c d e f : Vector (BitVec 64) 8) :
-    slice14 (quadMulVec a b c d e f) = quadMulVec14 a b c d e f := by
-  rw [quadMulVec, quadVec24, slice14_quadCat]; rfl
-@[simp] theorem slice25_quadMulVec (a b c d e f : Vector (BitVec 64) 8) :
-    slice25 (quadMulVec a b c d e f) = quadMulVec25 a b c d e f := by
-  rw [quadMulVec, quadVec24, slice25_quadCat]; rfl
+def quadMulResult (x y: Quad): Quad where
+  v03 := quadVec (quadMulLimb x y) 0 3
+  v14 := quadVec (quadMulLimb x y) 1 4
+  v25 := quadVec (quadMulLimb x y) 2 5
 
 /-! ## Ring correctness
 
@@ -80,11 +60,12 @@ Per element, this is the scalar theorem. -/
 /-- **Ring correctness**, elementwise: the limbs `quadMulLimb` predicts for
 element `j` decode to the product of the two decoded inputs in
 `GF(2^255 - 19)`. -/
-theorem decodeLimbs_quadMulLimb_zmod (a b c d e f : Vector (BitVec 64) 8) (j : ℕ) :
-    ((decodeNat (quadMulLimb a b c d e f j) : ℕ) : ZMod p)
-      = ((decodeNat (quadLimb a b c j) : ℕ) : ZMod p)
-        * ((decodeNat (quadLimb d e f j) : ℕ) : ZMod p) :=
-  decodeLimbs_limb_zmod _ _
+theorem decodeLimbs_quadMulLimb_zmod (x y : Quad) (j : Fin 4) :
+    ((decodeNat (quadMulLimb x y j) : ℕ) : ZMod p)
+      = ((decodeNat (laneFunc (x.vector j)) : ℕ) : ZMod p)
+        * ((decodeNat (laneFunc (y.vector j)) : ℕ) : ZMod p) := by
+  rw [laneFunc_vector, laneFunc_vector]
+  exact decodeLimbs_limb_zmod _ _
 
 /-! ## Bounds
 
@@ -92,62 +73,54 @@ The four rows of the `fd_r43x6.h` width table, lifted lanewise. Each is the
 scalar `limb_lt_u4x` under a `UNN` hypothesis on all six vectors. -/
 
 /-- The scalar width table, applied at every lane of the QUAD. -/
-private theorem quadMulLimb_lt_of (a b c d e f : Vector (BitVec 64) 8)
+private theorem quadMulLimb_lt_of (x y: Quad)
     (n N : ℕ) (hn : n ≤ 62)
-    (scalar : ∀ x y : ℕ → ℕ, (∀ i < 6, x i < 2 ^ n) → (∀ i < 6, y i < 2 ^ n) →
-      ∀ k < 6, limb x y k < N)
-    (ha : R43x6.UNN n a) (hb : R43x6.UNN n b) (hc : R43x6.UNN n c)
-    (hd : R43x6.UNN n d) (he : R43x6.UNN n e) (hf : R43x6.UNN n f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < N :=
+    (scalar : ∀ a b : Fin 6 → ℕ, (∀ i, a i < 2 ^ n) → (∀ i, b i < 2 ^ n) →
+      ∀ k, limb a b k < N)
+    (hx03 : R43x6.UNN n x.v03) (hx14 : R43x6.UNN n x.v14) (hx25 : R43x6.UNN n x.v25)
+    (hy03 : R43x6.UNN n y.v03) (hy14 : R43x6.UNN n y.v14) (hy25 : R43x6.UNN n y.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadMulLimb x y j k < N :=
   scalar _ _
-    (fun i hi => quadLimb_lt a b c n hn ha hb hc j hj i hi)
-    (fun i hi => quadLimb_lt d e f n hn hd he hf j hj i hi) k hk
+    (fun i => quadLimb_lt x n hn hx03 hx14 hx25 j i)
+    (fun i => quadLimb_lt y n hn hy03 hy14 hy25 j i) k
 
 /-- **`u44` in, `u62` out.** -/
-theorem quadMulLimb_lt_u44 (a b c d e f : Vector (BitVec 64) 8)
-    (ha : R43x6.U44 a) (hb : R43x6.U44 b) (hc : R43x6.U44 c)
-    (hd : R43x6.U44 d) (he : R43x6.U44 e) (hf : R43x6.U44 f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < 2 ^ 62 :=
-  quadMulLimb_lt_of a b c d e f 44 (2 ^ 62) (by omega) limb_lt_u44
-    ha hb hc hd he hf j hj k hk
+theorem quadMulLimb_lt_u44 (x y : Quad)
+    (hx03 : R43x6.U44 x.v03) (hx14 : R43x6.U44 x.v14) (hx25 : R43x6.U44 x.v25)
+    (hy03 : R43x6.U44 y.v03) (hy14 : R43x6.U44 y.v14) (hy25 : R43x6.U44 y.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadMulLimb x y j k < 2 ^ 62 :=
+  quadMulLimb_lt_of x y 44 (2 ^ 62) (by omega) limb_lt_u44
+    hx03 hx14 hx25 hy03 hy14 hy25 j k
 
-/-- **`u45` in, `u62` out.** -/
-theorem quadMulLimb_lt_u45 (a b c d e f : Vector (BitVec 64) 8)
-    (ha : R43x6.U45 a) (hb : R43x6.U45 b) (hc : R43x6.U45 c)
-    (hd : R43x6.U45 d) (he : R43x6.U45 e) (hf : R43x6.U45 f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < 2 ^ 62 :=
-  quadMulLimb_lt_of a b c d e f 45 (2 ^ 62) (by omega) limb_lt_u45
-    ha hb hc hd he hf j hj k hk
-
-/-- **`u46` in, `u62` out.** -/
-theorem quadMulLimb_lt_u46 (a b c d e f : Vector (BitVec 64) 8)
-    (ha : R43x6.U46 a) (hb : R43x6.U46 b) (hc : R43x6.U46 c)
-    (hd : R43x6.U46 d) (he : R43x6.U46 e) (hf : R43x6.U46 f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < 2 ^ 62 :=
-  quadMulLimb_lt_of a b c d e f 46 (2 ^ 62) (by omega) limb_lt_u46
-    ha hb hc hd he hf j hj k hk
+/-- **`u46` in, `7000·2^49` out**: the exact count (`limb_lt_u46_tight`),
+lanewise. It is what makes the `fd_r43x6_ge_is_eq` differences `s62`. -/
+theorem quadMulLimb_lt_u46_tight (x y : Quad)
+    (hx03 : R43x6.U46 x.v03) (hx14 : R43x6.U46 x.v14) (hx25 : R43x6.U46 x.v25)
+    (hy03 : R43x6.U46 y.v03) (hy14 : R43x6.U46 y.v14) (hy25 : R43x6.U46 y.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadMulLimb x y j k < 7000 * 2 ^ 49 :=
+  quadMulLimb_lt_of x y 46 (7000 * 2 ^ 49) (by omega) limb_lt_u46_tight
+    hx03 hx14 hx25 hy03 hy14 hy25 j k
 
 /-- **`u47` in, `u63` out.** -/
-theorem quadMulLimb_lt_u47 (a b c d e f : Vector (BitVec 64) 8)
-    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
-    (hd : R43x6.U47 d) (he : R43x6.U47 e) (hf : R43x6.U47 f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < 2 ^ 63 :=
-  quadMulLimb_lt_of a b c d e f 47 (2 ^ 63) (by omega) limb_lt_u47
-    ha hb hc hd he hf j hj k hk
+theorem quadMulLimb_lt_u47 (x y : Quad)
+    (hx03 : R43x6.U47 x.v03) (hx14 : R43x6.U47 x.v14) (hx25 : R43x6.U47 x.v25)
+    (hy03 : R43x6.U47 y.v03) (hy14 : R43x6.U47 y.v14) (hy25 : R43x6.U47 y.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadMulLimb x y j k < 2 ^ 63 :=
+  quadMulLimb_lt_of x y 47 (2 ^ 63) (by omega) limb_lt_u47
+    hx03 hx14 hx25 hy03 hy14 hy25 j k
 
 /-- The bound the `BitVec.toInt` transfer needs: below `2^63` a lane is not
 read back as negative. For a multiply this *is* the `u47` row of the table --
 the scalar bound is `u63`, exactly on the boundary. -/
-theorem quadMulLimb_lt_two_pow_63 (a b c d e f : Vector (BitVec 64) 8)
-    (ha : R43x6.U47 a) (hb : R43x6.U47 b) (hc : R43x6.U47 c)
-    (hd : R43x6.U47 d) (he : R43x6.U47 e) (hf : R43x6.U47 f)
-    (j : ℕ) (hj : j < 4) (k : ℕ) (hk : k < 6) :
-    quadMulLimb a b c d e f j k < 2 ^ 63 :=
-  quadMulLimb_lt_u47 a b c d e f ha hb hc hd he hf j hj k hk
+theorem quadMulLimb_lt_two_pow_63 (x y : Quad)
+    (hx03 : R43x6.U47 x.v03) (hx14 : R43x6.U47 x.v14) (hx25 : R43x6.U47 x.v25)
+    (hy03 : R43x6.U47 y.v03) (hy14 : R43x6.U47 y.v14) (hy25 : R43x6.U47 y.v25)
+    (j : Fin 4) (k : Fin 6) :
+    quadMulLimb x y j k < 2 ^ 63 :=
+  quadMulLimb_lt_u47 x y hx03 hx14 hx25 hy03 hy14 hy25 j k
 
 end Firedancer.Avx512

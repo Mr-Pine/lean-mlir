@@ -48,7 +48,7 @@ limbs
 every `pl i j` with `i+j = k` and every `ph i j` with `i+j+1 = k`, i.e. the
 coefficient of `2^43k` before any folding. This is the `z0`,…,`z11` diagram in
 the comments of `fd_r43x6_mul_fast`. -/
-def col (x y : ℕ → ℕ) : ℕ → ℕ
+def col (x y : Fin 6 → ℕ) : Fin 12 → ℕ
   | 0 => pl (x 0) (y 0)
   | 1 => pl (x 0) (y 1) + pl (x 1) (y 0)
       + ph (x 0) (y 0)
@@ -77,19 +77,18 @@ def col (x y : ℕ → ℕ) : ℕ → ℕ
   | 10 => pl (x 5) (y 5)
       + ph (x 4) (y 5) + ph (x 5) (y 4)
   | 11 => ph (x 5) (y 5)
-  | _ => 0
 
 /-- The output limbs of `fd_r43x6_mul_fast`: the low six columns, plus the
 high six folded in with weight `152 = 2^258 mod p`. -/
-def limb (x y : ℕ → ℕ) (k : ℕ) : ℕ :=
-  col x y k + 152 * col x y (k + 6)
+def limb (x y : Fin 6 → ℕ) (k : Fin 6) : ℕ :=
+  col x y (k.castAdd 6) + 152 * col x y (k.addNat 6)
 
 /-! ## Ring correctness -/
 
 set_option exponentiation.threshold 600 in
 /-- The twelve columns decode to the full product: each of the thirty-six
 products appears exactly once, at the weight `2^(43(i+j))` of its column. -/
-theorem cols_mul (x y : ℕ → ℕ) :
+theorem cols_mul (x y : Fin 6 → ℕ) :
     (decodeNat x) * (decodeNat y) =
       col x y 0 + 2^43 * col x y 1 + 2^86 * col x y 2 + 2^129 * col x y 3
       + 2^172 * col x y 4 + 2^215 * col x y 5 + 2^258 * col x y 6
@@ -156,7 +155,7 @@ theorem cols_mul (x y : ℕ → ℕ) :
 
 /-- **Ring correctness**: decoding the output limbs of `fd_r43x6_mul_fast`
 yields the product of the decoded inputs modulo `p = 2^255 - 19`. -/
-theorem decodeLimbs_limb_modEq (x y : ℕ → ℕ) :
+theorem decodeLimbs_limb_modEq (x y : Fin 6 → ℕ) :
     decodeNat (limb x y) ≡ (decodeNat x) * (decodeNat y) [MOD p] := by
   -- The high columns contribute a multiple of `p`, since `2^258 - 152 = 8·p`.
   have hsplit : decodeNat (limb x y)
@@ -164,7 +163,7 @@ theorem decodeLimbs_limb_modEq (x y : ℕ → ℕ) :
           + 2^129 * col x y 9 + 2^172 * col x y 10 + 2^215 * col x y 11))
       = (decodeNat x) * (decodeNat y) := by
     rw [cols_mul]
-    simp only [decodeNat_eq, limb, p]
+    simp only [decodeNat_eq, limb, p, Fin.reduceCastAdd, Fin.reduceAddNat]
     generalize col x y 0 = c0; generalize col x y 1 = c1
     generalize col x y 2 = c2; generalize col x y 3 = c3
     generalize col x y 4 = c4; generalize col x y 5 = c5
@@ -177,7 +176,7 @@ theorem decodeLimbs_limb_modEq (x y : ℕ → ℕ) :
   rw [Nat.add_mul_mod_self_left]
 
 /-- Ring correctness, stated in `ZMod p`. -/
-theorem decodeLimbs_limb_zmod (x y : ℕ → ℕ) :
+theorem decodeLimbs_limb_zmod (x y : Fin 6 → ℕ) :
     ((decodeNat (limb x y) : ℕ) : ZMod p)
       = ((decodeNat x : ℕ) : ZMod p) * ((decodeNat y : ℕ) : ZMod p) := by
   have h := decodeLimbs_limb_modEq x y
@@ -196,14 +195,14 @@ source comments. -/
 
 set_option maxHeartbeats 1000000 in
 /-- Every output limb, in terms of a `ph` bound `Bo`. -/
-private theorem limb_lt_of_bounds (x y : ℕ → ℕ) (Bo L : ℕ)
-    (hph : ∀ i < 6, ∀ j < 6, ph (x i) (y j) < Bo)
+private theorem limb_lt_of_bounds (x y : Fin 6 → ℕ) (Bo L : ℕ)
+    (hph : ∀ i j, ph (x i) (y j) < Bo)
     (hL : 761 * 2^52 + 912 * Bo ≤ L)
-    (k : ℕ) (hk : k < 6) :
+    (k : Fin 6) :
     limb x y k < L := by
   have hpl : ∀ a b : ℕ, pl a b < 2^52 := fun a b => pl_lt a b
-  interval_cases k <;>
-  · simp only [limb, col]
+  fin_cases k <;>
+  · simp [limb, col]
     have := hpl (x 0) (y 0); have := hpl (x 0) (y 1); have := hpl (x 0) (y 2)
     have := hpl (x 0) (y 3); have := hpl (x 0) (y 4); have := hpl (x 0) (y 5)
     have := hpl (x 1) (y 0); have := hpl (x 1) (y 1); have := hpl (x 1) (y 2)
@@ -216,65 +215,76 @@ private theorem limb_lt_of_bounds (x y : ℕ → ℕ) (Bo L : ℕ)
     have := hpl (x 4) (y 3); have := hpl (x 4) (y 4); have := hpl (x 4) (y 5)
     have := hpl (x 5) (y 0); have := hpl (x 5) (y 1); have := hpl (x 5) (y 2)
     have := hpl (x 5) (y 3); have := hpl (x 5) (y 4); have := hpl (x 5) (y 5)
-    have := hph 0 (by omega) 0 (by omega); have := hph 0 (by omega) 1 (by omega)
-    have := hph 0 (by omega) 2 (by omega); have := hph 0 (by omega) 3 (by omega)
-    have := hph 0 (by omega) 4 (by omega); have := hph 0 (by omega) 5 (by omega)
-    have := hph 1 (by omega) 0 (by omega); have := hph 1 (by omega) 1 (by omega)
-    have := hph 1 (by omega) 2 (by omega); have := hph 1 (by omega) 3 (by omega)
-    have := hph 1 (by omega) 4 (by omega); have := hph 1 (by omega) 5 (by omega)
-    have := hph 2 (by omega) 0 (by omega); have := hph 2 (by omega) 1 (by omega)
-    have := hph 2 (by omega) 2 (by omega); have := hph 2 (by omega) 3 (by omega)
-    have := hph 2 (by omega) 4 (by omega); have := hph 2 (by omega) 5 (by omega)
-    have := hph 3 (by omega) 0 (by omega); have := hph 3 (by omega) 1 (by omega)
-    have := hph 3 (by omega) 2 (by omega); have := hph 3 (by omega) 3 (by omega)
-    have := hph 3 (by omega) 4 (by omega); have := hph 3 (by omega) 5 (by omega)
-    have := hph 4 (by omega) 0 (by omega); have := hph 4 (by omega) 1 (by omega)
-    have := hph 4 (by omega) 2 (by omega); have := hph 4 (by omega) 3 (by omega)
-    have := hph 4 (by omega) 4 (by omega); have := hph 4 (by omega) 5 (by omega)
-    have := hph 5 (by omega) 0 (by omega); have := hph 5 (by omega) 1 (by omega)
-    have := hph 5 (by omega) 2 (by omega); have := hph 5 (by omega) 3 (by omega)
-    have := hph 5 (by omega) 4 (by omega); have := hph 5 (by omega) 5 (by omega)
+    have := hph 0 0; have := hph 0 1
+    have := hph 0 2; have := hph 0 3
+    have := hph 0 4; have := hph 0 5
+    have := hph 1 0; have := hph 1 1
+    have := hph 1 2; have := hph 1 3
+    have := hph 1 4; have := hph 1 5
+    have := hph 2 0; have := hph 2 1
+    have := hph 2 2; have := hph 2 3
+    have := hph 2 4; have := hph 2 5
+    have := hph 3 0; have := hph 3 1
+    have := hph 3 2; have := hph 3 3
+    have := hph 3 4; have := hph 3 5
+    have := hph 4 0; have := hph 4 1
+    have := hph 4 2; have := hph 4 3
+    have := hph 4 4; have := hph 4 5
+    have := hph 5 0; have := hph 5 1
+    have := hph 5 2; have := hph 5 3
+    have := hph 5 4; have := hph 5 5
     omega
 
 /-- **`u44` in, `u62` out.** -/
-theorem limb_lt_u44 (x y : ℕ → ℕ)
-    (hx : ∀ i < 6, x i < 2^44) (hy : ∀ i < 6, y i < 2^44) (k : ℕ) (hk : k < 6) :
+theorem limb_lt_u44 (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^44) (hy : ∀ i, y i < 2^44) (k : Fin 6) :
     limb x y k < 2^62 :=
   limb_lt_of_bounds x y (2^36 * 2^9) (2^62)
-    (fun i hi j hj => ph_lt_bound (u := 2^44) (v := 2^44) (hx i hi) (hy j hj) (by omega))
-    (by omega) k hk
+    (fun i j => ph_lt_bound (u := 2^44) (v := 2^44) (hx i) (hy j) (by omega))
+    (by omega) k
 
 /-- **`u45` in, `u62` out.** -/
-theorem limb_lt_u45 (x y : ℕ → ℕ)
-    (hx : ∀ i < 6, x i < 2^45) (hy : ∀ i < 6, y i < 2^45) (k : ℕ) (hk : k < 6) :
+theorem limb_lt_u45 (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^45) (hy : ∀ i, y i < 2^45) (k : Fin 6) :
     limb x y k < 2^62 :=
   limb_lt_of_bounds x y (2^38 * 2^9) (2^62)
-    (fun i hi j hj => ph_lt_bound (u := 2^45) (v := 2^45) (hx i hi) (hy j hj) (by omega))
-    (by omega) k hk
+    (fun i j => ph_lt_bound (u := 2^45) (v := 2^45) (hx i) (hy j) (by omega))
+    (by omega) k
 
 /-- **`u46` in, `u62` out.** -/
-theorem limb_lt_u46 (x y : ℕ → ℕ)
-    (hx : ∀ i < 6, x i < 2^46) (hy : ∀ i < 6, y i < 2^46) (k : ℕ) (hk : k < 6) :
+theorem limb_lt_u46 (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^46) (hy : ∀ i, y i < 2^46) (k : Fin 6) :
     limb x y k < 2^62 :=
   limb_lt_of_bounds x y (2^40 * 2^9) (2^62)
-    (fun i hi j hj => ph_lt_bound (u := 2^46) (v := 2^46) (hx i hi) (hy j hj) (by omega))
-    (by omega) k hk
+    (fun i j => ph_lt_bound (u := 2^46) (v := 2^46) (hx i) (hy j) (by omega))
+    (by omega) k
+
+/-- **`u46` in, the count exactly**: `761·2^52 + 912·2^49 = 7000·2^49`, about
+`0.85·2^62`. The `u62` row rounds this up; `fd_r43x6_ge_is_eq` cannot afford
+the rounding -- its `fd_r43x6_sub_fast` results are differences of `u46`
+products *plus `p`*, and only this margin keeps them inside `s62`. -/
+theorem limb_lt_u46_tight (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^46) (hy : ∀ i, y i < 2^46) (k : Fin 6) :
+    limb x y k < 7000 * 2^49 :=
+  limb_lt_of_bounds x y (2^40 * 2^9) (7000 * 2^49)
+    (fun i j => ph_lt_bound (u := 2^46) (v := 2^46) (hx i) (hy j) (by omega))
+    (by omega) k
 
 /-- **`u47` in, `u63` out.** The count reproduces the source's
 `2434·2^51 < 2^63`. -/
-theorem limb_lt_u47 (x y : ℕ → ℕ)
-    (hx : ∀ i < 6, x i < 2^47) (hy : ∀ i < 6, y i < 2^47) (k : ℕ) (hk : k < 6) :
+theorem limb_lt_u47 (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^47) (hy : ∀ i, y i < 2^47) (k : Fin 6) :
     limb x y k < 2^63 :=
   limb_lt_of_bounds x y (2^42 * 2^9) (2^63)
-    (fun i hi j hj => ph_lt_bound (u := 2^47) (v := 2^47) (hx i hi) (hy j hj) (by omega))
-    (by omega) k hk
+    (fun i j => ph_lt_bound (u := 2^47) (v := 2^47) (hx i) (hy j) (by omega))
+    (by omega) k
 
 /-- The bound the `BitVec.toInt` transfer needs: below `2^63`, a lane is not
 read back as negative. -/
-theorem limb_lt_two_pow_63 (x y : ℕ → ℕ)
-    (hx : ∀ i < 6, x i < 2^47) (hy : ∀ i < 6, y i < 2^47) (k : ℕ) (hk : k < 6) :
+theorem limb_lt_two_pow_63 (x y : Fin 6 → ℕ)
+    (hx : ∀ i, x i < 2^47) (hy : ∀ i, y i < 2^47) (k : Fin 6) :
     limb x y k < 2^63 :=
-  limb_lt_u47 x y hx hy k hk
+  limb_lt_u47 x y hx hy k
 
 /-! ## The lanes -/
 

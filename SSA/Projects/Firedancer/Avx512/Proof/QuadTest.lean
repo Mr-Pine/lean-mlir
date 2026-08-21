@@ -29,12 +29,12 @@ def ex {n : Nat} (v : Vector (BitVec 64) n) : List (Option Nat) := rd (v.map Poi
 
 /-! ## The specifications against the C kernels -/
 
-#eval ex (quadMulVec03 x03 x14 x25 y03 y14 y25) == ex mz03
-    && ex (quadMulVec14 x03 x14 x25 y03 y14 y25) == ex mz14
-    && ex (quadMulVec25 x03 x14 x25 y03 y14 y25) == ex mz25
-#eval ex (quadSqrVec03 x03 x14 x25) == ex sz03
-    && ex (quadSqrVec14 x03 x14 x25) == ex sz14
-    && ex (quadSqrVec25 x03 x14 x25) == ex sz25
+#eval ex (quadMulResult ⟨x03, x14, x25⟩ ⟨y03, y14, y25⟩).v03 == ex mz03
+    && ex (quadMulResult ⟨x03, x14, x25⟩ ⟨y03, y14, y25⟩).v14 == ex mz14
+    && ex (quadMulResult ⟨x03, x14, x25⟩ ⟨y03, y14, y25⟩).v25 == ex mz25
+#eval ex (quadSqrResult ⟨x03, x14, x25⟩).v03 == ex sz03
+    && ex (quadSqrResult ⟨x03, x14, x25⟩).v14 == ex sz14
+    && ex (quadSqrResult ⟨x03, x14, x25⟩).v25 == ex sz25
 
 /-! ## The lifted kernels against the C kernels
 

@@ -38,10 +38,10 @@ representation. `decodeNat` is `R43x6.decodeLimbs` for that form, and the only
 thing standing between the two. -/
 
 /-- `R43x6.decodeLimbs` for a limb function indexed by `ℕ`. -/
-def decodeNat {R : Type*} [CommSemiring R] (l : ℕ → R) : R :=
+def decodeNat {R : Type*} [CommSemiring R] (l : Fin 6 → R) : R :=
   R43x6.decodeLimbs (fun i : Fin R43x6.limbCount => l i)
 
-@[simp] theorem decodeNat_eq {R : Type*} [CommSemiring R] (l : ℕ → R) :
+@[simp] theorem decodeNat_eq {R : Type*} [CommSemiring R] (l : Fin 6 → R) :
     decodeNat l = l 0 + 2^43 * l 1 + 2^86 * l 2 + 2^129 * l 3 + 2^172 * l 4
       + 2^215 * l 5 := by
   simp [decodeNat, R43x6.limbCount]
@@ -81,16 +81,6 @@ theorem ph_lt_bound {a b u v B : ℕ} (ha : a < u) (hb : b < v)
     have hm : a * b < u * v := Nat.mul_lt_mul_of_lt_of_lt ha hb
     omega)
 
-/-! The products a zero limb (a hypothesised-zero lane 6 or 7) eliminates. -/
-
-theorem pl_zero_left (b : ℕ) : pl 0 b = 0 := by simp [pl]
-
-theorem pl_zero_right (a : ℕ) : pl a 0 = 0 := by simp [pl]
-
-theorem ph_zero_left (b : ℕ) : ph 0 b = 0 := by simp [ph]
-
-theorem ph_zero_right (a : ℕ) : ph a 0 = 0 := by simp [ph]
-
 /-! ## `BitVec`/ℕ transfer
 
 A lane is built only from operations that wrap mod `2^64`, so each is a
@@ -109,13 +99,6 @@ theorem ofNat_shl7 (a : Nat) :
     (BitVec.ofNat 64 a) <<< (7 : BitVec 64) = BitVec.ofNat 64 (a * 128) := by
   rw [ofNat_shl, show (7 : BitVec 64).toNat = 7 from rfl]
   norm_num
-
-/-! Numeric literals in a lane are `BitVec.ofNat`, but reach the goal as
-`Nat.cast` or as `OfNat` and so do not match it syntactically. -/
-
-theorem natCast_bv (n : Nat) : ((n : Nat) : BitVec 64) = BitVec.ofNat 64 n := rfl
-
-theorem bv_zero : (0 : BitVec 64) = BitVec.ofNat 64 0 := rfl
 
 /-- The `* 24` of the `za + 152*zb` fold (`152 = 128 + 24`). -/
 theorem ofNat_mul24 (a : Nat) :
@@ -143,11 +126,11 @@ theorem toNat_lt_of_bounds {a : BitVec 64} {N : ℕ} (hN : N ≤ 2^62)
 
 /-- An input limb of a `UNN n` vector, as a natural. -/
 theorem unn_toNat (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
-    (hx : R43x6.UNN n x) (i : ℕ) (hi : i < 8) : (x[i]'hi).toNat < 2^n :=
+    (hx : R43x6.UNN n x) (i : Fin 8) : (x[i]).toNat < 2^n :=
   toNat_lt_of_bounds (Nat.pow_le_pow_right (by omega) hn)
-    (by have := hx.1 ⟨i, hi⟩; simp only [LimbRepresentations.toInts] at this
+    (by have := hx.1 i; simp only [LimbRepresentations.toInts] at this
         push_cast; omega)
-    (hx.2 ⟨i, hi⟩)
+    (hx.2 i)
 
 /-- An output lane, back in `toInt` form. -/
 theorem lane_toInt_bound {n N : ℕ} (hN : N ≤ 2^63) (h : n < N) :
@@ -170,14 +153,26 @@ theorem decode'_lit (a b c d e f g h : BitVec 64) :
 
 /-- The input limbs of a vector as naturals, in the `ℕ → ℕ` form the column
 sums take. -/
-def limbNat (x : Vector (BitVec 64) 8) : ℕ → ℕ
+def limbNat (x : Vector (BitVec 64) 8) : Fin 6 → ℕ
   | 0 => x[0].toNat
   | 1 => x[1].toNat
   | 2 => x[2].toNat
   | 3 => x[3].toNat
   | 4 => x[4].toNat
   | 5 => x[5].toNat
-  | _ => 0
+
+/-- The limb bound a `UNN n` vector gives `limbNat`. Stated over `limbNat`
+rather than lanes because that is the form the column-sum bounds consume. -/
+theorem limbNat_lt (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
+    (hx : R43x6.UNN n x) : ∀ i : Fin 6, limbNat x i < 2 ^ n := by
+  intro i
+  fin_cases i
+  · simpa [limbNat] using unn_toNat x n hn hx 0
+  · simpa [limbNat] using unn_toNat x n hn hx 1
+  · simpa [limbNat] using unn_toNat x n hn hx 2
+  · simpa [limbNat] using unn_toNat x n hn hx 3
+  · simpa [limbNat] using unn_toNat x n hn hx 4
+  · simpa [limbNat] using unn_toNat x n hn hx 5
 
 /-! ## The predicted result vector
 
@@ -185,51 +180,50 @@ Both `fd_r43x6_sqr_fast` and `fd_r43x6_mul_fast` produce six specified limbs
 in lanes 0-5 and zero in lanes 6 and 7. -/
 
 /-- Six ℕ-level limbs as an 8-lane result vector, lanes 6 and 7 zero. -/
-def limbVec (l : ℕ → ℕ) : Vector (BitVec 64) 8 :=
+def limbVec (l : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
   #v[BitVec.ofNat 64 (l 0), BitVec.ofNat 64 (l 1), BitVec.ofNat 64 (l 2),
      BitVec.ofNat 64 (l 3), BitVec.ofNat 64 (l 4), BitVec.ofNat 64 (l 5), 0, 0]
 
 /-- Decoding `limbVec` is `decodeNat`, provided no lane reads back negative. -/
-theorem decode'_limbVec (l : ℕ → ℕ) (hb : ∀ k < 6, l k < 2^63) :
+theorem decode'_limbVec (l : Fin 6 → ℕ) (hb : ∀ k, l k < 2^63) :
     R43x6.decode' (limbVec l) = ((decodeNat l : ℕ) : Int) := by
   rw [limbVec, decode'_lit,
-    ofNat_toInt (hb 0 (by omega)), ofNat_toInt (hb 1 (by omega)),
-    ofNat_toInt (hb 2 (by omega)), ofNat_toInt (hb 3 (by omega)),
-    ofNat_toInt (hb 4 (by omega)), ofNat_toInt (hb 5 (by omega))]
+    ofNat_toInt (hb 0), ofNat_toInt (hb 1), ofNat_toInt (hb 2),
+    ofNat_toInt (hb 3), ofNat_toInt (hb 4), ofNat_toInt (hb 5)]
   push_cast [decodeNat_eq]
   try ring
 
 /-- Two-sided lane bounds on `limbVec` from a ceiling `N` on the ℕ-level
 limbs: lanes 0-5 are the limbs, lanes 6 and 7 the zero literal. -/
-theorem limbVec_bounds (l : ℕ → ℕ) (N : ℕ) (hN : N ≤ 2^63)
-    (hb : ∀ k < 6, l k < N) :
+theorem limbVec_bounds (l : Fin 6 → ℕ) (N : ℕ) (hN : N ≤ 2^63)
+    (hb : ∀ k, l k < N) :
     R43x6.BoundedUpper ((N : Int) - 1) (limbVec l)
       ∧ R43x6.BoundedLower 0 (limbVec l) := by
-  have key : ∀ k, k < 6 →
+  have key : ∀ k : Fin 6,
       (0:Int) ≤ (BitVec.ofNat 64 (l k)).toInt
       ∧ (BitVec.ofNat 64 (l k)).toInt ≤ (N:Int) - 1 :=
-    fun k hk => lane_toInt_bound hN (hb k hk)
-  have hN1 : 1 ≤ N := by have := hb 0 (by omega); omega
+    fun k => lane_toInt_bound hN (hb k)
+  have hN1 : 1 ≤ N := by have := hb 0; omega
   have hz : ((0 : BitVec 64)).toInt = 0 := rfl
   refine ⟨fun i => ?_, fun i => ?_⟩ <;>
     simp only [LimbRepresentations.toInts, limbVec] <;>
     fin_cases i
-  · exact (key 0 (by omega)).2
-  · exact (key 1 (by omega)).2
-  · exact (key 2 (by omega)).2
-  · exact (key 3 (by omega)).2
-  · exact (key 4 (by omega)).2
-  · exact (key 5 (by omega)).2
+  · exact (key 0).2
+  · exact (key 1).2
+  · exact (key 2).2
+  · exact (key 3).2
+  · exact (key 4).2
+  · exact (key 5).2
   · show (0 : BitVec 64).toInt ≤ _
     rw [hz]; omega
   · show (0 : BitVec 64).toInt ≤ _
     rw [hz]; omega
-  · exact (key 0 (by omega)).1
-  · exact (key 1 (by omega)).1
-  · exact (key 2 (by omega)).1
-  · exact (key 3 (by omega)).1
-  · exact (key 4 (by omega)).1
-  · exact (key 5 (by omega)).1
+  · exact (key 0).1
+  · exact (key 1).1
+  · exact (key 2).1
+  · exact (key 3).1
+  · exact (key 4).1
+  · exact (key 5).1
   · show (0 : BitVec 64).toInt ≥ _
     rw [hz]
   · show (0 : BitVec 64).toInt ≥ _

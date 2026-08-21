@@ -76,7 +76,7 @@ macro "quad_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tacti
                 Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
                 List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
                 Array.getElem_replicate, Vector.getElem_replicate,
-                quadLimb, vlane, pl, phRaw,
+                quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, pl, phRaw,
                 ← BitVec.ofNat_add, BitVec.toNat_ofNat,
                 Nat.mod_mod_of_dvd _ dvd52_64, toNat_mod_two_pow_64,
                 Nat.reducePow, Nat.reduceMod, reduceIte,
@@ -110,7 +110,7 @@ macro "quad_vecbin " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic 
                 PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
                 PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
                 PoisonOr.mk_some, PoisonOr.mk_none,
-                quadLimb, vlane, toNat_mod_two_pow_64,
+                quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, toNat_mod_two_pow_64,
                 Nat.reducePow, Nat.reduceMod, reduceIte,
                 Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
                 false_and, and_false, true_and, and_true, $hs,*]))
