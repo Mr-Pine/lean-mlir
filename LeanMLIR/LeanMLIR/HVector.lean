@@ -298,15 +298,6 @@ def append {as bs} : HVector A as → HVector A bs → HVector A (as ++ bs)
   | .nil, ys => ys
   | x ::ₕ xs, ys => x ::ₕ (append xs ys)
 
-/-- Reverse an `HVector`, reversing its type-level index list with it.
-
-Needed because block arguments enter a `Ctxt` in reverse declaration order: an
-operand list in source order has to be reversed before it can become a
-valuation of the callee's context. -/
-def reverse {A : α → Type*} : {as : List α} → HVector A as → HVector A as.reverse
-  | [], .nil => .nil
-  | _::_, .cons x xs => (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil)
-
 instance : HAppend (HVector A as) (HVector A bs) (HVector A (as ++ bs)) where
   hAppend := append
 
@@ -316,6 +307,76 @@ variable {bs} {xs : HVector A as} {ys : HVector A bs}
 
 @[simp] theorem nil_append : nil (f:=A) ++ ys = ys := rfl
 @[simp] theorem cons_append : (x ::ₕ xs) ++ ys = (x ::ₕ (xs ++ ys)) := rfl
+
+/-! ## Reverse
+
+Needed because block arguments enter a `Ctxt` in reverse declaration order: an
+operand list in source order has to be reversed before it can become a
+valuation of the callee's context.
+
+`reverse` is defined by accumulation, `List.reverseAux`-style, rather than as
+`reverse xs ++ [x]`: the latter needs a cast through `List.reverse_cons` at
+every element, which `whnf` has to push back through the `append`s, and which
+made deciding a nine-operand call's argument valuation by `isDefEq` take over a
+minute. `(x ::ₕ xs).reverseAux acc` is `xs.reverseAux (x ::ₕ acc)` by
+definition, so nothing is cast. `reverse_cons_eqRec` recovers the old
+recursion. -/
+
+/-- `List.reverseAux` on an `HVector`: `xs` reversed onto the accumulator `acc`. -/
+def reverseAux : {as : List α} → HVector A as → {bs : List α} → HVector A bs →
+    HVector A (as.reverseAux bs)
+  | _, .nil, _, acc => acc
+  | _, .cons x xs, _, acc => reverseAux xs (x ::ₕ acc)
+
+@[simp] theorem reverseAux_nil {bs} (acc : HVector A bs) :
+    reverseAux (.nil : HVector A []) acc = acc := rfl
+@[simp] theorem reverseAux_cons {a as bs} (x : A a) (xs : HVector A as) (acc : HVector A bs) :
+    reverseAux (x ::ₕ xs) acc = reverseAux xs (x ::ₕ acc) := rfl
+
+/-- Reverse an `HVector`, reversing its type-level index list with it. -/
+def reverse {as : List α} (xs : HVector A as) : HVector A as.reverse :=
+  reverseAux xs .nil
+
+@[simp] theorem reverse_nil : reverse (.nil : HVector A []) = .nil := rfl
+@[simp] theorem reverse_cons {a as} (x : A a) (xs : HVector A as) :
+    reverse (x ::ₕ xs) = reverseAux xs (x ::ₕ .nil) := rfl
+
+/-! `HEq` congruences for the index-changing operations, for relating
+`reverseAux` to `reverse` and `append`, whose indices agree only
+propositionally. -/
+
+theorem cons_heq_cons {a : α} {l₁ l₂ : List α} (h : l₁ = l₂) {t₁ : HVector A l₁}
+    {t₂ : HVector A l₂} (ht : HEq t₁ t₂) (x : A a) : HEq (x ::ₕ t₁) (x ::ₕ t₂) := by
+  subst h; cases ht; rfl
+
+theorem append_heq_left {l₁ l₂ cs : List α} (h : l₁ = l₂) {t₁ : HVector A l₁}
+    {t₂ : HVector A l₂} (ht : HEq t₁ t₂) (zs : HVector A cs) : HEq (t₁ ++ zs) (t₂ ++ zs) := by
+  subst h; cases ht; rfl
+
+theorem append_assoc_heq {cs} (xs : HVector A as) (ys : HVector A bs) (zs : HVector A cs) :
+    HEq ((xs ++ ys) ++ zs) (xs ++ (ys ++ zs)) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => exact cons_heq_cons (List.append_assoc ..) ih x
+
+/-- `reverseAux` is `reverse` followed by `append`, up to the index. -/
+theorem reverseAux_heq (xs : HVector A as) (acc : HVector A bs) :
+    HEq (reverseAux xs acc) (reverse xs ++ acc) := by
+  induction xs generalizing bs acc with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [reverseAux_cons, reverse_cons]
+    refine (ih (x ::ₕ acc)).trans ?_
+    refine (append_assoc_heq (reverse xs) (x ::ₕ .nil) acc).symm.trans ?_
+    exact append_heq_left List.reverseAux_eq.symm (ih (x ::ₕ .nil)).symm acc
+
+/-- **The old definition of `reverse`**, as a theorem: `reverse (x ::ₕ xs)` is
+`reverse xs ++ [x]`, cast along `List.reverse_cons`. -/
+theorem reverse_cons_eqRec {a as} (x : A a) (xs : HVector A as) :
+    reverse (x ::ₕ xs) = (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil) := by
+  apply eq_of_heq
+  rw [reverse_cons]
+  exact (reverseAux_heq xs (x ::ₕ .nil)).trans (eqRec_heq _ _).symm
 
 end Append
 
