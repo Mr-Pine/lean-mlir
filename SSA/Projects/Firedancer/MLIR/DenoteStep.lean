@@ -114,6 +114,20 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) :
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (_, lhs, rhs) := tgt.eq? | return none
     let lhs ← whnfR lhs
+    -- A derivation that threads a state works on `(com.denote V).run s`. A
+    -- pure(-op) step does not touch the state, so the denote-level step
+    -- equation still applies -- it just has to be transported through the
+    -- `StateT.run … s` wrapper. Peel the wrapper here; re-wrap below.
+    let (runWrap?, lhs) ←
+      if lhs.isAppOf ``StateT.run then
+        let fn := lhs.getAppFn
+        let args := lhs.getAppArgs
+        if args.size ≥ 2 then
+          pure (some (fn, args), ← whnfR args[args.size - 2]!)
+        else
+          pure (none, lhs)
+      else
+        pure (none, lhs)
     unless lhs.isAppOf ``Com.denote do return none
     let lhsArgs := lhs.getAppArgs
     unless lhsArgs.size ≥ 2 do return none
@@ -150,14 +164,28 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) :
           return some (stepEq, tVal)
         catch _ => return none
     let some (stepEq, tVal) ← mkStep | return none
+    -- For a run-form goal, transport the denote-level step equation through
+    -- the `StateT.run … s` wrapper: `congrArg (fun X => StateT.run X s)`.
+    let stepEq ← match runWrap? with
+      | none => pure stepEq
+      | some (fn, args) => do
+          let some (ty, _, _) := (← inferType stepEq).eq?
+            | throwError "denote_step_all: step equation is not an equality"
+          let lam ← withLocalDeclD `X ty fun X =>
+            mkLambdaFVars #[X] (mkAppN fn (args.set! (args.size - 2) X))
+          mkCongrArg lam stepEq
     let vName := baseName.appendAfter (toString i)
     let hName := Name.mkSimple ("h" ++ vName.toString)
     -- newType : ∀ v, v = e.denoteOp1 V → body.denote (v ::ᵥ V) = rhs
-    -- (oriented `v = def` so `simp only [*]` expands uses of `v` on demand)
+    -- (oriented `v = def` so `simp only [*]` expands uses of `v` on demand);
+    -- in run form the conclusion's left-hand side keeps its wrapper.
     let newType ← withLocalDeclD vName (← inferType tVal) fun v => do
       let defEq ← mkEq v tVal
       let consV ← mkAppM ``Ctxt.Valuation.cons #[v, V]
       let newLhs ← mkAppM ``Com.denote #[body, consV]
+      let newLhs := match runWrap? with
+        | none => newLhs
+        | some (fn, args) => mkAppN fn (args.set! (args.size - 2) newLhs)
       let concl ← mkEq newLhs rhs
       withLocalDeclD hName defEq fun h =>
         mkForallFVars #[v, h] concl
@@ -193,7 +221,12 @@ private def nextStepIndex (goal : MVarId) : MetaM Nat :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (_, lhs, _) := tgt.eq? | return 0
-    let lhs ← whnfR lhs
+    let mut lhs ← whnfR lhs
+    -- run-form goals wrap the denotation in `StateT.run … s`; see `denoteStep1`.
+    if lhs.isAppOf ``StateT.run then
+      let args := lhs.getAppArgs
+      if args.size ≥ 2 then
+        lhs ← whnfR args[args.size - 2]!
     unless lhs.isAppOf ``Com.denote do return 0
     let args := lhs.getAppArgs
     unless args.size ≥ 1 do return 0
