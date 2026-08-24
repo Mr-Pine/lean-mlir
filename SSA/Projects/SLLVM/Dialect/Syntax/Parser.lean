@@ -499,11 +499,14 @@ open MLIR.AST in
 /-- Attach each bound region to the `llvm.call`s that name it.
 
 Only calls that do not already carry a region are rewritten, so an inline
-region always wins over a binding. Recurses into nested regions, so a call
-inside a callee can be bound too. -/
-private partial def bindCallees (table : List (String × Region 0)) (reg : Region 0) :
+region always wins over a binding. Recurses into nested regions (a bound
+callee's own calls need their bodies too) and into a multi-block region's
+tail blocks. -/
+partial def bindCallees (table : List (String × Region 0)) (reg : Region 0) :
     Region 0 :=
-  { reg with ops := reg.ops.map goOp }
+  { reg with
+    ops := reg.ops.map goOp
+    blocks := reg.blocks.map fun b => { b with ops := b.ops.map goOp } }
 where
   goOp (op : Op 0) : Op 0 :=
     let op := { op with regions := op.regions.map (bindCallees table) }
@@ -511,9 +514,6 @@ where
     else match op.getAttr? "callee" with
       | some (.symbol callee) =>
           match table.lookup callee with
-          -- Recurse into the region being attached, too: a bound callee's own
-          -- calls (`fd_long_if` inside `fd_r43x6_is_nonzero`) need their
-          -- bodies as much as the caller's do.
           | some r => { op with regions := [bindCallees table r] }
           | none   => op
       | _ => op
