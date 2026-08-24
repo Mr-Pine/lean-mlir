@@ -86,6 +86,109 @@ def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
   | some _ => throw <| .generic s!"{opStx.name}: atomic accesses are not modelled \
       (expected `ordering = 0`, i.e. non-atomic)"
 
+/-! ### LLVM aggregate types and their layout
+
+`!llvm.struct<"…", (…)>` / `!llvm.array<n x t>` reach the AST as the verbatim
+text of the type (inside `MLIRType.undefined`); `getelementptr` needs their
+layout, so the text is decoded here. Default data layout, no packed structs.
+-/
+
+/-- An LLVM aggregate element type, as `getelementptr`'s `elem_type` spells
+it. -/
+inductive AggTy where
+  | int (bits : Nat)
+  | ptr
+  | struct (fields : List AggTy)
+  | array (n : Nat) (elem : AggTy)
+  deriving Repr
+
+private def takeAggNat (cs : List Char) : Option (Nat × List Char) :=
+  let ds := cs.takeWhile Char.isDigit
+  if ds.isEmpty then none
+  else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
+
+private def dropWs (cs : List Char) : List Char := cs.dropWhile (· == ' ')
+
+mutual
+/-- Decode one aggregate type from the head of `cs`. -/
+partial def parseAggTy : List Char → Option (AggTy × List Char)
+  | 'i' :: cs => (takeAggNat cs).map fun (w, rest) => (.int w, rest)
+  | 'p' :: 't' :: 'r' :: cs => some (.ptr, cs)
+  | 'a' :: 'r' :: 'r' :: 'a' :: 'y' :: '<' :: cs => do
+      let (n, cs) ← takeAggNat (dropWs cs)
+      let 'x' :: cs := dropWs cs | none
+      let (t, cs) ← parseAggTy (dropWs cs)
+      let '>' :: cs := dropWs cs | none
+      return (.array n t, cs)
+  | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
+      -- optional `"name", `
+      let cs := dropWs cs
+      let cs ← match cs with
+        | '"' :: cs =>
+            let cs := cs.dropWhile (· != '"')
+            let '"' :: cs := cs | none
+            let ',' :: cs := dropWs cs | none
+            pure (dropWs cs)
+        | _ => pure cs
+      let '(' :: cs := cs | none
+      let (fields, cs) ← parseAggFields (dropWs cs) []
+      let '>' :: cs := dropWs cs | none
+      return (.struct fields, cs)
+  | _ => none
+
+/-- `t (`, ` t)* `)`` -/
+partial def parseAggFields (cs : List Char) (acc : List AggTy) :
+    Option (List AggTy × List Char) := do
+  let (t, cs) ← parseAggTy cs
+  match dropWs cs with
+  | ',' :: cs => parseAggFields (dropWs cs) (t :: acc)
+  | ')' :: cs => return ((t :: acc).reverse, cs)
+  | _ => none
+end
+
+/-- Round `off` up to a multiple of `a`. -/
+private def alignTo (off a : Nat) : Nat := ((off + a - 1) / a) * a
+
+/-- `(size, alignment)` in bytes, per LLVM's default data layout. An array
+element's stride is its padded size; a struct is laid out sequentially with
+padding, then padded to its own alignment. -/
+partial def AggTy.sizeAlign : AggTy → ExceptM SLLVM (Nat × Nat)
+  | .int bits =>
+      let sz := (bits + 7) / 8
+      if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then
+        return (sz, sz)
+      else
+        throw <| .generic s!"llvm.getelementptr: unsupported integer size i{bits}"
+  | .ptr => return (8, 8)
+  | .array n t => do
+      let (s, a) ← t.sizeAlign
+      return (n * alignTo s a, a)
+  | .struct fields => do
+      let (off, al) ← fields.foldlM (init := (0, 1)) fun (off, al) f => do
+        let (s, a) ← f.sizeAlign
+        return (alignTo off a + s, max al a)
+      return (alignTo off al, al)
+
+/-- Byte offset of field `k` of a struct, `k`-scaled stride within an array. -/
+partial def AggTy.constIndexOffset (k : Nat) : AggTy → ExceptM SLLVM (Nat × AggTy)
+  | .struct fields => do
+      if h : k < fields.length then
+        -- end of the k-field prefix, then align up to field k's alignment
+        let off ← (fields.take k).foldlM (init := 0) fun off f => do
+          let (s, a) ← f.sizeAlign
+          return alignTo off a + s
+        let fld := fields[k]
+        let (_, a) ← fld.sizeAlign
+        return (alignTo off a, fld)
+      else
+        throw <| .generic s!"llvm.getelementptr: struct field index {k} out of range"
+  | .array n t => do
+      unless k < n do
+        throw <| .generic s!"llvm.getelementptr: array index {k} out of range"
+      let (s, a) ← t.sizeAlign
+      return (k * alignTo s a, t)
+  | t => throw <| .generic s!"llvm.getelementptr: cannot index into {repr t}"
+
 /-- The integers inside a `dense<…>` attribute: either a single value (the
 splat form) or one per lane. -/
 def denseInts : MLIR.AST.AttrValue 0 → ExceptM SLLVM (List Int)
@@ -175,6 +278,35 @@ instance : DialectParse SLLVM 0 where
   match opStx.name with
     -- new SLLVM operations
     | "ptr.add" => mkExprOf <| .ptradd
+    -- One leading *dynamic* index (MLIR's sentinel), then constant indices
+    -- walking into the element type: `ptradd` by `stride·i + offset`. The
+    -- stride is the element type's padded size; the offset accumulates
+    -- struct-field and array steps. `inbounds` is accepted and ignored (see
+    -- `SLLVM.gep`).
+    | "llvm.getelementptr" => do
+        let _ ← args.assumeArity 2
+        let sentinel :: constIdxs ← arrayInts opStx "rawConstantIndices"
+          | throw <| .generic "llvm.getelementptr: empty `rawConstantIndices`"
+        unless sentinel == -2147483648 do
+          throw <| .generic s!"llvm.getelementptr: the first index must be the dynamic \
+            operand (`-2147483648` sentinel); constant-only geps are not supported"
+        let t ← opStx.getTypeAttr "elem_type"
+        let aggTy ← match t with
+          | .int _ w => pure (AggTy.int w.toConcrete)
+          | .undefined s =>
+              match parseAggTy (s.toList.drop "llvm.".length) with
+              | some (t, []) => pure t
+              | _ => throw <| .generic s!"llvm.getelementptr: cannot decode \
+                  `elem_type = !{s}`"
+          | t => throw <| .generic s!"llvm.getelementptr: unsupported `elem_type` {repr t}"
+        let (elemSize, elemAlign) ← aggTy.sizeAlign
+        let stride := alignTo elemSize elemAlign
+        let (offset, _) ← constIdxs.foldlM (init := ((0 : Nat), aggTy)) fun (off, ty) k => do
+          unless k ≥ 0 do
+            throw <| .generic s!"llvm.getelementptr: negative constant index {k}"
+          let (step, ty) ← ty.constIndexOffset k.toNat
+          return (off + step, ty)
+        mkExprOf <| SLLVMOp.gep stride offset
     | "ptr.load" => mkExprOf <| .load (← getOutputArithTy opStx)
     | "ptr.store" => do
         let args ← args.assumeArity 2
@@ -199,10 +331,25 @@ instance : DialectParse SLLVM 0 where
     -- arithmetic element type. `Op.alloca` allocates a *single* element, so
     -- the count operand is dropped -- for the scalar locals the compiler
     -- emits it is always the constant 1, and nothing else is expressible.
-    | "llvm.alloca" =>
-        let t ← mkArithTy (← opStx.getTypeAttr "elem_type")
+    -- Aggregate element types (`fd_f25519_t r[1]` and friends) allocate a
+    -- block of the aggregate's padded size: memory is flat bytes here, so
+    -- the layout is all an aggregate alloca needs.
+    | "llvm.alloca" => do
+        let tStx ← opStx.getTypeAttr "elem_type"
+        let w ← match tStx with
+          | .undefined s =>
+              if s.startsWith "llvm.struct<" || s.startsWith "llvm.array<" then
+                match parseAggTy (s.toList.drop "llvm.".length) with
+                | some (t, []) => do
+                    let (sz, al) ← (AggTy.sizeAlign t : ExceptM SLLVM _)
+                    pure (8 * alignTo sz al)
+                | _ => throw <| .generic s!"llvm.alloca: cannot decode \
+                    `elem_type = !{s}`"
+              else
+                throw <| .generic s!"llvm.alloca: unsupported `elem_type` !{s}"
+          | t => do pure (LLVM.Ty.width (← mkArithTy t))
         opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ
-          <| .alloca (LLVM.Ty.width t)
+          <| .alloca w
     -- Stack-coloring metadata: no semantics here, but part of the artifact, so
     -- they parse (and denote to nothing) rather than having to be stripped.
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true

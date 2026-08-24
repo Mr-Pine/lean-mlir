@@ -37,6 +37,11 @@ inductive SLLVMTy where
 inductive SLLVMOp where
   | arith (o : LLVM.Op)
   | ptradd
+  /-- `llvm.getelementptr` with a leading dynamic index and constant trailing
+  indices (`rawConstantIndices = array<i32: -2147483648, k, …>`): a `ptradd`
+  by `strideBytes · i + offsetBytes`. The parser computes both from the
+  `elem_type` layout. `inbounds` is accepted and ignored; see `SLLVM.gep`. -/
+  | gep (strideBytes offsetBytes : Nat)
   /-- `load`/`store` carry the *type* loaded or stored, not just a width, so
   that vector types (`load <8 x i64>`) are expressible. The flat, in-memory bit
   pattern is given by `LLVM.Ty.flatten` / `LLVM.Ty.unflatten`. -/
@@ -155,6 +160,7 @@ open Ty in
 def_signature for SLLVM
   -- New operations
   | .ptradd          => (ptr, bitvec 64) -> ptr
+  | .gep _ _         => (ptr, bitvec 64) -> ptr
   | .load t          => (ptr) -[.impure]-> Ty.arith t
   | .loadPure t      => (mem, ptr) -> [mem, Ty.arith t]
   | .store t         => (ptr, Ty.arith t) -[.impure]-> []
@@ -216,6 +222,7 @@ attribute [local irreducible] EffectM
 def_denote for SLLVM
   -- New operations
   | .ptradd   => fun p x => [SLLVM.ptradd p x]ₕ
+  | .gep sz off => fun p i => [SLLVM.gep p sz off i]ₕ
   | .load t   => fun p   => ([·]ₕ) <$> SLLVM.load p t
   | .loadPure t => fun m p => HVector.ofPair <| SLLVM.loadPure m p t
   | .store t  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
@@ -282,12 +289,14 @@ instance : DialectPrint SLLVM where
     | .loadPure _
     | .load _t    => "ptr.load"
     | .ptradd     => "ptr.add"
+    | .gep ..     => "llvm.getelementptr"
     | .alloca _w  => "ptr.alloca"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call ..    => "llvm.call"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
+    | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"
     | _ => ""
   printTy
     | .arith llvmTy => printTy llvmTy

@@ -54,6 +54,14 @@ def ptradd (p : SLLVM.Ptr) (x : LLVM.IntW 64) : SLLVM.Ptr := do
   let x ← x
   return { p with offset := p.offset + x}
 
+/-- `getelementptr` with one leading dynamic index and constant trailing
+indices: `ptradd` by `strideBytes * i + offsetBytes`, where the stride is the
+element type's size and the offset accumulates the constant struct-field and
+array indices. `inbounds` is not modelled, so an out-of-bounds gep that LLVM
+makes poison stays a plain pointer here -- more defined than LLVM. -/
+def gep (p : SLLVM.Ptr) (strideBytes offsetBytes : Nat) (i : LLVM.IntW 64) : SLLVM.Ptr :=
+  ptradd p (LLVM.add (LLVM.mul i (LLVM.const? 64 strideBytes)) (LLVM.const? 64 offsetBytes))
+
 /-!
 **SIMPLIFICATION**
 We deliberately don't support int-to-ptr nor ptr-to-int casts
