@@ -269,15 +269,40 @@ end Test
 -- successor-list       ::= `[` successor (`,` successor)* `]`
 -- successor            ::= caret-id (`:` bb-arg-list)?
 
+syntax mlir_suffix_id := num <|> ident
+
+/--
+`getSuffixId` converts the syntax object of a `suffix id` to a string.
+A `suffix id` is a notion from the MLIR standard defined as
+```bnf
+suffix-id ::= (digit+ | ((letter|id-punct) (letter|id-punct|digit)*))
+```
+See more at
+https://mlir.llvm.org/docs/LangRef/#identifiers-and-keywords
+If the suffix id is a number (the left choice), we convert that number to a string
+If the suffix id is an identifier (the right choice), we convert that identifier to a string
+
+`getSuffixId` is used in parsing the syntax of MLIR to a Lean AST
+-/
+def getSuffixId : TSyntax ``mlir_suffix_id → String
+  | `(mlir_suffix_id| $x:ident) => x.getId.toString
+  | `(mlir_suffix_id| $x:num) => toString (x.getNat)
+  | _ => "" -- Should never happen, since `mlir_suffix_id` is a closed syntax definition
+
 declare_syntax_cat mlir_op_successor_arg -- bb argument
-syntax "^" ident : mlir_op_successor_arg -- bb argument with no operands
+syntax "^" mlir_suffix_id : mlir_op_successor_arg -- bb argument with no operands
 -- syntax "^" ident ":" "(" mlir_op_operand","* ")" : mlir_op_successor_arg
+
+/-- The block name a successor refers to, e.g. `"bb9"` for `^bb9`. -/
+def getSuccessorName : TSyntax `mlir_op_successor_arg → String
+  | `(mlir_op_successor_arg| ^ $x:mlir_suffix_id) => getSuffixId x
+  | _ => "" -- Should never happen: `mlir_op_successor_arg` has one production
 
 syntax "[mlir_op_successor_arg|" mlir_op_successor_arg "]" : term
 
 macro_rules
-  | `([mlir_op_successor_arg| ^ $x:ident  ]) =>
-      `(BBName.mk $(Lean.quote (x.getId.toString)))
+  | `([mlir_op_successor_arg| ^ $x:mlir_suffix_id  ]) =>
+      `(BBName.mk $(Lean.quote (getSuffixId x)))
 
 section Test
 
@@ -456,6 +481,18 @@ macro_rules
       let t ← vectorElemType (String.ofList rest) b
       `(MLIRType.vector $fixedDims $scaledDims $t)
 
+-- Parametric dialect types (`!llvm.struct<"…", (…)>`, `!llvm.array<5 x i64>`):
+-- the payload nests types Lean's tokenizer cannot split (`>>`, `5 x i64`), so
+-- it is captured raw -- like `vector` above -- and kept verbatim inside
+-- `MLIRType.undefined`, for a dialect parser to interpret.
+syntax "!" ident balancedBrackets : mlir_type
+
+macro_rules
+| `([mlir_type| ! $x:ident $b:balancedBrackets ]) => do
+    let .atom _ val := b.raw[0]
+      | Macro.throwErrorAt b "expected balanced brackets to have atom"
+    `(MLIRType.undefined $(Lean.quote (x.getId.toString ++ val)))
+
 syntax "tensor1d" : mlir_type
 macro_rules
 | `([mlir_type| tensor1d ]) => do
@@ -558,7 +595,7 @@ macro_rules
 macro_rules
   | `([mlir_ops| $$($q)]) => `(coe $q)
 
-/--
+/-
 Reference from the MLIR standard
 https://mlir.llvm.org/docs/LangRef/#identifiers-and-keywords
 // Identifiers
@@ -577,42 +614,85 @@ value-use-list ::= value-use (`,` value-use)*
 -/
 
 
-syntax mlir_suffix_id := num <|> ident
-syntax  "{" ("^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")?
-    ":")? mlir_ops "}" : mlir_region
+/-! ### MLIR `//` line comments
+
+`mlir-opt --mlir-print-op-generic` decorates block headers with predecessor
+comments (`^bb1:  // pred: ^bb0`). Lean's whitespace function does not consume
+`//`, so a raw `ParserFn` eats the comment through end-of-line; the content is
+discarded by the macros. -/
+
+/-- Node kind for a `//`-to-end-of-line MLIR comment. -/
+abbrev mlirCommentKind : SyntaxNodeKind := `MLIR.EDSL.mlirComment
+
+open Lean.Parser in
+/-- Consume `//` and everything up to (excluding) the next newline. -/
+def mlirCommentFn : ParserFn := fun c s =>
+  let i := s.pos
+  if h : c.atEnd i then s.mkEOIError
+  else if c.get' i h == '/' then
+    let i₂ := c.next' i h
+    if h₂ : c.atEnd i₂ then s.mkErrorAt "'//' line comment" i
+    else if c.get' i₂ h₂ == '/' then
+      let s := s.setPos (c.next' i₂ h₂)
+      let s := takeUntilFn (· == '\n') c s
+      mkNodeToken mlirCommentKind i true c s
+    else s.mkErrorAt "'//' line comment" i
+  else s.mkErrorAt "'//' line comment" i
+
+open Lean.Parser in
+@[inherit_doc mlirCommentFn]
+def mlirCommentNoAntiquot : Parser := {
+  fn := mlirCommentFn
+  info := mkAtomicInfo "mlirComment"
+}
+
+open Lean.Parser in
+@[inherit_doc mlirCommentFn]
+def mlirComment : Parser :=
+  withAntiquot (mkAntiquot "mlirComment" mlirCommentKind) mlirCommentNoAntiquot
+
+@[combinator_formatter mlirCommentNoAntiquot]
+def mlirCommentNoAntiquot.formatter := Lean.PrettyPrinter.Formatter.visitAtom mlirCommentKind
+@[combinator_parenthesizer mlirCommentNoAntiquot]
+def mlirCommentNoAntiquot.parenthesizer := Lean.PrettyPrinter.Parenthesizer.visitToken
+
+-- A basic block: `^name(args...):`, an optional trailing comment, then ops.
+syntax "^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")?
+    ":" (mlirComment)? mlir_ops : mlir_bb
+
+-- A region is either one or more labeled blocks (the first is the entry
+-- block), or a single headerless op list.
+syntax "{" mlir_bb+ "}" : mlir_region
+syntax "{" mlir_ops "}" : mlir_region
 syntax "[mlir_region|" mlir_region "]": term
 
-/--
-`getSuffixId` converts the syntax object of a `suffix id` to a string.
-A `suffix id` is a notion from the MLIR standard defined as
-```bnf
-suffix-id ::= (digit+ | ((letter|id-punct) (letter|id-punct|digit)*))
-```
-See more at
-https://mlir.llvm.org/docs/LangRef/#identifiers-and-keywords
-If the suffix id is a number (the left choice), we convert that number to a string
-If the suffix id is an identifier (the right choice), we convert that identifier to a string
-
-`getSuffixId` is used in parsing the syntax of MLIR to a Lean AST
--/
-def getSuffixId : TSyntax ``mlir_suffix_id → String
-  | `(mlir_suffix_id| $x:ident) => x.getId.toString
-  | `(mlir_suffix_id| $x:num) => toString (x.getNat)
-  | _ => "" -- Should never happen, since `mlir_suffix_id` is a closed syntax definition
+/-- Elaborate one `mlir_bb` to `(block name, args term, ops term)`. -/
+def elabMlirBb (blk : TSyntax `mlir_bb) :
+    MacroM (String × TSyntax `term × TSyntax `term) := do
+  match blk with
+  | `(mlir_bb| ^ $name:mlir_suffix_id ( $operands,* ) : $[$_cmt]? $ops:mlir_ops) => do
+    let initList ← `(@List.nil (MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
+    let argsList ← operands.getElems.foldrM (init := initList) fun x xs =>
+        `([mlir_bb_operand| $x] :: $xs)
+    let opsList ← `([mlir_ops| $ops])
+    return (getSuffixId name, argsList, opsList)
+  | `(mlir_bb| ^ $name:mlir_suffix_id : $[$_cmt]? $ops:mlir_ops) => do
+    let opsList ← `([mlir_ops| $ops])
+    return (getSuffixId name, ← `([]), opsList)
+  | _ => Macro.throwUnsupported
 
 macro_rules
-| `(mlir_region| { ^ $name:mlir_suffix_id ( $operands,* ) : $ops }) => do
-   let initList <- `(@List.nil (MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
-   let argsList <- operands.getElems.foldrM (init := initList) fun x xs =>
-       `([mlir_bb_operand| $x] :: $xs)
-   let opsList <- `([mlir_ops| $ops])
-   `(Region.mk $(Lean.quote (getSuffixId name)) $argsList $opsList)
-| `(mlir_region| {  ^ $name:mlir_suffix_id : $ops } ) => do
-   let opsList <- `([mlir_ops| $ops])
-   `(Region.mk $(Lean.quote (getSuffixId name)) [] $opsList)
+| `(mlir_region| { $[$blks:mlir_bb]* }) => do
+   if blks.isEmpty then Macro.throwUnsupported
+   let (entryName, entryArgs, entryOps) ← elabMlirBb blks[0]!
+   let tail ← blks.toList.drop 1 |>.mapM fun b => do
+     let (n, a, o) ← elabMlirBb b
+     `(Block.mk $(Lean.quote n) $a $o)
+   let tailList ← quoteMList tail (← `(MLIR.AST.Block _))
+   `(Region.mk $(Lean.quote entryName) $entryArgs $entryOps $tailList)
 | `(mlir_region| { $ops:mlir_ops }) => do
    let opsList <- `([mlir_ops| $ops])
-   `(Region.mk "entry" [] $opsList)
+   `(Region.mk "entry" [] $opsList [])
 
 macro_rules
 | `([mlir_region| $q:mlir_region ]) => `(mlir_region| $q)
@@ -930,6 +1010,7 @@ end Test
 syntax
   (mlir_op_operand,* "=")?
   str "(" mlir_op_operand,* ")"
+         ( "[" mlir_op_successor_arg,* "]" )?
          ( "(" mlir_region,* ")" )?
          (mlir_attr_dict)?
   ":" "(" mlir_type,* ")" "->" "("mlir_type,*")" : mlir_op
@@ -940,11 +1021,21 @@ macro_rules
 macro_rules
   | `([mlir_op| $$($x)]) => return x
 
+/-- Quote a successor list (e.g. `[^bb1, ^bb2]`) to a `List String` term. -/
+def quoteSuccessors (succs : Option (Lean.Syntax.TSepArray `mlir_op_successor_arg ",")) :
+    MacroM (TSyntax `term) := do
+  match succs with
+  | none => `(@List.nil String)
+  | some ss =>
+    let elems := ss.getElems.toList.map fun s => Lean.quote (getSuccessorName s)
+    quoteMList elems (← `(String))
+
 macro_rules
   | `(mlir_op|
         $[ $resNamesStx,* = ]?
         $name:str
         ( $operandsNames,* )
+        $[ [ $succs,* ] ]?
         $[ ( $rgns,* ) ]?
         $[ $attrDict ]?
         : ( $operandsTypes,* ) -> ( $resTypesStx,* ) ) => do
@@ -966,6 +1057,7 @@ macro_rules
       let attrDict <- match attrDict with
                         | none => `(AttrDict.mk [])
                         | some dict => `([mlir_attr_dict| $dict])
+      let succList ← quoteSuccessors succs
       let rgnsList <- match rgns with
                 | none => `(@List.nil (MLIR.AST.Region _))
                 | some rgns => do
@@ -975,18 +1067,21 @@ macro_rules
       `(Op.mk $name -- name
               $res -- results
               $operands -- operands
+              $succList -- successors
               $rgnsList -- regions
               $attrDict) -- attrs
 
 -- Op with definite result
 syntax mlir_op_operand "="
   strLit "(" mlir_op_operand,* ")"
+         ( "[" mlir_op_successor_arg,* "]" )?
          ( "(" mlir_region,* ")" )?
          (mlir_attr_dict)? ":" "(" mlir_type,* ")" "->" mlir_type : mlir_op
 
 macro_rules
   | `(mlir_op|
-        $resName:mlir_op_operand = $name:str ( $operandsNames,* ) $[ ( $rgns,* ) ]? $[ $attrDict ]?
+        $resName:mlir_op_operand = $name:str ( $operandsNames,* )
+        $[ [ $succs,* ] ]? $[ ( $rgns,* ) ]? $[ $attrDict ]?
         : ( $operandsTypes,* ) -> $resType:mlir_type
       ) => do
         let results ← `([([mlir_op_operand| $resName], [mlir_type| $resType])])
@@ -998,12 +1093,13 @@ macro_rules
         let attributes <- match attrDict with
                           | none => `(AttrDict.mk [])
                           | some dict => `([mlir_attr_dict| $dict])
+        let succList ← quoteSuccessors succs
         let regions <- match rgns with
                   | none => `(@List.nil (MLIR.AST.Region _))
                   | some rgns => do
                     let rngs <- rgns.getElems.mapM (fun x => `([mlir_region| $x]))
                     quoteMList rngs.toList (<- `(MLIR.AST.Region _))
-        `(Op.mk $name $results $operands $regions $attributes)
+        `(Op.mk $name $results $operands $succList $regions $attributes)
 
 section Test
 
@@ -1015,7 +1111,7 @@ fun {φ} =>
   { name := "foo", res := [],
     args :=
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
-    regions := [], attrs := AttrDict.mk [] }
+    successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
 #guard_msgs in #print op1
 
@@ -1027,7 +1123,7 @@ fun {φ} =>
   { name := "foo", res := [(SSAVal.name "z", MLIRType.int Signedness.Signless 32)],
     args :=
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
-    regions := [], attrs := AttrDict.mk [] }
+    successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
 #guard_msgs in #print op2
 
@@ -1060,11 +1156,13 @@ fun {φ} =>
           args :=
             [(SSAVal.name "x", MLIRType.int Signedness.Signless 32),
               (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
-          regions := [], attrs := AttrDict.mk [] },
+          successors := [], regions := [], attrs := AttrDict.mk [] },
         { name := "bar", res := [(SSAVal.name "z", MLIRType.int Signedness.Signless 32)],
-          args := [(SSAVal.name "x", MLIRType.int Signedness.Signless 32)], regions := [], attrs := AttrDict.mk [] },
+          args := [(SSAVal.name "x", MLIRType.int Signedness.Signless 32)], successors := [], regions := [],
+          attrs := AttrDict.mk [] },
         { name := "std.return", res := [], args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless 42)],
-          regions := [], attrs := AttrDict.mk [] }] }
+          successors := [], regions := [], attrs := AttrDict.mk [] }],
+    blocks := [] }
 -/
 #guard_msgs in #print bb1NoArgs
 
@@ -1091,11 +1189,13 @@ fun {φ} =>
           args :=
             [(SSAVal.name "x", MLIRType.int Signedness.Signless 32),
               (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
-          regions := [], attrs := AttrDict.mk [] },
+          successors := [], regions := [], attrs := AttrDict.mk [] },
         { name := "bar", res := [(SSAVal.name "z", MLIRType.int Signedness.Signless 32)],
-          args := [(SSAVal.name "x", MLIRType.int Signedness.Signless 32)], regions := [], attrs := AttrDict.mk [] },
+          args := [(SSAVal.name "x", MLIRType.int Signedness.Signless 32)], successors := [], regions := [],
+          attrs := AttrDict.mk [] },
         { name := "std.return", res := [], args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless 42)],
-          regions := [], attrs := AttrDict.mk [] }] }
+          successors := [], regions := [], attrs := AttrDict.mk [] }],
+    blocks := [] }
 -/
 #guard_msgs in #print bb2SingleArg
 
@@ -1117,13 +1217,14 @@ info: { name := "entry",
         args :=
           [(SSAVal.name "x", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32)),
             (SSAVal.name "y", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32))],
-        regions := [], attrs := AttrDict.mk [] },
+        successors := [], regions := [], attrs := AttrDict.mk [] },
       { name := "bar", res := [(SSAVal.name "z", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32))],
-        args := [(SSAVal.name "x", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32))], regions := [],
-        attrs := AttrDict.mk [] },
+        args := [(SSAVal.name "x", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32))], successors := [],
+        regions := [], attrs := AttrDict.mk [] },
       { name := "std.return", res := [],
-        args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 42))], regions := [],
-        attrs := AttrDict.mk [] }] }
+        args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 42))], successors := [],
+        regions := [], attrs := AttrDict.mk [] }],
+  blocks := [] }
 -/
 #guard_msgs in #reduce bb3MultipleArgs
 
@@ -1131,7 +1232,7 @@ info: { name := "entry",
 private def rgn0 : Region φ := ([mlir_region|  { }])
 /--
 info: private def MLIR.EDSL.rgn0 : {φ : ℕ} → Region φ :=
-fun {φ} => { name := "entry", args := [], ops := [] }
+fun {φ} => { name := "entry", args := [], ops := [], blocks := [] }
 -/
 #guard_msgs in #print rgn0
 
@@ -1146,7 +1247,8 @@ fun {φ} =>
   { name := "entry", args := [],
     ops :=
       [{ name := "std.return", res := [], args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless 42)],
-          regions := [], attrs := AttrDict.mk [] }] }
+          successors := [], regions := [], attrs := AttrDict.mk [] }],
+    blocks := [] }
 -/
 #guard_msgs in #print rgn1
 
@@ -1161,7 +1263,8 @@ fun {φ} =>
   { name := "entry", args := [],
     ops :=
       [{ name := "std.return", res := [], args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless 42)],
-          regions := [], attrs := AttrDict.mk [] }] }
+          successors := [], regions := [], attrs := AttrDict.mk [] }],
+    blocks := [] }
 -/
 #guard_msgs in #print rgn2
 
@@ -1177,7 +1280,8 @@ fun {φ} =>
   { name := "entry", args := [],
     ops :=
       [{ name := "std.return", res := [], args := [(SSAVal.name "x0", MLIRType.int Signedness.Signless 42)],
-          regions := [], attrs := AttrDict.mk [] }] }
+          successors := [], regions := [], attrs := AttrDict.mk [] }],
+    blocks := [] }
 -/
 #guard_msgs in #print rgn1
 
@@ -1191,7 +1295,7 @@ fun {φ} =>
   { name := "foo", res := [],
     args :=
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
-    regions := [], attrs := AttrDict.mk [] }
+    successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
 #guard_msgs in #print opcall1
 
@@ -1201,13 +1305,14 @@ private def oprgn0 : Op φ := [mlir_op|
  "func"() ({ ^entry: %x = "foo.add"() : () -> (i64) } ) : () -> ()
 ]
 /--
-info: { name := "func", res := [], args := [],
+info: { name := "func", res := [], args := [], successors := [],
   regions :=
     [{ name := "entry", args := [],
         ops :=
           [{ name := "foo.add",
               res := [(SSAVal.name "x", MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 64))], args := [],
-              regions := [], attrs := AttrDict.mk [] }] }],
+              successors := [], regions := [], attrs := AttrDict.mk [] }],
+        blocks := [] }],
   attrs := AttrDict.mk [] }
 -/
 #guard_msgs in #reduce oprgn0
@@ -1227,11 +1332,11 @@ private def opRgnAttr0 : Op φ := [mlir_op|
 /--
 info: private def MLIR.EDSL.opRgnAttr0 : {φ : ℕ} → Op φ :=
 fun {φ} =>
-  { name := "module", res := [], args := [],
+  { name := "module", res := [], args := [], successors := [],
     regions :=
       [{ name := "entry", args := [],
           ops :=
-            [{ name := "func", res := [], args := [],
+            [{ name := "func", res := [], args := [], successors := [],
                 regions :=
                   [{ name := "bb0",
                       args :=
@@ -1242,15 +1347,63 @@ fun {φ} =>
                             args :=
                               [(SSAVal.name "arg0", MLIRType.int Signedness.Signless 32),
                                 (SSAVal.name "arg1", MLIRType.int Signedness.Signless 16)],
-                            regions := [], attrs := AttrDict.mk [] },
+                            successors := [], regions := [], attrs := AttrDict.mk [] },
                           { name := "std.return", res := [],
-                            args := [(SSAVal.name "zero", MLIRType.int Signedness.Signless 32)], regions := [],
-                            attrs := AttrDict.mk [] }] }],
+                            args := [(SSAVal.name "zero", MLIRType.int Signedness.Signless 32)], successors := [],
+                            regions := [], attrs := AttrDict.mk [] }],
+                      blocks := [] }],
                 attrs := AttrDict.mk [AttrEntry.mk "sym_name" (AttrValue.str "add")] },
-              { name := "module_terminator", res := [], args := [], regions := [], attrs := AttrDict.mk [] }] }],
+              { name := "module_terminator", res := [], args := [], successors := [], regions := [],
+                attrs := AttrDict.mk [] }],
+          blocks := [] }],
     attrs := AttrDict.mk [] }
 -/
 #guard_msgs in #print opRgnAttr0
+
+end Test
+
+section Test
+
+/-! Multi-block regions, successor lists, and `//` comments -- the shapes
+`mlir-opt --mlir-print-op-generic` emits for a CFG. Structural `#guard`s
+rather than `#print` transcripts, so they don't churn with `Repr`. -/
+
+private def brOp : Op 0 :=
+  [mlir_op| "llvm.br"(%x)[^bb1] : (i32) -> ()]
+#guard brOp.successors == ["bb1"]
+#guard brOp.args.length == 1
+
+private def condBrOp : Op 0 :=
+  [mlir_op| "llvm.cond_br"(%c, %v)[^bb1, ^bb9] <{operandSegmentSizes = array<i32: 1, 1, 0>}> : (i1, i32) -> ()]
+#guard condBrOp.successors == ["bb1", "bb9"]
+
+private def switchOp : Op 0 :=
+  [mlir_op| "llvm.switch"(%x)[^bb9, ^bb1, ^bb5] <{case_operand_segments = array<i32: 0, 0>, case_values = dense<[0, 2251799813685229]> : vector<2xi64>, operandSegmentSizes = array<i32: 1, 0, 0>}> : (i64) -> ()]
+#guard switchOp.successors == ["bb9", "bb1", "bb5"]
+
+-- An op with no successor list still has `successors = []`.
+#guard (Op.empty "foo" : Op 0).successors == []
+
+private def twoBlocks : Region 0 := [mlir_region| {
+  ^bb0(%arg0: i64):
+    "llvm.br"()[^bb1] : () -> ()
+  ^bb1:  // pred: ^bb0
+    "llvm.return"() : () -> ()
+}]
+#guard twoBlocks.name == "bb0"
+#guard twoBlocks.args.length == 1
+#guard twoBlocks.blocks.map (·.name) == ["bb1"]
+#guard (twoBlocks.ops.getLast?.map (·.successors)) == some ["bb1"]
+
+-- Block arguments on a non-entry block (the φ shape), a multi-predecessor
+-- comment, and a comment on the last block before `}`.
+private def phiBlocks : Region 0 := [mlir_region| {
+  ^bb0:
+    "llvm.br"(%x)[^bb1] : (i32) -> ()
+  ^bb1(%v: i32):  // 2 preds: ^bb0, ^bb0
+    "llvm.return"(%v) : (i32) -> ()
+}]
+#guard phiBlocks.blocks.map (fun b => (b.name, b.args.length)) == [("bb1", 1)]
 
 end Test
 
@@ -1270,7 +1423,7 @@ macro_rules
      let bbargs ← args.getElems.mapM (fun x => `([mlir_bb_operand| $x]))
      let bbargs ← quoteMList bbargs.toList (← `(MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
      -- Make the entry block (the only block)
-     let rgn ← `(Region.mk "entry" $bbargs [mlir_ops| $ops])
+     let rgn ← `(Region.mk "entry" $bbargs [mlir_ops| $ops] [])
 
      -- Make the function signature
      let argTypes ← args.getElems.mapM (fun x => `(Prod.snd [mlir_bb_operand| $x]))
@@ -1285,7 +1438,7 @@ macro_rules
         AttrEntry.mk "function_type" (AttrValue.type $signature),
         AttrEntry.mk "sym_name" [mlir_attr_val_symbol| $name]
       ])
-     `(Op.mk "func" [] [] [$rgn] $attrs)
+     `(Op.mk "func" [] [] [] [$rgn] $attrs)
 
 
 
@@ -1296,7 +1449,7 @@ macro_rules
      let initList <- `([Op.empty "module_terminator"])
      let ops <- ops.foldrM (init := initList) fun x xs => `([mlir_op| $x] :: $xs)
      let rgn <- `(Region.fromOps $ops)
-     `(Op.mk "module" [] [] [$rgn] AttrDict.empty)
+     `(Op.mk "module" [] [] [] [$rgn] AttrDict.empty)
 
 section Test
 
@@ -1304,8 +1457,8 @@ private def mod1 : Op φ := [mlir_op| module { }]
 /--
 info: private def MLIR.EDSL.mod1 : {φ : ℕ} → Op φ :=
 fun {φ} =>
-  { name := "module", res := [], args := [], regions := [Region.fromOps [Op.empty "module_terminator"]],
-    attrs := AttrDict.empty }
+  { name := "module", res := [], args := [], successors := [],
+    regions := [Region.fromOps [Op.empty "module_terminator"]], attrs := AttrDict.empty }
 -/
 #guard_msgs in #print mod1
 
@@ -1313,10 +1466,10 @@ private def mod2 : Op φ := [mlir_op| module { "dummy.dummy"(): () -> () }]
 /--
 info: private def MLIR.EDSL.mod2 : {φ : ℕ} → Op φ :=
 fun {φ} =>
-  { name := "module", res := [], args := [],
+  { name := "module", res := [], args := [], successors := [],
     regions :=
       [Region.fromOps
-          [{ name := "dummy.dummy", res := [], args := [], regions := [], attrs := AttrDict.mk [] },
+          [{ name := "dummy.dummy", res := [], args := [], successors := [], regions := [], attrs := AttrDict.mk [] },
             Op.empty "module_terminator"]],
     attrs := AttrDict.empty }
 -/

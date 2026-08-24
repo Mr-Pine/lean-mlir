@@ -232,6 +232,10 @@ private def mkComAux [TransformTy d φ] [TransformExpr d φ] [TransformReturn d 
     Nat → MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
   | 0, _ => throw <| .generic "Region nesting is too deep"
   | fuel+1, reg =>
+    match reg.blocks with
+    | _ :: _ => throw <| .generic
+        "multi-block region: not representable as a Com -- use the SLLVM CFG quotation"
+    | [] =>
     match reg.ops with
     | [] => throw <| .generic "Ill-formed region (empty)"
     | coms => BuilderM.runWithEmptyMapping <| do

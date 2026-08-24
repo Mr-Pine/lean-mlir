@@ -72,6 +72,10 @@ inductive MLIRType (φ : Nat) : Type _ where
   `vector<[2]x4xf32>` that this representation cannot express; the parser
   rejects those rather than silently reordering the dimensions. -/
   | vector (fixed scalable : List Nat) (elem : MLIRType φ) : MLIRType φ
+  /-- Dialect types the generic AST does not model, carried as their source
+  text. Parametric ones (`!llvm.struct<…>`, `!llvm.array<…>`) keep their full
+  `<…>` payload, which a dialect parser may interpret (SLLVM's
+  `getelementptr` computes struct layouts from it). -/
   | undefined: String → MLIRType φ
   deriving Repr, DecidableEq
 
@@ -141,13 +145,23 @@ structure Op where
   (name: String)
   (res: List <| TypedSSAVal φ)
   (args: List <| TypedSSAVal φ)
+  (successors: List String)
   (regions: List Region)
   (attrs: AttrDict φ)
 
+/-- A non-entry basic block of a `Region`. -/
+structure Block where
+  (name: String)
+  (args: List <| TypedSSAVal φ)
+  (ops: List Op)
+
+/-- `name`/`args`/`ops` are the entry block; `blocks` the tail blocks, in
+source order. Single-block regions have `blocks = []`. -/
 structure Region where
   (name: String)
   (args: List <| TypedSSAVal φ)
   (ops: List Op)
+  (blocks: List Block)
 
 end
 
@@ -267,28 +281,42 @@ instance : ToFormat SSAVal where
 
 mutual
 partial def op_to_format {φ} : Op φ →  Format
-  | Op.mk name res args rgns attrs =>
+  | Op.mk name res args succs rgns attrs =>
       let doc_name := f!"\"{name}\""
       let doc_rgns := if rgns.isEmpty
                       then f!""
                       else rgns.map (Format.align true ++ rgn_to_format ·) |> Format.join
       let doc_args := f!"({args.map repr |>.intersperse f!", " |> Format.join})"
+      let doc_succs := if succs.isEmpty
+                      then f!""
+                      else f!"[{succs.map (f!"^{·}") |>.intersperse f!", " |> Format.join}]"
       let doc_res := f!"({res.map repr |>.intersperse f!", " |> Format.join})"
 
-      doc_res ++ " := " ++ doc_name ++ doc_args ++ doc_rgns ++ repr attrs
+      doc_res ++ " := " ++ doc_name ++ doc_args ++ doc_succs ++ doc_rgns ++ repr attrs
+
+partial def blk_header_to_format {φ} (name : String) (args : List (TypedSSAVal φ)) : Format :=
+  let doc_args := if args.isEmpty then
+      f!""
+    else
+      f!"({args.map (fun (v, t) => f!"{repr v} : {repr t}") |>.intersperse "," |> Format.join})"
+  f!"^{name}{doc_args} : "
+
+partial def blk_to_format {φ} : Block φ → Format
+  | Block.mk name args ops =>
+      blk_header_to_format name args
+        ++ (ops.map (Format.align true ++ op_to_format ·) |> Format.join)
 
 partial def rgn_to_format {φ} : Region φ → Format
-  | Region.mk name args ops =>
-      let doc_args := if args.isEmpty then
-          f!""
-        else
-          f!"({args.map (fun (v, t) => f!"{repr v} : {repr t}") |>.intersperse "," |> Format.join})"
+  | Region.mk name args ops blocks =>
       let doc_ops :=
         ops.map (Format.align true ++ op_to_format ·) |> Format.join
-      f!"^{name}{doc_args} : " ++ doc_ops
+      let doc_blocks :=
+        blocks.map (Format.align true ++ blk_to_format ·) |> Format.join
+      blk_header_to_format name args ++ doc_ops ++ doc_blocks
 end
 
 instance : Repr (Op φ) := ⟨fun x _ => op_to_format x⟩
+instance : Repr (Block φ) := ⟨fun x _ => blk_to_format x⟩
 instance : Repr (Region φ) := ⟨fun x _ => rgn_to_format x⟩
 
 def AttrEntry.key {φ} : AttrEntry φ → String
@@ -300,22 +328,16 @@ def AttrEntry.value {φ} : AttrEntry φ → AttrValue φ
 
 def AttrDict.empty {φ} : AttrDict φ := AttrDict.mk []
 
-def Op.empty {φ} (name : String) : Op φ := Op.mk name [] [] [] AttrDict.empty
+def Op.empty {φ} (name : String) : Op φ := Op.mk name [] [] [] [] AttrDict.empty
 
 def Op.addArg {φ} (o : Op φ) (arg : TypedSSAVal φ) : Op φ :=
-  match o with
-  | Op.mk name res args regions attrs =>
-    Op.mk name res (args ++ [arg])  regions attrs
+  { o with args := o.args ++ [arg] }
 
 def Op.addResult {φ} (o : Op φ) (new_res : TypedSSAVal φ) : Op φ :=
- match o with
- | Op.mk name res args  regions attrs =>
-    Op.mk name (res ++ [new_res]) args  regions attrs
+  { o with res := o.res ++ [new_res] }
 
 def Op.appendRegion {φ} (o : Op φ) (r : Region φ) : Op φ :=
-  match o with
-  | Op.mk name res args regions attrs =>
-      Op.mk name res args (regions ++ [r]) attrs
+  { o with regions := o.regions ++ [r] }
 
 
 -- | Note: AttrEntry can be given as String × AttrValue
@@ -369,18 +391,14 @@ def AttrDict.addType (attrs: AttrDict φ) (k: String) (v: MLIRType φ): AttrDict
 
 
 def Op.addAttr (o: Op φ) (k: String) (v: AttrValue φ): Op φ :=
- match o with
- | Op.mk name res args regions attrs =>
-    Op.mk name res args regions (attrs.add (k, v))
+  { o with attrs := o.attrs.add (k, v) }
 
-def Region.empty {φ} (name: String): Region φ := Region.mk name [] []
+def Region.empty {φ} (name: String): Region φ := Region.mk name [] [] []
 def Region.appendOp (bb: Region φ) (op: Op φ): Region φ :=
-  match bb with
-  | Region.mk name args bbs => Region.mk name args (bbs ++ [op])
+  { bb with ops := bb.ops ++ [op] }
 
 def Region.appendOps (bb: Region φ) (ops: List (Op φ)): Region φ :=
-  match bb with
-  | Region.mk name args bbs => Region.mk name args (bbs ++ ops)
+  { bb with ops := bb.ops ++ ops }
 
 
 instance : Inhabited (MLIRType φ) where
@@ -401,10 +419,9 @@ instance : Repr (Module φ) where
       attrs.map repr ++ fs.map repr |>.map (Format.align true ++ ·) |> Format.join
 
 def Region.fromOps {φ} (os: List (Op φ)) (name: String := "entry") : Region φ :=
-  Region.mk name [] os
+  Region.mk name [] os []
 
 def Region.setArgs {φ} (bb: Region φ) (args: List (SSAVal × MLIRType φ)) : Region φ :=
-  match bb with
-    | (Region.mk name _ ops) => (Region.mk name args ops)
+  { bb with args := args }
 
 end MLIR.AST
