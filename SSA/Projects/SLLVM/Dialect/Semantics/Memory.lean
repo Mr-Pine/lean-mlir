@@ -59,6 +59,8 @@ def LiveBlock.lengthInBits (b : LiveBlock) : Nat :=
 def Pointer.offsetInBits (p : Pointer) : Nat :=
   8 * p.offset.toNat
 
+def Pointer.withOffset (p: Pointer) (n: BitVec 64) := Pointer.mk p.id (p.offset + n)
+
 /-! ## Refinement -/
 section Refinement
 
