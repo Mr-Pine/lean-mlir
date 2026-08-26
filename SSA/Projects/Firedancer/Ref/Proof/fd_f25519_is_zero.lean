@@ -1,6 +1,7 @@
 import SSA.Projects.Firedancer.Ref.Spec.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Ref.Mlir.fd_f25519_is_zero
 import SSA.Projects.Firedancer.MLIR.DenoteStep
+import SSA.Projects.Firedancer.Ref.Proof.MemoryTactics
 
 
 namespace Firedancer.Ref
@@ -46,7 +47,7 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
   · -- `= 0` in `ZMod p` is divisibility by `p` on the underlying natural.
     intro hzero
     have hdvd : _root_.p ∣ (e 0 + e 1 * 2^51 + e 2 * 2^102 + e 3 * 2^153 + e 4 * 2^204) :=
-      (ZMod.natCast_eq_zero_iff _ _).mp (by simpa [decodeFielElem] using hzero)
+      (ZMod.natCast_eq_zero_iff _ _).mp (by simpa [decodeFieldElem] using hzero)
     rcases limbs_of_dvd (hlimb 0 _ (he 0)) (hlimb 1 _ (he 1)) (hlimb 2 _ (he 2))
         (hlimb 3 _ (he 3)) (hlimb 4 _ (he 4)) hdvd with
       ⟨r0, r1, r2, r3, r4⟩ | ⟨r0, r1, r2, r3, r4⟩
@@ -54,78 +55,23 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
     · exact Or.inr fun i => by fin_cases i <;> simp_all
   · rintro (h | h) <;>
       have r := fun i => Option.some.inj ((he i).symm.trans (h i))
-    · simp [decodeFielElem, r]
+    · simp [decodeFieldElem, r]
     · -- these limbs sum to `p` on the nose
       have hp0 : ((0x7ffffffffffed + 0x7ffffffffffff * 2^51 + 0x7ffffffffffff * 2^102
           + 0x7ffffffffffff * 2^153 + 0x7ffffffffffff * 2^204 : ℕ) : ZMod _root_.p) = 0 :=
         (ZMod.natCast_eq_zero_iff _ _).mpr (by norm_num [_root_.p])
-      simpa [decodeFielElem, r] using hp0
-
-theorem remainingFits (m: MemoryState) (p: Pointer) (hp: Fits m p n) (o: BitVec 64)
-    (ho : o.toNat * 8 ≤ n) : Fits m (p.withOffset o) (n - (o.toNat * 8)) := by
-  obtain ⟨blk, hblk, hlen⟩ := hp
-  refine ⟨blk, hblk, ?_⟩
-  have h1 : p.offset.toNat < 2 ^ 64 := p.offset.isLt
-  have h2 : o.toNat < 2 ^ 64 := o.isLt
-  simp only [Pointer.withOffset, Pointer.offsetInBits, LiveBlock.lengthInBits,
-    BitVec.toNat_add] at hlen ⊢
-  omega
-
-local macro "peel_load " blk:term ", " p:term ", " hblk:term ", " st:term : tactic =>
-  `(tactic|
-   (try simp only [bind_assoc]
-    rw [BlockCom.run_bind_denote_var_of_value
-      (x := PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits 64)) (s' := $st)
-      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          rw [run_liftM (run_load ($hblk) (by show ($p).offsetInBits + 64 ≤ _; omega))]
-          rfl)
-    ]))
-
-private def subscript (i : Nat) : String :=
-  (toString i).map fun c => Char.ofNat (c.toNat - '0'.toNat + '₀'.toNat)
-
-open Lean Elab Tactic
-elab "peel_limb " i:num ", " ptr:ident ", " hptr:term : tactic => do
-  let baseblk := mkIdent (Name.mkSimple "blk")
-  let basehblk := mkIdent (Name.mkSimple "hblk")
-  let s := subscript i.getNat
-  let blk := mkIdent (Name.mkSimple ("blk" ++ s))
-  let hblk := mkIdent (Name.mkSimple ("hblk" ++ s))
-  let hlen := mkIdent (Name.mkSimple ("hlen" ++ s))
-  let limb := mkIdent (Name.mkSimple ("limb" ++ s))
-  let hlimb := mkIdent (Name.mkSimple ("hlimb" ++ s))
-  let st := mkIdent (Name.mkSimple "s")
-  -- byte offset of limb `i`, and the bits still left after it
-  evalTactic (← `(tactic| obtain ⟨$blk, $hblk, $hlen⟩ := id $hptr))
-  evalTactic (← `(tactic| peel_load $blk, $ptr, $hblk, $st))
-  evalTactic (← `(tactic| set $limb:ident := (($blk).bytes.extractLsb' ($ptr).offsetInBits 64) with $hlimb:ident))
-  -- `$ptr` is a `let`-bound pointer for i > 0 and must be in the simp set to
-  -- zeta-unfold; at limb 0 it is the plain fvar `p`, which simp would reject.
-  if i.getNat == 0 then
-    evalTactic (← `(tactic| have hblkeq : $baseblk = $blk := by
-        simpa [Pointer.withOffset, $basehblk:ident] using $hblk))
-  else
-    evalTactic (← `(tactic| have hblkeq : $baseblk = $blk := by
-        simpa [$ptr:ident, Pointer.withOffset, $basehblk:ident] using $hblk))
-  evalTactic (← `(tactic| subst hblkeq))
-  evalTactic (← `(tactic| clear $hblk $hlen))
+      simpa [decodeFieldElem, r] using hp0
 
 open Lean Elab Tactic
 elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let num := i.getNat
-  -- `withOffset` and `remainingFits` count bytes; `offsetInBits` counts bits
-  let offBytes := Syntax.mkNumLit (toString (num * 8))
+  -- `peel_gep` counts bytes; `offsetInBits` counts bits
   let offBits := Syntax.mkNumLit (toString (num * 64))
-  let remainingBits := Syntax.mkNumLit (toString ((5 - num) * 64))
   let n ← nextStepIndex (← getMainGoal)
-  let nLit := Syntax.mkNumLit (toString n)
-  let nIcmp := n + 2
-  let nIcmpLit := Syntax.mkNumLit (toString nIcmp)
+  let nIcmpLit := Syntax.mkNumLit (toString (n + 2))
 
   let vBase := mkIdent (Name.mkSimple "v")
-  let v := mkIdent (Name.mkSimple ("v" ++ (toString n)))
-  let hv := mkIdent (Name.mkSimple ("hv" ++ (toString n)))
-  let hv' := mkIdent (Name.mkSimple ("hv" ++ (toString nIcmp)))
+  let hv' := mkIdent (Name.mkSimple ("hv" ++ (toString (n + 2))))
 
   let s := subscript i.getNat
   let ptr := mkIdent (Name.mkSimple ("p" ++ s))
@@ -137,16 +83,7 @@ elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let hread := mkIdent (Name.mkSimple ("hread" ++ s))
   let baseHread := mkIdent (Name.mkSimple "hread")
 
-  evalTactic (← `(tactic| denote_step_all $vBase $nLit))
-  evalTactic (← `(tactic| denote_eval $vBase $nLit $nLit))
-  evalTactic (← `(tactic| let $ptr := ($p).withOffset (($offBytes) : BitVec 64)))
-  evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr ($remainingBits) := by
-        simpa using remainingFits ($st).mem $p $hp ($offBytes) (by simp)))
-  evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
-          LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
-  evalTactic (← `(tactic| subst vValue))
-  evalTactic (← `(tactic| clear $hv))
+  evalTactic (← `(tactic| peel_gep $i, $p, $hp, $st, p))
   evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr))
   evalTactic (← `(tactic| have hoff : ($ptr).offsetInBits = ($p).offsetInBits + ($offBits) := by
         have hlt : ($p).offset.toNat < 2 ^ 64 := ($p).offset.isLt

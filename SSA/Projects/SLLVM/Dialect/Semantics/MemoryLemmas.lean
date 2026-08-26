@@ -172,14 +172,12 @@ theorem run_load {t : LLVM.Ty} {m : MemoryState} {p : Pointer} {block : LiveBloc
 whose block at `p.id` is the spliced one -- in particular after any number of
 intervening stores to other blocks. -/
 theorem run_load_of_splice {t : LLVM.Ty} {x : TyDenote.toType t}
-    {b : BitVec (LLVM.Ty.width t)} {m m' : MemoryState} {p : Pointer} {block : LiveBlock}
+    {b : BitVec (LLVM.Ty.width t)} {m' : MemoryState} {p : Pointer} {block : LiveBlock}
     (hx : LLVM.Ty.flatten t x = .value b)
-    (hblk : m[p.id]? = some (.live block))
     (hlen : p.offsetInBits + LLVM.Ty.width t ≤ block.lengthInBits)
     (hm' : m'[p.id]?
       = some (.live { block with bytes := spliceBits block.bytes p.offsetInBits b })) :
     (load (.value p) t).run m' = .value (x, m') := by
-  clear hblk
   rw [run_load hm' hlen,
     show (({ block with bytes := spliceBits block.bytes p.offsetInBits b } : LiveBlock).bytes)
       = spliceBits block.bytes p.offsetInBits b from rfl,
@@ -191,7 +189,7 @@ theorem run_load_splice_self {t : LLVM.Ty} {x : TyDenote.toType t}
     (hx : LLVM.Ty.flatten t x = .value b) (hfit : Fits m p (LLVM.Ty.width t)) :
     (load (.value p) t).run (m.splice p b) = .value (x, m.splice p b) := by
   obtain ⟨block, hblk, hlen⟩ := hfit
-  exact run_load_of_splice hx hblk hlen (getElem?_splice_self hblk)
+  exact run_load_of_splice hx hlen (getElem?_splice_self hblk)
 
 /-- **Load after store, different block**: an unrelated store is invisible. -/
 theorem run_load_splice_ne {t : LLVM.Ty} {m : MemoryState} {p q : Pointer} {w : Nat}

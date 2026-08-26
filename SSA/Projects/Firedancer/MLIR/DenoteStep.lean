@@ -196,6 +196,30 @@ theorem BlockCom.run_bind_denote_var_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets
       (by rw [EffectM.run_map, h]; rfl),
     single_append]
 
+/-- `.nil ++ V` is `V`; the nil-result counterpart of `single_append`, for the
+instructions that bind nothing. -/
+private theorem nil_append {Γ : Ctxt SLLVM.Ty} (V : Γ.Valuation) :
+    ((.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) = V := by
+  show (Ctxt.Valuation.ofHVector
+      (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty))) ++ V = V
+  simp only [Ctxt.Valuation.ofHVector_nil, Ctxt.Valuation.nil_append]
+
+/-- One impure instruction that binds no variable -- a `store` -- given that it
+succeeds and leaves the state at `s'`. The valuation is untouched, so unlike
+`run_bind_denote_var_of_value` this does not extend the `cons` spine. -/
+theorem BlockCom.run_bind_denote_var_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
+    {e : Expr SLLVM Γ .impure []}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
+    (h : StateT.run (e.denoteOp V) s = .value (.nil, s')) :
+    StateT.run ((BlockCom.var e body).denote V >>= k) s
+      = StateT.run (body.denote V >>= k) s' := by
+  rw [BlockCom.denote_var, bind_assoc, Expr.denote_unfold,
+    EffectM.run_bind_of_value
+      (a := (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) (s' := s')
+      (by rw [EffectM.run_map, h]; rfl),
+    nil_append]
+
 /-! ### Entering a block
 
 `Blocks.tail` and `Blocks.denoteHead` let the walk into a block be stated over
@@ -306,8 +330,8 @@ any of the wrappers `peelWrappers` handles), introduce `v<i> : _` together
 with `hv<i> : v<i> = e.denoteOp1 V` and return the goal
 `body.denote (v<i> ::ᵥ V) = rhs`. Returns `none` if the goal is not of that
 shape (i.e. the program is exhausted). -/
-private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) :
-    MetaM (Option MVarId) :=
+private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
+    (inline : Bool := false) : MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (_, lhs, rhs) := tgt.eq? | return none
@@ -376,6 +400,16 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) :
         mkCongrArg lam stepEq
       else
         pure stepEq
+    -- `inline`: drop the value straight into the valuation spine instead of
+    -- naming it, so no `v<i>`/`hv<i>` is introduced for this instruction.
+    if inline then
+      let consV ← mkAppM ``Ctxt.Valuation.cons #[tVal, V]
+      let newLhs ← mkAppM
+        (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
+      let newLhs := if wrapped then rebuild newLhs else newLhs
+      let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkEq newLhs rhs)
+      goal.assign (← mkEqTrans stepEq newGoal)
+      return some newGoal.mvarId!
     let vName := baseName.appendAfter (toString i)
     let hName := Name.mkSimple ("h" ++ vName.toString)
     -- newType : ∀ v, v = e.denoteOp1 V → body.denote (v ::ᵥ V) = rhs
@@ -688,6 +722,32 @@ first, or the goal fills up with unevaluated `denoteOp1`s. -/
 elab "denote_expand " base:ident lo:num hi:num : tactic => do
   let hyps := (← denoteHyps base.getId lo.getNat hi.getNat).reverse
   evalTactic (← `(tactic| simp only [$[$hyps:ident],*]))
+
+open Lean Elab Tactic in
+/-- `denote_step v 12` runs to instruction `%12` like `denote_step_all`, but
+peels back only the *last* one: `%12` gets `v12`/`hv12`, and everything before it
+is inlined straight into the valuation spine. The context therefore never
+accumulates `hv<i>` for instructions already dealt with, and no `subst` is needed
+to retire them.
+
+The trade is term size: an inlined instruction sits in the spine as an
+unevaluated `Expr.denoteOp1`, and `hv<n>` is stated over that spine. Cheap for a
+run of constants or a short chain, but see `denote_eval` -- evaluating each
+instruction on its own is the direction that scales. -/
+elab "denote_step " base:ident target:num : tactic => do
+  let baseName := base.getId
+  let start ← nextStepIndex (← getMainGoal)
+  let target := target.getNat
+  if start > target then
+    throwError "denote_step: already positioned at %{start}, which is past the \
+      requested %{target}"
+  for i in [start:target] do
+    let some g ← denoteStep1 (← getMainGoal) baseName i (inline := true)
+      | throwError "denote_step: the program has no instruction %{i}"
+    replaceMainGoal [g]
+  let some g ← denoteStep1 (← getMainGoal) baseName target
+    | throwError "denote_step: the program has no instruction %{target}"
+  replaceMainGoal [g]
 
 open Lean Meta Elab Tactic in
 /-- `denote_clear v 4 27` retires `hv4 … hv27` and `v4 … v27`, for stretches of

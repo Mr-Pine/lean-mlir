@@ -70,15 +70,43 @@ theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVe
   · rw [if_neg (by omega)]
     simp [h3, BitVec.getLsbD_of_ge bytes i (by omega)]
 
+/-- Two stores at adjacent ranges are one store of the concatenation. `++` puts
+its left operand in the high bits, so the *later*, higher store is the left
+operand. -/
+theorem spliceBits_append {n w w' : Nat} (bytes : BitVec n) (off : Nat)
+    (x : BitVec w) (y : BitVec w') :
+    spliceBits (spliceBits bytes off x) (off + w) y = spliceBits bytes off (y ++ x) := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [getLsbD_spliceBits, BitVec.getLsbD_append]
+  by_cases h1 : off ≤ i
+  · by_cases h2 : i < off + w
+    · -- inside the earlier store: the later one is above `i`
+      rw [if_neg (by omega), if_pos (by omega), if_pos (by omega)]
+      simp [show i - off < w by omega]
+    · by_cases h3 : i < off + w + w'
+      · -- inside the later store, which is the concatenation's high half
+        rw [if_pos (by omega), if_pos (by omega)]
+        simp [show ¬ (i - off < w) by omega, show i - off - w = i - (off + w) by omega]
+      · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+
+/-- Any sub-range of the spliced-in range reads back out of the spliced-in
+value, at the offset it was placed at. -/
+theorem extractLsb'_spliceBits_of_subrange {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
+    (x : BitVec w) (hoff : off ≤ off') (hw : (off' - off) + w' ≤ w) (hn : off + w ≤ n) :
+    (spliceBits bytes off x).extractLsb' off' w' = x.extractLsb' (off' - off) w' := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', getLsbD_spliceBits, hi, decide_true, Bool.true_and]
+  rw [if_pos (by omega), show off' + i - off = off' - off + i by omega]
+
 /-- The spliced-in value reads back exactly, provided it fits. -/
 theorem extractLsb'_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w)
     (h : off + w ≤ n) :
     (spliceBits bytes off x).extractLsb' off w = x := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [BitVec.getLsbD_extractLsb', getLsbD_spliceBits, hi, decide_true, Bool.true_and]
-  rw [if_pos (by omega)]
-  simp
+  rw [extractLsb'_spliceBits_of_subrange bytes off off x le_rfl (by omega) h,
+    Nat.sub_self, BitVec.extractLsb'_eq_self]
 
 /-- A range disjoint from the spliced-in one is untouched. -/
 theorem extractLsb'_spliceBits_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)

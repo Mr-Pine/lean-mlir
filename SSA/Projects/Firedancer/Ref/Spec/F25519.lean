@@ -6,7 +6,7 @@ import SSA.Projects.SLLVM.Dialect
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
 
-def decodeFielElem (limbs: Fin 5 → ℕ) :=
+def decodeFieldElem (limbs: Fin 5 → ℕ) :=
   let limbValue (i: Fin 5): ZMod p := limbs i * ((2)^(51 * i.toNat))
   limbValue 0 + limbValue 1 + limbValue 2 + limbValue 3 + limbValue 4
 
@@ -21,6 +21,6 @@ def readFieldElem? (p: Pointer) (m: MemoryState) := do
   let l2 ← readLimb? p 2 m
   let l3 ← readLimb? p 3 m
   let l4 ← readLimb? p 4 m
-  return decodeFielElem ![l0, l1, l2, l3, l4]
+  return decodeFieldElem ![l0, l1, l2, l3, l4]
 
 end Firedancer.Ref

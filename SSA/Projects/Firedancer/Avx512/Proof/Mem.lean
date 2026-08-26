@@ -136,13 +136,13 @@ theorem storeVec3_readback {p₀ p₁ p₂ : Pointer} {u v w : Vector (BitVec 64
   obtain ⟨b₂, hb₂, hl₂⟩ := h₂
   simp only [MemoryState.writeVec, vecBits]
   refine ⟨?_, ?_, ?_⟩
-  · refine SLLVM.run_load_of_splice (flatten_map_value u) hb₀ hl₀ ?_
+  · refine SLLVM.run_load_of_splice (flatten_map_value u) hl₀ ?_
     rw [SLLVM.getElem?_splice_ne (Ne.symm d₀₂), SLLVM.getElem?_splice_ne (Ne.symm d₀₁)]
     exact SLLVM.getElem?_splice_self hb₀
-  · refine SLLVM.run_load_of_splice (flatten_map_value v) hb₁ hl₁ ?_
+  · refine SLLVM.run_load_of_splice (flatten_map_value v) hl₁ ?_
     rw [SLLVM.getElem?_splice_ne (Ne.symm d₁₂)]
     exact SLLVM.getElem?_splice_self (by rw [SLLVM.getElem?_splice_ne d₀₁, hb₁])
-  · exact SLLVM.run_load_of_splice (flatten_map_value w) hb₂ hl₂
+  · exact SLLVM.run_load_of_splice (flatten_map_value w) hl₂
       (SLLVM.getElem?_splice_self
         (by rw [SLLVM.getElem?_splice_ne d₁₂, SLLVM.getElem?_splice_ne d₀₂, hb₂]))
 
