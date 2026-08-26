@@ -1,7 +1,7 @@
 import SSA.Projects.Firedancer.Ref.Spec.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Ref.Mlir.fd_f25519_is_zero
 import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryTactics
+import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
 
 namespace Firedancer.Ref
@@ -84,7 +84,9 @@ elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let baseHread := mkIdent (Name.mkSimple "hread")
 
   evalTactic (← `(tactic| peel_gep $i, $p, $hp, $st, p))
-  evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr))
+  let baseblk := mkIdent (Name.mkSimple "blk")
+  let basehblk := mkIdent (Name.mkSimple "hblk")
+  evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk))
   evalTactic (← `(tactic| have hoff : ($ptr).offsetInBits = ($p).offsetInBits + ($offBits) := by
         have hlt : ($p).offset.toNat < 2 ^ 64 := ($p).offset.isLt
         simp [$ptr:ident, Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add]
@@ -184,7 +186,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
 
     obtain ⟨blk, hblk, hlen⟩ := id hp   -- `id` so `hp` survives for the lemma
 
-    peel_limb 0, p, hp
+    peel_limb 0, p, hp, blk, hblk
 
     -- Bridge from the block bytes the region loads to the `readLimb?` the spec
     -- reads; all three arms need it to build `badLimbMakesNonzero`'s witness.

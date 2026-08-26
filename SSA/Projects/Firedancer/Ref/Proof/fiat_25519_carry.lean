@@ -1,7 +1,7 @@
 import SSA.Projects.Firedancer.Ref.Spec.fiat_25519_carry
 import SSA.Projects.Firedancer.Ref.Mlir.fiat_25519_carry
 import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryTactics
+import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
 
 namespace Firedancer.Ref
@@ -231,33 +231,6 @@ theorem add_toNat_le {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 
     (c + m).toNat ≤ 2 ^ 51 + 2 := by
   rw [add_toNat hc hm]; omega
 
-lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.id = .some b) {w : Nat} (d: BitVec w) : (m.splice p d).live? p.id = .some { length := b.length, bytes := spliceBits b.bytes p.offsetInBits d } := by
-  rw [MemoryState.splice]
-
-  simp [MemoryState.live?] at hb
-  replace hb : m[p.id]? = some (Block.live b) := by split at hb <;> simp_all
-  simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
-
-/-- The five 64-bit limbs of a stored field element. `++` puts its left operand
-in the high bits, so `e ++ d ++ c ++ b ++ a` lays limb `i` out as `![a,b,c,d,e] i`. -/
-private lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
-    (e ++ d ++ c ++ b ++ q).extractLsb' (64 * i.toNat) 64 = ![q, b, c, d, e] i := by
-  fin_cases i <;> simp <;> bv_decide
-
-/-- Every limb of a field element stored at `p` reads back as the chunk it was
-built from. The store is written high limb first, so `a` is limb 0. -/
-lemma limbReadback (q : MemoryState) (p : Pointer) (a b c d e : BitVec 64)
-    (hp : Fits q p 320) (i : Fin 5) :
-    readLimb? p i (q.splice p (e ++ d ++ c ++ b ++ a))
-      = .some (![a, b, c, d, e] i).toNat := by
-  obtain ⟨blk, hblk, hfits⟩ := hp
-  have hb : q.live? p.id = .some blk := by simp [MemoryState.live?, hblk]
-  have hi : i.toNat < 5 := i.isLt
-  simp only [readLimb?, splicedLive q p blk hb _, Option.bind_eq_bind, Option.bind_some,
-    Option.pure_def]
-  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
-    Nat.add_sub_cancel_left, extractLimb]
-
 open Lean Elab Tactic in
 /-- `peel_input i, p, hp, s` consumes limb `i`'s `getelementptr` and `load`, and
 leaves its value as `input i` rather than as block bytes: `peel_gep` + `peel_limb`,
@@ -265,8 +238,8 @@ then `limb<i> = BitVec.ofNat 64 (input i)` rewritten into the goal, so the stepp
 produces every later `hv<n>` in terms of `input`.
 
 Carry-proof-local: it reads `hbits`, `hoff` and `input` out of the context by
-name, the way `peel_limb` reads `blk`/`hblk`/`s`. For `i = 0` there is no gep --
-use `peel_limb 0, p, hp` and `hbits 0 p.offsetInBits (by simp)` directly. -/
+name, the way `peel_limb` reads `s`. For `i = 0` there is no gep -- use
+`peel_limb 0, p, hp, blk, hblk` and `hbits 0 p.offsetInBits (by simp)` directly. -/
 elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let num := i.getNat
   let offBytes := Syntax.mkNumLit (toString (num * 8))
@@ -279,8 +252,10 @@ elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let hbits := mkIdent (Name.mkSimple "hbits")
   let hoff := mkIdent (Name.mkSimple "hoff")
   let inp := mkIdent (Name.mkSimple "input")
+  let baseblk := mkIdent (Name.mkSimple "blk")
+  let basehblk := mkIdent (Name.mkSimple "hblk")
   evalTactic (← `(tactic| peel_gep $i, $p, $hp, $st, p))
-  evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr))
+  evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk))
   evalTactic (← `(tactic| have $hin:ident : $limb = BitVec.ofNat 64 ($inp $i) :=
       Eq.trans $hlimb ($hbits $i _ ($hoff $i $offBytes (by simp)))))
   evalTactic (← `(tactic| rw [$hin:ident]))
