@@ -220,6 +220,43 @@ theorem BlockCom.run_bind_denote_var_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets suc
       (by rw [EffectM.run_map, h]; rfl),
     nil_append]
 
+/-- One `call` that returns nothing, given that the callee -- run as a function
+on the call's arguments -- succeeds and leaves the state at `s'`. The callee is
+a `Cfg` in `h`, which is the form its own conformance theorem is stated in, so
+a proven callee is a single rewrite here rather than a re-derivation. -/
+theorem BlockCom.run_bind_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
+    {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
+    {callee : String}
+    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
+    {cblocks : Blocks cΓout [] csigs}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
+    (h : StateT.run (runFunction
+        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
+      = .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= k) s
+      = StateT.run (body.denote V >>= k) s' := by
+  -- `denote_call` inlines the callee rather than naming it, and its `match`es
+  -- are a different auxiliary from `Cfg.denote`'s, so the two forms have to be
+  -- reconciled by destructing rather than by `rfl`.
+  have hcall : BlockCom.denote (.call callee centry cblocks args body) V
+      = (runFunction (Cfg.denote ⟨centry, cblocks⟩
+            (Ctxt.Valuation.ofHVector (args.map V).reverse))
+          >>= fun rs => body.denote (rs ++ V)) := by
+    rw [BlockCom.denote_call]
+    refine congrArg (fun m => runFunction m >>= fun rs => body.denote (rs ++ V)) ?_
+    simp only [Cfg.denote]
+    refine congrArg (Bind.bind (centry.denote _)) ?_
+    funext x
+    obtain ⟨Vc, r⟩ := x
+    cases r <;> rfl
+  rw [hcall, bind_assoc,
+    EffectM.run_bind_of_value
+      (a := (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)))
+      (s' := s') h,
+    nil_append]
+
 /-! ### Entering a block
 
 `Blocks.tail` and `Blocks.denoteHead` let the walk into a block be stated over

@@ -23,4 +23,14 @@ def readFieldElem? (p: Pointer) (m: MemoryState) := do
   let l4 ← readLimb? p 4 m
   return decodeFieldElem ![l0, l1, l2, l3, l4]
 
+/-- Equivalent states have the same live blocks, and a limb read looks at
+nothing else. -/
+theorem readLimb?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) (i : Fin 5) :
+    readLimb? p i s.mem = readLimb? p i s'.mem := by
+  simp only [readLimb?, h.2 p.id]
+
+theorem readFieldElem?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) :
+    readFieldElem? p s.mem = readFieldElem? p s'.mem := by
+  simp only [readFieldElem?, readLimb?_of_equiv h]
+
 end Firedancer.Ref

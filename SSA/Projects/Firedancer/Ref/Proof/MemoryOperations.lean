@@ -47,6 +47,63 @@ lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.i
   replace hb : m[p.id]? = some (Block.live b) := by split at hb <;> simp_all
   simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
 
+/-- A store leaves the blocks it does not address alone. -/
+theorem live?_splice_ne {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    {q : BlockId} (h : p.id ≠ q) : (m.splice p x).live? q = m.live? q := by
+  simp only [MemoryState.live?, getElem?_splice_ne h]
+
+/-- A store through a pointer that addresses no live block does nothing. -/
+theorem splicedDead {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    (h : m.live? p.id = none) : (m.splice p x).live? p.id = none := by
+  unfold MemoryState.splice
+  cases hb : m[p.id]? with
+  | none => exact h
+  | some blk =>
+    cases blk with
+    | dead => exact h
+    | live b => simp [MemoryState.live?, hb] at h
+
+/-- Splicing the same bits at the same pointer preserves equivalence: the block
+written is fixed by the (equal) live block there, and no other block moves. -/
+theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
+    (h : s ≈ s') :
+    ({ s with mem := s.mem.splice p x } : GlobalState)
+      ≈ { s' with mem := s'.mem.splice p x } := by
+  refine ⟨h.1, fun q => ?_⟩
+  by_cases hq : p.id = q
+  · subst hq
+    cases hb : s.mem.live? p.id with
+    | none => rw [splicedDead hb, splicedDead ((h.2 p.id).symm.trans hb)]
+    | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.2 p.id).symm.trans hb)]
+  · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.2 q
+
+/-- A store overwritten by a second store at the same pointer is invisible. -/
+theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : BitVec w) :
+    ({ s with mem := (s.mem.splice p x).splice p y } : GlobalState)
+      ≈ { s with mem := s.mem.splice p y } := by
+  refine ⟨rfl, fun q => ?_⟩
+  by_cases hq : p.id = q
+  · subst hq
+    cases hb : s.mem.live? p.id with
+    | none => rw [splicedDead (splicedDead hb), splicedDead hb]
+    | some b =>
+      rw [splicedLive _ _ _ (splicedLive _ _ _ hb x), splicedLive _ _ _ hb,
+        spliceBits_spliceBits_self]
+  · rw [live?_splice_ne hq, live?_splice_ne hq, live?_splice_ne hq]
+
+@[simp_sllvm]
+theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n: Nat}
+    (hs: s ≈ s') (h : Fits s.mem p n) : Fits s'.mem p n := by
+  obtain ⟨block, hblk, hlen⟩ := h
+  simp only [GlobalState.equiv_def] at hs
+  have block_equiv := hs.right p.id
+  simp only [MemoryState.live?, hblk] at block_equiv
+  -- `live?` is a `match`, so `block_equiv` is one too; splitting it names the
+  -- branch and hands over the scrutinee's equation, which is the lookup wanted.
+  replace block_equiv : s'.mem[p.id]? = some (Block.live block) := by
+    split at block_equiv <;> simp_all
+  exact ⟨block, block_equiv, hlen⟩
+
 private lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
     (e ++ d ++ c ++ b ++ q).extractLsb' (64 * i.toNat) 64 = ![q, b, c, d, e] i := by
   fin_cases i <;> simp <;> bv_decide
@@ -62,6 +119,20 @@ lemma limbReadback (m : MemoryState) (p : Pointer) (a b c d e : BitVec 64)
     Option.pure_def]
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left, extractLimb]
+
+/-- A limb read back out of a splice sees only the spliced bits, whatever the
+block underneath held. Two states that both fit a field element at `p` therefore
+read the same after splicing the same value there. -/
+lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
+    (hp : Fits m p (5 * 64)) (i : Fin 5) :
+    readLimb? p i (m.splice p x) = .some (x.extractLsb' (64 * i.toNat) 64).toNat := by
+  obtain ⟨blk, hblk, hfits⟩ := hp
+  have hb : m.live? p.id = .some blk := by simp [MemoryState.live?, hblk]
+  have hi : i.toNat < 5 := i.isLt
+  simp only [readLimb?, splicedLive m p blk hb _, Option.bind_eq_bind, Option.bind_some,
+    Option.pure_def]
+  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
+    Nat.add_sub_cancel_left]
 
 /-- Stepping `o` bytes into a block leaves the same block, with `o * 8` fewer
 bits available. -/

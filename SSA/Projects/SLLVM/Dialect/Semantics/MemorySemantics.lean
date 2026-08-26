@@ -91,6 +91,14 @@ theorem spliceBits_append {n w w' : Nat} (bytes : BitVec n) (off : Nat)
       · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
   · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
 
+/-- Splicing twice at the same offset: the later write wins. -/
+theorem spliceBits_spliceBits_self {n w : Nat} (bytes : BitVec n) (off : Nat) (x y : BitVec w) :
+    spliceBits (spliceBits bytes off x) off y = spliceBits bytes off y := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [getLsbD_spliceBits]
+  split <;> rfl
+
 /-- Any sub-range of the spliced-in range reads back out of the spliced-in
 value, at the offset it was placed at. -/
 theorem extractLsb'_spliceBits_of_subrange {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
