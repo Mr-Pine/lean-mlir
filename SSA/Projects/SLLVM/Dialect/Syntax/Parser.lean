@@ -368,6 +368,11 @@ instance : DialectParse SLLVM 0 where
           | t => do pure (LLVM.Ty.width (← mkArithTy t))
         opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ
           <| .alloca w
+    -- `llvm.intr.memset(ptr, i8, i64)`. `isVolatile` is accepted and ignored,
+    -- as alignment is throughout.
+    | "llvm.intr.memset" => do
+        let _ ← args.assumeArity 3
+        mkExprOf <| SLLVMOp.memset
     -- Stack-coloring metadata: no semantics here, but part of the artifact, so
     -- they parse (and denote to nothing) rather than having to be stripped.
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true

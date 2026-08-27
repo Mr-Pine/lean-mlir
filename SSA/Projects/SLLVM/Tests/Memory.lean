@@ -119,4 +119,55 @@ example := [sllvm| {
     "llvm.return"() : () -> ()
 }]
 
+/-! ## `llvm.intr.memset`
+
+The fill covers exactly `len` bytes at the pointer, and nothing outside it. -/
+
+/-- 32 bytes; `0xff` written over the 8 bytes at offset 8, then read back. -/
+def memsetFills : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i256}> : () -> (!ptr)
+    %one  = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %len  = "llvm.mlir.constant"() <{value = 8 : i64}> : () -> (i64)
+    %ff   = "llvm.mlir.constant"() <{value = -1 : i8}> : () -> (i8)
+    %q = "llvm.getelementptr"(%p, %one) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.intr.memset"(%q, %ff, %len) <{isVolatile = false}> : (!llvm.ptr, i8, i64) -> ()
+    %v = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%v) : (i64) -> ()
+}]
+
+#guard runScalar memsetFills == some (.value (BitVec.allOnes 64))
+
+/-- The same fill must leave the i64 below it, written before the memset,
+alone: the range is `[off, off + len)`, not the whole block. -/
+def memsetKeepsNeighbour : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i256}> : () -> (!ptr)
+    %one  = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %len  = "llvm.mlir.constant"() <{value = 8 : i64}> : () -> (i64)
+    %ff   = "llvm.mlir.constant"() <{value = -1 : i8}> : () -> (i8)
+    %c7   = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> (i64)
+    "llvm.store"(%c7, %p) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %q = "llvm.getelementptr"(%p, %one) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.intr.memset"(%q, %ff, %len) <{isVolatile = false}> : (!llvm.ptr, i8, i64) -> ()
+    %v = "llvm.load"(%p) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%v) : (i64) -> ()
+}]
+
+#guard runScalar memsetKeepsNeighbour == some (.value 7#64)
+
+/-- A fill running past the end of the block is UB, as an out-of-range store
+is: 8 bytes allocated, 16 written. -/
+def memsetOutOfRange : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i64}> : () -> (!ptr)
+    %len  = "llvm.mlir.constant"() <{value = 16 : i64}> : () -> (i64)
+    %ff   = "llvm.mlir.constant"() <{value = -1 : i8}> : () -> (i8)
+    "llvm.intr.memset"(%p, %ff, %len) <{isVolatile = false}> : (!llvm.ptr, i8, i64) -> ()
+    %v = "llvm.load"(%p) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%v) : (i64) -> ()
+}]
+
+#guard (runScalar memsetOutOfRange).isNone
+
 end LeanMLIR.SLLVM.Tests

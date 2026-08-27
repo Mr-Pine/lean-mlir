@@ -50,6 +50,10 @@ inductive SLLVMOp where
   | alloca (w : Nat)
   | loadPure (t : LLVM.Ty)
   | storePure (t : LLVM.Ty)
+  /-- `llvm.intr.memset`: fill `len` bytes at the pointer with a byte value.
+  The `isVolatile` attribute is accepted and ignored, as alignment is
+  everywhere else in this dialect. -/
+  | memset
   /-- `llvm.intr.lifetime.start` / `.end` (`start` selects which). Stack
   coloring metadata: the model gives them no semantics at all -- they denote
   to nothing -- but the compiler brackets every `alloca` with them, so they
@@ -166,6 +170,7 @@ def_signature for SLLVM
   | .store t         => (ptr, Ty.arith t) -[.impure]-> []
   | .storePure t     => (mem, ptr, Ty.arith t) -> [mem]
   | .alloca _w       => () -[.impure]-> ptr
+  | .memset          => (ptr, bitvec 8, bitvec 64) -[.impure]-> []
   | .lifetime _      => (ptr) -[.impure]-> []
   -- LLVM operations with modified effect signature
   | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
@@ -228,6 +233,7 @@ def_denote for SLLVM
   | .store t  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
   | .storePure t => fun m p x => [SLLVM.storePure m p t x]ₕ
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
+  | .memset => fun p b len => (fun _ => []ₕ) <$> SLLVM.memset p b len
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
@@ -291,6 +297,7 @@ instance : DialectPrint SLLVM where
     | .ptradd     => "ptr.add"
     | .gep ..     => "llvm.getelementptr"
     | .alloca _w  => "ptr.alloca"
+    | .memset     => "llvm.intr.memset"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call ..    => "llvm.call"
   printAttributes

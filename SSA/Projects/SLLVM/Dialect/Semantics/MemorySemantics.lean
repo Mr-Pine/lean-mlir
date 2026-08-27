@@ -196,6 +196,33 @@ def storePure (m : MemorySSAState) (p : SLLVM.Ptr) (t : LLVM.Ty) (x : TyDenote.t
   Prod.snd <$> (store p t x).run m
 
 /--
+`memset p b len` overwrites the `len` bytes starting at `p` with the byte `b`.
+
+Raises UB if:
+- `p`, `b` or `len` is poison
+- The block pointed to by `p.id` has not been allocated yet or has been freed already
+- The range of bytes to be written is out of range of the block pointed to by `p.id`
+
+`len` is a run-time value, so the written bit pattern -- `len` copies of `b` --
+has a run-time width; `spliceBits` is width-polymorphic, so it takes it as is.
+
+**SIMPLIFICATION**: as for `store`, alignment and `isVolatile` are ignored, and
+a partly-poison fill is UB rather than poison memory.
+-/
+def memset (p : SLLVM.Ptr) (b : LLVM.IntW 8) (len : LLVM.IntW 64) : MemorySSAM Unit := do
+  let p ← p.getOrUB
+  let b ← b.getOrUB
+  let len ← len.getOrUB
+  let block ← getLiveBlockOrUB p
+  throwUBIf <| p.offsetInBits + 8 * len.toNat > block.lengthInBits
+  let fill := BitVec.replicate len.toNat b
+  modifyThe MemoryState fun m => { m with
+    mem := m.mem.insert p.id <| .live
+      { block with bytes := spliceBits block.bytes p.offsetInBits fill }
+  }
+  return ()
+
+/--
 Allocate the next available block of `w` bits on the stack.
 
 A block lives until the call that allocated it returns: the denotation of
