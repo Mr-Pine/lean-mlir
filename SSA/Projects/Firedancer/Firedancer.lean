@@ -13,5 +13,5 @@ import SSA.Projects.Firedancer.Avx512.Proof.fd_r43x6_biased_carry_propagate_limb
 import SSA.Projects.Firedancer.Avx512.Proof.fd_r43x6_mod_nearly_reduced_limbs
 import SSA.Projects.Firedancer.Avx512.Proof.fd_r43x6_is_nonzero
 import SSA.Projects.Firedancer.Avx512.Proof.IsNonzeroTest
-import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_sub
+import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_eq

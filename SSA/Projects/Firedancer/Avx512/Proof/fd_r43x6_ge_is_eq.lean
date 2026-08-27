@@ -350,7 +350,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad)
 
   -- Alloca three vectors
   rw [SLLVM.run_var_alloca, SLLVM.run_var_alloca, SLLVM.run_var_alloca]
-  dsimp only
+  dsimp only [GlobalState.afterAlloca]
   rw [← hMAlloc]
 
   denote_step_all v 50

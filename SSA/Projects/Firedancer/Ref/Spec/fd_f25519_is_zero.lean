@@ -7,7 +7,7 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 abbrev fd_f25519_is_zero_spec (p: Pointer) (s: GlobalState) : Prop :=
-  let invocation := fd_f25519_is_zero.denote (Ctxt.Valuation.singleton (.value p))
+  let invocation := runFunction (fd_f25519_is_zero.denote (Ctxt.Valuation.singleton (.value p)))
   let result := StateT.run invocation s
   let extracted_value := readFieldElem? p s.mem
   let is_zero := extracted_value = .some 0

@@ -47,19 +47,16 @@ theorem run_modifyThe_alloc (f : AllocState → AllocState) (s : GlobalState) :
 killed and the entry counter restored. -/
 theorem run_runFunction {α : Type} {body : EffectM α} {s s' : GlobalState} {r : α}
     (h : StateT.run body s = .value (r, s')) :
-    StateT.run (runFunction body) s
-      = .value (r, { alloc := s.alloc, mem := s'.mem.killFrom s.alloc.nextFreeBlock }) := by
+    StateT.run (runFunction body) s = .value (r, s.popFrame s'.mem) := by
   simp only [runFunction, EffectM.run_bind, run_getThe_alloc, PoisonOr.value_bind, h,
     run_modifyThe_mem, run_modifyThe_alloc, EffectM.run_pure]
+  rfl
 
 /-- What `alloca` does to a state: the pointer to a fresh zeroed block at the
 counter, the counter advanced past it. -/
 theorem run_alloca (w : Nat) (s : GlobalState) :
     StateT.run (SLLVM.alloca w) s
-      = .value (PoisonOr.value ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩,
-          { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
-            mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
-                      (.live { length := (w + 7) / 8, bytes := 0#_ })⟩ }) := by
+      = .value (PoisonOr.value ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩, s.afterAlloca w) := by
   rfl
 
 /-! ## The operations, in `denoteOp` form
@@ -151,9 +148,7 @@ theorem run_var_alloca {Γ : Ctxt SLLVM.Ty} {ts : List SLLVM.Ty} {w : Nat}
           body).denote V) s
       = StateT.run
           (body.denote (PoisonOr.value ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ ::ᵥ V))
-          { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
-            mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
-                      (.live { length := (w + 7) / 8, bytes := 0#_ })⟩ } :=
+          (s.afterAlloca w) :=
   run_denote_var_single (by
     simp only [denoteOp_alloca, EffectM.run_map]
     rw [run_alloca]

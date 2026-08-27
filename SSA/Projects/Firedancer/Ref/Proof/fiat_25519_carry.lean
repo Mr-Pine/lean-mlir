@@ -264,14 +264,12 @@ elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
 set_option maxHeartbeats 3200000 in
 theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
   (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i s.mem = some l → l ≤ 0x18000000000000)
-  (hq : Fits s.mem q (5 * 64))
-  (hp₀ : Fits s.mem p₀ (5 * 64))
-  (hq' : q.offset.toNat + 40 ≤ 2 ^ 64)
-  (hp₀' : p₀.offset.toNat + 40 ≤ 2 ^ 64) :
+  (hq : IsFieldElemPtr s.mem q)
+  (hp₀ : IsFieldElemPtr s.mem p₀) :
   fiat_25519_carry_spec q p₀ s := by
     simp only [fiat_25519_carry_spec, Cfg.denote]
 
-    obtain ⟨blk, hblk, hlen⟩ := id hp₀
+    obtain ⟨blk, hblk, hlen⟩ := id hp₀.left
     obtain ⟨input, hinput⟩ : ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p₀ i s.mem = some (l i) :=
       ⟨fun i => (blk.bytes.extractLsb' (p₀.offsetInBits + 64 * i.toNat) 64).toNat,
         fun i => by simp [readLimb?, MemoryState.live?, hblk]⟩
@@ -362,7 +360,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     subst hv8
 
     -- %9-%10: limb 1's address and value
-    peel_input 1, p₀, hp₀, s
+    peel_input 1, p₀, hp₀.left, s
 
     denote_step_all v 12
     denote_eval v 11 12
@@ -372,7 +370,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     set x3₀ : BitVec 64 := x2 >>> (51 : ℕ) with hx3₀
     subst hv11 hv12
 
-    peel_input 2, p₀, hp₀, s
+    peel_input 2, p₀, hp₀.left, s
     denote_step_all v 16
     denote_eval v 15 16
     simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.lshr, LLVM.lshr?] at hv15 hv16
@@ -381,7 +379,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     set x4₀ : BitVec 64 := x3 >>> (51 : ℕ) with hx4₀
     subst hv15 hv16
 
-    peel_input 3, p₀, hp₀, s
+    peel_input 3, p₀, hp₀.left, s
     denote_step_all v 20
     denote_eval v 19 29
     simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.lshr, LLVM.lshr?] at hv19 hv20
@@ -390,7 +388,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     set x5₀ : BitVec 64 := x4 >>> (51 : ℕ) with hx5₀
     subst hv19 hv20
 
-    peel_input 4, p₀, hp₀, s
+    peel_input 4, p₀, hp₀.left, s
     denote_step_all v 23
     denote_eval v 23 23
     simp [LLVM.add, LLVM.add?, LLVM.add, LLVM.add?] at hv23
@@ -527,9 +525,9 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     -- only moves the state; naming each state keeps the next `Fits` obligation
     -- -- and the `getelementptr` that follows it -- readable. `fits_splice`
     -- carries `q`'s room across a store, since a store changes no block's size.
-    peel_store (outputBV 0), q, hq, s
+    peel_store (outputBV 0), q, hq.left, s
     set s₁ : GlobalState := { s with mem := s.mem.splice q (outputBV 0) } with hs₁
-    have f₁ : Fits s₁.mem q (5 * 64) := fits_splice hq
+    have f₁ : Fits s₁.mem q (5 * 64) := fits_splice hq.left
 
     peel_gep 1, q, f₁, s₁, q
     peel_store (outputBV 1), q₁, hq₁, s₁
@@ -556,7 +554,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
 
     simp [output_state, GlobalState.equiv_def]
     intro p
-    obtain ⟨qblk, hqblk, hqlen⟩ := id hq
+    obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
 
     by_cases h: q.id = p
     case neg =>

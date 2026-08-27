@@ -23,6 +23,18 @@ def readFieldElem? (p: Pointer) (m: MemoryState) := do
   let l4 ← readLimb? p 4 m
   return decodeFieldElem ![l0, l1, l2, l3, l4]
 
+abbrev IsFieldElemPtr (m: MemoryState) (p: Pointer) : Prop :=
+  Fits m p (5 * 64) ∧ p.offset.toNat + (5 * 8) ≤ 2^64
+
+theorem readFieldElem?_isSome {m : MemoryState} {p : Pointer} (h : IsFieldElemPtr m p) :
+    (readFieldElem? p m).isSome := by
+  obtain ⟨⟨block, hblk, -⟩, -⟩ := h
+  have hlive : m.live? p.id = some block := by
+    simp only [MemoryState.live?, hblk]
+  simp [readFieldElem?, readLimb?, readFieldElem?, readLimb?, hlive]
+
+def readFieldElem (p: Pointer) (m: MemoryState) (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)
+
 /-- Equivalent states have the same live blocks, and a limb read looks at
 nothing else. -/
 theorem readLimb?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) (i : Fin 5) :

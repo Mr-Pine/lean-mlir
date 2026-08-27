@@ -217,6 +217,22 @@ def alloca (w : Nat) : EffectM SLLVM.Ptr := do
     }
   return ptr
 
+/-- The state an `alloca w` leaves: a zeroed block of `w` bits at the counter,
+the counter advanced past it. The pointer it hands back is
+`⟨⟨s.alloc.nextFreeBlock⟩, 0⟩`; see `run_alloca`. -/
+def _root_.LeanMLIR.GlobalState.afterAlloca (s : GlobalState) (w : Nat) : GlobalState where
+  alloc := ⟨s.alloc.nextFreeBlock + 1⟩
+  mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
+            (.live { length := (w + 7) / 8, bytes := 0#_ })⟩
+
+/-- The pointer and the state an `alloca w` produces, packaged for `obtain`:
+`obtain ⟨slot, sAlloc, hslot, hsAlloc⟩ := GlobalState.exists_afterAlloca s w`
+names both opaquely, with their defining equations. -/
+theorem _root_.LeanMLIR.GlobalState.exists_afterAlloca (s : GlobalState) (w : Nat) :
+    ∃ (t : Pointer) (s' : GlobalState),
+      t = ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ ∧ s' = s.afterAlloca w :=
+  ⟨_, _, rfl, rfl⟩
+
 /-- Mark dead every block with id at least `n₀`: the *frame* of a call that
 was entered at `nextFreeBlock = n₀`. Ids come from that monotonic counter and
 `alloca` is the only allocator, so `n₀ ≤ id` says exactly "allocated during
@@ -228,6 +244,20 @@ pointer does. -/
 def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) :
     MemoryState :=
   { mem := s.mem.map fun id b => if n₀ ≤ id.id then .dead else b }
+
+/-- The state a function entered at `s` returns to, having left memory at `m`:
+`s`'s counter restored and `s`'s frame killed. The counterpart of
+`GlobalState.afterAlloca`; see `run_runFunction`. -/
+def _root_.LeanMLIR.GlobalState.popFrame (s : GlobalState) (m : MemoryState) : GlobalState where
+  alloc := s.alloc
+  mem := m.killFrom s.alloc.nextFreeBlock
+
+/-- The returned-to state, packaged for `obtain`:
+`obtain ⟨s'', hs''⟩ := GlobalState.exists_popFrame s s'.mem` names it opaquely,
+with its defining equation. -/
+theorem _root_.LeanMLIR.GlobalState.exists_popFrame (s : GlobalState) (m : MemoryState) :
+    ∃ t : GlobalState, t = s.popFrame m :=
+  ⟨_, rfl⟩
 
 /-- Run `body` as a function: snapshot the counter, run, kill the frame --
 every block allocated since the snapshot -- and restore the counter. After it

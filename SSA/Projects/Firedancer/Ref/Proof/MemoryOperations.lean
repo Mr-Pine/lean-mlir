@@ -48,6 +48,7 @@ lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.i
   simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
 
 /-- A store leaves the blocks it does not address alone. -/
+@[simp]
 theorem live?_splice_ne {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
     {q : BlockId} (h : p.id ≠ q) : (m.splice p x).live? q = m.live? q := by
   simp only [MemoryState.live?, getElem?_splice_ne h]
@@ -234,5 +235,10 @@ tokens are consumed anyway. -/
 macro "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
     basehblk:ident : tactic =>
   `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk, limb)
+
+/-- `skip_lifetime` steps the next instruction, which must be a lifetime
+marker. It moves neither state nor valuation, so it takes no arguments. -/
+macro "skip_lifetime" : tactic =>
+  `(tactic| rw [BlockCom.run_bind_denote_lifetime])
 
 end Firedancer.Ref

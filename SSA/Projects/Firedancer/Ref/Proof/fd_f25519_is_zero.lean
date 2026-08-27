@@ -12,7 +12,7 @@ open InstCombine (LLVM)
 patterns: all zero, or the limbs of `p` itself. The sum is below `2p`, so it is
 `0` or `p` on the nose, and digits below `2^51` then pin every limb. -/
 private lemma limbs_of_dvd {l0 l1 l2 l3 l4 : ℕ}
-    (h0 : l0 < 2^51) (h1 : l1 < 2^51) (h2 : l2 < 2^51) (h3 : l3 < 2^51) (h4 : l4 < 2^51)
+    (h0 : l0 ≤ 2^51) (h1 : l1 ≤ 2^51) (h2 : l2 ≤ 2^51) (h3 : l3 ≤ 2^51) (h4 : l4 ≤ 2^51)
     (h : p ∣ (l0 + l1 * 2^51 + l2 * 2^102 + l3 * 2^153 + l4 * 2^204)) :
     (l0 = 0 ∧ l1 = 0 ∧ l2 = 0 ∧ l3 = 0 ∧ l4 = 0)
   ∨ (l0 = 0x7ffffffffffed ∧ l1 = 0x7ffffffffffff ∧ l2 = 0x7ffffffffffff
@@ -29,7 +29,7 @@ limb bound is needed only left-to-right -- any limbs at all that *are* one of
 the two patterns decode to `0`. -/
 private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
     (hp : Fits m p (5 * 64))
-    (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i m = some l → l < 2 ^ 51) :
+    (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i m = some l → l ≤ 2 ^ 51) :
     readFieldElem? p m = .some 0
       ↔ (∀ i : Fin 5, readLimb? p i m = .some 0)
       ∨ (∀ i : Fin 5, readLimb? p i m = .some (match i with
@@ -167,26 +167,26 @@ elab "discharge_bad " i:num "@" target:num " with " p:term ", " hp:ident ", " st
 
 set_option maxHeartbeats 400000 in
 theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
-  (hp : Fits s.mem p (5 * 64))
-  (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l < 2 ^ 51)
-  -- The five limbs do not straddle the end of the address space, so the region's
-  -- geps do not wrap. `Fits` cannot give this: it bounds `p.offset` only against
-  -- `blk.length`, which is an unbounded `ℕ`.
-  (hnw : p.offset.toNat + 40 ≤ 2 ^ 64) :
+  (hs : s.WF)
+  (hp : IsFieldElemPtr s.mem p)
+  (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 2 ^ 51) :
   fd_f25519_is_zero_spec p s := by
     -- Split the region into the entry block and the dispatch on its terminator.
     simp only [fd_f25519_is_zero_spec, Cfg.denote]
-    -- No store runs, so the final state is `s` itself; `≈` is reflexive.
-    refine ⟨s, ?_, GlobalState.Equiv.refl s⟩
+    -- No store runs, so the body ends in `s` itself; the frame pop is then a
+    -- no-op -- the region allocates nothing, and by `hs` nothing at or above
+    -- the counter was live to begin with.
+    refine ⟨s.popFrame s.mem, run_runFunction (s' := s) ?_,
+      GlobalState.Equiv.symm (GlobalState.killFrom_equiv s.mem hs fun _ _ => rfl)⟩
     -- `^bb0`, up to the load at `%8`: the eight compare constants.
     denote_step_all v 7
     denote_eval v 0 7
     simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7
     subst hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7
 
-    obtain ⟨blk, hblk, hlen⟩ := id hp   -- `id` so `hp` survives for the lemma
+    obtain ⟨blk, hblk, hlen⟩ := hp.left
 
-    peel_limb 0, p, hp, blk, hblk
+    peel_limb 0, p, hp.left, blk, hblk
 
     -- Bridge from the block bytes the region loads to the `readLimb?` the spec
     -- reads; all three arms need it to build `badLimbMakesNonzero`'s witness.
@@ -207,16 +207,16 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
       simp [e0]
 
       denote_enter_block
-      discharge_bad 1@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 1@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 2@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 2@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 3@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 3@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 4@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 4@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
       simp only [BlockCom.denote_term, Terminator.denote_ret,
@@ -225,7 +225,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         Ctxt.Valuation.cons_last, simp_denote, simp_sllvm]
 
       rw [hl₀] at hread₀
-      rw [readFieldElem_eq_zero_iff p s.mem hp hlimb]
+      rw [readFieldElem_eq_zero_iff p s.mem hp.left hlimb]
       left
       intro i
       fin_cases i <;> simp [hread₀, hread₁, hread₂, hread₃, hread₄]
@@ -238,16 +238,16 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         simp [e0, e1]
 
         denote_enter_block
-        discharge_bad 1@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 1@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 2@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 2@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 3@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 3@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 4@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 4@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
         simp only [BlockCom.denote_term, Terminator.denote_ret,
@@ -256,7 +256,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
           Ctxt.Valuation.cons_last, simp_denote, simp_sllvm]
 
         rw [hl₀'] at hread₀
-        rw [readFieldElem_eq_zero_iff p s.mem hp hlimb]
+        rw [readFieldElem_eq_zero_iff p s.mem hp.left hlimb]
         right
         intro i
         fin_cases i <;> simp [hread₀, hread₁, hread₂, hread₃, hread₄]
@@ -270,7 +270,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         -- Either pattern would force limb 0 to a value the switch already ruled
         -- out; `hread0` carries the comparison over to `readLimb?`.
         intro hzero
-        rcases (readFieldElem_eq_zero_iff p s.mem hp hlimb).mp hzero with h | h
+        rcases (readFieldElem_eq_zero_iff p s.mem hp.left hlimb).mp hzero with h | h
         · exact hl₀ (by simpa [← BitVec.toNat_inj] using Option.some.inj (hread₀.symm.trans (h 0)))
         · exact hl₀' (by simpa [← BitVec.toNat_inj] using Option.some.inj (hread₀.symm.trans (h 0)))
 

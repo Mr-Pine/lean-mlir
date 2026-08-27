@@ -142,7 +142,7 @@ it was entered in, provided its body left the blocks below the entry counter
 live-for-live as it found them. -/
 theorem GlobalState.killFrom_equiv {s : GlobalState} (m : MemoryState) (hs : s.WF)
     (hframe : ∀ q : BlockId, q.id < s.alloc.nextFreeBlock → m.live? q = s.mem.live? q) :
-    ({ alloc := s.alloc, mem := m.killFrom s.alloc.nextFreeBlock } : GlobalState) ≈ s := by
+    s.popFrame m ≈ s := by
   refine ⟨rfl, fun q => ?_⟩
   by_cases hq : q.id < s.alloc.nextFreeBlock
   · exact (live?_killFrom_of_lt hq).trans (hframe q hq)

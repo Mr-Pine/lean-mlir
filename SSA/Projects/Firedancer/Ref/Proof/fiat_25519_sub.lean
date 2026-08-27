@@ -67,17 +67,14 @@ set_option maxHeartbeats 3200000 in
 theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
   (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
   (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
-  (ho : Fits s.mem o (5 * 64))
-  (ho' : o.offset.toNat + 40 ≤ 2 ^ 64)
-  (hp : Fits s.mem p (5 * 64))
-  (hp' : p.offset.toNat + 40 ≤ 2 ^ 64)
-  (hq : Fits s.mem q (5 * 64))
-  (hq' : q.offset.toNat + 40 ≤ 2 ^ 64) :
+  (ho: IsFieldElemPtr s.mem o)
+  (hp: IsFieldElemPtr s.mem p)
+  (hq: IsFieldElemPtr s.mem q) :
   fiat_25519_sub_spec o p q s := by
     simp only [fiat_25519_sub_spec, Cfg.denote]
 
-    obtain ⟨pblk, hpblk, hplen⟩ := id hp
-    obtain ⟨qblk, hqblk, hqlen⟩ := id hq
+    obtain ⟨pblk, hpblk, hplen⟩ := id hp.left
+    obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
 
     obtain ⟨pinput, hpinput⟩ : ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p i s.mem = some (l i) :=
       ⟨fun i => (pblk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat,
@@ -123,7 +120,7 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
 
     simp [output_state, GlobalState.equiv_def]
     intro p
-    obtain ⟨oblk, hoblk, holen⟩ := id ho
+    obtain ⟨oblk, hoblk, holen⟩ := id ho.left
 
     by_cases h: o.id = p
     case neg =>
@@ -182,11 +179,11 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5
     subst hv0 hv1 hv2 hv3 hv4 hv5
 
-    peel_limb 0, p, hp, pblk, hpblk, plimb
+    peel_limb 0, p, hp.left, pblk, hpblk, plimb
     denote_step_all v 7
     denote_eval v 7 7
     simp [LLVM.add, LLVM.add?] at hv7
-    peel_limb 0, q, hq, qblk, hqblk, qlimb
+    peel_limb 0, q, hq.left, qblk, hqblk, qlimb
     denote_step_all v 9
     denote_eval v 9 9
     simp [LLVM.sub, LLVM.sub?, hv7] at hv9
@@ -194,12 +191,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv9
     denote_clear v 7 9
 
-    peel_gep 1, p, hp, s, p
+    peel_gep 1, p, hp.left, s, p
     peel_limb 1, p₁, hp₁, pblk, hpblk, plimb
     denote_step_all v 12
     denote_eval v 12 12
     simp [LLVM.add, LLVM.add?] at hv12
-    peel_gep 1, q, hq, s, q
+    peel_gep 1, q, hq.left, s, q
     peel_limb 1, q₁, hq₁, qblk, hqblk, qlimb
     denote_step_all v 15
     denote_eval v 15 15
@@ -208,12 +205,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv15
     denote_clear v 12 15
 
-    peel_gep 2, p, hp, s, p
+    peel_gep 2, p, hp.left, s, p
     peel_limb 2, p₂, hp₂, pblk, hpblk, plimb
     denote_step_all v 18
     denote_eval v 18 18
     simp [LLVM.add, LLVM.add?] at hv18
-    peel_gep 2, q, hq, s, q
+    peel_gep 2, q, hq.left, s, q
     peel_limb 2, q₂, hq₂, qblk, hqblk, qlimb
     denote_step_all v 21
     denote_eval v 21 21
@@ -222,12 +219,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv21
     denote_clear v 18 21
 
-    peel_gep 3, p, hp, s, p
+    peel_gep 3, p, hp.left, s, p
     peel_limb 3, p₃, hp₃, pblk, hpblk, plimb
     denote_step_all v 24
     denote_eval v 24 24
     simp [LLVM.add, LLVM.add?] at hv24
-    peel_gep 3, q, hq, s, q
+    peel_gep 3, q, hq.left, s, q
     peel_limb 3, q₃, hq₃, qblk, hqblk, qlimb
     denote_step_all v 27
     denote_eval v 27 27
@@ -236,12 +233,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv27
     denote_clear v 24 27
 
-    peel_gep 4, p, hp, s, p
+    peel_gep 4, p, hp.left, s, p
     peel_limb 4, p₄, hp₄, pblk, hpblk, plimb
     denote_step_all v 30
     denote_eval v 30 30
     simp [LLVM.add, LLVM.add?] at hv30
-    peel_gep 4, q, hq, s, q
+    peel_gep 4, q, hq.left, s, q
     peel_limb 4, q₄, hq₄, qblk, hqblk, qlimb
     denote_step_all v 33
     denote_eval v 33 33
@@ -309,9 +306,9 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     have e5 : x5 = outputBV 4 := hout _ 4 m5
     rw [e1, e2, e3, e4, e5]
 
-    peel_store (outputBV 0), o, ho, s
+    peel_store (outputBV 0), o, ho.left, s
     set s₁ : GlobalState := { s with mem := s.mem.splice o (outputBV 0) } with hs₁
-    have f₁ : Fits s₁.mem o (5 * 64) := fits_splice ho
+    have f₁ : Fits s₁.mem o (5 * 64) := fits_splice ho.left
 
     peel_gep 1, o, f₁, s₁, o
     peel_store (outputBV 1), o₁, ho₁, s₁

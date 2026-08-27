@@ -220,6 +220,20 @@ theorem BlockCom.run_bind_denote_var_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets suc
       (by rw [EffectM.run_map, h]; rfl),
     nil_append]
 
+/-- Step a lifetime marker: it denotes to `pure []ₕ`, so neither the state nor
+the valuation moves. Unlike `run_bind_denote_var_of_nil` this leaves no `s'`
+for the use site to determine, so it applies as a bare `rw`. -/
+theorem BlockCom.run_bind_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
+    {start : Bool} {p : Ctxt.Var Γ .ptr}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s : GlobalState} :
+    StateT.run ((BlockCom.var
+        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
+          (SLLVMOp.lifetime start) rfl (EffectKind.le_refl _)
+          (p ::ₕ .nil) Regions.nil) body).denote V >>= k) s
+      = StateT.run (body.denote V >>= k) s :=
+  BlockCom.run_bind_denote_var_of_nil (by simp only [denoteOp_lifetime, EffectM.run_pure])
+
 /-- One `call` that returns nothing, given that the callee -- run as a function
 on the call's arguments -- succeeds and leaves the state at `s'`. The callee is
 a `Cfg` in `h`, which is the form its own conformance theorem is stated in, so
@@ -256,6 +270,36 @@ theorem BlockCom.run_bind_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets su
       (a := (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)))
       (s' := s') h,
     nil_append]
+
+/-- As `run_bind_denote_call_of_nil`, for a call that binds its result: the
+returned value enters the valuation and the state advances to `s'`. -/
+theorem BlockCom.run_bind_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets succs β}
+    {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
+    {callee : String}
+    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [t] csigs}
+    {cblocks : Blocks cΓout [t] csigs}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([t] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState} {x : ⟦t⟧}
+    (h : StateT.run (runFunction
+        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
+      = .value ([x]ₕ, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= k) s
+      = StateT.run (body.denote (x ::ᵥ V) >>= k) s' := by
+  have hcall : BlockCom.denote (.call callee centry cblocks args body) V
+      = (runFunction (Cfg.denote ⟨centry, cblocks⟩
+            (Ctxt.Valuation.ofHVector (args.map V).reverse))
+          >>= fun rs => body.denote (rs ++ V)) := by
+    rw [BlockCom.denote_call]
+    refine congrArg (fun m => runFunction m >>= fun rs => body.denote (rs ++ V)) ?_
+    simp only [Cfg.denote]
+    refine congrArg (Bind.bind (centry.denote _)) ?_
+    funext y
+    obtain ⟨Vc, r⟩ := y
+    cases r <;> rfl
+  rw [hcall, bind_assoc,
+    EffectM.run_bind_of_value (a := ([x]ₕ : HVector _ [t])) (s' := s') h,
+    single_append]
 
 /-! ### Entering a block
 
