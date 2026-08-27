@@ -71,6 +71,24 @@ def structGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := 
 
 #guard runScalar structGep == some (.value 77#64)
 
+/-- The avx512 point struct: three `vector<8xi64>` fields, 64 bytes each.
+Field 1 must land at byte offset 64 (i.e. `i64` element 8), which needs the
+vector's own size and alignment, not its element's. -/
+def vectorStructGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p     = "ptr.alloca"() <{elem_type = i1536}> : () -> (!ptr)
+    %zero  = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> (i64)
+    %eight = "llvm.mlir.constant"() <{value = 8 : i64}> : () -> (i64)
+    %v     = "llvm.mlir.constant"() <{value = 99 : i64}> : () -> (i64)
+    %f1 = "llvm.getelementptr"(%p, %zero) <{elem_type = !llvm.struct<"struct.fd_curve25519_edwards", (vector<8xi64>, vector<8xi64>, vector<8xi64>)>, inbounds, rawConstantIndices = array<i32: -2147483648, 1>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%v, %f1) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %q = "llvm.getelementptr"(%p, %eight) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %r = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%r) : (i64) -> ()
+}]
+
+#guard runScalar vectorStructGep == some (.value 99#64)
+
 -- A gep with no leading dynamic index must be rejected, not silently
 -- mis-scaled.
 /--

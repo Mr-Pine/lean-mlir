@@ -100,6 +100,7 @@ inductive AggTy where
   | ptr
   | struct (fields : List AggTy)
   | array (n : Nat) (elem : AggTy)
+  | vector (n : Nat) (elem : AggTy)
   deriving Repr
 
 private def takeAggNat (cs : List Char) : Option (Nat × List Char) :=
@@ -120,6 +121,12 @@ partial def parseAggTy : List Char → Option (AggTy × List Char)
       let (t, cs) ← parseAggTy (dropWs cs)
       let '>' :: cs := dropWs cs | none
       return (.array n t, cs)
+  | 'v' :: 'e' :: 'c' :: 't' :: 'o' :: 'r' :: '<' :: cs => do
+      let (n, cs) ← takeAggNat (dropWs cs)
+      let 'x' :: cs := dropWs cs | none
+      let (t, cs) ← parseAggTy (dropWs cs)
+      let '>' :: cs := dropWs cs | none
+      return (.vector n t, cs)
   | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
       -- optional `"name", `
       let cs := dropWs cs
@@ -163,6 +170,12 @@ partial def AggTy.sizeAlign : AggTy → ExceptM SLLVM (Nat × Nat)
   | .array n t => do
       let (s, a) ← t.sizeAlign
       return (n * alignTo s a, a)
+  -- Vectors are unpadded, and their alignment is the size rounded up to a
+  -- power of two (LLVM's default layout), not the element's.
+  | .vector n t => do
+      let (s, _) ← t.sizeAlign
+      let sz := n * s
+      return (sz, Nat.nextPowerOfTwo sz)
   | .struct fields => do
       let (off, al) ← fields.foldlM (init := (0, 1)) fun (off, al) f => do
         let (s, a) ← f.sizeAlign
@@ -187,6 +200,11 @@ partial def AggTy.constIndexOffset (k : Nat) : AggTy → ExceptM SLLVM (Nat × A
         throw <| .generic s!"llvm.getelementptr: array index {k} out of range"
       let (s, a) ← t.sizeAlign
       return (k * alignTo s a, t)
+  | .vector n t => do
+      unless k < n do
+        throw <| .generic s!"llvm.getelementptr: vector index {k} out of range"
+      let (s, _) ← t.sizeAlign
+      return (k * s, t)
   | t => throw <| .generic s!"llvm.getelementptr: cannot index into {repr t}"
 
 /-- The integers inside a `dense<…>` attribute: either a single value (the
