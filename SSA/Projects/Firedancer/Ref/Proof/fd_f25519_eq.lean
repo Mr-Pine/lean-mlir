@@ -13,10 +13,10 @@ open InstCombine (LLVM)
 set_option maxHeartbeats 3200000 in
 theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
   (hs : s.WF)
-  (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
-  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
   (hp : IsFieldElemPtr s.mem p)
-  (hq : IsFieldElemPtr s.mem q) :
+  (hq : IsFieldElemPtr s.mem q)
+  (hpbounds : LimbBounds hp)
+  (hqbounds : LimbBounds hq) :
   fd_f25519_eq_spec p q s := by
     simp only [fd_f25519_eq_spec, Cfg.denote]
 
@@ -66,13 +66,13 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
         Std.HashMap.getElem?_insert, hne]
 
     have hpbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? p i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
-      fun i l hl => hpbounds i l (by simpa [readLimb?, hlive p hp] using hl)
+      fun i l hl => limbBounds_readLimb? hp hpbounds i l (by simpa [readLimb?, hlive p hp] using hl)
     have hqbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? q i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
-      fun i l hl => hqbounds i l (by simpa [readLimb?, hlive q hq] using hl)
+      fun i l hl => limbBounds_readLimb? hq hqbounds i l (by simpa [readLimb?, hlive q hq] using hl)
 
     obtain ⟨subres, ⟨substate, hsubstate, hsubstate_eq⟩, hsubres⟩ := fd_f25519_sub_conforms r p q sAlloc hsAllocWF hpbounds₁ hqbounds₁ hr₁ hp₁ hq₁
 
-    have hrbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? r i substate.mem = some l → l ≤ 2 ^ 51 := by
+    have hrbounds? : ∀ (i : Fin 5) (l : ℕ), readLimb? r i substate.mem = some l → l ≤ 2 ^ 51 := by
       simp at hsubres
       simp [← readLimb?_of_equiv hsubstate_eq]
       intro i
@@ -91,6 +91,9 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
       rw [← halloc] at ht
       rw [← hsubstate_eq.2 t]
       grind [live?_splice_ne, GlobalState.afterAlloca, hsAllocWF t ht]
+
+    -- and `fd_f25519_is_zero` in the total form
+    have hrbounds : LimbBounds hr₂ := limbBounds_of_readLimb? hr₂ hrbounds?
 
     obtain ⟨iszerostate, hiszerostate, hiszerostate_eq⟩ :=
       fd_f25519_is_zero_conforms r substate hsubstateWF hr₂ hrbounds

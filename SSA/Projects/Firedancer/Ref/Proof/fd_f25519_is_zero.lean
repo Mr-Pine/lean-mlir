@@ -28,19 +28,18 @@ of the two representations of zero: all zero, or the limbs of `p` itself. The
 limb bound is needed only left-to-right -- any limbs at all that *are* one of
 the two patterns decode to `0`. -/
 private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
-    (hp : Fits m p (5 * 64))
-    (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i m = some l → l ≤ 2 ^ 51) :
+    (hp : IsFieldElemPtr m p) (hlimb : LimbBounds hp) :
     readFieldElem? p m = .some 0
       ↔ (∀ i : Fin 5, readLimb? p i m = .some 0)
       ∨ (∀ i : Fin 5, readLimb? p i m = .some (match i with
           | 0 => 0x7ffffffffffed
           | _ => 0x7ffffffffffff)) := by
-  obtain ⟨blk, hblk, hlen⟩ := hp
-  -- One opaque handle for all five limbs. `e` is an existential witness, so no
-  -- later `simp` can unfold it back into `extractLsb'`.
-  obtain ⟨e, he⟩ : ∃ e : Fin 5 → ℕ, ∀ i, readLimb? p i m = some (e i) :=
-    ⟨fun i => (blk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat,
-      fun i => by simp [readLimb?, MemoryState.live?, hblk]⟩
+  -- One opaque handle for all five limbs, carrying its bound. `e` is an
+  -- existential witness, so no later `simp` can unfold it back into `Option.get`.
+  obtain ⟨e, he, hbound⟩ :
+      ∃ e : Fin 5 → ℕ, (∀ i, readLimb? p i m = some (e i)) ∧ ∀ i, e i ≤ 2 ^ 51 :=
+    ⟨fun i => readLimb p i m hp, fun i => (Option.some_get _).symm,
+      fun i => le_trans (hlimb i) (by norm_num)⟩
   simp only [readFieldElem?, he 0, he 1, he 2, he 3, he 4, Option.bind_eq_bind,
     Option.bind_some, Option.pure_def, Option.some.injEq]
   constructor
@@ -48,8 +47,7 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
     intro hzero
     have hdvd : _root_.p ∣ (e 0 + e 1 * 2^51 + e 2 * 2^102 + e 3 * 2^153 + e 4 * 2^204) :=
       (ZMod.natCast_eq_zero_iff _ _).mp (by simpa [decodeFieldElem] using hzero)
-    rcases limbs_of_dvd (hlimb 0 _ (he 0)) (hlimb 1 _ (he 1)) (hlimb 2 _ (he 2))
-        (hlimb 3 _ (he 3)) (hlimb 4 _ (he 4)) hdvd with
+    rcases limbs_of_dvd (hbound 0) (hbound 1) (hbound 2) (hbound 3) (hbound 4) hdvd with
       ⟨r0, r1, r2, r3, r4⟩ | ⟨r0, r1, r2, r3, r4⟩
     · exact Or.inl fun i => by fin_cases i <;> simp_all
     · exact Or.inr fun i => by fin_cases i <;> simp_all
@@ -147,7 +145,8 @@ elab "discharge_bad_case " i:num ", " target:num ", " caseH:ident ", " hlz:ident
 
 open Lean Elab Tactic
 elab "discharge_bad " i:num "@" target:num " with " p:term ", " hp:ident ", " st:term ", " hlimb:ident " and " limbz:ident ", " hlz:ident ", " hreadz:ident : tactic => do
-  evalTactic (← `(tactic| read_limb $i, $p, $hp, $st))
+  -- `read_limb` wants the `Fits` half; `readFieldElem_eq_zero_iff` the whole
+  evalTactic (← `(tactic| read_limb $i, $p, ($hp).left, $st))
 
   let s := subscript i.getNat
   let hl := mkIdent (Name.mkSimple ("hl" ++ s))
@@ -169,7 +168,7 @@ set_option maxHeartbeats 400000 in
 theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
   (hs : s.WF)
   (hp : IsFieldElemPtr s.mem p)
-  (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 2 ^ 51) :
+  (hlimb : LimbBounds hp) :
   fd_f25519_is_zero_spec p s := by
     -- Split the region into the entry block and the dispatch on its terminator.
     simp only [fd_f25519_is_zero_spec, Cfg.denote]
@@ -207,16 +206,16 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
       simp [e0]
 
       denote_enter_block
-      discharge_bad 1@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 1@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 2@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 2@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 3@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 3@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      discharge_bad 4@0 with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+      discharge_bad 4@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
       simp only [BlockCom.denote_term, Terminator.denote_ret,
@@ -225,7 +224,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         Ctxt.Valuation.cons_last, simp_denote, simp_sllvm]
 
       rw [hl₀] at hread₀
-      rw [readFieldElem_eq_zero_iff p s.mem hp.left hlimb]
+      rw [readFieldElem_eq_zero_iff p s.mem hp hlimb]
       left
       intro i
       fin_cases i <;> simp [hread₀, hread₁, hread₂, hread₃, hread₄]
@@ -238,16 +237,16 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         simp [e0, e1]
 
         denote_enter_block
-        discharge_bad 1@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 1@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 2@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 2@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 3@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 3@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        discharge_bad 4@0x7ffffffffffff with p, hp.left, s, hlimb and limb₀, hl₀, hread₀
+        discharge_bad 4@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
         simp only [BlockCom.denote_term, Terminator.denote_ret,
@@ -256,7 +255,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
           Ctxt.Valuation.cons_last, simp_denote, simp_sllvm]
 
         rw [hl₀'] at hread₀
-        rw [readFieldElem_eq_zero_iff p s.mem hp.left hlimb]
+        rw [readFieldElem_eq_zero_iff p s.mem hp hlimb]
         right
         intro i
         fin_cases i <;> simp [hread₀, hread₁, hread₂, hread₃, hread₄]
@@ -270,7 +269,7 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
         -- Either pattern would force limb 0 to a value the switch already ruled
         -- out; `hread0` carries the comparison over to `readLimb?`.
         intro hzero
-        rcases (readFieldElem_eq_zero_iff p s.mem hp.left hlimb).mp hzero with h | h
+        rcases (readFieldElem_eq_zero_iff p s.mem hp hlimb).mp hzero with h | h
         · exact hl₀ (by simpa [← BitVec.toNat_inj] using Option.some.inj (hread₀.symm.trans (h 0)))
         · exact hl₀' (by simpa [← BitVec.toNat_inj] using Option.some.inj (hread₀.symm.trans (h 0)))
 

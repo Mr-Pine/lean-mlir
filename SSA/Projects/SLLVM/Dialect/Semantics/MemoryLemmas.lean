@@ -137,6 +137,14 @@ invariant `alloca` and `killFrom` keep. -/
 def _root_.LeanMLIR.GlobalState.WF (s : GlobalState) : Prop :=
   ∀ q : BlockId, s.alloc.nextFreeBlock ≤ q.id → s.mem.live? q = none
 
+/-- `WF` speaks only of the counter and of `live?`, and `≈` equates both, so it
+transports along an equivalence. -/
+theorem _root_.LeanMLIR.GlobalState.WF.of_equiv {s s' : GlobalState}
+    (hs : s.WF) (h : s ≈ s') : s'.WF := by
+  intro q hq
+  rw [← h.2 q]
+  exact hs q (by rw [h.1]; exact hq)
+
 /-- The state a function returns to (`run_runFunction`) is equivalent to the one
 it was entered in, provided its body left the blocks below the entry counter
 live-for-live as it found them. -/
