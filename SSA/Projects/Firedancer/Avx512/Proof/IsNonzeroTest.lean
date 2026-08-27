@@ -7,7 +7,7 @@ import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_is_nonzero
 /-!
 # The lifted `fd_r43x6_is_nonzero` against its specification
 
-A differential check, in the style of `Proof/QuadTest.lean`: the lifted region
+A differential check: the lifted region
 evaluated against the `ℤ`-level model of `Spec/fd_r43x6_is_nonzero.lean`, on
 the inputs that matter.
 
