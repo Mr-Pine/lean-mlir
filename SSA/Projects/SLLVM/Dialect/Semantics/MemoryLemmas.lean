@@ -160,6 +160,16 @@ theorem fits_afterAlloca (s : GlobalState) (w : Nat) :
     by simp [GlobalState.afterAlloca, MemoryState.getElem?_eq],
     by simp [Pointer.offsetInBits, LiveBlock.lengthInBits]; omega⟩
 
+/-- Popping a frame that allocated nothing is invisible: everything the kill
+could touch is dead already. -/
+theorem _root_.LeanMLIR.GlobalState.WF.popFrame_equiv {s : GlobalState} (hs : s.WF) :
+    s ≈ s.popFrame s.mem := by
+  refine ⟨rfl, fun q => ?_⟩
+  show s.mem.live? q = (s.mem.killFrom s.alloc.nextFreeBlock).live? q
+  by_cases hq : q.id < s.alloc.nextFreeBlock
+  · exact (live?_killFrom_of_lt hq).symm
+  · rw [live?_killFrom_of_le (not_lt.mp hq)]; exact hs q (not_lt.mp hq)
+
 /-- The state a function returns to (`run_runFunction`) is equivalent to the one
 it was entered in, provided its body left the blocks below the entry counter
 live-for-live as it found them. -/
