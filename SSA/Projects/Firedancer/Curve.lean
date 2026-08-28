@@ -79,6 +79,7 @@ say `if P.SamePoint Q then … else …` and still be executable. -/
 instance (P Q : Point) : Decidable (P.SamePoint Q) :=
   inferInstanceAs (Decidable (P.x = Q.x ∧ P.y = Q.y))
 
+@[simp]
 theorem samePoint_equivalence : Equivalence SamePoint where
   refl _ := ⟨rfl, rfl⟩
   symm h := ⟨h.1.symm, h.2.symm⟩

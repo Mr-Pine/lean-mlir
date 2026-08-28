@@ -84,6 +84,10 @@ limb pairs they carry. -/
   v14 : Vector (BitVec 64) 8
   v25 : Vector (BitVec 64) 8
 
+/-- All three vectors of a QUAD are `u46`. -/
+abbrev Quad.U46 (q : Quad) : Prop :=
+  R43x6.U46 q.v03 ∧ R43x6.U46 q.v14 ∧ R43x6.U46 q.v25
+
 def Quad.vector (q: Quad) (i: Fin 4) := quadElemVec q.v03 q.v14 q.v25 i
 def Quad.vectorFunc (q: Quad) := laneFunc ∘ q.vector
 
@@ -245,5 +249,57 @@ theorem quadVec_bounds (l : QuadFunc) (m n: Fin 6) (N : ℕ) (hN : N ≤ 2 ^ 63)
   · exact (key _ (hb 1).2).1
   · exact (key _ (hb 2).2).1
   · exact (key _ (hb 3).2).1
+
+/-! ## Memory -/
+/-- `p` addresses a whole QUAD: three 8-lane vectors, `3 * 8 * 64` bits = 192
+bytes. (Not `4 * 5 * 64` -- that is the *ref* point's four five-limb
+coordinates, a 160-byte object with a different layout.) -/
+abbrev IsQuadPtr (m: MemoryState) (p: Pointer) : Prop :=
+  Fits m p (3 * 8 * 64) ∧ p.offset.toNat + (3 * 8 * 8) ≤ 2^64
+
+def readQuad? (p: Pointer) (m: MemoryState) : Option Quad := do
+  let readVec (i : Fin 3) := do
+    let liveBlock ← m.live? p.id
+    let vec : Vector _ 8 := Vector.ofFn (fun j => liveBlock.bytes.extractLsb' (p.offsetInBits + i.toNat * (64 * 8) + 64 * j.toNat) 64)
+    return vec
+  let v1 ← readVec 0
+  let v2 ← readVec 1
+  let v3 ← readVec 2
+  return ⟨v1, v2, v3⟩
+
+theorem readQuad?_isSome {m : MemoryState} {p : Pointer} (h : IsQuadPtr m p) :
+    (readQuad? p m).isSome := by
+  obtain ⟨⟨block, hblk, -⟩, -⟩ := h
+  have hlive : m.live? p.id = some block := by
+    simp only [MemoryState.live?, hblk]
+  -- The three reads are `extractLsb'`, which is total, so liveness of the
+  -- block is all that makes this `some`; `IsQuadPtr`'s size bound is not used.
+  simp [readQuad?, hlive]
+
+def readQuad {p: Pointer} {m: MemoryState} (h: IsQuadPtr m p) : Quad := (readQuad? p m).get (readQuad?_isSome h)
+
+/-- The 512 bits an `fd_r43x6_t` occupies in memory: lane `j` at bits
+`[64j, 64j + 64)`, which is what a whole-vector store writes. -/
+def vecBV (v : Vector (BitVec 64) 8) : BitVec 512 :=
+  LLVM.Ty.flattenBV (.vector 8 (.bitvec (.concrete 64))) (v.map PoisonOr.value)
+
+/-- A fully-defined `fd_r43x6_t` flattens to `vecBV`: every lane holds a value,
+so a whole-vector store of it does not raise poison. (The same fact as
+`Avx512.flatten_map_value`, stated where `vecBV` lives so the store peel does
+not have to reach into the proof layer for it.) -/
+theorem flatten_vecBV (v : Vector (BitVec 64) 8) :
+    LLVM.Ty.flatten (.vector 8 (.bitvec (.concrete 64))) (v.map PoisonOr.value)
+      = .value (vecBV v) := by
+  rw [LLVM.Ty.flatten, if_pos]
+  · rfl
+  · intro i
+    show LLVM.Ty.ofBitvec ((v.map PoisonOr.value)[i.val]) ≠ .poison
+    rw [Vector.getElem_map]
+    exact PoisonOr.value_ne_poison _
+
+/-- The 1536 bits a QUAD occupies in memory: the three vectors at the offsets
+`readQuad?` reads them back at -- `v03` lowest, then `v14`, then `v25`. -/
+def Quad.BV (q : Quad) : BitVec (3 * 8 * 64) :=
+  BitVec.packLanes (we := 512) (n := 3) #v[vecBV q.v03, vecBV q.v14, vecBV q.v25]
 
 end Firedancer.Avx512

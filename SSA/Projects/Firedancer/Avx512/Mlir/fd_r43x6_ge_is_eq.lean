@@ -5,48 +5,12 @@ import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_quad_mul_fast
 import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_is_nonzero
 
-/-!
-# `fd_r43x6_ge_is_eq`, lifted from Firedancer's AVX-512 ed25519 implementation
-
-The program below is the MLIR translation of `fd_r43x6_ge_is_eq` from
-`firedancer/src/ballet/ed25519/avx512/fd_r43x6_ge.h`, taken **verbatim** from
-the build artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_ge_is_eq.mlir`
--- the artifact and the region below are byte-identical. This is the first
-`ge` (group element / curve point)
-operation lifted, and the first region with more than one callee: all three
-are bound below, `fd_r43x6_quad_mul_fast` and `fd_r43x6_is_nonzero` directly
-and `fd_long_if` inside the latter, `bindCallees` being recursive.
-
-Arguments: `%arg0`-`%arg2` are the QUAD of the first point, `%arg3`-`%arg5` of
-the second (see `Spec/Quad.lean` for the layout). `%70` is the result, the
-`i32` the C returns: `1` if the two QUADs represent the same curve point.
-
-## What the region does
-
-* `%45`-`%50` are the two `FD_R43X6_QUAD_PERMUTE`s: the first QUAD becomes
-  `(Z₁,X₁,Z₁,Y₁)`, the second `(X₂,Z₂,Y₂,Z₂)` -- each `shufflevector` permutes
-  one third of a QUAD, lanes 0-3 and 4-7 alike.
-* `%42`-`%44`, the call, and `%51`-`%53` are `FD_R43X6_QUAD_MUL_FAST`: three
-  stack slots, `fd_r43x6_quad_mul_fast` filling them through pointers, three
-  loads back. The product QUAD is `(xn2, xn1, yn2, yn1)` -- the four cross
-  products `X₂Z₁, X₁Z₂, Y₂Z₁, Y₁Z₂` of the RFC 8032 `__eq__` method quoted in
-  the C source.
-* `%54`-`%61` are `FD_R43X6_QUAD_UNPACK`, vectorised: two interleaving
-  shuffles pair each element's limbs, and four `vpermi2var`s (indices `%38`,
-  `%39`) reassemble the four elements as scalar `fd_r43x6_t`s with lanes 6-7
-  zeroed from `%20`/`%37`.
-* `%62`/`%66` and `%63`/`%67` are the two `fd_r43x6_sub_fast`s, reassociated
-  by the compiler into `(xn1 - xn2) + p` -- `%40` is `fd_r43x6_p()`.
-* `%64` and `%68` call `fd_r43x6_is_nonzero`; `%65`, `%69` and `%70` are
-  `(int)!a & (int)!b`, compiled to `(b ^ 1) & ~a` on the two `{0,1}` results.
--/
-
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
 /-- `fd_r43x6_ge_is_eq`, as the compiler emits it: permute, one quad multiply
 through the stack, unpack, two subtract-and-test-zeros. -/
-def fd_r43x6_ge_is_eq := [sllvm|
+def fd_r43x6_ge_is_eq_region : MLIR.AST.Region 0 := [mlir_region|
 {
   ^bb0(%arg0: vector<8xi64>, %arg1: vector<8xi64>, %arg2: vector<8xi64>, %arg3: vector<8xi64>, %arg4: vector<8xi64>, %arg5: vector<8xi64>):
     %0 = "llvm.mlir.constant"() <{value = 1 : i32}> : () -> i32
@@ -129,8 +93,11 @@ def fd_r43x6_ge_is_eq := [sllvm|
     %70 = "llvm.and"(%69, %65) : (i32, i32) -> i32
     "llvm.return"(%70) : (i32) -> ()
 }
-with @fd_r43x6_quad_mul_fast := fd_r43x6_quad_mul_fastRegion,
-     @fd_r43x6_is_nonzero := fd_r43x6_is_nonzeroRegion,
-     @fd_long_if := fd_long_ifRegion]
+]
+
+def fd_r43x6_ge_is_eq := [sllvm_of| fd_r43x6_ge_is_eq_region with
+    @fd_r43x6_quad_mul_fast := fd_r43x6_quad_mul_fast_region,
+     @fd_r43x6_is_nonzero := fd_r43x6_is_nonzero_region,
+     @fd_long_if := fd_long_if_region]
 
 end Firedancer.Avx512

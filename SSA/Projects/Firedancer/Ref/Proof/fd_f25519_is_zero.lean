@@ -63,7 +63,7 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
 open Lean Elab Tactic
 elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let num := i.getNat
-  -- `peel_gep` counts bytes; `offsetInBits` counts bits
+  -- `peel_gep_limb` counts bytes; `offsetInBits` counts bits
   let offBits := Syntax.mkNumLit (toString (num * 64))
   let n ← nextStepIndex (← getMainGoal)
   let nIcmpLit := Syntax.mkNumLit (toString (n + 2))
@@ -81,7 +81,7 @@ elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let hread := mkIdent (Name.mkSimple ("hread" ++ s))
   let baseHread := mkIdent (Name.mkSimple "hread")
 
-  evalTactic (← `(tactic| peel_gep $i, $p, $hp, $st, p))
+  evalTactic (← `(tactic| peel_gep_limb $i, $p, $hp, $st, p))
   let baseblk := mkIdent (Name.mkSimple "blk")
   let basehblk := mkIdent (Name.mkSimple "hblk")
   evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk))

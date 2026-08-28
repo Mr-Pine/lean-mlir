@@ -191,12 +191,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv9
     denote_clear v 7 9
 
-    peel_gep 1, p, hp.left, s, p
+    peel_gep_limb 1, p, hp.left, s, p
     peel_limb 1, p₁, hp₁, pblk, hpblk, plimb
     denote_step_all v 12
     denote_eval v 12 12
     simp [LLVM.add, LLVM.add?] at hv12
-    peel_gep 1, q, hq.left, s, q
+    peel_gep_limb 1, q, hq.left, s, q
     peel_limb 1, q₁, hq₁, qblk, hqblk, qlimb
     denote_step_all v 15
     denote_eval v 15 15
@@ -205,12 +205,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv15
     denote_clear v 12 15
 
-    peel_gep 2, p, hp.left, s, p
+    peel_gep_limb 2, p, hp.left, s, p
     peel_limb 2, p₂, hp₂, pblk, hpblk, plimb
     denote_step_all v 18
     denote_eval v 18 18
     simp [LLVM.add, LLVM.add?] at hv18
-    peel_gep 2, q, hq.left, s, q
+    peel_gep_limb 2, q, hq.left, s, q
     peel_limb 2, q₂, hq₂, qblk, hqblk, qlimb
     denote_step_all v 21
     denote_eval v 21 21
@@ -219,12 +219,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv21
     denote_clear v 18 21
 
-    peel_gep 3, p, hp.left, s, p
+    peel_gep_limb 3, p, hp.left, s, p
     peel_limb 3, p₃, hp₃, pblk, hpblk, plimb
     denote_step_all v 24
     denote_eval v 24 24
     simp [LLVM.add, LLVM.add?] at hv24
-    peel_gep 3, q, hq.left, s, q
+    peel_gep_limb 3, q, hq.left, s, q
     peel_limb 3, q₃, hq₃, qblk, hqblk, qlimb
     denote_step_all v 27
     denote_eval v 27 27
@@ -233,12 +233,12 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     subst hv27
     denote_clear v 24 27
 
-    peel_gep 4, p, hp.left, s, p
+    peel_gep_limb 4, p, hp.left, s, p
     peel_limb 4, p₄, hp₄, pblk, hpblk, plimb
     denote_step_all v 30
     denote_eval v 30 30
     simp [LLVM.add, LLVM.add?] at hv30
-    peel_gep 4, q, hq.left, s, q
+    peel_gep_limb 4, q, hq.left, s, q
     peel_limb 4, q₄, hq₄, qblk, hqblk, qlimb
     denote_step_all v 33
     denote_eval v 33 33
@@ -310,22 +310,22 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     set s₁ : GlobalState := { s with mem := s.mem.splice o (outputBV 0) } with hs₁
     have f₁ : Fits s₁.mem o (5 * 64) := fits_splice ho.left
 
-    peel_gep 1, o, f₁, s₁, o
+    peel_gep_limb 1, o, f₁, s₁, o
     peel_store (outputBV 1), o₁, ho₁, s₁
     set s₂ : GlobalState := { s₁ with mem := s₁.mem.splice o₁ (outputBV 1) } with hs₂
     have f₂ : Fits s₂.mem o (5 * 64) := fits_splice f₁
 
-    peel_gep 2, o, f₂, s₂, o
+    peel_gep_limb 2, o, f₂, s₂, o
     peel_store (outputBV 2), o₂, ho₂, s₂
     set s₃ : GlobalState := { s₂ with mem := s₂.mem.splice o₂ (outputBV 2) } with hs₃
     have f₃ : Fits s₃.mem o (5 * 64) := fits_splice f₂
 
-    peel_gep 3, o, f₃, s₃, o
+    peel_gep_limb 3, o, f₃, s₃, o
     peel_store (outputBV 3), o₃, ho₃, s₃
     set s₄ : GlobalState := { s₃ with mem := s₃.mem.splice o₃ (outputBV 3) } with hs₄
     have f₄ : Fits s₄.mem o (5 * 64) := fits_splice f₃
 
-    peel_gep 4, o, f₄, s₄, o
+    peel_gep_limb 4, o, f₄, s₄, o
     peel_store (outputBV 4), o₄, ho₄, s₄
 
 

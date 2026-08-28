@@ -4,52 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.Mlir.fd_long_if
 
-/-!
-# `fd_r43x6_is_nonzero`, lifted from Firedancer's AVX-512 ed25519 implementation
-
-All four of the blockers this file was once checked in to *display* are gone:
-`llvm.extractelement` had no operation at all and stopped the region at `%14`
-(`LIMITATIONS.md` 7.2); generic-form `llvm.icmp` stopped it at `%58` (6.5); and
-the `llvm.call` at `%60` had nothing to call, because `Com` has no symbol table
-(4.1). The call is now an operation carrying its callee as a region, and
-`with @fd_long_if := fd_long_ifRegion` is what binds it -- MLIR's `llvm.call`
-names a symbol and carries no inline region, so the body has to be supplied.
-
-There are now **no deviations at all**: what follows is byte-for-byte the
-artifact. The last one to go was the `nsw` quoting (6.1) -- while `nsw` was a
-reserved token, every flag had to be rewritten before it could be quoted.
-
-The program below is the MLIR translation of `fd_r43x6_is_nonzero` from
-`firedancer/src/ballet/ed25519/avx512/fd_r43x6.h`, taken **verbatim** from the
-build artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_is_nonzero.mlir`
--- the artifact and the region below differ in nothing but indentation. Its
-one callee is `Avx512/Mlir/fd_long_if.lean`, likewise verbatim, and proven in
-`Avx512/Proof/fd_long_if.lean`.
-
-`%79` is the result, the `i32` the C returns.
-
-## What the region does
-
-`%14`-`%19` are `fd_r43x6_extract_limbs`: the six limbs off the `<8 x i64>`.
-`%20`-`%38` are `fd_r43x6_biased_carry_propagate_limbs` at `b = 2^20`, and
-`%39`-`%71` are `fd_r43x6_mod_nearly_reduced_limbs`. `%72`-`%79` are the
-`!!(l0|l1|l2|l3|l4|l5)` read off the end.
-
-Two things the compiler did that the proof will have to follow:
-
-* `%72`-`%77` OR the *unmasked* `e0`-`e4` and mask once (`%76 = (e0|e1|e2|e3|e4)
-  & m43`), rather than ORing the masked limbs `z0`-`z4`. Same answer, one fewer
-  `and` per limb.
-* `%58` is `icmp ult %56, 2^40` where the source asks whether `a5 >> 40` is
-  zero, and `%60` is a call to a `fd_long_if` that constant propagation has
-  already specialised to `select(%59 == 0, 0, 19)`.
-
-Every arithmetic operation here carries `nsw`, and the `mod_nearly_reduced`
-half carries `nuw` on top of it. lean-mlir's `LLVM.add` yields poison on signed
-overflow, so this region does not denote to a value at all without the input
-range `CarryPre` of `Spec/fd_r43x6_is_nonzero.lean`.
--/
-
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
@@ -58,7 +12,7 @@ open LeanMLIR SLLVM
 `fd_long_if` call inside is *not* bound here -- the artifact carries no
 region, and `bindCallees` recurses, so whoever binds this region binds its
 callee too. -/
-def fd_r43x6_is_nonzeroRegion : MLIR.AST.Region 0 := [mlir_region|
+def fd_r43x6_is_nonzero_region : MLIR.AST.Region 0 := [mlir_region|
   {
     ^bb0(%arg0: vector<8xi64>):
       %0 = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> i64
@@ -147,6 +101,6 @@ def fd_r43x6_is_nonzeroRegion : MLIR.AST.Region 0 := [mlir_region|
 /-- `fd_r43x6_is_nonzero`, as the compiler emits it: the six limb extracts, both
 carry chains, and the call at `%60` still a call. -/
 def fd_r43x6_is_nonzero :=
-  [sllvm_of| fd_r43x6_is_nonzeroRegion with @fd_long_if := fd_long_ifRegion]
+  [sllvm_of| fd_r43x6_is_nonzero_region with @fd_long_if := fd_long_if_region]
 
 end Firedancer.Avx512

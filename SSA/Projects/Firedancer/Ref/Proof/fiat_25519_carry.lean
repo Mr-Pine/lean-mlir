@@ -1,6 +1,7 @@
 import SSA.Projects.Firedancer.Ref.Spec.fiat_25519_carry
 import SSA.Projects.Firedancer.Ref.Mlir.fiat_25519_carry
 import SSA.Projects.Firedancer.MLIR.DenoteStep
+import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
 
@@ -233,7 +234,7 @@ theorem add_toNat_le {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 
 
 open Lean Elab Tactic in
 /-- `peel_input i, p, hp, s` consumes limb `i`'s `getelementptr` and `load`, and
-leaves its value as `input i` rather than as block bytes: `peel_gep` + `peel_limb`,
+leaves its value as `input i` rather than as block bytes: `peel_gep_limb` + `peel_limb`,
 then `limb<i> = BitVec.ofNat 64 (input i)` rewritten into the goal, so the stepper
 produces every later `hv<n>` in terms of `input`.
 
@@ -254,7 +255,7 @@ elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let inp := mkIdent (Name.mkSimple "input")
   let baseblk := mkIdent (Name.mkSimple "blk")
   let basehblk := mkIdent (Name.mkSimple "hblk")
-  evalTactic (← `(tactic| peel_gep $i, $p, $hp, $st, p))
+  evalTactic (← `(tactic| peel_gep_limb $i, $p, $hp, $st, p))
   evalTactic (← `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk))
   evalTactic (← `(tactic| have $hin:ident : $limb = BitVec.ofNat 64 ($inp $i) :=
       Eq.trans $hlimb ($hbits $i _ ($hoff $i $offBytes (by simp)))))
@@ -319,7 +320,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     denote_eval v 6 6
     subst hv6
 
-    peel_load blk, p₀, hblk, s
+    peel_load (.bitvec (.concrete 64)), blk, p₀, hblk, s
 
     denote_step_all v 8
     denote_eval v 8 8
@@ -337,7 +338,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
         Option.pure_def, Option.some.injEq] at h
       rw [← h, BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
-    -- `peel_gep`'s pointers do not wrap (`hp₀'`), so limb `i` sits exactly
+    -- `peel_gep_limb`'s pointers do not wrap (`hp₀'`), so limb `i` sits exactly
     -- `64 * i` bits into the block -- the offset `hbits` asks for.
     have hoff : ∀ (i : Fin 5) (o : BitVec 64), o.toNat = 8 * i.toNat →
         (p₀.withOffset o).offsetInBits = p₀.offsetInBits + 64 * i.toNat := by
@@ -529,22 +530,22 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     set s₁ : GlobalState := { s with mem := s.mem.splice q (outputBV 0) } with hs₁
     have f₁ : Fits s₁.mem q (5 * 64) := fits_splice hq.left
 
-    peel_gep 1, q, f₁, s₁, q
+    peel_gep_limb 1, q, f₁, s₁, q
     peel_store (outputBV 1), q₁, hq₁, s₁
     set s₂ : GlobalState := { s₁ with mem := s₁.mem.splice q₁ (outputBV 1) } with hs₂
     have f₂ : Fits s₂.mem q (5 * 64) := fits_splice f₁
 
-    peel_gep 2, q, f₂, s₂, q
+    peel_gep_limb 2, q, f₂, s₂, q
     peel_store (outputBV 2), q₂, hq₂, s₂
     set s₃ : GlobalState := { s₂ with mem := s₂.mem.splice q₂ (outputBV 2) } with hs₃
     have f₃ : Fits s₃.mem q (5 * 64) := fits_splice f₂
 
-    peel_gep 3, q, f₃, s₃, q
+    peel_gep_limb 3, q, f₃, s₃, q
     peel_store (outputBV 3), q₃, hq₃, s₃
     set s₄ : GlobalState := { s₃ with mem := s₃.mem.splice q₃ (outputBV 3) } with hs₄
     have f₄ : Fits s₄.mem q (5 * 64) := fits_splice f₃
 
-    peel_gep 4, q, f₄, s₄, q
+    peel_gep_limb 4, q, f₄, s₄, q
     peel_store (outputBV 4), q₄, hq₄, s₄
 
     -- `llvm.return`: nothing is left but the state, which is `output_state`

@@ -3,33 +3,12 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.SLLVM.Dialect
 
-/-!
-# `fd_r43x6_quad_mul_fast`, lifted with its memory writes intact
-
-The program below is the MLIR translation of `fd_r43x6_quad_mul_fast` from
-`firedancer/src/ballet/ed25519/avx512/fd_r43x6_inl.h`, taken **verbatim** from
-the build artifact
-`build/native/gcc/mlir/avx512/region/fd_r43x6_quad_mul_fast.mlir`.
-
-This is the kernel as the compiler emits it, with no extraction probe around
-it: it takes the three `fd_r43x6_t *` out-parameters as `!llvm.ptr` block
-arguments and ends in three `llvm.store`s. Nothing here is rewritten -- not the
-`!llvm.ptr` spelling, not the `(value, ptr)` operand order of `llvm.store`, not
-the `alignment`, `ordering` and `tbaa` attributes.
-
-`%81`, `%85` and `%89` are the results `z03`, `z14` and `z25`.
-
-Block arguments enter the `Ctxt` in reverse declaration order, so the context
-is `[y25, y14, y03, x25, x14, x03, z25ptr, z14ptr, z03ptr]`; see `quadValMem6`
-in `Proof/Mem.lean`. The program is `.impure` throughout and returns nothing.
--/
-
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
 /-- The region as an AST value, so it can be written once and used both as the
 `Com` below and as the callee binding in `Mlir/fd_r43x6_ge_is_eq.lean`. -/
-def fd_r43x6_quad_mul_fastRegion : MLIR.AST.Region 0 := [mlir_region|
+def fd_r43x6_quad_mul_fast_region : MLIR.AST.Region 0 := [mlir_region|
 {
   ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: vector<8xi64>, %arg4: vector<8xi64>, %arg5: vector<8xi64>, %arg6: vector<8xi64>, %arg7: vector<8xi64>, %arg8: vector<8xi64>):
     %0 = "llvm.mlir.poison"() : () -> vector<8xi64>
@@ -129,6 +108,6 @@ def fd_r43x6_quad_mul_fastRegion : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_r43x6_quad_mul_fast := [sllvm_of| fd_r43x6_quad_mul_fastRegion]
+def fd_r43x6_quad_mul_fast := [sllvm_of| fd_r43x6_quad_mul_fast_region]
 
 end Firedancer.Avx512

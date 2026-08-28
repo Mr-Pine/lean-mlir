@@ -1,68 +1,12 @@
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Spec.F25519
+import SSA.Projects.Firedancer.Proof.Memory
+import SSA.Projects.Firedancer.Proof.Tactics.Memory
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
-
-macro "peel_load " blk:term ", " p:term ", " hblk:term ", " st:term : tactic =>
-  `(tactic|
-   (try simp only [bind_assoc]
-    rw [BlockCom.run_bind_denote_var_of_value
-      (x := PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits 64)) (s' := $st)
-      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          rw [run_liftM (run_load ($hblk) (by show ($p).offsetInBits + 64 ≤ _; omega))]
-          rfl)
-    ]))
-
-/-- `Fits` is antitone in the size demanded. -/
-theorem Fits.mono {m : MemoryState} {p : Pointer} {n n' : Nat} (h : Fits m p n)
-    (hle : n' ≤ n) : Fits m p n' :=
-  let ⟨blk, hblk, hlen⟩ := h; ⟨blk, hblk, by omega⟩
-
-/-- `peel_store x, p, hp, s` runs the next instruction, which must be an
-`llvm.store` of a 64-bit `x` through `p`, and leaves the run at `s` with `x`
-spliced in at `p`. `hp : Fits ($st).mem $p n` is the no-trap obligation, for any `n` at least
-64 -- the room the store itself needs is weakened out of it.
-
-A `store` binds no variable, so -- unlike `peel_load` -- there is no `v<n>` to
-name afterwards; only the state moves. -/
-macro "peel_store " x:term ", " p:term ", " hp:term ", " st:term : tactic =>
-  `(tactic|
-   (try simp only [bind_assoc]
-    rw [BlockCom.run_bind_denote_var_of_nil
-      (s' := { $st with mem := ($st).mem.splice $p $x })
-      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          rw [run_liftM (run_store (t := .bitvec (.concrete 64))
-            (x := PoisonOr.value $x) rfl
-            (show Fits (($st).mem) $p 64 from Fits.mono $hp (by omega)))]
-          rfl)
-    ]))
-
-lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.id = .some b) {w : Nat} (d: BitVec w) : (m.splice p d).live? p.id = .some { length := b.length, bytes := spliceBits b.bytes p.offsetInBits d } := by
-  rw [MemoryState.splice]
-
-  simp [MemoryState.live?] at hb
-  replace hb : m[p.id]? = some (Block.live b) := by split at hb <;> simp_all
-  simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
-
-/-- A store leaves the blocks it does not address alone. -/
-@[simp]
-theorem live?_splice_ne {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    {q : BlockId} (h : p.id ≠ q) : (m.splice p x).live? q = m.live? q := by
-  simp only [MemoryState.live?, getElem?_splice_ne h]
-
-/-- A store through a pointer that addresses no live block does nothing. -/
-theorem splicedDead {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    (h : m.live? p.id = none) : (m.splice p x).live? p.id = none := by
-  unfold MemoryState.splice
-  cases hb : m[p.id]? with
-  | none => exact h
-  | some blk =>
-    cases blk with
-    | dead => exact h
-    | live b => simp [MemoryState.live?, hb] at h
 
 /-- Splicing the same bits at the same pointer preserves equivalence: the block
 written is fixed by the (equal) live block there, and no other block moves. -/
@@ -135,24 +79,12 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
 
-/-- Stepping `o` bytes into a block leaves the same block, with `o * 8` fewer
-bits available. -/
-theorem remainingFits (m: MemoryState) (p: Pointer) (hp: Fits m p n) (o: BitVec 64)
-    (ho : o.toNat * 8 ≤ n) : Fits m (p.withOffset o) (n - (o.toNat * 8)) := by
-  obtain ⟨blk, hblk, hlen⟩ := hp
-  refine ⟨blk, hblk, ?_⟩
-  have h1 : p.offset.toNat < 2 ^ 64 := p.offset.isLt
-  have h2 : o.toNat < 2 ^ 64 := o.isLt
-  simp only [Pointer.withOffset, Pointer.offsetInBits, LiveBlock.lengthInBits,
-    BitVec.toNat_add] at hlen ⊢
-  omega
-
 /-- `₀`-style index for the per-limb names the tactics below generate. -/
 def subscript (i : Nat) : String :=
   (toString i).map fun c => Char.ofNat (c.toNat - '0'.toNat + '₀'.toNat)
 
 open Lean Elab Tactic in
-/-- `peel_gep i, p, hp, s, x` steps the next instruction, which must be a
+/-- `peel_gep_limb i, p, hp, s, x` steps the next instruction, which must be a
 `getelementptr` off `p` by the constant `i`, and replaces the pointer it yields
 by `x<i> := p.withOffset (8 * i)` -- substituted into the goal, so the stepper's
 `v<n>`/`hv<n>` for the gep are gone afterwards. Leaves `hx<i> : Fits s.mem x<i>
@@ -160,7 +92,7 @@ _` beside it.
 
 Assumes a five-limb field element at `p`, i.e. `hp : Fits s.mem p (5 * 64)`;
 the remaining size is `(5 - i) * 64`. -/
-elab "peel_gep " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident : tactic => do
+elab "peel_gep_limb " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident : tactic => do
   let num := i.getNat
   -- `withOffset` counts bytes, `Fits` counts bits
   let offBytes := Syntax.mkNumLit (toString (num * 8))
@@ -214,7 +146,7 @@ elab "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
   let st := mkIdent (Name.mkSimple "s")
   -- byte offset of limb `i`, and the bits still left after it
   evalTactic (← `(tactic| obtain ⟨$blk, $hblk, $hlen⟩ := id $hptr))
-  evalTactic (← `(tactic| peel_load $blk, $ptr, $hblk, $st))
+  evalTactic (← `(tactic| peel_load (.bitvec (.concrete 64)), $blk, $ptr, $hblk, $st))
   evalTactic (← `(tactic| set $limb:ident := (($blk).bytes.extractLsb' ($ptr).offsetInBits 64) with $hlimb:ident))
   -- `$ptr` is a `let`-bound pointer for i > 0 and must be in the simp set to
   -- zeta-unfold; at limb 0 it is the plain fvar `p`, which simp would reject.

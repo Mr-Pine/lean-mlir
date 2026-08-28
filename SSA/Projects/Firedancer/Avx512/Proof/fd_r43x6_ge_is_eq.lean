@@ -234,13 +234,13 @@ returns the model's answer and leaves the stack as it found it -- its three
 slots are its frame, popped by `runFunction`. The callees are single rewrites:
 `denote_fd_r43x6_quad_mul_fast` at the call, and
 `spec_denote_fd_r43x6_is_nonzero` at the two `fd_r43x6_is_nonzero` calls. -/
-theorem run_fd_r43x6_ge_is_eq (x y : Quad)
-    (hx03 : R43x6.U46 x.v03) (hx14 : R43x6.U46 x.v14) (hx25 : R43x6.U46 x.v25)
-    (hy03 : R43x6.U46 y.v03) (hy14 : R43x6.U46 y.v14) (hy25 : R43x6.U46 y.v25)
+theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
     (s : GlobalState) (hs : s.WF) :
     ∃ s', StateT.run (runFunction (fd_r43x6_ge_is_eq.denote (quadDualValuation x y))) s
         = .value ([PoisonOr.value (geIsEq x y)]ₕ, s')
       ∧ s' ≈ s := by
+  obtain ⟨hx03, hx14, hx25⟩ := hx
+  obtain ⟨hy03, hy14, hy25⟩ := hy
   -- The body: three slots at the entry counter, nothing below it changed --
   -- all `runFunction` needs to pop the frame.
   suffices body : ∃ m, StateT.run (fd_r43x6_ge_is_eq.denote (quadDualValuation x y)) s
@@ -687,15 +687,13 @@ are invertible, the function returns `1` exactly when they represent the same
 curve point and `0` otherwise, and leaves the stack as it found it. The
 composition of `run_fd_r43x6_ge_is_eq` with `geIsEqDecides`; the model does
 not appear. -/
-theorem spec_run_fd_r43x6_ge_is_eq (x y : Quad)
-    (hx03 : R43x6.U46 x.v03) (hx14 : R43x6.U46 x.v14) (hx25 : R43x6.U46 x.v25)
-    (hy03 : R43x6.U46 y.v03) (hy14 : R43x6.U46 y.v14) (hy25 : R43x6.U46 y.v25)
+theorem spec_run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
     (hZ1 : IsUnit x.toPoint.Z) (hZ2 : IsUnit y.toPoint.Z)
     (s : GlobalState) (hs : s.WF) :
     ∃ s', StateT.run (runFunction (fd_r43x6_ge_is_eq.denote (quadDualValuation x y))) s
         = .value ([PoisonOr.value (if x.toPoint.SamePoint y.toPoint then 1 else 0)]ₕ, s')
       ∧ s' ≈ s := by
-  rw [← geIsEqDecides x y hx03 hx14 hx25 hy03 hy14 hy25 hZ1 hZ2]
-  exact run_fd_r43x6_ge_is_eq x y hx03 hx14 hx25 hy03 hy14 hy25 s hs
+  rw [← geIsEqDecides x y hx.1 hx.2.1 hx.2.2 hy.1 hy.2.1 hy.2.2 hZ1 hZ2]
+  exact run_fd_r43x6_ge_is_eq x y hx hy s hs
 
 end Firedancer.Avx512
