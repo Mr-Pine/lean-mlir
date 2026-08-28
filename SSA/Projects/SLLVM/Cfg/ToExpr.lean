@@ -1,7 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.Basic
+import SSA.Projects.SLLVM.Cfg.OfCom
 
 /-!
 # Reflecting a `Cfg` back into a Lean term
@@ -20,6 +20,17 @@ unfolding.
 namespace LeanMLIR.SLLVM
 
 open Lean Qq
+
+/-- How a `BlockCom.call`'s callee is reflected: by reference to a constant
+already in the environment -- the `Com` the callee was lifted to (embedded
+through `Cfg.ofCom`), or a `Cfg` constant directly -- or, absent a reference,
+inlined as before. A reference keeps the emitted term small and lets the
+callee's conformance theorem apply syntactically (`Cfg.denote_mk_ofCom` /
+`Cfg.denote_mk_self`); the caller trusts that the constant was lifted from
+the same region the binding supplies. -/
+inductive CalleeRef
+  | com (e : Lean.Expr)
+  | cfg (e : Lean.Expr)
 
 namespace CfgToExpr
 
@@ -64,7 +75,8 @@ private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty)
 
 mutual
 
-private partial def blockComE (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
+private partial def blockComE (refs : List (String × CalleeRef))
+    (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
     {Γ Γout : Ctxt SLLVM.Ty} → BlockCom Γ Γout rets succs → MetaM Lean.Expr :=
   fun {Γ} {Γout} b => match b with
   | .term t =>
@@ -72,26 +84,42 @@ private partial def blockComE (rets : List SLLVM.Ty) (succs : List (List SLLVM.T
         #[ctxtE Γ, tyListE rets, sigsE succs, terminatorE Γ rets succs t]
   | .var (tys := tys) e body => do
       let eE ← e.metaMap f
-      let bodyE ← blockComE rets succs body
+      let bodyE ← blockComE refs rets succs body
       return mkAppN (mkConst ``BlockCom.var)
         #[ctxtE Γ, tyListE tys, ctxtE Γout, tyListE rets, sigsE succs, eE, bodyE]
   | .call (argTys := argTys) (retTys := retTys) (csigs := csigs) (cΓout := cΓout)
       callee centry cblocks args body => do
-      let centryE ← blockComE retTys csigs centry
-      let cblocksE ← blocksE retTys cΓout cblocks
-      let bodyE ← blockComE rets succs body
-      return mkAppN (mkConst ``BlockCom.call)
-        #[ctxtE Γ, ctxtE Γout, tyListE rets, sigsE succs, tyListE argTys, tyListE retTys,
-          sigsE csigs, ctxtE cΓout, toExpr callee, centryE, cblocksE, f.mapVarVec args, bodyE]
+      let bodyE ← blockComE refs rets succs body
+      match refs.lookup callee with
+      | some ref =>
+          -- By reference: the callee's fields are projections of the constant,
+          -- so the emitted term never spells out its body.
+          let ΓinE := ctxtE (Ctxt.ofList argTys.reverse)
+          let cfgE := match ref with
+            | .cfg e => e
+            | .com e => mkAppN (mkConst ``Cfg.ofCom) #[tyListE retTys, ΓinE, e]
+          let proj (fld : Name) : Lean.Expr :=
+            mkAppN (mkConst fld) #[ΓinE, tyListE retTys, cfgE]
+          return mkAppN (mkConst ``BlockCom.call)
+            #[ctxtE Γ, ctxtE Γout, tyListE rets, sigsE succs, tyListE argTys, tyListE retTys,
+              proj ``Cfg.sigs, proj ``Cfg.Γout, toExpr callee,
+              proj ``Cfg.entry, proj ``Cfg.blocks, f.mapVarVec args, bodyE]
+      | none =>
+          let centryE ← blockComE refs retTys csigs centry
+          let cblocksE ← blocksE refs retTys cΓout cblocks
+          return mkAppN (mkConst ``BlockCom.call)
+            #[ctxtE Γ, ctxtE Γout, tyListE rets, sigsE succs, tyListE argTys, tyListE retTys,
+              sigsE csigs, ctxtE cΓout, toExpr callee, centryE, cblocksE, f.mapVarVec args, bodyE]
 
-private partial def blocksE (rets : List SLLVM.Ty) (Γamb : Ctxt SLLVM.Ty) :
+private partial def blocksE (refs : List (String × CalleeRef))
+    (rets : List SLLVM.Ty) (Γamb : Ctxt SLLVM.Ty) :
     {sigs : List (List SLLVM.Ty)} → Blocks Γamb rets sigs → MetaM Lean.Expr :=
   fun {sigs} bs => match sigs, bs with
   | [], .nil =>
       return mkAppN (mkConst ``Blocks.nil) #[ctxtE Γamb, tyListE rets]
   | argTys :: sigs, .cons (Γout := Γout) b bs => do
-      let bE ← blockComE rets sigs b
-      let bsE ← blocksE rets Γamb bs
+      let bE ← blockComE refs rets sigs b
+      let bsE ← blocksE refs rets Γamb bs
       return mkAppN (mkConst ``Blocks.cons)
         #[ctxtE Γamb, tyListE rets, tyListE argTys, sigsE sigs, ctxtE Γout, bE, bsE]
 
@@ -101,12 +129,12 @@ end CfgToExpr
 
 open CfgToExpr in
 /-- Build a (Lean) `Expr` representing a `Cfg` value. -/
-def Cfg.toExprM {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (cfg : Cfg Γin rets) :
-    MetaM Lean.Expr := do
+def Cfg.toExprM {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (cfg : Cfg Γin rets)
+    (refs : List (String × CalleeRef) := []) : MetaM Lean.Expr := do
   match cfg with
   | .mk (sigs := sigs) (Γout := Γout) entry blocks =>
-    let entryE ← blockComE rets sigs entry
-    let blocksE ← blocksE rets Γout blocks
+    let entryE ← blockComE refs rets sigs entry
+    let blocksE ← blocksE refs rets Γout blocks
     return mkAppN (mkConst ``Cfg.mk)
       #[ctxtE Γin, tyListE rets, sigsE sigs, ctxtE Γout, entryE, blocksE]
 

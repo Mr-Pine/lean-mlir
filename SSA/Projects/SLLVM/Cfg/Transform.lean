@@ -145,7 +145,8 @@ private def isIntrinsicCall (opStx : Op 0) : Bool :=
 `BlockCom.call` node whose callee -- bound beforehand, like the `Com` path's
 `with @f := …` -- is built by `mkCallee` as a `Cfg` of its own (a
 straight-line callee is the one-block case). -/
-def mkBlockCom (mkCallee : MkCallee) (rets : List SLLVM.Ty)
+def mkBlockCom (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
+    (rets : List SLLVM.Ty)
     (succs : List (List SLLVM.Ty)) (remaining all : List String) :
     (Γ : Ctxt SLLVM.Ty) → List (Op 0) → BuilderM SLLVM (Σ Γout, BlockCom Γ Γout rets succs)
   | Γ, [termStx] => do
@@ -154,13 +155,18 @@ def mkBlockCom (mkCallee : MkCallee) (rets : List SLLVM.Ty)
       if opStx.name == "llvm.call" && !isIntrinsicCall opStx then
         let some (.symbol callee) := opStx.getAttr? "callee"
           | throw <| .generic "llvm.call: expected a `callee` symbol attribute"
-        let some calleeReg := opStx.regions[0]?
-          | throw <| .unsupportedOp s!"llvm.call to {callee}: the callee's body \
-              is not bound. Supply it with `with @{callee} := …`."
         let args ← opStx.parseArgs Γ
         let argTys := args.types
         let retTys ← opStx.res.mapM (fun r => mkTy r.2)
-        let ⟨cΓin, crets, ccfg⟩ ← mkCallee calleeReg
+        -- A spliced region wins; otherwise the callee's already-lifted constant
+        -- (evaluated into `valTable` by the quotation) supplies the body.
+        let ⟨cΓin, crets, ccfg⟩ ← match opStx.regions[0]? with
+          | some calleeReg => mkCallee calleeReg
+          | none => match valTable.lookup callee with
+            | some p => pure p
+            | none => throw <| .unsupportedOp s!"llvm.call to {callee}: the callee's \
+                body is not bound. Supply it with `with @{callee} := …` or define a \
+                lifted `{callee}` in scope."
         if hΓ : cΓin = Ctxt.ofList argTys.reverse then
           if hr : crets = retTys then
             let ccfg : Cfg (Ctxt.ofList argTys.reverse) retTys := hΓ ▸ hr ▸ ccfg
@@ -168,7 +174,7 @@ def mkBlockCom (mkCallee : MkCallee) (rets : List SLLVM.Ty)
             let _ ← (opStx.res.zip retTys).foldlM (init := Γ) fun Γ (var, ty) => do
               let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
               return Γ'
-            let ⟨Γout, body⟩ ← mkBlockCom mkCallee rets succs remaining all (retTys ++ Γ) rest
+            let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs remaining all (retTys ++ Γ) rest
             return ⟨Γout, .call callee centry cblocks args.toHVector body⟩
           else
             throw <| .generic s!"llvm.call to {callee}: the callee returns \
@@ -188,7 +194,7 @@ def mkBlockCom (mkCallee : MkCallee) (rets : List SLLVM.Ty)
       let _ ← (opStx.res.zip tys).foldlM (init := Γ) fun Γ (var, ty) => do
         let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
         return Γ'
-      let ⟨Γout, body⟩ ← mkBlockCom mkCallee rets succs remaining all (tys ++ Γ) rest
+      let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs remaining all (tys ++ Γ) rest
       return ⟨Γout, .var (e.changeEffect (EffectKind.le_impure _)) body⟩
   | _, [] => throw <| .generic "empty block: every block must end in a terminator"
 
@@ -202,7 +208,8 @@ private def declareBlockArgNames (args : List (TypedSSAVal 0)) : BuilderM SLLVM 
 /-- Build the tail blocks. `snapshot` is the name mapping right after the
 entry block -- restoring it before each block is what enforces depth-1
 dominance. `remainingNames` starts with the current block's own name. -/
-def mkBlocks (mkCallee : MkCallee) (all : List String) (rets : List SLLVM.Ty)
+def mkBlocks (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
+    (all : List String) (rets : List SLLVM.Ty)
     (Γamb : Ctxt SLLVM.Ty) (snapshot : NameMapping) :
     (bs : List (MLIR.AST.Block 0)) → (sigs : List (List SLLVM.Ty)) →
     (remainingNames : List String) → BuilderM SLLVM (Blocks Γamb rets sigs)
@@ -214,14 +221,14 @@ def mkBlocks (mkCallee : MkCallee) (all : List String) (rets : List SLLVM.Ty)
       declareBlockArgNames b.args
       let ⟨_Γout, body⟩ ←
         try
-          mkBlockCom mkCallee rets sigs restNames all
+          mkBlockCom mkCallee valTable rets sigs restNames all
             (Ctxt.ofList argTys.reverse ++ Γamb) b.ops
         catch
           | .undeclaredName n => throw <| .generic s!"%{n} is not in scope in ^{b.name}: \
               a CFG block may only use entry-block definitions and its own arguments \
               (depth-1 dominance)"
           | e => throw e
-      let rest ← mkBlocks mkCallee all rets Γamb snapshot bs sigs restNames
+      let rest ← mkBlocks mkCallee valTable all rets Γamb snapshot bs sigs restNames
       return .cons body rest
   | _, _, _ => throw <| .generic "internal: blocks out of sync with signatures"
 
@@ -234,7 +241,8 @@ private def findRets (reg : Region 0) : ExceptM SLLVM (List SLLVM.Ty) := do
   retStx.args.mapM (TypedSSAVal.mkTy ·)
 
 /-- The `mkCfg` body, with callee-building supplied as data. -/
-def mkCfgCore (mkCallee : MkCallee) (reg : Region 0) : BuilderM SLLVM ParsedCfg := do
+def mkCfgCore (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
+    (reg : Region 0) : BuilderM SLLVM ParsedCfg := do
   let sigTable ← reg.blocks.mapM fun b => do
     let tys ← (b.args.mapM (TypedSSAVal.mkTy ·) : ExceptM SLLVM _)
     return (b.name, tys)
@@ -245,20 +253,20 @@ def mkCfgCore (mkCallee : MkCallee) (reg : Region 0) : BuilderM SLLVM ParsedCfg 
   let entryArgTys ← (reg.args.mapM (TypedSSAVal.mkTy ·) : ExceptM SLLVM _)
   declareBlockArgNames reg.args
   let Γin := Ctxt.ofList entryArgTys.reverse
-  let ⟨Γout, entry⟩ ← mkBlockCom mkCallee rets (sigTable.map (·.2)) names names Γin reg.ops
+  let ⟨Γout, entry⟩ ← mkBlockCom mkCallee valTable rets (sigTable.map (·.2)) names names Γin reg.ops
   let snapshot ← get
-  let blocks ← mkBlocks mkCallee names rets Γout snapshot reg.blocks (sigTable.map (·.2)) names
+  let blocks ← mkBlocks mkCallee valTable names rets Γout snapshot reg.blocks (sigTable.map (·.2)) names
   return ⟨Γin, rets, ⟨entry, blocks⟩⟩
 
 /-- Callee building with a nesting bound: each level of call nesting spends
 one unit of fuel (the bound is not a real restriction, exactly as in
 `mkComAux`). A callee is its own scope, so it gets a fresh name mapping. -/
-def mkCfgAux : Nat → MkCallee
+def mkCfgAux (valTable : List (String × ParsedCfg)) : Nat → MkCallee
   | 0, _ => throw <| .generic "call nesting is too deep"
   | fuel + 1, reg => do
       let saved ← get
       set ([] : NameMapping)
-      let r ← mkCfgCore (mkCfgAux fuel) reg
+      let r ← mkCfgCore (mkCfgAux valTable fuel) valTable reg
       set saved
       return r
 
@@ -268,8 +276,8 @@ def maxCallDepth : Nat := 64
 /-- Turn a (possibly multi-block, forward-branching) region into a `Cfg`.
 Calls become `BlockCom.call` nodes; their callees must have been bound into
 the ops beforehand (`bindCallees`, surfaced as `with @f := …`). -/
-def mkCfg (reg : Region 0) :
+def mkCfg (reg : Region 0) (valTable : List (String × ParsedCfg) := []) :
     ExceptM SLLVM (Σ (Γin : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty), Cfg Γin rets) :=
-  BuilderM.runWithEmptyMapping <| mkCfgCore (mkCfgAux maxCallDepth) reg
+  BuilderM.runWithEmptyMapping <| mkCfgCore (mkCfgAux valTable maxCallDepth) valTable reg
 
 end LeanMLIR.SLLVM
