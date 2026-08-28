@@ -145,6 +145,21 @@ theorem _root_.LeanMLIR.GlobalState.WF.of_equiv {s s' : GlobalState}
   rw [← h.2 q]
   exact hs q (by rw [h.1]; exact hq)
 
+theorem _root_.LeanMLIR.GlobalState.WF.afterAlloca {s : GlobalState} (hs : s.WF) (w : Nat) :
+    (s.afterAlloca w).WF := by
+  intro q hq
+  simp only [GlobalState.afterAlloca] at hq ⊢
+  have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ q := by
+    rintro rfl; change s.alloc.nextFreeBlock + 1 ≤ s.alloc.nextFreeBlock at hq; omega
+  simpa [MemoryState.live?, MemoryState.getElem?_eq, Std.HashMap.getElem?_insert, hne]
+    using hs q (by omega)
+
+theorem fits_afterAlloca (s : GlobalState) (w : Nat) :
+    Fits (s.afterAlloca w).mem ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ w :=
+  ⟨{ length := (w + 7) / 8, bytes := 0#_ },
+    by simp [GlobalState.afterAlloca, MemoryState.getElem?_eq],
+    by simp [Pointer.offsetInBits, LiveBlock.lengthInBits]; omega⟩
+
 /-- The state a function returns to (`run_runFunction`) is equivalent to the one
 it was entered in, provided its body left the blocks below the entry counter
 live-for-live as it found them. -/
@@ -164,6 +179,19 @@ theorem run_store {t : LLVM.Ty} {x : TyDenote.toType t} {b : BitVec (LLVM.Ty.wid
     (store (.value p) t x).run m = .value ((), m.splice p b) := by
   obtain ⟨block, hblk, hlen⟩ := hfit
   simp [store, getLiveBlockOrUB, hblk, hx, throwUBIf, Nat.not_lt.mpr hlen,
+    MemoryState.splice, PoisonOr.getOrUB]
+
+/-! ## `memset` -/
+
+/-- A memset of `len` bytes at a pointer with room for them splices `len`
+copies of the fill byte in. The `store` lemma's shape, with the written width
+depending on the (run-time) length. -/
+theorem run_memset {m : MemoryState} {p : Pointer} {b : BitVec 8} {len : BitVec 64}
+    (hfit : Fits m p (8 * len.toNat)) :
+    (memset (.value p) (.value b) (.value len)).run m
+      = .value ((), m.splice p (BitVec.replicate len.toNat b)) := by
+  obtain ⟨block, hblk, hlen⟩ := hfit
+  simp [memset, getLiveBlockOrUB, hblk, throwUBIf, Nat.not_lt.mpr hlen,
     MemoryState.splice, PoisonOr.getOrUB]
 
 /-! ## `load` -/
