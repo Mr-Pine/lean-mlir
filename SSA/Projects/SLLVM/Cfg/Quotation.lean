@@ -45,7 +45,7 @@ SAFETY: as `evalExprOfTypeRegion` -- the `implemented_by` is safe assuming
 private partial def evalParsedCfg : Q(ParsedCfg) → MetaM ParsedCfg := default
 
 private def elabCfgOfRegion (ast : MLIR.AST.Region 0) : TermElabM Lean.Expr := do
-  match mkCfg ast with
+  match mkCfg (foldGepZeroIndex ast) with
   | .error (e : TransformError) => throwError (repr e)
   | .ok ⟨_, _, cfg⟩ => cfg.toExprM
 
@@ -99,7 +99,7 @@ private def elabCfgWithBindings (ast : MLIR.AST.Region 0)
     match b with | .ref r _ => some (n, r) | _ => none
   let vals := table.filterMap fun (n, b) =>
     match b with | .ref _ v => some (n, v) | _ => none
-  match mkCfg (bindCallees regions ast) vals with
+  match mkCfg (foldGepZeroIndex (bindCallees regions ast)) vals with
   | .error (e : TransformError) => throwError (repr e)
   | .ok ⟨_, _, cfg⟩ => cfg.toExprM refs
 

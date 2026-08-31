@@ -104,4 +104,41 @@ def gepConstIndex : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]
     "llvm.return"(%v) : (i64) -> ()
 }]
 
+/-- The `fd_f25519_set` gep shape, verbatim: `x->limb[k]` as a gep of
+`array<5 x i64>` with *two* dynamic index operands, the leading one the
+constant `0`. `foldGepZeroIndex` must rewrite it to the single-index `i64`
+gep, so element 1 lands at byte offset 8. -/
+def zeroLeadGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i320}> : () -> (!ptr)
+    %zero = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> (i64)
+    %one  = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %a    = "llvm.mlir.constant"() <{value = 11 : i64}> : () -> (i64)
+    %b    = "llvm.mlir.constant"() <{value = 22 : i64}> : () -> (i64)
+    "llvm.store"(%a, %p) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %q = "llvm.getelementptr"(%p, %zero, %one) <{elem_type = !llvm.array<5 x i64>, inbounds, rawConstantIndices = array<i32: -2147483648, -2147483648>}> : (!llvm.ptr, i64, i64) -> !llvm.ptr
+    "llvm.store"(%b, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %v = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %w = "llvm.load"(%p) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %r = "llvm.add"(%v, %w) <{overflowFlags = #llvm.overflow<none>}> : (i64, i64) -> i64
+    "llvm.return"(%r) : (i64) -> ()
+}]
+
+#guard runScalar zeroLeadGep == some (.value 33#64)
+
+-- A two-operand gep whose leading index is *not* a visible zero must stay
+-- rejected, not folded.
+/--
+error: Expected exactly 2 argument(s), but found 3
+-/
+#guard_msgs in
+def twoDynGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p   = "ptr.alloca"() <{elem_type = i320}> : () -> (!ptr)
+    %one = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p, %one, %one) <{elem_type = !llvm.array<5 x i64>, inbounds, rawConstantIndices = array<i32: -2147483648, -2147483648>}> : (!llvm.ptr, i64, i64) -> !llvm.ptr
+    %v = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%v) : (i64) -> ()
+}]
+
 end LeanMLIR.SLLVM.Tests.Gep

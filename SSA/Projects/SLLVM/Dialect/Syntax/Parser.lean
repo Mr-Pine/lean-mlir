@@ -541,6 +541,69 @@ where
           | none   => op
       | _ => op
 
+/-- `AggTy`, back as `getelementptr`'s `elem_type` spells it. Struct names are
+not kept by `AggTy`, so they are dropped -- `parseAggTy` treats them as
+optional, and only the layout is ever read. -/
+partial def AggTy.print : AggTy → String
+  | .int w => s!"i{w}"
+  | .ptr => "ptr"
+  | .array n t => s!"array<{n} x {t.print}>"
+  | .vector n t => s!"vector<{n}x{t.print}>"
+  | .struct fields => "struct<(" ++ String.intercalate ", " (fields.map print) ++ ")>"
+
+private def _root_.MLIR.AST.AttrDict.set (d : AttrDict 0) (key : String) (v : AttrValue 0) :
+    AttrDict 0 :=
+  match d with
+  | .mk entries => .mk <| entries.map fun
+      | .mk k old => .mk k (if k == key then v else old)
+
+open MLIR.AST in
+/-- Fold away a gep's leading zero index.
+
+GCC spells `x->limb[k]` as a gep with *two* dynamic index operands
+(`rawConstantIndices = array<i32: -2147483648, -2147483648>`): a leading `0`
+into the pointee and the limb index, both SSA values. `SLLVMOp.gep` carries
+exactly one dynamic index, so the shape is normalised here, on the AST: a gep
+of `array<n x t>` whose leading operand is visibly the constant `0` is
+`ptradd` by `sizeof t · i`, i.e. the single-index gep of `t` that the parse
+arm already accepts. Anything else -- a leading index that is not a visible
+zero, a non-array element type -- is left for the parse arm to reject. Each
+region is its own scope; only entry-block constants are collected, which is
+where MLIR hoists them. -/
+partial def foldGepZeroIndex (reg : Region 0) : Region 0 :=
+  let zeros := reg.ops.filterMap fun op =>
+    if op.name == "llvm.mlir.constant" then
+      match op.getAttr? "value", op.res with
+      | some (.int 0 _), [(name, _)] => some name
+      | _, _ => none
+    else none
+  { reg with
+    ops := reg.ops.map (goOp zeros)
+    blocks := reg.blocks.map fun b => { b with ops := b.ops.map (goOp zeros) } }
+where
+  sentinel : Int := -2147483648
+  goOp (zeros : List SSAVal) (op : Op 0) : Op 0 :=
+    let op := { op with regions := op.regions.map foldGepZeroIndex }
+    if op.name != "llvm.getelementptr" then op
+    else match op.getAttr? "rawConstantIndices", op.args, op.getAttr? "elem_type" with
+      | some (.array ity (.int s₀ _ :: .int s₁ t₁ :: rest)),
+        p :: (idx₀, _) :: idxs,
+        some (.type (.undefined tyText)) =>
+          if s₀ == sentinel && s₁ == sentinel && zeros.contains idx₀ then
+            match parseAggTy (tyText.toList.drop "llvm.".length) with
+            | some (.array _ elem, []) =>
+                let elemAttr : AttrValue 0 := match elem with
+                  | .int w => .type (MLIRType.int .Signless w)
+                  | t => .type (.undefined ("llvm." ++ t.print))
+                { op with
+                  args := p :: idxs
+                  attrs := op.attrs
+                    |>.set "elem_type" elemAttr
+                    |>.set "rawConstantIndices" (.array ity (.int s₁ t₁ :: rest)) }
+            | _ => op
+          else op
+      | _, _, _ => op
+
 open MLIR.AST in
 /-- The one semantic assumption the `llvm.alloca` parse arm makes, checked:
 `Op.alloca` allocates a single element, so every `llvm.alloca`'s count operand
@@ -585,7 +648,7 @@ private def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
     | _ => throwUnsupportedSyntax
 
 elab "[sllvm| " reg:mlir_region "]" : term =>
-  SSA.elabIntoCom' reg SLLVM (check := allocaCountsAreOne)
+  SSA.elabIntoCom' reg SLLVM (pre := foldGepZeroIndex) (check := allocaCountsAreOne)
 
 /-- `[sllvm| ‹region› with @f := fRegion]` binds the bodies of the symbols the
 region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
@@ -593,16 +656,18 @@ region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
 this is how a lifted call site gets its callee. -/
 elab "[sllvm| " reg:mlir_region " with " bs:sllvmCallee,+ "]" : term => do
   let table ← elabCalleeTable bs.getElems
-  SSA.elabIntoCom' reg SLLVM (pre := bindCallees table) (check := allocaCountsAreOne)
+  SSA.elabIntoCom' reg SLLVM (pre := foldGepZeroIndex ∘ bindCallees table)
+    (check := allocaCountsAreOne)
 
 /-- `[sllvm| … ]` from an already-built `MLIR.AST.Region 0`, so a region can be
 written once and used both as a `Com` and as a callee binding. -/
 elab "[sllvm_of| " t:term "]" : term => do
-  SSA.elabIntoCom'OfRegion (← elabRegionTerm t) SLLVM (check := allocaCountsAreOne)
+  SSA.elabIntoCom'OfRegion (foldGepZeroIndex (← elabRegionTerm t)) SLLVM
+    (check := allocaCountsAreOne)
 
 /-- `[sllvm_of| r with @f := fRegion]`: `[sllvm_of| r]` with callee bindings,
 for a lifted region that both *is* a callee and *has* callees of its own. -/
 elab "[sllvm_of| " t:term " with " bs:sllvmCallee,+ "]" : term => do
   let table ← elabCalleeTable bs.getElems
-  SSA.elabIntoCom'OfRegion (bindCallees table (← elabRegionTerm t)) SLLVM
+  SSA.elabIntoCom'OfRegion (foldGepZeroIndex (bindCallees table (← elabRegionTerm t))) SLLVM
     (check := allocaCountsAreOne)
