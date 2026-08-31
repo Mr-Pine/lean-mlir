@@ -12,12 +12,6 @@ lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.i
   replace hb : m[p.id]? = some (Block.live b) := by split at hb <;> simp_all
   simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
 
-/-- A store leaves the blocks it does not address alone. -/
-@[simp]
-theorem live?_splice_ne {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    {q : BlockId} (h : p.id ≠ q) : (m.splice p x).live? q = m.live? q := by
-  simp only [MemoryState.live?, getElem?_splice_ne h]
-
 /-- The `getElem?` form of a live block. -/
 theorem getElem?_of_live? {m : MemoryState} {q : BlockId} {b : LiveBlock}
     (h : m.live? q = some b) : m[q]? = some (.live b) := by
@@ -28,25 +22,6 @@ theorem getElem?_of_live? {m : MemoryState} {q : BlockId} {b : LiveBlock}
 theorem live?_splice_of_lt {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
     {b : BlockId} (h : b.id < p.id.id) : (m.splice p x).live? b = m.live? b :=
   live?_splice_ne (by rintro rfl; omega)
-
-/-- An `alloca` leaves the blocks below the counter alone. -/
-theorem live?_afterAlloca_of_lt {s : GlobalState} {w : Nat} {b : BlockId}
-    (h : b.id < s.alloc.nextFreeBlock) : (s.afterAlloca w).mem.live? b = s.mem.live? b := by
-  have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ b := by
-    rintro rfl; change s.alloc.nextFreeBlock < s.alloc.nextFreeBlock at h; omega
-  simp [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq,
-    Std.HashMap.getElem?_insert, hne]
-
-/-- A store through a pointer that addresses no live block does nothing. -/
-theorem splicedDead {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    (h : m.live? p.id = none) : (m.splice p x).live? p.id = none := by
-  unfold MemoryState.splice
-  cases hb : m[p.id]? with
-  | none => exact h
-  | some blk =>
-    cases blk with
-    | dead => exact h
-    | live b => simp [MemoryState.live?, hb] at h
 
 /-- Two stores at *adjacent* ranges through the same base pointer are one
 store of the concatenation -- the `MemoryState` counterpart of
@@ -89,18 +64,6 @@ theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
     | none => rw [splicedDead hb, splicedDead ((h.2 p.id).symm.trans hb)]
     | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.2 p.id).symm.trans hb)]
   · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.2 q
-
-/-- A store neither resurrects a block nor kills one. -/
-theorem live?_splice_eq_none {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    {q : BlockId} (h : m.live? q = none) : (m.splice p x).live? q = none := by
-  by_cases hq : p.id = q
-  · subst hq; exact splicedDead h
-  · rw [live?_splice_ne hq]; exact h
-
-/-- A store keeps the blocks above the counter dead. -/
-theorem _root_.LeanMLIR.GlobalState.WF.splice {s : GlobalState} {p : Pointer} {w : Nat}
-    {x : BitVec w} (hs : s.WF) : ({ s with mem := s.mem.splice p x } : GlobalState).WF :=
-  fun q hq => live?_splice_eq_none (hs q hq)
 
 /-- The frame kill at the end of a call that allocated nothing is invisible:
 every block it could kill is dead already. -/
@@ -167,5 +130,87 @@ theorem live?_afterAlloca_of_fits {s : GlobalState} (hs : s.WF) (w : Nat) {p : P
     {n : Nat} (h : Fits s.mem p n) :
     (s.afterAlloca w).mem.live? p.id = s.mem.live? p.id :=
   live?_afterAlloca_of_lt (lt_nextFreeBlock_of_fits hs h)
+
+/-! ## Locals frames
+
+A region that allocates locals -- `fd_f25519_t t1[1], t2[1], …` -- steps
+through states whose only lasting difference from the entry state `s` sits in
+blocks at or above `s`'s counter. `FrameBelow` names that invariant once, so a
+proof carries a single fact through its `alloca`s, its callee equivalences,
+and its stores to locals, instead of re-deriving a `live?` chain at every
+step. It is stated to plug directly into `GlobalState.killFrom_equiv`, which
+is how such a region's `popFrame` ending discharges. -/
+
+/-- Every block below `n₀` reads in `s'` as it did in `s`. With
+`n₀ = s.alloc.nextFreeBlock` this is the frame condition of a region entered
+at `s`: everything the caller could address is untouched. -/
+def FrameBelow (n₀ : Nat) (s s' : GlobalState) : Prop :=
+  ∀ b : BlockId, b.id < n₀ → s'.mem.live? b = s.mem.live? b
+
+namespace FrameBelow
+
+variable {n₀ : Nat} {s s' s'' : GlobalState}
+
+protected theorem refl (n₀ : Nat) (s : GlobalState) : FrameBelow n₀ s s := fun _ _ => rfl
+
+protected theorem trans (h : FrameBelow n₀ s s') (h' : FrameBelow n₀ s' s'') :
+    FrameBelow n₀ s s'' :=
+  fun b hb => (h' b hb).trans (h b hb)
+
+/-- An `alloca` in a state whose counter is at or above `n₀` allocates outside
+the frame. -/
+theorem afterAlloca {w : Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock) (hf : FrameBelow n₀ s s') :
+    FrameBelow n₀ s (s'.afterAlloca w) :=
+  fun b hb => (live?_afterAlloca_of_lt (by omega)).trans (hf b hb)
+
+/-- A store to a local -- a pointer whose block id is at or above `n₀` --
+stays outside the frame. -/
+theorem splice {t : Pointer} {w : Nat} {x : BitVec w} (ht : n₀ ≤ t.id.id)
+    (hf : FrameBelow n₀ s s') :
+    FrameBelow n₀ s { s' with mem := s'.mem.splice t x } :=
+  fun b hb => (live?_splice_ne fun h => absurd (h ▸ hb) (by omega)).trans (hf b hb)
+
+/-- A callee's result state is equivalent to a splice state; the frame
+transports along the equivalence. -/
+theorem of_equiv (he : s' ≈ s'') (hf : FrameBelow n₀ s s') : FrameBelow n₀ s s'' :=
+  fun b hb => (he.2 b).symm.trans (hf b hb)
+
+/-- The `popFrame` ending: a region entered at `s` whose final state kept the
+frame restores `s` up to equivalence. -/
+theorem popFrame_equiv (hs : s.WF) (hf : FrameBelow s.alloc.nextFreeBlock s s') :
+    s.popFrame s'.mem ≈ s :=
+  GlobalState.killFrom_equiv s'.mem hs hf
+
+end FrameBelow
+
+/-- Equal blocks splice to equal blocks: `splice` looks only at the block the
+pointer addresses. -/
+theorem live?_splice_congr {m₁ m₂ : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    (h : m₁.live? p.id = m₂.live? p.id) :
+    (m₁.splice p x).live? p.id = (m₂.splice p x).live? p.id := by
+  cases hb : m₂.live? p.id with
+  | none => rw [splicedDead (h.trans hb), splicedDead hb]
+  | some blk => rw [splicedLive _ _ _ (h.trans hb), splicedLive _ _ _ hb]
+
+/-- The `popFrame` ending of a region that wrote exactly one caller block `o`
+(through an out-parameter) and otherwise kept its frame: the result is the
+entry state with one splice. `hoval` says `m` holds at `o` what the splice
+puts there -- typically via `live?_splice_congr` and the frame up to the final
+write. -/
+theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} {w : Nat}
+    {x : BitVec w} (hs : s.WF) (ho : o.id.id < s.alloc.nextFreeBlock)
+    (hf : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o.id →
+      m.live? b = s.mem.live? b)
+    (hoval : m.live? o.id = (s.mem.splice o x).live? o.id) :
+    ({ s with mem := s.mem.splice o x } : GlobalState) ≈ s.popFrame m := by
+  refine ⟨rfl, fun b => ?_⟩
+  show (s.mem.splice o x).live? b = (m.killFrom s.alloc.nextFreeBlock).live? b
+  by_cases hb : b.id < s.alloc.nextFreeBlock
+  · rw [live?_killFrom_of_lt hb]
+    by_cases hbo : b = o.id
+    · rw [hbo, ← hoval]
+    · rw [hf b hb hbo, live?_splice_ne (fun h => hbo h.symm)]
+  · rw [live?_killFrom_of_le (by omega),
+      live?_splice_ne (fun h => by rw [← h] at hb; omega), hs b (by omega)]
 
 end Firedancer

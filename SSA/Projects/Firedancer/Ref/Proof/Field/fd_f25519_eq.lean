@@ -20,20 +20,17 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
   fd_f25519_eq_spec p q s := by
     simp only [fd_f25519_eq_spec, Cfg.denote]
 
-    obtain ⟨r, sAlloc, hrdef, hsAlloc⟩ := GlobalState.exists_afterAlloca s (5 * 64)
-    -- the fresh block is 40 zero bytes at offset 0: exactly one field element.
-    have hr₁ : IsFieldElemPtr sAlloc.mem r := by
-      subst hrdef hsAlloc; exact isFieldElemPtr_afterAlloca_self s
-    -- a pointer live in `s` predates the frame, so the fresh block's id is not
-    -- its own and the insert leaves it alone: `p` and `q` read as they did.
+    -- `fd_f25519_t r[1]`
+    obtain ⟨r, sAlloc, hrdef, hsAlloc, hsAllocWF, hrfits, hrid, hroff, -, -⟩ :=
+      GlobalState.exists_afterAlloca_facts s hs (5 * 64)
+    have fb : FrameBelow s.alloc.nextFreeBlock s sAlloc :=
+      hsAlloc ▸ FrameBelow.afterAlloca (le_refl _) (FrameBelow.refl _ _)
+    have hr₁ : IsFieldElemPtr sAlloc.mem r := ⟨hrfits, by simp [hroff]⟩
     have hlive : ∀ t : Pointer, IsFieldElemPtr s.mem t →
-        sAlloc.mem.live? t.id = s.mem.live? t.id := by
-      subst hsAlloc; exact fun t ht => live?_afterAlloca_of_fits hs _ ht.left
-    have hframe : ∀ t : Pointer, IsFieldElemPtr s.mem t → IsFieldElemPtr sAlloc.mem t :=
-      fun t ht => isFieldElemPtr_of_live?_eq (hlive t ht) ht
-    have hp₁ : IsFieldElemPtr sAlloc.mem p := hframe p hp
-    have hq₁ : IsFieldElemPtr sAlloc.mem q := hframe q hq
-    have hsAllocWF : sAlloc.WF := by subst hsAlloc; exact hs.afterAlloca _
+        sAlloc.mem.live? t.id = s.mem.live? t.id :=
+      fun t ht => fb t.id (lt_nextFreeBlock_of_fits hs ht.left)
+    have hp₁ : IsFieldElemPtr sAlloc.mem p := isFieldElemPtr_of_live?_eq (hlive p hp) hp
+    have hq₁ : IsFieldElemPtr sAlloc.mem q := isFieldElemPtr_of_live?_eq (hlive q hq) hq
 
     have hpbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? p i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
       fun i l hl => limbBounds_readLimb? hp hpbounds i l (by simpa [readLimb?, hlive p hp] using hl)
@@ -53,30 +50,21 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
       apply fits_equiv hsubstate_eq
       simpa using fits_splice hr₁.1
 
-    -- the sub only spliced at `r`, which is *below* `sAlloc`'s counter, so
-    -- nothing at or above it became live.
-    have hsubstateWF : substate.WF := by
-      have halloc : sAlloc.alloc = substate.alloc := hsubstate_eq.1
-      intro t ht
-      rw [← halloc] at ht
-      rw [← hsubstate_eq.2 t]
-      grind [live?_splice_ne, GlobalState.afterAlloca, hsAllocWF t ht]
+    have hsubstateWF : substate.WF := GlobalState.WF.of_equiv hsAllocWF.splice hsubstate_eq
 
-    -- and `fd_f25519_is_zero` in the total form
+    -- `fd_f25519_is_zero( r )`, which takes its bound in the total form
     have hrbounds : LimbBounds hr₂ := limbBounds_of_readLimb? hr₂ hrbounds?
 
     obtain ⟨iszerostate, hiszerostate, hiszerostate_eq⟩ :=
       fd_f25519_is_zero_conforms r substate hsubstateWF hr₂ hrbounds
 
-    refine ⟨s.popFrame iszerostate.mem, run_runFunction (s' := iszerostate) ?_, ?_⟩
-    case refine_2 =>
-      refine GlobalState.Equiv.symm ((GlobalState.killFrom_equiv iszerostate.mem hs) ?_)
-      intro t ht
-      have hne : r.id ≠ t := by
-        grind only
-      rw [← hiszerostate_eq.2 t, ← hsubstate_eq.2 t]
-      grind only [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq,
-        Std.HashMap.getElem?_insert, live?_splice_ne]
+    -- the frame holds only `r`, so popping it restores `s`
+    have fbZero : FrameBelow s.alloc.nextFreeBlock s iszerostate :=
+      FrameBelow.of_equiv hiszerostate_eq
+        (FrameBelow.of_equiv hsubstate_eq (FrameBelow.splice (by omega) fb))
+
+    refine ⟨s.popFrame iszerostate.mem, run_runFunction (s' := iszerostate) ?_,
+      GlobalState.Equiv.symm (FrameBelow.popFrame_equiv hs fbZero)⟩
 
     denote_step_all v 0
     denote_eval v 0 0

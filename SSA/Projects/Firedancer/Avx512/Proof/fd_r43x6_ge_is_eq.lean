@@ -430,248 +430,247 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
     simp only [EffectM.run_bind, EffectM.run_pure] at h3
     simp only [h3, PoisonOr.value_bind]
     rfl
-  ·
-    have hd01 : (⟨⟨mem_slot_1⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_2⟩, 0⟩ : Pointer).id := by
-      simp only [ne_eq, BlockId.mk.injEq, mem_slot_2]; omega
-    have hd02 : (⟨⟨mem_slot_1⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_3⟩, 0⟩ : Pointer).id := by
-      simp only [ne_eq, BlockId.mk.injEq, mem_slot_3, mem_slot_2]; omega
-    have hd12 : (⟨⟨mem_slot_2⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_3⟩, 0⟩ : Pointer).id := by
-      simp only [ne_eq, BlockId.mk.injEq, mem_slot_3]; omega
-    obtain ⟨hld0, hld1, hld2⟩ :=
-      killFrom_readback (n₀ := mem_slot_3 + 1)
-        (u := (quadMulResult XShuff YShuff).v03) (v := (quadMulResult XShuff YShuff).v14)
-        (w := (quadMulResult XShuff YShuff).v25)
-        hfit0 hfit1 hfit2 hd01 hd02 hd12
-        (by simp only [mem_slot_3, mem_slot_2]; omega)
-        (by simp only [mem_slot_3, mem_slot_2]; omega)
-        (by simp only [mem_slot_3]; omega)
-    rw [SLLVM.run_var_load hld0, SLLVM.run_var_load hld1, SLLVM.run_var_load hld2]
-    rw [SLLVM.run_var_lifetime, SLLVM.run_var_lifetime, SLLVM.run_var_lifetime]
-    clear hd01 hd02 hd12 hfit0 hfits hfit1 hfit2 hfit1' hfit2'
+  have hd01 : (⟨⟨mem_slot_1⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_2⟩, 0⟩ : Pointer).id := by
+    simp only [ne_eq, BlockId.mk.injEq, mem_slot_2]; omega
+  have hd02 : (⟨⟨mem_slot_1⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_3⟩, 0⟩ : Pointer).id := by
+    simp only [ne_eq, BlockId.mk.injEq, mem_slot_3, mem_slot_2]; omega
+  have hd12 : (⟨⟨mem_slot_2⟩, 0⟩ : Pointer).id ≠ (⟨⟨mem_slot_3⟩, 0⟩ : Pointer).id := by
+    simp only [ne_eq, BlockId.mk.injEq, mem_slot_3]; omega
+  obtain ⟨hld0, hld1, hld2⟩ :=
+    killFrom_readback (n₀ := mem_slot_3 + 1)
+      (u := (quadMulResult XShuff YShuff).v03) (v := (quadMulResult XShuff YShuff).v14)
+      (w := (quadMulResult XShuff YShuff).v25)
+      hfit0 hfit1 hfit2 hd01 hd02 hd12
+      (by simp only [mem_slot_3, mem_slot_2]; omega)
+      (by simp only [mem_slot_3, mem_slot_2]; omega)
+      (by simp only [mem_slot_3]; omega)
+  rw [SLLVM.run_var_load hld0, SLLVM.run_var_load hld1, SLLVM.run_var_load hld2]
+  rw [SLLVM.run_var_lifetime, SLLVM.run_var_lifetime, SLLVM.run_var_lifetime]
+  clear hd01 hd02 hd12 hfit0 hfits hfit1 hfit2 hfit1' hfit2'
 
-    denote_step_all v 61
-    let xn2 := resultQuad.vector 0
-    let xn1 := resultQuad.vector 1
-    let yn2 := resultQuad.vector 2
-    let yn1 := resultQuad.vector 3
-    -- `'(by decide)`: the default `get_elem_tactic` times out in this context
-    let tmp_c0 := #v[xn2[0]'(by decide), xn2[1]'(by decide), yn2[0]'(by decide), yn2[1]'(by decide),
-      xn2[3]'(by decide), xn2[4]'(by decide), yn2[3]'(by decide), yn2[4]'(by decide)]
-    let tmp_c1 := #v[xn1[0]'(by decide), xn1[1]'(by decide), yn1[0]'(by decide), yn1[1]'(by decide),
-      xn1[3]'(by decide), xn1[4]'(by decide), yn1[3]'(by decide), yn1[4]'(by decide)]
-    let tmp_c2 := #v[xn2[2]'(by decide), 0, yn2[2]'(by decide), 0,
-      xn2[5]'(by decide), 0, yn2[5]'(by decide), 0]
-    let tmp_c3 := #v[xn1[2]'(by decide), 0, yn1[2]'(by decide), 0,
-      xn1[5]'(by decide), 0, yn1[5]'(by decide), 0]
-    have v54Value : v54 = tmp_c0.map PoisonOr.value := by
-      denote_shuffle hv54 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
-    have v55Value : v55 = tmp_c1.map PoisonOr.value := by
-      denote_shuffle hv55 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
-    have v56Value : v56 = tmp_c2.map PoisonOr.value := by
-      denote_shuffle hv56 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
-    have v57Value : v57 = tmp_c3.map PoisonOr.value := by
-      denote_shuffle hv57 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
-    subst v54Value v55Value v56Value v57Value
+  denote_step_all v 61
+  let xn2 := resultQuad.vector 0
+  let xn1 := resultQuad.vector 1
+  let yn2 := resultQuad.vector 2
+  let yn1 := resultQuad.vector 3
+  -- `'(by decide)`: the default `get_elem_tactic` times out in this context
+  let tmp_c0 := #v[xn2[0]'(by decide), xn2[1]'(by decide), yn2[0]'(by decide), yn2[1]'(by decide),
+    xn2[3]'(by decide), xn2[4]'(by decide), yn2[3]'(by decide), yn2[4]'(by decide)]
+  let tmp_c1 := #v[xn1[0]'(by decide), xn1[1]'(by decide), yn1[0]'(by decide), yn1[1]'(by decide),
+    xn1[3]'(by decide), xn1[4]'(by decide), yn1[3]'(by decide), yn1[4]'(by decide)]
+  let tmp_c2 := #v[xn2[2]'(by decide), 0, yn2[2]'(by decide), 0,
+    xn2[5]'(by decide), 0, yn2[5]'(by decide), 0]
+  let tmp_c3 := #v[xn1[2]'(by decide), 0, yn1[2]'(by decide), 0,
+    xn1[5]'(by decide), 0, yn1[5]'(by decide), 0]
+  have v54Value : v54 = tmp_c0.map PoisonOr.value := by
+    denote_shuffle hv54 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
+  have v55Value : v55 = tmp_c1.map PoisonOr.value := by
+    denote_shuffle hv55 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
+  have v56Value : v56 = tmp_c2.map PoisonOr.value := by
+    denote_shuffle hv56 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
+  have v57Value : v57 = tmp_c3.map PoisonOr.value := by
+    denote_shuffle hv57 with quadMulResult, quadVec, Quad.vector, quadElemVec, Vector.getElem_map
+  subst v54Value v55Value v56Value v57Value
 
-    -- %58-%61: the four `vpermi2var`s, each gathering one element's six limbs
-    -- (lanes 6 and 7 zero), written out lane by lane
-    let xn2z := #v[xn2[0]'(by decide), xn2[1]'(by decide), xn2[2]'(by decide), xn2[3]'(by decide), xn2[4]'(by decide), xn2[5]'(by decide), 0, 0]
-    let xn1z := #v[xn1[0]'(by decide), xn1[1]'(by decide), xn1[2]'(by decide), xn1[3]'(by decide), xn1[4]'(by decide), xn1[5]'(by decide), 0, 0]
-    let yn2z := #v[yn2[0]'(by decide), yn2[1]'(by decide), yn2[2]'(by decide), yn2[3]'(by decide), yn2[4]'(by decide), yn2[5]'(by decide), 0, 0]
-    let yn1z := #v[yn1[0]'(by decide), yn1[1]'(by decide), yn1[2]'(by decide), yn1[3]'(by decide), yn1[4]'(by decide), yn1[5]'(by decide), 0, 0]
-    have v58Value : v58 = xn2z.map PoisonOr.value := by ge_permi hv58 with Vector.getElem_map, Quad.vector, quadElemVec
-    have v59Value : v59 = xn1z.map PoisonOr.value := by ge_permi hv59 with Vector.getElem_map, Quad.vector, quadElemVec
-    have v60Value : v60 = yn2z.map PoisonOr.value := by ge_permi hv60 with Vector.getElem_map, Quad.vector, quadElemVec
-    have v61Value : v61 = yn1z.map PoisonOr.value := by ge_permi hv61 with Vector.getElem_map, Quad.vector, quadElemVec
-    subst v58Value v59Value v60Value v61Value
-    denote_clear v 54 61
+  -- %58-%61: the four `vpermi2var`s, each gathering one element's six limbs
+  -- (lanes 6 and 7 zero), written out lane by lane
+  let xn2z := #v[xn2[0]'(by decide), xn2[1]'(by decide), xn2[2]'(by decide), xn2[3]'(by decide), xn2[4]'(by decide), xn2[5]'(by decide), 0, 0]
+  let xn1z := #v[xn1[0]'(by decide), xn1[1]'(by decide), xn1[2]'(by decide), xn1[3]'(by decide), xn1[4]'(by decide), xn1[5]'(by decide), 0, 0]
+  let yn2z := #v[yn2[0]'(by decide), yn2[1]'(by decide), yn2[2]'(by decide), yn2[3]'(by decide), yn2[4]'(by decide), yn2[5]'(by decide), 0, 0]
+  let yn1z := #v[yn1[0]'(by decide), yn1[1]'(by decide), yn1[2]'(by decide), yn1[3]'(by decide), yn1[4]'(by decide), yn1[5]'(by decide), 0, 0]
+  have v58Value : v58 = xn2z.map PoisonOr.value := by ge_permi hv58 with Vector.getElem_map, Quad.vector, quadElemVec
+  have v59Value : v59 = xn1z.map PoisonOr.value := by ge_permi hv59 with Vector.getElem_map, Quad.vector, quadElemVec
+  have v60Value : v60 = yn2z.map PoisonOr.value := by ge_permi hv60 with Vector.getElem_map, Quad.vector, quadElemVec
+  have v61Value : v61 = yn1z.map PoisonOr.value := by ge_permi hv61 with Vector.getElem_map, Quad.vector, quadElemVec
+  subst v58Value v59Value v60Value v61Value
+  denote_clear v 54 61
 
-    -- `fd_r43x6_sub_fast`: `xn1 - xn2 + p`, lane by lane (lanes 6 and 7 are `0 - 0 + 0`)
-    let xDiff := #v[xn1[0]'(by decide) - xn2[0]'(by decide) + pVec[0]'(by decide), xn1[1]'(by decide) - xn2[1]'(by decide) + pVec[1]'(by decide), xn1[2]'(by decide) - xn2[2]'(by decide) + pVec[2]'(by decide), xn1[3]'(by decide) - xn2[3]'(by decide) + pVec[3]'(by decide), xn1[4]'(by decide) - xn2[4]'(by decide) + pVec[4]'(by decide), xn1[5]'(by decide) - xn2[5]'(by decide) + pVec[5]'(by decide), 0, 0]
-    let yDiff := #v[yn1[0]'(by decide) - yn2[0]'(by decide) + pVec[0]'(by decide), yn1[1]'(by decide) - yn2[1]'(by decide) + pVec[1]'(by decide), yn1[2]'(by decide) - yn2[2]'(by decide) + pVec[2]'(by decide), yn1[3]'(by decide) - yn2[3]'(by decide) + pVec[3]'(by decide), yn1[4]'(by decide) - yn2[4]'(by decide) + pVec[4]'(by decide), yn1[5]'(by decide) - yn2[5]'(by decide) + pVec[5]'(by decide), 0, 0]
+  -- `fd_r43x6_sub_fast`: `xn1 - xn2 + p`, lane by lane (lanes 6 and 7 are `0 - 0 + 0`)
+  let xDiff := #v[xn1[0]'(by decide) - xn2[0]'(by decide) + pVec[0]'(by decide), xn1[1]'(by decide) - xn2[1]'(by decide) + pVec[1]'(by decide), xn1[2]'(by decide) - xn2[2]'(by decide) + pVec[2]'(by decide), xn1[3]'(by decide) - xn2[3]'(by decide) + pVec[3]'(by decide), xn1[4]'(by decide) - xn2[4]'(by decide) + pVec[4]'(by decide), xn1[5]'(by decide) - xn2[5]'(by decide) + pVec[5]'(by decide), 0, 0]
+  let yDiff := #v[yn1[0]'(by decide) - yn2[0]'(by decide) + pVec[0]'(by decide), yn1[1]'(by decide) - yn2[1]'(by decide) + pVec[1]'(by decide), yn1[2]'(by decide) - yn2[2]'(by decide) + pVec[2]'(by decide), yn1[3]'(by decide) - yn2[3]'(by decide) + pVec[3]'(by decide), yn1[4]'(by decide) - yn2[4]'(by decide) + pVec[4]'(by decide), yn1[5]'(by decide) - yn2[5]'(by decide) + pVec[5]'(by decide), 0, 0]
 
-    -- the differences are `s62`: lane by lane they are `subFast` of the four
-    -- cross products, which the tight `u46` count bounds by `7000·2^49`
-    have hM : ∀ (j : Fin 4) (k : Fin 6), quadMulLimb XShuff YShuff j k < 7000 * 2 ^ 49 :=
-      fun j k => quadMulLimb_lt_u46_tight XShuff YShuff
-        hXShuff03 hXShuff14 hXShuff25 hYShuff03 hYShuff14 hYShuff25 j k
-    have hxd : xDiff = subFastVec (quadMulLimb XShuff YShuff 1) (quadMulLimb XShuff YShuff 0) := by
-      apply Vector.ext
-      intro i hi
-      interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
-    have hyd : yDiff = subFastVec (quadMulLimb XShuff YShuff 3) (quadMulLimb XShuff YShuff 2) := by
-      apply Vector.ext
-      intro i hi
-      interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
-    have hxs62 : R43x6.S62 (xDiff.take R43x6.limbCount) := hxd ▸ s62_subFastVec (hM 1) (hM 0)
-    have hys62 : R43x6.S62 (yDiff.take R43x6.limbCount) := hyd ▸ s62_subFastVec (hM 3) (hM 2)
+  -- the differences are `s62`: lane by lane they are `subFast` of the four
+  -- cross products, which the tight `u46` count bounds by `7000·2^49`
+  have hM : ∀ (j : Fin 4) (k : Fin 6), quadMulLimb XShuff YShuff j k < 7000 * 2 ^ 49 :=
+    fun j k => quadMulLimb_lt_u46_tight XShuff YShuff
+      hXShuff03 hXShuff14 hXShuff25 hYShuff03 hYShuff14 hYShuff25 j k
+  have hxd : xDiff = subFastVec (quadMulLimb XShuff YShuff 1) (quadMulLimb XShuff YShuff 0) := by
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+  have hyd : yDiff = subFastVec (quadMulLimb XShuff YShuff 3) (quadMulLimb XShuff YShuff 2) := by
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+  have hxs62 : R43x6.S62 (xDiff.take R43x6.limbCount) := hxd ▸ s62_subFastVec (hM 1) (hM 0)
+  have hys62 : R43x6.S62 (yDiff.take R43x6.limbCount) := hyd ▸ s62_subFastVec (hM 3) (hM 2)
 
-    let P := X.toPoint
-    let Q := Y.toPoint
-    have hP : x.toPoint = P := rfl
-    have hQ : y.toPoint = Q := rfl
+  let P := X.toPoint
+  let Q := Y.toPoint
+  have hP : x.toPoint = P := rfl
+  have hQ : y.toPoint = Q := rfl
 
-    have xDiffVal : R43x6.decode' xDiff = ((P.X * Q.Z) - (P.Z * Q.X)) := by
-      let xn1Val := decodeVec (by omega) xn1
-      let xn2Val := decodeVec (by omega) xn2
-      let pVal := decodeVec (by omega) pVec
+  have xDiffVal : R43x6.decode' xDiff = ((P.X * Q.Z) - (P.Z * Q.X)) := by
+    let xn1Val := decodeVec (by omega) xn1
+    let xn2Val := decodeVec (by omega) xn2
+    let pVal := decodeVec (by omega) pVec
 
-      -- `fd_r43x6_p()` decodes to `p`, which is `0` in the field
-      have pValIsP : pVal = 0 := by
-        have hp : (decodeNat (fun i : Fin 6 =>
-            (pVec[i.val]'(lt_of_lt_of_le i.isLt (by omega : 6 ≤ 8))).toNat) : ℕ) = p := by
-          simp [decodeNat_eq, pVec]; rfl
-        show ((decodeNat _ : ℕ) : ZMod p) = 0
-        rw [hp]; exact ZMod.natCast_self p
+    -- `fd_r43x6_p()` decodes to `p`, which is `0` in the field
+    have pValIsP : pVal = 0 := by
+      have hp : (decodeNat (fun i : Fin 6 =>
+          (pVec[i.val]'(lt_of_lt_of_le i.isLt (by omega : 6 ≤ 8))).toNat) : ℕ) = p := by
+        simp [decodeNat_eq, pVec]; rfl
+      show ((decodeNat _ : ℕ) : ZMod p) = 0
+      rw [hp]; exact ZMod.natCast_self p
 
-      -- an element of the result QUAD decodes to its specified limbs
-      have hres : ∀ j : Fin 4, decodeVec (le_refl _) (resultQuad.vector j)
-          = ((decodeNat (quadMulLimb XShuff YShuff j) : ℕ) : ZMod p) := by
-        intro j
-        show quadElem resultQuad j = _
-        simp only [quadElem, Quad.vectorFunc, Function.comp, laneFunc_vector]
-        congr 2
-        funext k
-        exact quadMul_limbs XShuff YShuff hXShuff03' hXShuff14' hXShuff25' hYShuff03' hYShuff14' hYShuff25' j k
+    -- an element of the result QUAD decodes to its specified limbs
+    have hres : ∀ j : Fin 4, decodeVec (le_refl _) (resultQuad.vector j)
+        = ((decodeNat (quadMulLimb XShuff YShuff j) : ℕ) : ZMod p) := by
+      intro j
+      show quadElem resultQuad j = _
+      simp only [quadElem, Quad.vectorFunc, Function.comp, laneFunc_vector]
+      congr 2
+      funext k
+      exact quadMul_limbs XShuff YShuff hXShuff03' hXShuff14' hXShuff25' hYShuff03' hYShuff14' hYShuff25' j k
 
-      have xDiffSub : ((R43x6.decode' xDiff : ℤ) : ZMod p) = xn1Val - xn2Val + pVal := by
-        rw [show xn1Val = _ from hres 1, show xn2Val = _ from hres 0, pValIsP, add_zero, hxd,
-          ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 1) (hM 0),
-          intCast_decodeLimbs_subFast]
+    have xDiffSub : ((R43x6.decode' xDiff : ℤ) : ZMod p) = xn1Val - xn2Val + pVal := by
+      rw [show xn1Val = _ from hres 1, show xn2Val = _ from hres 0, pValIsP, add_zero, hxd,
+        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 1) (hM 0),
+        intCast_decodeLimbs_subFast]
 
-      -- the permuted multiply's elements 1 and 0 are `xn1 = X₁·Z₂` and `xn2 = Z₁·X₂`
-      obtain ⟨hs0, hs1, _, _⟩ := quadMulLimb_shuf x y
-      have xn1Value : xn1Val = P.X * Q.Z := by
-        rw [show xn1Val = _ from hres 1, show quadMulLimb XShuff YShuff 1 = xn1Limb x y from hs1,
-          decodeLimbs_xn1Limb_zmod, hP, hQ]
-      have xn2Value : xn2Val = P.Z * Q.X := by
-        rw [show xn2Val = _ from hres 0, show quadMulLimb XShuff YShuff 0 = xn2Limb x y from hs0,
-          decodeLimbs_xn2Limb_zmod, hP, hQ]
-      rw [xDiffSub, xn1Value, xn2Value, pValIsP, add_zero]
+    -- the permuted multiply's elements 1 and 0 are `xn1 = X₁·Z₂` and `xn2 = Z₁·X₂`
+    obtain ⟨hs0, hs1, _, _⟩ := quadMulLimb_shuf x y
+    have xn1Value : xn1Val = P.X * Q.Z := by
+      rw [show xn1Val = _ from hres 1, show quadMulLimb XShuff YShuff 1 = xn1Limb x y from hs1,
+        decodeLimbs_xn1Limb_zmod, hP, hQ]
+    have xn2Value : xn2Val = P.Z * Q.X := by
+      rw [show xn2Val = _ from hres 0, show quadMulLimb XShuff YShuff 0 = xn2Limb x y from hs0,
+        decodeLimbs_xn2Limb_zmod, hP, hQ]
+    rw [xDiffSub, xn1Value, xn2Value, pValIsP, add_zero]
 
-    have yDiffVal : R43x6.decode' yDiff = ((P.Y * Q.Z) - (P.Z * Q.Y)) := by
-      let yn1Val := decodeVec (by omega) yn1
-      let yn2Val := decodeVec (by omega) yn2
-      let pVal := decodeVec (by omega) pVec
+  have yDiffVal : R43x6.decode' yDiff = ((P.Y * Q.Z) - (P.Z * Q.Y)) := by
+    let yn1Val := decodeVec (by omega) yn1
+    let yn2Val := decodeVec (by omega) yn2
+    let pVal := decodeVec (by omega) pVec
 
-      -- `fd_r43x6_p()` decodes to `p`, which is `0` in the field
-      have pValIsP : pVal = 0 := by
-        have hp : (decodeNat (fun i : Fin 6 =>
-            (pVec[i.val]'(lt_of_lt_of_le i.isLt (by omega : 6 ≤ 8))).toNat) : ℕ) = p := by
-          simp [decodeNat_eq, pVec]; rfl
-        show ((decodeNat _ : ℕ) : ZMod p) = 0
-        rw [hp]; exact ZMod.natCast_self p
+    -- `fd_r43x6_p()` decodes to `p`, which is `0` in the field
+    have pValIsP : pVal = 0 := by
+      have hp : (decodeNat (fun i : Fin 6 =>
+          (pVec[i.val]'(lt_of_lt_of_le i.isLt (by omega : 6 ≤ 8))).toNat) : ℕ) = p := by
+        simp [decodeNat_eq, pVec]; rfl
+      show ((decodeNat _ : ℕ) : ZMod p) = 0
+      rw [hp]; exact ZMod.natCast_self p
 
-      -- an element of the result QUAD decodes to its specified limbs
-      have hres : ∀ j : Fin 4, decodeVec (le_refl _) (resultQuad.vector j)
-          = ((decodeNat (quadMulLimb XShuff YShuff j) : ℕ) : ZMod p) := by
-        intro j
-        show quadElem resultQuad j = _
-        simp only [quadElem, Quad.vectorFunc, Function.comp, laneFunc_vector]
-        rw [show quadLimb resultQuad.v03 resultQuad.v14 resultQuad.v25 j
-            = quadMulLimb XShuff YShuff j from funext fun k =>
-              quadMul_limbs XShuff YShuff hXShuff03' hXShuff14' hXShuff25' hYShuff03' hYShuff14' hYShuff25' j k]
+    -- an element of the result QUAD decodes to its specified limbs
+    have hres : ∀ j : Fin 4, decodeVec (le_refl _) (resultQuad.vector j)
+        = ((decodeNat (quadMulLimb XShuff YShuff j) : ℕ) : ZMod p) := by
+      intro j
+      show quadElem resultQuad j = _
+      simp only [quadElem, Quad.vectorFunc, Function.comp, laneFunc_vector]
+      rw [show quadLimb resultQuad.v03 resultQuad.v14 resultQuad.v25 j
+          = quadMulLimb XShuff YShuff j from funext fun k =>
+            quadMul_limbs XShuff YShuff hXShuff03' hXShuff14' hXShuff25' hYShuff03' hYShuff14' hYShuff25' j k]
 
-      have yDiffSub : ((R43x6.decode' yDiff : ℤ) : ZMod p) = yn1Val - yn2Val + pVal := by
-        rw [show yn1Val = _ from hres 3, show yn2Val = _ from hres 2, pValIsP, add_zero, hyd,
-          ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 3) (hM 2),
-          intCast_decodeLimbs_subFast]
+    have yDiffSub : ((R43x6.decode' yDiff : ℤ) : ZMod p) = yn1Val - yn2Val + pVal := by
+      rw [show yn1Val = _ from hres 3, show yn2Val = _ from hres 2, pValIsP, add_zero, hyd,
+        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 3) (hM 2),
+        intCast_decodeLimbs_subFast]
 
-      -- the permuted multiply's elements 3 and 2 are `yn1 = Y₁·Z₂` and `yn2 = Z₁·Y₂`
-      obtain ⟨_, _, hs2, hs3⟩ := quadMulLimb_shuf x y
-      have yn1Value : yn1Val = P.Y * Q.Z := by
-        rw [show yn1Val = _ from hres 3, show quadMulLimb XShuff YShuff 3 = yn1Limb x y from hs3,
-          decodeLimbs_yn1Limb_zmod, hP, hQ]
-      have yn2Value : yn2Val = P.Z * Q.Y := by
-        rw [show yn2Val = _ from hres 2, show quadMulLimb XShuff YShuff 2 = yn2Limb x y from hs2,
-          decodeLimbs_yn2Limb_zmod, hP, hQ]
-      rw [yDiffSub, yn1Value, yn2Value, pValIsP, add_zero]
+    -- the permuted multiply's elements 3 and 2 are `yn1 = Y₁·Z₂` and `yn2 = Z₁·Y₂`
+    obtain ⟨_, _, hs2, hs3⟩ := quadMulLimb_shuf x y
+    have yn1Value : yn1Val = P.Y * Q.Z := by
+      rw [show yn1Val = _ from hres 3, show quadMulLimb XShuff YShuff 3 = yn1Limb x y from hs3,
+        decodeLimbs_yn1Limb_zmod, hP, hQ]
+    have yn2Value : yn2Val = P.Z * Q.Y := by
+      rw [show yn2Val = _ from hres 2, show quadMulLimb XShuff YShuff 2 = yn2Limb x y from hs2,
+        decodeLimbs_yn2Limb_zmod, hP, hQ]
+    rw [yDiffSub, yn1Value, yn2Value, pValIsP, add_zero]
 
-    denote_step_all v 63
-    have v63Value : v63 = xDiff.map PoisonOr.value := by
-      simp only [hv62, hv63, Expr.denoteOp1, Expr.denoteOpPure]
-      simp_peephole
-      simp only [HVector.head]
-      apply Vector.ext
-      intro i hi
-      interval_cases i
-      all_goals simp +zetaDelta [InstCombine.binaryDenote, LLVM.sub, LLVM.sub?, LLVM.add, LLVM.add?,
-          Vector.getElem_ofFn, Vector.getElem_mk, List.getElem_toArray,
-          List.getElem_cons_zero, List.getElem_cons_succ]
-    subst v63Value
-    denote_clear v 62 63
-
-    denote_step_all v 65
-    -- %64: the first `fd_r43x6_is_nonzero` call, a single rewrite of the callee's
-    -- spec: the zero test is in the field
-    let xDiffNonzero := PoisonOr.value (if ((R43x6.decode' xDiff : ℤ) : ZMod p) = 0 then 0#32 else 1#32)
-    have v64Value : v64 = xDiffNonzero := by
-      simp only [hv64, Expr.denoteOp1, Expr.denoteOpPure]
-      set_option maxRecDepth 100000 in
-      show HVector.head (fd_r43x6_is_nonzero.denote (Ctxt.Valuation.singleton
-        (xDiff.map PoisonOr.value))) = _
-      rw [spec_denote_fd_r43x6_is_nonzero _ hxs62]
-      rfl
-    subst v64Value
-
-    let xDiffZero := PoisonOr.value (if ((R43x6.decode' xDiff : ℤ) : ZMod p) = 0 then (-1#32) else (-2#32))
-    have v65Value : v65 = xDiffZero := by
-      simp only [hv65, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
-      simp_peephole
-      -- `0 ^^^ -1 = -1`, `1 ^^^ -1 = -2`, one branch each
-      simp [LLVM.xor, LLVM.xor?, xDiffNonzero, xDiffZero, neg1]
-      split <;> rfl
-    subst v65Value
-    denote_clear v 64 65
-
-    denote_step_all v 67
-    have v67Value : v67 = yDiff.map PoisonOr.value := by
-      simp only [hv66, hv67, Expr.denoteOp1, Expr.denoteOpPure]
-      simp_peephole
-      simp only [HVector.head]
-      apply Vector.ext
-      intro i hi
-      interval_cases i
-      all_goals simp +zetaDelta [InstCombine.binaryDenote, LLVM.sub, LLVM.sub?, LLVM.add, LLVM.add?,
-          Vector.getElem_ofFn, Vector.getElem_mk, List.getElem_toArray,
-          List.getElem_cons_zero, List.getElem_cons_succ]
-    subst v67Value
-    denote_clear v 66 67
-
-    denote_step_all v 69
-    -- %68: the second `fd_r43x6_is_nonzero` call, the same single rewrite
-    let yDiffNonzero := PoisonOr.value (if ((R43x6.decode' yDiff : ℤ) : ZMod p) = 0 then 0#32 else 1#32)
-    have v68Value : v68 = yDiffNonzero := by
-      simp only [hv68, Expr.denoteOp1, Expr.denoteOpPure]
-      set_option maxRecDepth 100000 in
-      show HVector.head (fd_r43x6_is_nonzero.denote (Ctxt.Valuation.singleton
-        (yDiff.map PoisonOr.value))) = _
-      rw [spec_denote_fd_r43x6_is_nonzero _ hys62]
-      rfl
-    subst v68Value
-
-    let yDiffZero := PoisonOr.value (if ((R43x6.decode' yDiff : ℤ) : ZMod p) = 0 then (1#32) else (0#32))
-    have v69Value : v69 = yDiffZero := by
-      simp only [hv69, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
-      simp_peephole
-      simp [LLVM.xor, LLVM.xor?, yDiffNonzero, yDiffZero]
-      split <;> rfl
-    subst v69Value
-    denote_clear v 68 69
-
-    denote_step_all v
-    simp only [Com.denote_rets]
-    simp only [hv70, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
+  denote_step_all v 63
+  have v63Value : v63 = xDiff.map PoisonOr.value := by
+    simp only [hv62, hv63, Expr.denoteOp1, Expr.denoteOpPure]
     simp_peephole
+    simp only [HVector.head]
+    apply Vector.ext
+    intro i hi
+    interval_cases i
+    all_goals simp +zetaDelta [InstCombine.binaryDenote, LLVM.sub, LLVM.sub?, LLVM.add, LLVM.add?,
+        Vector.getElem_ofFn, Vector.getElem_mk, List.getElem_toArray,
+        List.getElem_cons_zero, List.getElem_cons_succ]
+  subst v63Value
+  denote_clear v 62 63
 
-    simp
-    constructor
-    · simp [LLVM.and, LLVM.and?, xDiffZero, yDiffZero, geIsEq, xDiffVal, yDiffVal, P, Q, X, Y]
-      have novec (e: Quad) : e.PointVecs.toPoint = e.toPoint := rfl
-      rw [novec]
-      rw [novec]
-      by_cases h: ((x.toPoint.X * y.toPoint.Z) - (x.toPoint.Z * y.toPoint.X) = 0) <;> by_cases h': (x.toPoint.Y * y.toPoint.Z - x.toPoint.Z * y.toPoint.Y = 0) <;> simp [h, h']
-    · rfl
+  denote_step_all v 65
+  -- %64: the first `fd_r43x6_is_nonzero` call, a single rewrite of the callee's
+  -- spec: the zero test is in the field
+  let xDiffNonzero := PoisonOr.value (if ((R43x6.decode' xDiff : ℤ) : ZMod p) = 0 then 0#32 else 1#32)
+  have v64Value : v64 = xDiffNonzero := by
+    simp only [hv64, Expr.denoteOp1, Expr.denoteOpPure]
+    set_option maxRecDepth 100000 in
+    show HVector.head (fd_r43x6_is_nonzero.denote (Ctxt.Valuation.singleton
+      (xDiff.map PoisonOr.value))) = _
+    rw [spec_denote_fd_r43x6_is_nonzero _ hxs62]
+    rfl
+  subst v64Value
+
+  let xDiffZero := PoisonOr.value (if ((R43x6.decode' xDiff : ℤ) : ZMod p) = 0 then (-1#32) else (-2#32))
+  have v65Value : v65 = xDiffZero := by
+    simp only [hv65, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
+    simp_peephole
+    -- `0 ^^^ -1 = -1`, `1 ^^^ -1 = -2`, one branch each
+    simp [LLVM.xor, LLVM.xor?, xDiffNonzero, xDiffZero, neg1]
+    split <;> rfl
+  subst v65Value
+  denote_clear v 64 65
+
+  denote_step_all v 67
+  have v67Value : v67 = yDiff.map PoisonOr.value := by
+    simp only [hv66, hv67, Expr.denoteOp1, Expr.denoteOpPure]
+    simp_peephole
+    simp only [HVector.head]
+    apply Vector.ext
+    intro i hi
+    interval_cases i
+    all_goals simp +zetaDelta [InstCombine.binaryDenote, LLVM.sub, LLVM.sub?, LLVM.add, LLVM.add?,
+        Vector.getElem_ofFn, Vector.getElem_mk, List.getElem_toArray,
+        List.getElem_cons_zero, List.getElem_cons_succ]
+  subst v67Value
+  denote_clear v 66 67
+
+  denote_step_all v 69
+  -- %68: the second `fd_r43x6_is_nonzero` call, the same single rewrite
+  let yDiffNonzero := PoisonOr.value (if ((R43x6.decode' yDiff : ℤ) : ZMod p) = 0 then 0#32 else 1#32)
+  have v68Value : v68 = yDiffNonzero := by
+    simp only [hv68, Expr.denoteOp1, Expr.denoteOpPure]
+    set_option maxRecDepth 100000 in
+    show HVector.head (fd_r43x6_is_nonzero.denote (Ctxt.Valuation.singleton
+      (yDiff.map PoisonOr.value))) = _
+    rw [spec_denote_fd_r43x6_is_nonzero _ hys62]
+    rfl
+  subst v68Value
+
+  let yDiffZero := PoisonOr.value (if ((R43x6.decode' yDiff : ℤ) : ZMod p) = 0 then (1#32) else (0#32))
+  have v69Value : v69 = yDiffZero := by
+    simp only [hv69, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
+    simp_peephole
+    simp [LLVM.xor, LLVM.xor?, yDiffNonzero, yDiffZero]
+    split <;> rfl
+  subst v69Value
+  denote_clear v 68 69
+
+  denote_step_all v
+  simp only [Com.denote_rets]
+  simp only [hv70, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
+  simp_peephole
+
+  simp
+  constructor
+  · simp [LLVM.and, LLVM.and?, xDiffZero, yDiffZero, geIsEq, xDiffVal, yDiffVal, P, Q, X, Y]
+    have novec (e: Quad) : e.PointVecs.toPoint = e.toPoint := rfl
+    rw [novec]
+    rw [novec]
+    by_cases h: ((x.toPoint.X * y.toPoint.Z) - (x.toPoint.Z * y.toPoint.X) = 0) <;> by_cases h': (x.toPoint.Y * y.toPoint.Z - x.toPoint.Z * y.toPoint.Y = 0) <;> simp [h, h']
+  · rfl
 
 /-! ## The model decides equality -/
 

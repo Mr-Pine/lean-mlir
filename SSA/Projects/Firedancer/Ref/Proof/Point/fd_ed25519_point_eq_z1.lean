@@ -49,42 +49,30 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     coordPtr_zero b ▸ limbBounds_readLimb? (isCoordPtr b hb 0) (coordLimbBounds hb hbLimbs 0)
 
   -- `fd_f25519_t x1[1], y1[1]`
-  obtain ⟨x1, s₁, hx1def, hs₁def⟩ := GlobalState.exists_afterAlloca s (5 * 64)
-  obtain ⟨y1, s₂, hy1def, hs₂def⟩ := GlobalState.exists_afterAlloca s₁ (5 * 64)
+  obtain ⟨x1, s₁, hx1def, hs₁def, hs₁, hfitx1, hx1id, hx1off, hctr₁, -⟩ :=
+    GlobalState.exists_afterAlloca_facts s hs (5 * 64)
+  obtain ⟨y1, s₂, hy1def, hs₂def, hs₂, hfity1, hy1id, hy1off, -, hfry1⟩ :=
+    GlobalState.exists_afterAlloca_facts s₁ hs₁ (5 * 64)
+  have hxy : y1.id ≠ x1.id := fun h => by rw [h, hx1id, hctr₁] at hy1id; omega
 
-  have hs₁ : s₁.WF := hs₁def ▸ hs.afterAlloca _
-  have hs₂ : s₂.WF := hs₂def ▸ hs₁.afterAlloca _
-
-  have hx1id : x1.id.id = s.alloc.nextFreeBlock := by rw [hx1def]
-  have hy1id : y1.id.id = s.alloc.nextFreeBlock + 1 := by rw [hy1def, hs₁def]; rfl
-
-  -- a block that predates the frame is neither temporary, and neither `alloca`
-  -- disturbs it
-  have hnex : ∀ r : BlockId, r.id < s.alloc.nextFreeBlock → r ≠ x1.id := by
-    intro r hr h; rw [h, hx1id] at hr; omega
-  have hney : ∀ r : BlockId, r.id < s.alloc.nextFreeBlock → r ≠ y1.id := by
-    intro r hr h; rw [h, hy1id] at hr; omega
-  have hxy : y1.id ≠ x1.id := by intro h; rw [h, hx1id] at hy1id; omega
-  have hlive₂ : ∀ r : BlockId, r.id < s.alloc.nextFreeBlock →
-      s₂.mem.live? r = s.mem.live? r := by
-    intro r hr
-    subst hs₁def hs₂def
-    exact (live?_afterAlloca_of_lt (by simp only [GlobalState.afterAlloca]; omega)).trans
-      (live?_afterAlloca_of_lt hr)
+  -- one frame fact through both allocas; everything below `s`'s counter -- the
+  -- caller's `a` and `b` included -- rides it to the end of the region
+  have fb₁ : FrameBelow s.alloc.nextFreeBlock s s₁ :=
+    hs₁def ▸ FrameBelow.afterAlloca (le_refl _) (FrameBelow.refl _ _)
+  have fb₂ : FrameBelow s.alloc.nextFreeBlock s s₂ :=
+    hs₂def ▸ FrameBelow.afterAlloca (by omega) fb₁
 
   -- the pointer-shaped form the callee obligations take
   have hold : ∀ r : Pointer, IsFieldElemPtr s.mem r → r.id.id < s.alloc.nextFreeBlock :=
     fun r hr => lt_nextFreeBlock_of_fits hs hr.left
   have hS₂ : ∀ r : Pointer, IsFieldElemPtr s.mem r → s₂.mem.live? r.id = s.mem.live? r.id :=
-    fun r hr => hlive₂ r.id (hold r hr)
+    fun r hr => fb₂ r.id (hold r hr)
 
-  have px1₂ : IsFieldElemPtr s₂.mem x1 := by
-    subst hx1def hs₁def hs₂def
-    exact isFieldElemPtr_of_live?_eq
-      (live?_afterAlloca_of_lt (by simp [GlobalState.afterAlloca]))
-      (isFieldElemPtr_afterAlloca_self s)
-  have py1₂ : IsFieldElemPtr s₂.mem y1 := by
-    subst hy1def hs₂def; exact isFieldElemPtr_afterAlloca_self s₁
+  -- the locals themselves sit *in* the frame, so `y1`'s `alloca` has to be
+  -- stepped over by hand to see `x1`
+  have px1₂ : IsFieldElemPtr s₂.mem x1 :=
+    ⟨fits_of_live?_eq (hfry1 x1.id (Ne.symm hxy)) hfitx1, by simp [hx1off]⟩
+  have py1₂ : IsFieldElemPtr s₂.mem y1 := ⟨hfity1, by simp [hy1off]⟩
 
   -- `fd_f25519_mul( x1, b->X, a->Z )`
   obtain ⟨x1bits, hx1bits, ⟨x1state, hx1state, hx1state_eq⟩, bx1⟩ :=
@@ -94,11 +82,14 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
       (limbBounds_of_live?_eq (hS₂ b pbX) (fun i l h => (bbX i l h).trans (by norm_num)))
       (limbBounds_of_live?_eq (hS₂ _ paZ) (fun i l h => (baZ i l h).trans (by norm_num)))
 
-  -- the mul writes only `x1`; every other block reads as it did in `s₂`
+  -- the frame fact speaks only about blocks that predate the region; the
+  -- *sibling local* is above the counter, so it needs the write's own equation
   have hlivex1 : ∀ r : BlockId, r ≠ x1.id → x1state.mem.live? r = s₂.mem.live? r :=
     fun r hr => (hx1state_eq.2 r).symm.trans (live?_splice_ne (Ne.symm hr))
+  have fbX : FrameBelow s.alloc.nextFreeBlock s x1state :=
+    FrameBelow.of_equiv hx1state_eq (FrameBelow.splice (by omega) fb₂)
   have hX : ∀ r : Pointer, IsFieldElemPtr s.mem r → x1state.mem.live? r.id = s.mem.live? r.id :=
-    fun r hr => (hlivex1 r.id (hnex r.id (hold r hr))).trans (hS₂ r hr)
+    fun r hr => fbX r.id (hold r hr)
   have hx1WF : x1state.WF := GlobalState.WF.of_equiv hs₂.splice hx1state_eq
   have px1X : IsFieldElemPtr x1state.mem x1 :=
     isFieldElemPtr_of_live?_eq (hx1state_eq.2 x1.id).symm ⟨fits_splice px1₂.left, px1₂.right⟩
@@ -118,8 +109,10 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
 
   have hlivey1 : ∀ r : BlockId, r ≠ y1.id → y1state.mem.live? r = x1state.mem.live? r :=
     fun r hr => (hy1state_eq.2 r).symm.trans (live?_splice_ne (Ne.symm hr))
+  have fbY : FrameBelow s.alloc.nextFreeBlock s y1state :=
+    FrameBelow.of_equiv hy1state_eq (FrameBelow.splice (by omega) fbX)
   have hY : ∀ r : Pointer, IsFieldElemPtr s.mem r → y1state.mem.live? r.id = s.mem.live? r.id :=
-    fun r hr => (hlivey1 r.id (hney r.id (hold r hr))).trans (hX r hr)
+    fun r hr => fbY r.id (hold r hr)
   have hy1WF : y1state.WF := GlobalState.WF.of_equiv hx1WF.splice hy1state_eq
   have py1Y : IsFieldElemPtr y1state.mem y1 :=
     isFieldElemPtr_of_live?_eq (hy1state_eq.2 y1.id).symm ⟨fits_splice py1X.left, py1X.right⟩
@@ -136,8 +129,10 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
       (limbBounds_of_readLimb? px1Y (limbBounds_of_live?_eq (hlivey1 x1.id (Ne.symm hxy)) bx1X))
       (limbBounds_of_readLimb? paXY (limbBounds_of_live?_eq (hY a paX) baX))
 
+  -- the comparison writes nothing at all
+  have fbE : FrameBelow s.alloc.nextFreeBlock s eqx1state := FrameBelow.of_equiv heqx1state_eq fbY
   have hE : ∀ r : Pointer, IsFieldElemPtr s.mem r → eqx1state.mem.live? r.id = s.mem.live? r.id :=
-    fun r hr => (heqx1state_eq.2 r.id).symm.trans (hY r hr)
+    fun r hr => fbE r.id (hold r hr)
   have heqx1WF : eqx1state.WF := GlobalState.WF.of_equiv hy1WF heqx1state_eq
   have py1E : IsFieldElemPtr eqx1state.mem y1 :=
     isFieldElemPtr_of_live?_eq (heqx1state_eq.2 y1.id).symm py1Y
@@ -152,14 +147,10 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
       (limbBounds_of_readLimb? paYE (limbBounds_of_live?_eq (hE _ paY) baY))
 
   -- the region's frame holds only `x1` and `y1`, so popping it restores `s`
-  have hframe : ∀ r : BlockId, r.id < s.alloc.nextFreeBlock →
-      eqy1state.mem.live? r = s.mem.live? r := by
-    intro r hr
-    rw [← heqy1state_eq.2 r, ← heqx1state_eq.2 r, hlivey1 r (hney r hr),
-      hlivex1 r (hnex r hr), hlive₂ r hr]
+  have fbF : FrameBelow s.alloc.nextFreeBlock s eqy1state := FrameBelow.of_equiv heqy1state_eq fbE
 
   refine ⟨s.popFrame eqy1state.mem, ?_,
-    GlobalState.Equiv.symm (GlobalState.killFrom_equiv eqy1state.mem hs hframe)⟩
+    GlobalState.Equiv.symm (FrameBelow.popFrame_equiv hs fbF)⟩
 
   refine run_runFunction (s' := eqy1state) ?_
 
@@ -177,7 +168,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   peel_lifetime
 
   have haFits₂ : Fits s₂.mem a (4 * 5 * 64) :=
-    fits_of_live?_eq (hlive₂ a.id (lt_nextFreeBlock_of_fits hs ha.1)) ha.1
+    fits_of_live?_eq (fb₂ a.id (lt_nextFreeBlock_of_fits hs ha.1)) ha.1
   peel_gep 120 with a, haFits₂, s₂ as aZ
 
   peel_call hx1state
