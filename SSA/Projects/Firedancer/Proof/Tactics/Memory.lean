@@ -58,8 +58,14 @@ elab "peel_load " t:term ", " blk:term ", " p:term ", " hblk:term ", " st:term :
     let (val, width) ← if isVec then
         pure (← `(LLVM.Ty.unflatten $t (($blk).bytes.extractLsb' ($p).offsetInBits 512)),
           ← `(512))
-      else
-        pure (← `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits 64)), ← `(64))
+      else do
+        -- the scalar width, as a literal: the `omega` obligation below needs one
+        let w ← withoutModifyingState do
+          let e ← Term.elabTerm (← `((LLVM.Ty.width (($t) : LLVM.Ty) : Nat))) none
+          let some n := (← whnf (← instantiateMVars e)).rawNatLit?
+            | throwError "peel_load: cannot reduce the width of {← ppExpr e} to a literal"
+          `(term| $(Syntax.mkNumLit (toString n)):num)
+        pure (← `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits $w)), w)
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
       rw [BlockCom.run_bind_denote_var_of_value (x := $val) (s' := $st)

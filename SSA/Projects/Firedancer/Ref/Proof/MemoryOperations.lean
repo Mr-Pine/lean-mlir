@@ -105,6 +105,13 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
 
+/-- `limbReadback` for limbs given as a function rather than five variables --
+the form the specs' `packLimbs` witness takes. -/
+lemma limbReadbackPack (m : MemoryState) (p : Pointer) (l : Fin 5 → BitVec 64)
+    (hp : Fits m p (5 * 64)) (i : Fin 5) :
+    readLimb? p i (m.splice p (packLimbs l)) = .some (l i).toNat := by
+  rw [limbSpliceReadback _ _ _ hp i, extractLsb'_packLimbs]
+
 /-- What a field element spliced at `p` reads back as: only the spliced bits,
 whatever the block underneath held. -/
 theorem readFieldElem?_splice {m : MemoryState} {p : Pointer} (x : BitVec (5 * 64))
@@ -292,6 +299,105 @@ tokens are consumed anyway. -/
 macro "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
     basehblk:ident : tactic =>
   `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk, limb)
+
+open Lean Elab Tactic in
+/-- `peel_gep_byte i, p, hp, s, x` is `peel_gep_limb` at byte granularity: the
+gep is off `p` by the constant `i` with `elem_type = i8`, and the pointer it
+yields becomes `x<i> := p.withOffset i`.
+
+Assumes a 32-byte buffer at `p`, i.e. `hp : Fits s.mem p (32 * 8)`; the
+remaining size is `(32 - i) * 8`. -/
+elab "peel_gep_byte " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident : tactic => do
+  let num := i.getNat
+  let offBytes := Syntax.mkNumLit (toString num)
+  let remainingBits := Syntax.mkNumLit (toString ((32 - num) * 8))
+  let n ← nextStepIndex (← getMainGoal)
+  let nLit := Syntax.mkNumLit (toString n)
+  let vBase := mkIdent (Name.mkSimple "v")
+  let v := mkIdent (Name.mkSimple ("v" ++ toString n))
+  let hv := mkIdent (Name.mkSimple ("hv" ++ toString n))
+  let sub := subscript num
+  let base := nm.getId.eraseMacroScopes.toString
+  let ptr := mkIdent (Name.mkSimple (base ++ sub))
+  let hptr := mkIdent (Name.mkSimple ("h" ++ base ++ sub))
+  evalTactic (← `(tactic| denote_step_all $vBase $nLit))
+  evalTactic (← `(tactic| denote_eval $vBase $nLit $nLit))
+  evalTactic (← `(tactic| let $ptr := ($p).withOffset (($offBytes) : BitVec 64)))
+  evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr ($remainingBits) := by
+        simpa using remainingFits ($st).mem $p $hp ($offBytes) (by simp)))
+  evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
+        simp [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
+          LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
+  evalTactic (← `(tactic| subst vValue))
+  evalTactic (← `(tactic| clear $hv))
+
+/-- The byte offset of byte `k`, when the buffer's end cannot wrap. -/
+lemma byteOffsetInBits {p : Pointer} (hp : p.offset.toNat + 32 ≤ 2 ^ 64)
+    {k : ℕ} {off : BitVec 64} (hk : k ≤ 31) (hoff : off.toNat = k) :
+    (p.withOffset off).offsetInBits = p.offsetInBits + 8 * k := by
+  have hadd : (p.offset + off).toNat = p.offset.toNat + off.toNat := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
+  simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, hoff]
+  omega
+
+open Lean Elab Tactic in
+/-- `peel_buf_bytes p, hp, blk, hblk, buf, hoff, hbyte` runs the byte loads a
+32-byte deserialisation opens with: for `k = 31` down to `4`, the `getelementptr`
+to `arg1[k]` and the load, then one rewrite of all twenty-eight loaded values to
+`buf`'s bytes. Bytes `0`-`3` are left alone -- the compiler folds them into one
+32-bit load.
+
+`hoff` and `hbyte` are the two per-buffer facts the rewrite needs: the byte's
+offset in bits, and what the block holds there. Each byte is followed by its
+`zext`/`shl` pair, and `arg1[31]` by the `and` that masks its top bit, so the
+stepper is advanced past those too.
+
+The rewrite is deferred to one `simp only` at the end deliberately. Rewriting
+byte by byte re-checks the whole `StateT.run` goal twenty-eight times, which
+costs about a second each; one traversal pays that once. -/
+elab "peel_buf_bytes " p:ident ", " hp:ident ", " blk:ident ", " hblk:ident ", "
+    buf:ident ", " hoff:ident ", " hbyte:ident : tactic => do
+  let vBase := mkIdent (Name.mkSimple "v")
+  let st := mkIdent (Name.mkSimple "s")
+  let mut eqs : Array Term := #[]
+  let mut ptrs : Array Term := #[]
+  for k' in [4:32] do
+    let k := 35 - k'                       -- 31, 30, …, 4
+    let kLit := Syntax.mkNumLit (toString k)
+    let ptr := mkIdent (Name.mkSimple ("p" ++ subscript k))
+    let hptr := mkIdent (Name.mkSimple ("hp" ++ subscript k))
+    let hblkK := mkIdent (Name.mkSimple ("hblk" ++ subscript k))
+    let hlenK := mkIdent (Name.mkSimple ("hlen" ++ subscript k))
+    evalTactic (← `(tactic| peel_gep_byte $kLit, $p, ($hp).left, $st, p))
+    -- every byte lands in the block `p` already addresses, so the load's two
+    -- obligations come from `hblk`/`hoff` rather than from destructuring a fresh
+    -- `Fits` -- `obtain` re-checks the whole goal, these do not
+    evalTactic (← `(tactic| have $hblkK:ident : ($st).mem[($ptr).id]? = some (.live $blk) := $hblk))
+    evalTactic (← `(tactic| have $hlenK:ident :
+      ($ptr).offsetInBits + 8 ≤ ($blk).lengthInBits := by
+        rw [$hoff:ident $kLit ($kLit : BitVec 64) (by omega) (by simp)]; omega))
+    evalTactic (← `(tactic| peel_load (.bitvec (.concrete 8)), $blk, $ptr, $hblkK, $st))
+    -- kept as a hypothesis, not just used and dropped: the loaded values flow
+    -- into `hv<i>`, which this rewrite never reaches, so the caller needs these
+    -- again to put the byte terms and the buffer in the same vocabulary
+    let hbyteK := mkIdent (Name.mkSimple ("hbyte" ++ subscript k))
+    -- stated over `p.withOffset k`, not the let-bound `p<k>`: the goal carries the
+    -- zeta-expanded form and `simp only` will not unfold a let-bound fvar to match
+    evalTactic (← `(tactic| have $hbyteK:ident :
+      ($blk).bytes.extractLsb' (($p).withOffset ($kLit : BitVec 64)).offsetInBits 8
+      = ($buf).extractLsb' (8 * $kLit) 8 :=
+        $hbyte $kLit _ (by omega) ($hoff $kLit ($kLit : BitVec 64) (by omega) (by simp))))
+    eqs := eqs.push (← `($hbyteK:ident))
+    ptrs := ptrs.push (← `($ptr:ident))
+    -- `arg1[31]` is masked before it is widened, so it has one more pure
+    -- instruction after the load than the rest
+    let extra := if k == 31 then 2 else 1
+    let target := Syntax.mkNumLit (toString ((← nextStepIndex (← getMainGoal)) + extra))
+    evalTactic (← `(tactic| denote_step_all $vBase $target))
+  -- the pointer lets are unfolded in the same pass: here the goal still carries
+  -- `p<k>`, while the equations are stated over the expanded `p.withOffset k`
+  -- that the hypotheses use later
+  evalTactic (← `(tactic| simp only [$[$ptrs:term],*, $[$eqs:term],*]))
 
 open Lean Elab Tactic in
 /-- `store_limbs x, p, hp, s` runs the five limb stores a region ends in: `x i`

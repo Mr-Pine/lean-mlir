@@ -39,6 +39,46 @@ theorem eq_ofNat_of_toNat {l : Fin 5 → ℕ} {u : BitVec 64} {i : Fin 5}
 
 The shift amount is a `BitVec`, as `eval_llvm` leaves an `llvm.lshr`. -/
 
+/-- A window of a window: reading `b` bits at `a` out of the `n` bits at `s` is
+reading them at `s + a`. -/
+theorem extractLsb'_extractLsb' {w : ℕ} (x : BitVec w) {s n a b : ℕ} (h : a + b ≤ n) :
+    (x.extractLsb' s n).extractLsb' a b = x.extractLsb' (s + a) b := by
+  ext i hi
+  have hin : a + i < n := by omega
+  simp [BitVec.getElem_extractLsb', Nat.add_assoc, hin]
+
+/-! ### Widening a byte before shifting it
+
+The compiled `from_bytes` shifts each zero-extended byte with `nsw, nuw`, so the
+shift is poison unless it provably discards nothing. At a byte and a shift of at
+most 50 it never does.
+
+Two forms of each: `bv_decide` needs the bound on the `BitVec` (it cannot use a
+`toNat` hypothesis), while the walk meets the shift as `BitVec.ofNat 64 n` and
+needs the bound on `n`, where `simp` can discharge it for a literal. -/
+
+theorem zext8_shl_ushr (b : BitVec 8) {k : BitVec 64} (hk : k ≤ 50#64) :
+    (BitVec.zeroExtend 64 b <<< k) >>> k = BitVec.zeroExtend 64 b := by
+  bv_decide
+
+theorem zext8_shl_sshr (b : BitVec 8) {k : BitVec 64} (hk : k ≤ 50#64) :
+    (BitVec.zeroExtend 64 b <<< k).sshiftRight' k = BitVec.zeroExtend 64 b := by
+  bv_decide
+
+private theorem ofNat_le_50 {n : ℕ} (hn : n ≤ 50) : BitVec.ofNat 64 n ≤ 50#64 := by
+  simp only [BitVec.le_def, BitVec.toNat_ofNat]
+  omega
+
+theorem zext8_shl_ushr_ofNat (b : BitVec 8) {n : ℕ} (hn : n ≤ 50) :
+    (BitVec.zeroExtend 64 b <<< BitVec.ofNat 64 n) >>> BitVec.ofNat 64 n
+      = BitVec.zeroExtend 64 b :=
+  zext8_shl_ushr b (ofNat_le_50 hn)
+
+theorem zext8_shl_sshr_ofNat (b : BitVec 8) {n : ℕ} (hn : n ≤ 50) :
+    (BitVec.zeroExtend 64 b <<< BitVec.ofNat 64 n).sshiftRight' (BitVec.ofNat 64 n)
+      = BitVec.zeroExtend 64 b :=
+  zext8_shl_sshr b (ofNat_le_50 hn)
+
 theorem shift_toNat (x : BitVec 64) : (x >>> 51#64).toNat = x.toNat / 2 ^ 51 := by
   rw [show x >>> 51#64 = x >>> (51 : ℕ) from rfl, BitVec.toNat_ushiftRight,
     Nat.shiftRight_eq_div_pow]
