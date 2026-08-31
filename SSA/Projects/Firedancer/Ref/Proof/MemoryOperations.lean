@@ -126,6 +126,48 @@ theorem readFieldElem?_splice {m : MemoryState} {p : Pointer} (x : BitVec (5 * 6
   rw [← hfdef]
   simp only [readFieldElem?, hf, Option.bind_eq_bind, Option.bind_some, Option.pure_def, hvec]
 
+/-- A limb read passes over a splice that misses it: another block, or a
+disjoint bit range of the same one. -/
+theorem readLimb?_splice_of_disjoint {m : MemoryState} {p q : Pointer} {w : Nat}
+    {x : BitVec w} (i : Fin 5)
+    (h : q.id ≠ p.id ∨ q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat
+       ∨ p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits) :
+    readLimb? p i (m.splice q x) = readLimb? p i m := by
+  by_cases hid : q.id = p.id
+  case neg =>
+    simp only [readLimb?, live?_splice_ne hid]
+  case pos =>
+    cases hb : m.live? q.id with
+    | none =>
+        have : m.splice q x = m := by
+          unfold MemoryState.splice
+          unfold MemoryState.live? at hb
+          split at hb <;> simp_all
+        rw [this]
+    | some blk =>
+        have hdisj : q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat
+            ∨ p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits := by
+          rcases h with h | h | h
+          · exact absurd hid h
+          · exact .inl h
+          · exact .inr h
+        have hlive : (m.splice q x).live? p.id = some
+            { length := blk.length, bytes := spliceBits blk.bytes q.offsetInBits x } := by
+          rw [← hid]; exact splicedLive m q blk hb x
+        have hb' : m.live? p.id = some blk := hid ▸ hb
+        simp only [readLimb?, hlive, hb', Option.bind_eq_bind, Option.bind_some]
+        rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)]
+
+/-- `Pointer.withOffset` in `offsetInBits` form, given the offset does not
+wrap: the general shape behind `limbOffsetInBits`. -/
+lemma withOffset_offsetInBits {p : Pointer} {off : BitVec 64}
+    (h : p.offset.toNat + off.toNat < 2 ^ 64) :
+    (p.withOffset off).offsetInBits = p.offsetInBits + 8 * off.toNat := by
+  have hadd : (p.offset + off).toNat = p.offset.toNat + off.toNat := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
+  simp only [Pointer.withOffset, Pointer.offsetInBits, hadd]
+  omega
+
 /-- Limb `i` sits exactly `64 * i` bits into the block: the element fits, so
 the offset cannot wrap. -/
 lemma limbOffsetInBits {p : Pointer} (hp : p.offset.toNat + 5 * 8 ≤ 2 ^ 64)
