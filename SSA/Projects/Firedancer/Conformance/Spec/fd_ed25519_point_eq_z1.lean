@@ -1,5 +1,5 @@
 import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Spec.fd_ed25519_point_eq_z1
+import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_eq_z1
 import SSA.Projects.Firedancer.Avx512.Spec.fd_ed25519_point_eq_z1
 import SSA.Projects.Firedancer.Curve
 
