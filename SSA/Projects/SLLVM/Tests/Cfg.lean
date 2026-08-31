@@ -180,7 +180,7 @@ def callInTailBlock : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32]
   == some (.value 7#32)
 
 /--
-error: Unsupported operation 'llvm.call to nowhere: the callee's body is not bound. Supply it with `with @nowhere := …`.'
+error: Unsupported operation 'llvm.call to nowhere: the callee's body is not bound. Supply it with `with @nowhere := …` or define a lifted `nowhere` in scope.'
 -/
 #guard_msgs in
 def unboundCallee : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
