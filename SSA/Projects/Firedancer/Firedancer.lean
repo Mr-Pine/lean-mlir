@@ -16,3 +16,4 @@ import SSA.Projects.Firedancer.Avx512.Proof.IsNonzeroTest
 import SSA.Projects.Firedancer.Ref.Proof.fd_ed25519_point_is_zero
 import SSA.Projects.Firedancer.Avx512.Proof.fd_ed25519_point_eq_z1
 import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_mul
+import SSA.Projects.Firedancer.Ref.Proof.fd_ed25519_point_eq_z1
