@@ -37,13 +37,6 @@ abbrev AllLimbBounds {p : Pointer} {m: MemoryState} (h : IsPointPtr m p) := ∀ 
   have hf : IsFieldElemPtr m fieldElemPtr := by exact isCoordPtr p h i
   LimbBounds hf
 
-/-- The tight bound, as the `readLimb?`-shaped hypothesis the per-field-element
-lemmas take: every limb of coordinate `i` is at most `2^51`. -/
-theorem coordLimbBounds {m : MemoryState} {p : Pointer}
-    (h : IsPointPtr m p) (hb : AllLimbBounds h) (i : Fin 4) :
-    have coordPtr := isCoordPtr p h i
-    LimbBounds coordPtr := hb i
-
 theorem readPoint?_isSome {m : MemoryState} {p : Pointer} (h : IsPointPtr m p) :
     (readPoint? p m).isSome := by
   obtain ⟨⟨block, hblk, -⟩, -⟩ := h
@@ -52,13 +45,5 @@ theorem readPoint?_isSome {m : MemoryState} {p : Pointer} (h : IsPointPtr m p) :
   simp [readPoint?, readCoordinate?, readFieldElem?, readLimb?, Pointer.withOffset, hlive]
 
 def readPoint {p: Pointer} {m: MemoryState} (h: IsPointPtr m p) : Point := (readPoint? p m).get (readPoint?_isSome h)
-
-theorem readCoordinate?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) (i : Fin 4) :
-    readCoordinate? p i s.mem = readCoordinate? p i s'.mem := by
-  simp only [readCoordinate?, readFieldElem?_of_equiv h]
-
-theorem readPoint?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) :
-    readPoint? p s.mem = readPoint? p s'.mem := by
-  simp only [readPoint?, readCoordinate?_of_equiv h]
 
 end Firedancer.Ref

@@ -2,6 +2,7 @@ import SSA.Projects.Firedancer.Ref.Spec.fd_ed25519_point_is_zero
 import SSA.Projects.Firedancer.Ref.Mlir.fd_ed25519_point_is_zero
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+import SSA.Projects.Firedancer.Ref.Proof.Point
 
 import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Ref.Proof.fd_f25519_eq
