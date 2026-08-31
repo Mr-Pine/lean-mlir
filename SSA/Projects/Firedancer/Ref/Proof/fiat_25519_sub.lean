@@ -67,6 +67,7 @@ lemma sub_repr_correct (q r : Fin 5 → Nat)
 
 set_option maxHeartbeats 3200000 in
 theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
+  (hs : s.WF)
   (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
   (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
   (ho: IsFieldElemPtr s.mem o)
@@ -83,11 +84,11 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     let output := sub_repr pinput qinput
     let outputBV := BitVec.ofNat 64 ∘ output
 
-    refine ⟨outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0, ?_⟩
+    refine ⟨packLimbs outputBV, ?_⟩
 
     constructor
     case right =>
-      simp [readFieldElem?, hqinput, hpinput, ho, limbReadback, outputBV]
+      simp [readFieldElem?, hqinput, hpinput, ho, limbReadbackPack, outputBV]
       have pinput_bounds (j: Fin 5) : pinput j ≤ 0x8000000000000 := by simp only [hpinput, hpbounds j]
       have qinput_bounds (j: Fin 5) : qinput j ≤ 0x8000000000000 := by simp only [hqinput, hqbounds j]
       have output_bounds (i: Fin 5) : output i ≤ 0x18000000000000 := by
@@ -100,21 +101,23 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
       simp only [vec_eq, HSub.hSub, output, sub_repr_correct pinput qinput qinput_bounds]
 
       intro i
-      -- the stored vector is `output` pushed through `ofNat`, limb by limb; the
-      -- `ofNat` truncation can only lower a limb, so the bound carries over
-      simp only [vec_eq (fun j => BitVec.ofNat 64 (output j)), BitVec.toNat_ofNat]
-      exact (Nat.mod_le _ _).trans (output_bounds i)
+      exact output_bounds i
 
-    let output_state : GlobalState :=
-      { s with
-        mem := ((((s.mem.splice o (outputBV 0)).splice (o.withOffset 8) (outputBV 1)).splice
-                  (o.withOffset 16) (outputBV 2)).splice (o.withOffset 24) (outputBV 3)).splice
-                  (o.withOffset 32) (outputBV 4) }
-    refine ⟨output_state, ?_, ?_⟩
-    pick_goal 2
-
-    exact GlobalState.Equiv.symm (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2)
-      (outputBV 3) (outputBV 4) ho)
+    obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,
+        m = ((((s.mem.splice o (outputBV 0)).splice (o.withOffset 8) (outputBV 1)).splice
+              (o.withOffset 16) (outputBV 2)).splice (o.withOffset 24) (outputBV 3)).splice
+              (o.withOffset 32) (outputBV 4) := ⟨_, rfl⟩
+    refine ⟨s.popFrame outMem, run_runFunction (s' := { s with mem := outMem }) ?_, ?equiv⟩
+    case equiv =>
+      have hnone : ∀ (b : BlockId), s.alloc.nextFreeBlock ≤ b.id → outMem.live? b = none := by
+        rw [houtMem]
+        exact fun b hb => live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none
+          (live?_splice_eq_none (live?_splice_eq_none (hs b hb)))))
+      refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm
+        (killFrom_equiv_of_none (s := s) (m := outMem) hnone))
+      rw [houtMem]
+      exact GlobalState.Equiv.symm
+        (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) ho)
 
     denote_step_all v 5
     denote_eval v 0 5
@@ -238,7 +241,7 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     store_limbs outputBV, o, ho.left, s
 
 
-    simp only [BlockCom.denote_term, Terminator.denote_ret, output_state,
+    simp only [BlockCom.denote_term, Terminator.denote_ret, houtMem,
       hs₁, hs₂, hs₃, hs₄, o₁, o₂, o₃, o₄, simp_denote, simp_sllvm]
 
 end Firedancer.Ref

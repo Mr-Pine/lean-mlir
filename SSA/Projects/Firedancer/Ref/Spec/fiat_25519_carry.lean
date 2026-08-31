@@ -11,7 +11,7 @@ value is unchanged and every limb is at most `2^51`. The only lasting effect is
 the 5*64 bits spliced at `p₀` -- allocation counter, other blocks, and the rest
 of `p₀`'s block come along unchanged from the record update. -/
 abbrev fiat_25519_carry_spec (p₀ p₁: Pointer) (s: GlobalState) : Prop :=
-  let invocation := (fiat_25519_carry.denote (Ctxt.Valuation.ofPair (.value p₁) (.value p₀)))
+  let invocation := runFunction (fiat_25519_carry.denote (Ctxt.Valuation.ofPair (.value p₁) (.value p₀)))
   let result := StateT.run invocation s
   let input_value := readFieldElem? p₁ s.mem
 

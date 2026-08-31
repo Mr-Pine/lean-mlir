@@ -7,7 +7,7 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 abbrev fiat_25519_sub_spec (o p q: Pointer) (s: GlobalState) : Prop :=
-  let invocation := (fiat_25519_sub.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ ))
+  let invocation := runFunction (fiat_25519_sub.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ ))
   let result := StateT.run invocation s
   let p_input := readFieldElem? p s.mem
   let q_input := readFieldElem? q s.mem

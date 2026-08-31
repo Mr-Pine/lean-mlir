@@ -191,6 +191,7 @@ elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
 
 set_option maxHeartbeats 3200000 in
 theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
+  (hs : s.WF)
   (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i s.mem = some l → l ≤ 0x18000000000000)
   (hq : IsFieldElemPtr s.mem q)
   (hp₀ : IsFieldElemPtr s.mem p₀) :
@@ -202,12 +203,12 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     let output := carry_repr input
     let outputBV := BitVec.ofNat 64 ∘ output
 
-    refine ⟨outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0, ?_⟩
+    refine ⟨packLimbs outputBV, ?_⟩
 
     constructor
     pick_goal 2
 
-    simp [readFieldElem?, hq, limbReadback s.mem q, outputBV, hinput]
+    simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
 
     have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
     have hcb := carry_bounds input hb
@@ -232,12 +233,21 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     -- What the region actually leaves behind: five 64-bit writes at `q`, eight
     -- bytes apart, in program order. That this is the spec's single 320-bit
     -- splice is the `≈` obligation below.
-    let output_state : GlobalState :=
-      { s with
-        mem := ((((s.mem.splice q (outputBV 0)).splice (q.withOffset 8) (outputBV 1)).splice
-                  (q.withOffset 16) (outputBV 2)).splice (q.withOffset 24) (outputBV 3)).splice
-                  (q.withOffset 32) (outputBV 4) }
-    refine ⟨output_state, ?_, ?_⟩
+    obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,
+        m = ((((s.mem.splice q (outputBV 0)).splice (q.withOffset 8) (outputBV 1)).splice
+              (q.withOffset 16) (outputBV 2)).splice (q.withOffset 24) (outputBV 3)).splice
+              (q.withOffset 32) (outputBV 4) := ⟨_, rfl⟩
+    refine ⟨s.popFrame outMem, run_runFunction (s' := { s with mem := outMem }) ?_, ?equiv⟩
+    case equiv =>
+      have hnone : ∀ (b : BlockId), s.alloc.nextFreeBlock ≤ b.id → outMem.live? b = none := by
+        rw [houtMem]
+        exact fun b hb => live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none
+          (live?_splice_eq_none (live?_splice_eq_none (hs b hb)))))
+      refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm
+        (killFrom_equiv_of_none (s := s) (m := outMem) hnone))
+      rw [houtMem]
+      exact GlobalState.Equiv.symm
+        (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) hq)
 
     simp only [fiat_25519_carry]
 
@@ -403,12 +413,9 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     -- carries `q`'s room across a store, since a store changes no block's size.
     store_limbs outputBV, q, hq.left, s
 
-    -- `llvm.return`: nothing is left but the state, which is `output_state`
-    simp only [BlockCom.denote_term, Terminator.denote_ret, output_state, simp_sllvm,
+    -- `llvm.return`: nothing is left but the state, which is `outMem`
+    simp only [BlockCom.denote_term, Terminator.denote_ret, houtMem, simp_sllvm,
       hs₁, hs₂, hs₃, hs₄, q₁, q₂, q₃, q₄]
     rfl
-
-    exact GlobalState.Equiv.symm (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2)
-      (outputBV 3) (outputBV 4) hq)
 
 end Firedancer.Ref

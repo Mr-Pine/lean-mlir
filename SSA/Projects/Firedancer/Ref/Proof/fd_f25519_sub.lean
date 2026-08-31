@@ -22,7 +22,7 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     simp only [fd_f25519_sub_spec, Cfg.denote]
 
     obtain ⟨subres, ⟨substate, hsubstate, hsubstate_eq⟩, hsubres⟩ :=
-      fiat_25519_sub_conforms o p q s hpbounds hqbounds ho hp hq
+      fiat_25519_sub_conforms o p q s hs hpbounds hqbounds ho hp hq
     replace hsubres : readFieldElem? o substate.mem
           = Sub.sub <$> readFieldElem? p s.mem <*> readFieldElem? q s.mem
         ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? o i substate.mem = some l → l ≤ 0x18000000000000 :=
@@ -35,96 +35,53 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
 
     have hoframe : o.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs ho.left
 
-    -- the state the `fiat_25519_sub` call returns to, its frame popped: this,
-    -- not `substate`, is where `fiat_25519_carry` actually runs. Popping the
-    -- frame is invisible -- below the counter `killFrom` is the identity, above
-    -- it well-formedness says nothing was live -- so the two are equivalent and
-    -- everything known about `substate` transfers.
-    set substate' : GlobalState :=
-      { alloc := s.alloc, mem := substate.mem.killFrom s.alloc.nextFreeBlock } with hsubstate'def
-    have hsubstate'_eq : (substate' : GlobalState) ≈ substate := by
-      refine ⟨hsubstate_eq.1, fun r => ?_⟩
-      by_cases hr : r.id < s.alloc.nextFreeBlock
-      · exact live?_killFrom_of_lt hr
-      · rw [live?_killFrom_of_le (by omega), ← hsubstate_eq.2 r,
-          live?_splice_ne (show o.id ≠ r by rintro rfl; omega), hs r (by omega)]
-    have hread₁ : ∀ (i : Fin 5), readLimb? o i substate'.mem = readLimb? o i substate.mem :=
-      readLimb?_of_equiv hsubstate'_eq o
-    have hfield₁ : readFieldElem? o substate'.mem = readFieldElem? o substate.mem :=
-      readFieldElem?_of_equiv hsubstate'_eq o
-    have ho₁ : Fits substate'.mem o (5 * 64) :=
-      fits_equiv (GlobalState.Equiv.symm hsubstate'_eq) ho_subst
+    have hsubWF : substate.WF := GlobalState.WF.of_equiv hs.splice hsubstate_eq
+    have halloc : substate.alloc = s.alloc := hsubstate_eq.1.symm
 
     obtain ⟨carryres, ⟨carrystate, hcarrystate, hcarrystate_eq⟩, hcarryres⟩ :=
-      fiat_25519_carry_conforms o o substate'
-        (fun i l h => hsubres.2 i l ((hread₁ i).symm.trans h)) ⟨ho₁, ho.right⟩ ⟨ho₁, ho.right⟩
+      fiat_25519_carry_conforms o o substate hsubWF hsubres.2 ⟨ho_subst, ho.right⟩
+        ⟨ho_subst, ho.right⟩
 
-    -- and the state the `fiat_25519_carry` call returns to, which is what the
-    -- region as a whole ends in
-    set carrystate' : GlobalState :=
-      { alloc := s.alloc, mem := carrystate.mem.killFrom s.alloc.nextFreeBlock }
-      with hcarrystate'def
+    have hcarryWF : carrystate.WF :=
+      GlobalState.WF.of_equiv hsubWF.splice hcarrystate_eq
+    have hcalloc : carrystate.alloc = s.alloc := hcarrystate_eq.1.symm.trans halloc
 
-    -- and `fd_f25519_sub`'s own frame pop, which the spec's `runFunction`
-    -- performs: the region allocates nothing, so this second kill at the same
-    -- counter changes nothing the carry's kill left.
-    set carrystate'' : GlobalState :=
-      { alloc := s.alloc, mem := carrystate'.mem.killFrom s.alloc.nextFreeBlock }
-      with hcarrystate''def
+    have hpop : (s.popFrame carrystate.mem : GlobalState) ≈ carrystate :=
+      GlobalState.Equiv.trans
+        (killFrom_equiv_of_none (fun t ht => hcarryWF t (by rw [hcalloc]; omega)))
+        ⟨hcalloc.symm, fun _ => rfl⟩
 
-    refine ⟨carryres, ⟨carrystate'', ?_⟩, ?_⟩
-    pick_goal 2
-
-    -- the spec splices `carryres` into `s`, the carry into `substate'`; a read at `o`
-    -- sees only the spliced bits, so the two agree.
+    -- a read at `o` sees only the spliced bits, so splicing the carry's result
+    -- into `s` and into `substate` agree
     have hlimbs : ∀ i : Fin 5, readLimb? o i (s.mem.splice o carryres)
-        = readLimb? o i (substate'.mem.splice o carryres) := fun i => by
-      rw [limbSpliceReadback _ _ _ ho.left i, limbSpliceReadback _ _ _ ho₁ i]
+        = readLimb? o i (substate.mem.splice o carryres) := fun i => by
+      rw [limbSpliceReadback _ _ _ ho.left i, limbSpliceReadback _ _ _ ho_subst i]
     have hfield : readFieldElem? o (s.mem.splice o carryres)
-        = readFieldElem? o (substate'.mem.splice o carryres) := by
+        = readFieldElem? o (substate.mem.splice o carryres) := by
       simp only [readFieldElem?, hlimbs]
-    exact ⟨hfield.trans (hcarryres.1.trans (hfield₁.trans hsubres.1)),
-      fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)⟩
 
-    constructor
-    case refine_1.right =>
-      have hkill : (substate' : GlobalState)
-          ≈ { alloc := s.alloc, mem := s.mem.splice o subres } :=
-        GlobalState.Equiv.trans hsubstate'_eq (GlobalState.Equiv.symm hsubstate_eq)
-      -- popping the carry's frame is invisible for the same reason
-      have hkill₂ : (carrystate' : GlobalState) ≈ carrystate := by
-        refine ⟨hcarrystate_eq.1, fun r => ?_⟩
-        by_cases hr : r.id < s.alloc.nextFreeBlock
-        · exact live?_killFrom_of_lt hr
-        · rw [live?_killFrom_of_le (by omega), ← hcarrystate_eq.2 r,
-            live?_splice_ne (show o.id ≠ r by rintro rfl; omega),
-            live?_killFrom_of_le (by omega)]
-      -- killing an already-killed frame at the same counter is invisible
-      have hkill₃ : (carrystate' : GlobalState) ≈ carrystate'' := by
-        refine ⟨rfl, fun t => ?_⟩
-        by_cases ht : t.id < s.alloc.nextFreeBlock
-        · exact (live?_killFrom_of_lt ht).symm
-        · rw [hcarrystate''def, hcarrystate'def]
-          rw [live?_killFrom_of_le (by omega), live?_killFrom_of_le (by omega)]
-      -- the sub's splice at `o` is overwritten by the carry's
-      exact GlobalState.Equiv.trans
-        (GlobalState.Equiv.trans
-          (GlobalState.Equiv.trans
-            (GlobalState.Equiv.trans
-              (GlobalState.Equiv.symm (splice_splice_equiv (s := s) (p := o) subres carryres))
-              (GlobalState.Equiv.symm (splice_equiv (p := o) (x := carryres) hkill)))
-            hcarrystate_eq)
-          (GlobalState.Equiv.symm hkill₂))
-        hkill₃
+    have hkill : (substate : GlobalState)
+        ≈ { alloc := s.alloc, mem := s.mem.splice o subres } :=
+      GlobalState.Equiv.symm hsubstate_eq
 
-    refine run_runFunction (s' := carrystate') ?_
+    refine ⟨carryres, ⟨s.popFrame carrystate.mem,
+      run_runFunction (s' := carrystate) ?run, ?equiv⟩, ?value, ?bounds⟩
 
-    refine (BlockCom.run_bind_denote_call_of_nil (s' := substate') ?_).trans ?_
-    · exact run_runFunction hsubstate
-
-    refine (BlockCom.run_bind_denote_call_of_nil (s' := carrystate') ?_).trans ?_
-    · exact run_runFunction hcarrystate
-
-    rfl
+    case equiv =>
+      refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm hpop)
+      refine GlobalState.Equiv.trans ?_ hcarrystate_eq
+      refine GlobalState.Equiv.trans (GlobalState.Equiv.symm
+        (splice_splice_equiv (s := s) (p := o) subres carryres)) ?_
+      exact GlobalState.Equiv.symm (splice_equiv (p := o) (x := carryres) hkill)
+    case value =>
+      exact hfield.trans (hcarryres.1.trans hsubres.1)
+    case bounds =>
+      exact fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)
+    case run =>
+      refine (BlockCom.run_bind_denote_call_of_nil (s' := substate) ?_).trans ?_
+      · exact hsubstate
+      refine (BlockCom.run_bind_denote_call_of_nil (s' := carrystate) ?_).trans ?_
+      · exact hcarrystate
+      rfl
 
 end Firedancer.Ref
