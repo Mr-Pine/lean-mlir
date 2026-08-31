@@ -3,6 +3,7 @@ import SSA.Projects.Firedancer.Ref.Mlir.fiat_25519_carry
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+import SSA.Projects.Firedancer.Ref.Proof.Limb
 
 
 namespace Firedancer.Ref
@@ -128,15 +129,13 @@ lemma carry_bounds (input : Fin 5 → Nat) (hi : ∀ i : Fin 5, input i ≤ 0x18
   intro i
   simp only [carry_repr]
   carry_setup
-  -- one bound per limb, small enough for omega; `simp` then only has to pick
-  -- the right component out of `![...]`
+  -- one bound per limb, each small enough for omega
   have k0 : (input 0 % 2 ^ 51 + c5 * 19) % 2 ^ 51 ≤ 0x8000000000000 := by omega
   have k1 : (c6 + (c1 + input 1) % 2 ^ 51) % 2 ^ 51 ≤ 0x8000000000000 := by omega
   have k2 : c7 + (c2 + input 2) % 2 ^ 51 ≤ 0x8000000000000 := by omega
   have k3 : (c3 + input 3) % 2 ^ 51 ≤ 0x8000000000000 := by omega
   have k4 : (c4 + input 4) % 2 ^ 51 ≤ 0x8000000000000 := by omega
-  norm_num at k0 k1 k2 k3 k4
-  fin_cases i <;> simp <;> omega
+  exact forall_fin5 k0 k1 k2 k3 k4 i
 
 /-! ### The carry chain over `BitVec 64`
 
@@ -149,88 +148,16 @@ a carry can add. -/
 /-- One `lshr 51; add limb` step, over `toNat`. -/
 theorem carry_step_toNat {prev : BitVec 64} {n : ℕ}
     (hprev : prev.toNat ≤ 0x18000000000003) (hn : n ≤ 0x18000000000000) :
-    ((prev >>> (51 : ℕ)) + BitVec.ofNat 64 n).toNat = prev.toNat / 2 ^ 51 + n := by
-  rw [BitVec.toNat_add, BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow,
-    BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show n < 2 ^ 64 by omega)]
+    ((prev >>> 51#64) + BitVec.ofNat 64 n).toNat = prev.toNat / 2 ^ 51 + n := by
+  rw [BitVec.toNat_add, shift_toNat, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt (show n < 2 ^ 64 by omega)]
   exact Nat.mod_eq_of_lt (by omega)
 
 /-- ... and the same step preserves the invariant. -/
 theorem carry_step_le {prev : BitVec 64} {n : ℕ}
     (hprev : prev.toNat ≤ 0x18000000000003) (hn : n ≤ 0x18000000000000) :
-    ((prev >>> (51 : ℕ)) + BitVec.ofNat 64 n).toNat ≤ 0x18000000000003 := by
+    ((prev >>> 51#64) + BitVec.ofNat 64 n).toNat ≤ 0x18000000000003 := by
   rw [carry_step_toNat hprev hn]; omega
-
-/-- A shift by 51 is division, over `toNat`. -/
-theorem shift_toNat (x : BitVec 64) : (x >>> (51 : ℕ)).toNat = x.toNat / 2 ^ 51 := by
-  rw [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
-
-/-- The region's `and` with `2^51 - 1` is reduction mod `2^51`, over `toNat`. -/
-theorem mask_toNat (a : BitVec 64) : (a &&& 2251799813685247#64).toNat = a.toNat % 2 ^ 51 := by
-  rw [BitVec.toNat_and, show (2251799813685247#64).toNat = 2 ^ 51 - 1 by decide,
-    Nat.and_two_pow_sub_one_eq_mod]
-
-/-- ... so it bounds a limb below `2^51`. -/
-theorem mask_toNat_lt (a : BitVec 64) : (a &&& 2251799813685247#64).toNat < 2 ^ 51 := by
-  rw [mask_toNat]; omega
-
-/-- `%26`/`%27`'s `nsw, nuw` guards. All four are `decide` of arithmetic --
-the unsigned pair over `toNat`, the signed pair over `toInt` -- and
-`toInt_eq_toNat_of_lt` puts them on the same footing, so the carry bound and the
-limb bound kill all four at once. -/
-theorem mul19_add_no_overflow (c m : BitVec 64) (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (if c.smulOverflow 19#64 = true then (PoisonOr.poison : PoisonOr (BitVec 64))
-     else if c.umulOverflow 19#64 = true then PoisonOr.poison
-     else if (c * 19#64).saddOverflow m = true then PoisonOr.poison
-     else if (c * 19#64).uaddOverflow m = true then PoisonOr.poison
-     else PoisonOr.value (c * 19#64 + m))
-      = PoisonOr.value (c * 19#64 + m) := by
-  have h19 : (19#64).toInt = 19 := by decide
-  have hmul : (c * 19#64).toNat = c.toNat * 19 := by
-    rw [BitVec.toNat_mul]; simp; omega
-  have hci : c.toInt = (c.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
-  have hmi : m.toInt = (m.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
-  have hpi : (c * 19#64).toInt = ((c * 19#64).toNat : Int) :=
-    BitVec.toInt_eq_toNat_of_lt (by omega)
-  simp only [BitVec.smulOverflow, BitVec.umulOverflow, BitVec.saddOverflow,
-    BitVec.uaddOverflow, hci, hmi, hpi, hmul, h19, BitVec.toNat_ofNat]
-  rw [if_neg (by simp; omega), if_neg (by simp; omega), if_neg (by simp; omega),
-    if_neg (by simp; omega)]
-
-/-- A plain `nsw, nuw` add of a small carry onto a masked limb -- `%30` and the
-stores' accumulators, which have no `mul` in front. -/
-theorem add_no_overflow (c m : BitVec 64) (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (if c.saddOverflow m = true then (PoisonOr.poison : PoisonOr (BitVec 64))
-     else if c.uaddOverflow m = true then PoisonOr.poison
-     else PoisonOr.value (c + m))
-      = PoisonOr.value (c + m) := by
-  have hci : c.toInt = (c.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
-  have hmi : m.toInt = (m.toNat : Int) := BitVec.toInt_eq_toNat_of_lt (by omega)
-  simp only [BitVec.saddOverflow, BitVec.uaddOverflow, hci, hmi]
-  rw [if_neg (by simp; omega), if_neg (by simp; omega)]
-
-/-- `%26`/`%27` over `toNat`: at a `≤ 3` carry and a masked limb, neither the
-`mul` nor the `add` wraps. -/
-theorem mul19_add_toNat {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (c * 19#64 + m).toNat = c.toNat * 19 + m.toNat := by
-  have hmul : (c * 19#64).toNat = c.toNat * 19 := by
-    rw [BitVec.toNat_mul]; simp; omega
-  rw [BitVec.toNat_add, hmul, Nat.mod_eq_of_lt (by omega)]
-
-/-- `%27`'s value sits just above a masked limb, so its own carry is at most 1 --
-which is what lets `%30` reuse the `≤ 3` bound. -/
-theorem mul19_add_toNat_le {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (c * 19#64 + m).toNat ≤ 2 ^ 51 + 56 := by
-  rw [mul19_add_toNat hc hm]; omega
-
-/-- ... and the same for a carry added onto a masked limb with no `mul`, which
-is what each later accumulator (`%30`, `%35`) produces. -/
-theorem add_toNat {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (c + m).toNat = c.toNat + m.toNat := by
-  rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
-
-theorem add_toNat_le {c m : BitVec 64} (hc : c.toNat ≤ 3) (hm : m.toNat < 2 ^ 51) :
-    (c + m).toNat ≤ 2 ^ 51 + 2 := by
-  rw [add_toNat hc hm]; omega
 
 open Lean Elab Tactic in
 /-- `peel_input i, p, hp, s` consumes limb `i`'s `getelementptr` and `load`, and
@@ -271,9 +198,7 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     simp only [fiat_25519_carry_spec, Cfg.denote]
 
     obtain ⟨blk, hblk, hlen⟩ := id hp₀.left
-    obtain ⟨input, hinput⟩ : ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p₀ i s.mem = some (l i) :=
-      ⟨fun i => (blk.bytes.extractLsb' (p₀.offsetInBits + 64 * i.toNat) 64).toNat,
-        fun i => by simp [readLimb?, MemoryState.live?, hblk]⟩
+    obtain ⟨input, hinput⟩ := exists_limbs hblk
     let output := carry_repr input
     let outputBV := BitVec.ofNat 64 ∘ output
 
@@ -316,38 +241,20 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
 
     simp only [fiat_25519_carry]
 
-    denote_step v 6
-    denote_eval v 6 6
-    subst hv6
+    denote_step_all v 6
+    denote_eval v 0 6
+    simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5 hv6
+    subst hv0 hv1 hv2 hv3 hv4 hv5 hv6
 
     peel_load (.bitvec (.concrete 64)), blk, p₀, hblk, s
 
     denote_step_all v 8
     denote_eval v 8 8
-    -- The source limbs, as `BitVec`s: `hinput` is stated through `readLimb?`,
-    -- which simp drives all the way down to `Nat` shifts, so it never meets the
-    -- `BitVec.extractLsb'` the stepper leaves in `hv<i>`. The offset is taken as
-    -- a parameter rather than written `p₁.offsetInBits + 64 * i.toNat`, because
-    -- that is not syntactically what each load leaves behind -- limb 0 has no
-    -- `getelementptr` at all -- and simp will not match it up to arithmetic.
     have hbits : ∀ (i : Fin 5) (off : ℕ), off = p₀.offsetInBits + 64 * i.toNat →
-        blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (input i) := by
-      rintro i off rfl
-      have h := hinput i
-      simp only [readLimb?, MemoryState.live?, hblk, Option.bind_eq_bind, Option.bind_some,
-        Option.pure_def, Option.some.injEq] at h
-      rw [← h, BitVec.ofNat_toNat, BitVec.setWidth_eq]
-
-    -- `peel_gep_limb`'s pointers do not wrap (`hp₀'`), so limb `i` sits exactly
-    -- `64 * i` bits into the block -- the offset `hbits` asks for.
+        blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (input i) := limbBits hblk hinput
     have hoff : ∀ (i : Fin 5) (o : BitVec 64), o.toNat = 8 * i.toNat →
-        (p₀.withOffset o).offsetInBits = p₀.offsetInBits + 64 * i.toNat := by
-      intro i o ho
-      have h2 : i.toNat < 5 := i.isLt
-      have hadd : (p₀.offset + o).toNat = p₀.offset.toNat + o.toNat := by
-        rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
-      simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, ho]
-      omega
+        (p₀.withOffset o).offsetInBits = p₀.offsetInBits + 64 * i.toNat :=
+      fun i _ ho => limbOffsetInBits hp₀.right (by have : i.toNat < 5 := i.isLt; omega) ho
 
     -- `%7` has no gep, so its value is limb 0 at the bare offset. Rewrite it in
     -- the *goal*, not just in `hv8`: `%7` is used again at `%24`, and anything
@@ -356,45 +263,32 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
       hbits 0 p₀.offsetInBits (by simp)
     rw [hin₀]
 
-    simp [LLVM.const?, LLVM.lshr, LLVM.lshr?, hin₀] at hv8
-    set x2₀ : BitVec 64 := BitVec.ofNat 64 (input 0) >>> (51 : ℕ) with hx2₀
-    subst hv8
+    eval_llvm 8 [hin₀] as x2₀
 
     -- %9-%10: limb 1's address and value
     peel_input 1, p₀, hp₀.left, s
 
     denote_step_all v 12
     denote_eval v 11 12
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.lshr, LLVM.lshr?] at hv11 hv12
-    set x2 := x2₀ + BitVec.ofNat 64 (input 1) with hx2
-    simp [hv11] at hv12
-    set x3₀ : BitVec 64 := x2 >>> (51 : ℕ) with hx3₀
-    subst hv11 hv12
+    eval_llvm 11 as x2
+    eval_llvm 12 as x3₀
 
     peel_input 2, p₀, hp₀.left, s
     denote_step_all v 16
     denote_eval v 15 16
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.lshr, LLVM.lshr?] at hv15 hv16
-    set x3 := x3₀ + BitVec.ofNat 64 (input 2) with hx3
-    simp [hv15] at hv16
-    set x4₀ : BitVec 64 := x3 >>> (51 : ℕ) with hx4₀
-    subst hv15 hv16
+    eval_llvm 15 as x3
+    eval_llvm 16 as x4₀
 
     peel_input 3, p₀, hp₀.left, s
     denote_step_all v 20
-    denote_eval v 19 29
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.lshr, LLVM.lshr?] at hv19 hv20
-    set x4 := x4₀ + BitVec.ofNat 64 (input 3) with hx4
-    simp [hv19] at hv20
-    set x5₀ : BitVec 64 := x4 >>> (51 : ℕ) with hx5₀
-    subst hv19 hv20
+    denote_eval v 19 20
+    eval_llvm 19 as x4
+    eval_llvm 20 as x5₀
 
     peel_input 4, p₀, hp₀.left, s
     denote_step_all v 23
     denote_eval v 23 23
-    simp [LLVM.add, LLVM.add?, LLVM.add, LLVM.add?] at hv23
-    set x5 := x5₀ + BitVec.ofNat 64 (input 4) with hx5
-    subst hv23
+    eval_llvm 23 as x5
 
     -- The chain, over `toNat`: `x<k>` is `carry_repr`'s `x<k>`, and every step
     -- stays inside the invariant, so nothing wrapped. These are the facts the
@@ -403,84 +297,68 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     have b1 : (BitVec.ofNat 64 (input 0)).toNat ≤ 0x18000000000003 := by
       rw [BitVec.toNat_ofNat]; have := hb 0; omega
     have n2 : x2.toNat = (BitVec.ofNat 64 (input 0)).toNat / 2 ^ 51 + input 1 := by
-      rw [hx2, hx2₀]; exact carry_step_toNat b1 (hb 1)
+      rw [← hx2, ← hx2₀]; exact carry_step_toNat b1 (hb 1)
     have b2 : x2.toNat ≤ 0x18000000000003 := by
-      rw [hx2, hx2₀]; exact carry_step_le b1 (hb 1)
+      rw [← hx2, ← hx2₀]; exact carry_step_le b1 (hb 1)
     have n3 : x3.toNat = x2.toNat / 2 ^ 51 + input 2 := by
-      rw [hx3, hx3₀]; exact carry_step_toNat b2 (hb 2)
+      rw [← hx3, ← hx3₀]; exact carry_step_toNat b2 (hb 2)
     have b3 : x3.toNat ≤ 0x18000000000003 := by
-      rw [hx3, hx3₀]; exact carry_step_le b2 (hb 2)
+      rw [← hx3, ← hx3₀]; exact carry_step_le b2 (hb 2)
     have n4 : x4.toNat = x3.toNat / 2 ^ 51 + input 3 := by
-      rw [hx4, hx4₀]; exact carry_step_toNat b3 (hb 3)
+      rw [← hx4, ← hx4₀]; exact carry_step_toNat b3 (hb 3)
     have b4 : x4.toNat ≤ 0x18000000000003 := by
-      rw [hx4, hx4₀]; exact carry_step_le b3 (hb 3)
+      rw [← hx4, ← hx4₀]; exact carry_step_le b3 (hb 3)
     have n5 : x5.toNat = x4.toNat / 2 ^ 51 + input 4 := by
-      rw [hx5, hx5₀]; exact carry_step_toNat b4 (hb 4)
+      rw [← hx5, ← hx5₀]; exact carry_step_toNat b4 (hb 4)
     have b5 : x5.toNat ≤ 0x18000000000003 := by
-      rw [hx5, hx5₀]; exact carry_step_le b4 (hb 4)
+      rw [← hx5, ← hx5₀]; exact carry_step_le b4 (hb 4)
     -- the top carry, which is what `%26`'s `mul 19` consumes
-    -- stated over `x5.toNat >>> 51`, which is omega's normal form for the
-    -- shift; a `BitVec`-level statement lands on a different atom.
-    have hc5 : x5.toNat >>> 51 ≤ 3 := by rw [Nat.shiftRight_eq_div_pow]; omega
-    denote_step v 27
-    denote_eval v 27 27
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.and, LLVM.and?, LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, LLVM.mul, LLVM.mul?] at hv27
+    have s5 : (x5 >>> 51#64).toNat ≤ 3 := by rw [shift_toNat]; omega
 
-    -- %26/%27 carry `nsw, nuw`; `rw` unifies `c`/`m` out of `hv27` and leaves
-    -- the two bounds, which are the carry chain and the mask.
-    rw [mul19_add_no_overflow] at hv27
-    rotate_left
-    · rw [shift_toNat]; omega
-    · exact mask_toNat_lt _
-    rotate_left
-    set x6 := x5 >>> (51 : Nat) * 19#64 + ((BitVec.ofNat 64 (input 0)) &&& 0x7ffffffffffff#64) with hx6
-    subst hv27
+    denote_step_all v 27
+    denote_eval v 24 27
+    eval_llvm 24
+    eval_llvm 25
+    obtain ⟨g26s, g26u⟩ := mul19_no_overflow s5
+    eval_llvm 26 [g26s, g26u]
+    obtain ⟨g27s, g27u⟩ := add_no_overflow (u := (x5 >>> 51#64) * 19#64)
+      (v := BitVec.ofNat 64 (input 0) &&& 2251799813685247#64)
+      (by rw [mul19_toNat (by omega), mask_toNat]; omega)
+    eval_llvm 27 [g27s, g27u] as x6
 
-    denote_step v 30
-    denote_eval v 30 30
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.and, LLVM.and?, LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?] at hv30
-
-    -- %30's `nsw, nuw`: `%28` is `x6`'s carry, at most 1 because `%27` only
-    -- added `3 * 19` on top of a masked limb; `%29` is a masked limb.
+    -- `%28` is `x6`'s carry, at most 1: `%27` added only `3 * 19` on top of a
+    -- masked limb. `%29` is a masked limb.
     have b6 : x6.toNat ≤ 2 ^ 51 + 56 := by
-      rw [hx6]; exact mul19_add_toNat_le (by rw [shift_toNat]; omega) (mask_toNat_lt _)
-    rw [add_no_overflow] at hv30
-    rotate_left
-    · rw [shift_toNat]; omega
-    · exact mask_toNat_lt _
-    rotate_left
-    set x7 := x6 >>> (51 : Nat) + (x2 &&& 0x7ffffffffffff#64) with hx7
-    subst hv30
+      rw [← hx6]; exact mul19_add_toNat_le s5 (mask_toNat_lt _)
+    denote_step_all v 30
+    denote_eval v 28 30
+    eval_llvm 28
+    eval_llvm 29
+    obtain ⟨g30s, g30u⟩ := add_no_overflow (u := x6 >>> 51#64)
+      (v := x2 &&& 2251799813685247#64) (by rw [shift_toNat, mask_toNat]; omega)
+    eval_llvm 30 [g30s, g30u] as x7
 
     denote_step_all v 32
     denote_eval v 31 32
-    simp [LLVM.const?, LLVM.and, LLVM.and?] at hv31 hv32
-    set x8 := (x6 &&& 0x7ffffffffffff#64) with hx8
-    set x9 := (x7 &&& 0x7ffffffffffff#64) with hx9
-    subst hv31 hv32
+    eval_llvm 31 as x8
+    eval_llvm 32 as x9
 
-    denote_step v 35
-    denote_eval v 35 35
-    simp [LLVM.add, LLVM.add?, LLVM.const?, LLVM.and, LLVM.and?, LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?] at hv35
-
-    -- %35's `nsw, nuw`: `%33` is `x7`'s carry. `x7` is `x6`'s carry (at most 1)
-    -- on top of a masked limb, so it barely exceeds `2^51` and carries at most 1.
+    -- `%33` is `x7`'s carry. `x7` is a carry of at most 1 on top of a masked
+    -- limb, so it barely exceeds `2^51` and carries at most 1 itself.
     have b7 : x7.toNat ≤ 2 ^ 51 + 2 := by
-      rw [hx7]; exact add_toNat_le (by rw [shift_toNat]; omega) (mask_toNat_lt _)
-    rw [add_no_overflow] at hv35
-    rotate_left
-    · rw [shift_toNat]; omega
-    · exact mask_toNat_lt _
-    rotate_left
-    set x10 := x7 >>> (51 : Nat) + (x3 &&& 0x7ffffffffffff#64) with hx10
-    subst hv35
+      rw [← hx7]; exact add_toNat_le (by rw [shift_toNat]; omega) (mask_toNat_lt _)
+    denote_step_all v 35
+    denote_eval v 33 35
+    eval_llvm 33
+    eval_llvm 34
+    obtain ⟨g35s, g35u⟩ := add_no_overflow (u := x7 >>> 51#64)
+      (v := x3 &&& 2251799813685247#64) (by rw [shift_toNat, mask_toNat]; omega)
+    eval_llvm 35 [g35s, g35u] as x10
 
     denote_step_all v 37
     denote_eval v 36 37
-    simp [LLVM.const?, LLVM.and, LLVM.and?] at hv36 hv37
-    set x11 := x4 &&& 0x7ffffffffffff#64 with hx11
-    set x12 := x5 &&& 0x7ffffffffffff#64 with hx12
-    subst hv36 hv37
+    eval_llvm 36 as x11
+    eval_llvm 37 as x12
 
     -- The five registers the stores consume are `carry_repr`'s limbs. `n2 … n5`
     -- already put `x2 … x5` on the `ℕ` chain; these carry that through the
@@ -490,20 +368,19 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
       rw [BitVec.toNat_ofNat]; have := hb 0; omega
     have c1 : x2.toNat = input 0 / 2 ^ 51 + input 1 := by rw [n2, ha0]
     have n6 : x6.toNat = input 0 % 2 ^ 51 + x5.toNat / 2 ^ 51 * 19 := by
-      rw [hx6, mul19_add_toNat (by rw [shift_toNat]; omega) (mask_toNat_lt _),
-        shift_toNat, mask_toNat, ha0]
+      rw [← hx6, mul19_add_toNat s5 (mask_toNat_lt _), shift_toNat, mask_toNat, ha0]
       omega
     have n7 : x7.toNat = x6.toNat / 2 ^ 51 + x2.toNat % 2 ^ 51 := by
-      rw [hx7, add_toNat (by rw [shift_toNat]; omega) (mask_toNat_lt _), shift_toNat, mask_toNat]
+      rw [← hx7, add_toNat (by rw [shift_toNat]; omega) (mask_toNat_lt _), shift_toNat, mask_toNat]
     have n10 : x10.toNat = x7.toNat / 2 ^ 51 + x3.toNat % 2 ^ 51 := by
-      rw [hx10, add_toNat (by rw [shift_toNat]; omega) (mask_toNat_lt _), shift_toNat, mask_toNat]
+      rw [← hx10, add_toNat (by rw [shift_toNat]; omega) (mask_toNat_lt _), shift_toNat, mask_toNat]
 
     have hchain : carry_repr input
         = ![x8.toNat, x9.toNat, x10.toNat, x11.toNat, x12.toNat] := by
-      have m8 : x8.toNat = x6.toNat % 2 ^ 51 := by rw [hx8, mask_toNat]
-      have m9 : x9.toNat = x7.toNat % 2 ^ 51 := by rw [hx9, mask_toNat]
-      have m11 : x11.toNat = x4.toNat % 2 ^ 51 := by rw [hx11, mask_toNat]
-      have m12 : x12.toNat = x5.toNat % 2 ^ 51 := by rw [hx12, mask_toNat]
+      have m8 : x8.toNat = x6.toNat % 2 ^ 51 := by rw [← hx8, mask_toNat]
+      have m9 : x9.toNat = x7.toNat % 2 ^ 51 := by rw [← hx9, mask_toNat]
+      have m11 : x11.toNat = x4.toNat % 2 ^ 51 := by rw [← hx11, mask_toNat]
+      have m12 : x12.toNat = x5.toNat % 2 ^ 51 := by rw [← hx12, mask_toNat]
       have t6 : x6.toNat / 2 ^ 51 % 2 ^ 8 = x6.toNat / 2 ^ 51 := Nat.mod_eq_of_lt (by omega)
       have t7 : x7.toNat / 2 ^ 51 % 2 ^ 8 = x7.toNat / 2 ^ 51 := Nat.mod_eq_of_lt (by omega)
       simp only [carry_repr]
@@ -511,108 +388,27 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
 
     -- `x<k> = outputBV i` -- so the stores below write the spec's limbs, and
     -- `output_state` is exactly the state the run ends in
-    have hout : ∀ (v : BitVec 64) (i : Fin 5), v.toNat = output i → v = outputBV i := by
-      intro v i h
-      show v = BitVec.ofNat 64 (output i)
-      rw [← h, BitVec.ofNat_toNat, BitVec.setWidth_eq]
-    have e8 : x8 = outputBV 0 := hout _ 0 (by simp [output, hchain])
-    have e9 : x9 = outputBV 1 := hout _ 1 (by simp [output, hchain])
-    have e10 : x10 = outputBV 2 := hout _ 2 (by simp [output, hchain])
-    have e11 : x11 = outputBV 3 := hout _ 3 (by simp [output, hchain])
-    have e12 : x12 = outputBV 4 := hout _ 4 (by simp [output, hchain])
-    rw [e8, e9, e10, e11, e12]
+    have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
+      fun _ _ h => eq_ofNat_of_toNat h
+    rw [hout x8 0 (by simp [output, hchain])] at hv31
+    rw [hout x9 1 (by simp [output, hchain])] at hv32
+    rw [hout x10 2 (by simp [output, hchain])] at hv35
+    rw [hout x11 3 (by simp [output, hchain])] at hv36
+    rw [hout x12 4 (by simp [output, hchain])] at hv37
+    rw [hv31, hv32, hv35, hv36, hv37]
 
     -- The five stores, limb 0 first. A `store` binds nothing, so `peel_store`
     -- only moves the state; naming each state keeps the next `Fits` obligation
     -- -- and the `getelementptr` that follows it -- readable. `fits_splice`
     -- carries `q`'s room across a store, since a store changes no block's size.
-    peel_store (outputBV 0), q, hq.left, s
-    set s₁ : GlobalState := { s with mem := s.mem.splice q (outputBV 0) } with hs₁
-    have f₁ : Fits s₁.mem q (5 * 64) := fits_splice hq.left
-
-    peel_gep_limb 1, q, f₁, s₁, q
-    peel_store (outputBV 1), q₁, hq₁, s₁
-    set s₂ : GlobalState := { s₁ with mem := s₁.mem.splice q₁ (outputBV 1) } with hs₂
-    have f₂ : Fits s₂.mem q (5 * 64) := fits_splice f₁
-
-    peel_gep_limb 2, q, f₂, s₂, q
-    peel_store (outputBV 2), q₂, hq₂, s₂
-    set s₃ : GlobalState := { s₂ with mem := s₂.mem.splice q₂ (outputBV 2) } with hs₃
-    have f₃ : Fits s₃.mem q (5 * 64) := fits_splice f₂
-
-    peel_gep_limb 3, q, f₃, s₃, q
-    peel_store (outputBV 3), q₃, hq₃, s₃
-    set s₄ : GlobalState := { s₃ with mem := s₃.mem.splice q₃ (outputBV 3) } with hs₄
-    have f₄ : Fits s₄.mem q (5 * 64) := fits_splice f₃
-
-    peel_gep_limb 4, q, f₄, s₄, q
-    peel_store (outputBV 4), q₄, hq₄, s₄
+    store_limbs outputBV, q, hq.left, s
 
     -- `llvm.return`: nothing is left but the state, which is `output_state`
     simp only [BlockCom.denote_term, Terminator.denote_ret, output_state, simp_sllvm,
       hs₁, hs₂, hs₃, hs₄, q₁, q₂, q₃, q₄]
     rfl
 
-    simp [output_state, GlobalState.equiv_def]
-    intro p
-    obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
-
-    by_cases h: q.id = p
-    case neg =>
-      -- an unrelated block: every splice here is at `q.id`, so none is visible.
-      -- `getElem?_splice_ne` is stated over `m[_]?`, so it has to fire before
-      -- `getElem?_eq` rewrites that into the underlying map lookup.
-      simp only [MemoryState.live?]
-      have h₄ : (q.withOffset 32#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₃ : (q.withOffset 24#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₂ : (q.withOffset 16#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₁ : (q.withOffset 8#64).id ≠ p := by simp [Pointer.withOffset, h]
-      simp only [getElem?_splice_ne h₄, getElem?_splice_ne h₃, getElem?_splice_ne h₂, getElem?_splice_ne h₁, getElem?_splice_ne h]
-    case pos =>
-      simp only [MemoryState.live?]
-      rw [← h]
-      simp only [getElem?_splice_self (w := 320) (x := outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0) hqblk]
-
-      -- the four `getelementptr` destinations, in bits off `q`; `hq'` is what
-      -- rules out the pointer wrapping
-      have hoffq : ∀ (k : ℕ) (o : BitVec 64), k ≤ 4 → o.toNat = 8 * k →
-          (q.withOffset o).offsetInBits = q.offsetInBits + 64 * k := by
-        rintro k o hk ho
-        have hadd : (q.offset + o).toNat = q.offset.toNat + o.toNat := by
-          rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
-        simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, ho]
-        omega
-      have o₁ : (q.withOffset 8#64).offsetInBits = q.offsetInBits + 64 := by
-        rw [hoffq 1 8#64 (by omega) (by simp)]
-      have o₂ : (q.withOffset 16#64).offsetInBits = q.offsetInBits + 128 := by
-        rw [hoffq 2 16#64 (by omega) (by simp)]
-      have o₃ : (q.withOffset 24#64).offsetInBits = q.offsetInBits + 192 := by
-        rw [hoffq 3 24#64 (by omega) (by simp)]
-      have o₄ : (q.withOffset 32#64).offsetInBits = q.offsetInBits + 256 := by
-        rw [hoffq 4 32#64 (by omega) (by simp)]
-
-      -- peel the five stores off the right-hand state, innermost first: each
-      -- sees the block the previous one left. `getElem?_splice_self` states its
-      -- index as `p.id`, which for a `getelementptr` destination is `q.id` only
-      -- after unfolding, so each step is refolded before it is used again.
-      have hid : ∀ o : BitVec 64, (q.withOffset o).id = q.id := fun _ => rfl
-      have k₀ := getElem?_splice_self (x := outputBV 0) hqblk
-      have k₁ := getElem?_splice_self (p := q.withOffset 8#64) (x := outputBV 1) k₀
-      rw [hid] at k₁
-      have k₂ := getElem?_splice_self (p := q.withOffset 16#64) (x := outputBV 2) k₁
-      rw [hid] at k₂
-      have k₃ := getElem?_splice_self (p := q.withOffset 24#64) (x := outputBV 3) k₂
-      rw [hid] at k₃
-      have k₄ := getElem?_splice_self (p := q.withOffset 32#64) (x := outputBV 4) k₃
-      rw [hid] at k₄
-      rw [k₄, o₁, o₂, o₃, o₄]
-      simp only [Option.some.injEq, LiveBlock.mk.injEq, true_and]
-      clear o₁ o₂ o₃ o₄ k₀ k₁ k₂ k₃ k₄
-
-      simp only [spliceBits_append]
-      have assoc : (outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0) = (outputBV 4 ++ (outputBV 3 ++ (outputBV 2 ++ (outputBV 1 ++ outputBV 0)))) := by
-        simp only [BitVec.append_assoc, BitVec.cast_eq]
-
-      rw [assoc]
+    exact GlobalState.Equiv.symm (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2)
+      (outputBV 3) (outputBV 4) hq)
 
 end Firedancer.Ref

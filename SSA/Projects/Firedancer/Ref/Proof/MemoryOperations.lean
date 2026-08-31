@@ -8,20 +8,6 @@ namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-/-- Splicing the same bits at the same pointer preserves equivalence: the block
-written is fixed by the (equal) live block there, and no other block moves. -/
-theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
-    (h : s ≈ s') :
-    ({ s with mem := s.mem.splice p x } : GlobalState)
-      ≈ { s' with mem := s'.mem.splice p x } := by
-  refine ⟨h.1, fun q => ?_⟩
-  by_cases hq : p.id = q
-  · subst hq
-    cases hb : s.mem.live? p.id with
-    | none => rw [splicedDead hb, splicedDead ((h.2 p.id).symm.trans hb)]
-    | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.2 p.id).symm.trans hb)]
-  · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.2 q
-
 /-- A store overwritten by a second store at the same pointer is invisible. -/
 theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : BitVec w) :
     ({ s with mem := (s.mem.splice p x).splice p y } : GlobalState)
@@ -49,7 +35,7 @@ theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n: Nat}
     split at block_equiv <;> simp_all
   exact ⟨block, block_equiv, hlen⟩
 
-private lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
+lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
     (e ++ d ++ c ++ b ++ q).extractLsb' (64 * i.toNat) 64 = ![q, b, c, d, e] i := by
   fin_cases i <;> simp <;> bv_decide
 
@@ -78,6 +64,91 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
     Option.pure_def]
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
+
+/-- Limb `i` sits exactly `64 * i` bits into the block: the element fits, so
+the offset cannot wrap. -/
+lemma limbOffsetInBits {p : Pointer} (hp : p.offset.toNat + 5 * 8 ≤ 2 ^ 64)
+    {k : ℕ} {off : BitVec 64} (hk : k ≤ 4) (hoff : off.toNat = 8 * k) :
+    (p.withOffset off).offsetInBits = p.offsetInBits + 64 * k := by
+  have hadd : (p.offset + off).toNat = p.offset.toNat + off.toNat := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
+  simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, hoff]
+  omega
+
+/-- The five limbs behind a live block, as one opaque handle. -/
+lemma exists_limbs {m : MemoryState} {p : Pointer} {blk : LiveBlock}
+    (hblk : m[p.id]? = some (Block.live blk)) :
+    ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p i m = some (l i) :=
+  ⟨fun i => (blk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat,
+    fun i => by simp [readLimb?, MemoryState.live?, hblk]⟩
+
+/-- ... and what the block holds at limb `i`. The offset is a parameter, since
+what a load leaves behind is only equal to `p.offsetInBits + 64 * i`, not
+syntactically it. -/
+lemma limbBits {m : MemoryState} {p : Pointer} {blk : LiveBlock} {l : Fin 5 → ℕ}
+    (hblk : m[p.id]? = some (Block.live blk)) (hl : ∀ i, readLimb? p i m = some (l i))
+    (i : Fin 5) {off : ℕ} (hoff : off = p.offsetInBits + 64 * i.toNat) :
+    blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (l i) := by
+  subst hoff
+  have h := hl i
+  simp only [readLimb?, MemoryState.live?, hblk, Option.bind_eq_bind, Option.bind_some,
+    Option.pure_def, Option.some.injEq] at h
+  rw [← h, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
+/-- The five limb stores a region ends in are the one 320-bit store the spec
+makes. Proven pointwise: composing `splice_splice_append_equiv` four times says
+the same thing, but leaves each step nested inside the next one's
+structure-update, which does not unify in reasonable time. -/
+theorem splice5_equiv {s : GlobalState} {p : Pointer} (a b c d e : BitVec 64)
+    (hp : IsFieldElemPtr s.mem p) :
+    ({ s with mem := ((((s.mem.splice p a).splice (p.withOffset 8) b).splice
+        (p.withOffset 16) c).splice (p.withOffset 24) d).splice (p.withOffset 32) e }
+      : GlobalState)
+      ≈ { s with mem := s.mem.splice p (e ++ d ++ c ++ b ++ a) } := by
+  obtain ⟨blk, hblk, hlen⟩ := id hp.left
+  simp [GlobalState.equiv_def]
+  intro q
+  by_cases h : p.id = q
+  case neg =>
+    -- an unrelated block: every splice here is at `p.id`, so none is visible.
+    -- `getElem?_splice_ne` is stated over `m[_]?`, so it has to fire before
+    -- `getElem?_eq` rewrites that into the underlying map lookup.
+    simp only [MemoryState.live?]
+    have h₄ : (p.withOffset 32#64).id ≠ q := by simp [Pointer.withOffset, h]
+    have h₃ : (p.withOffset 24#64).id ≠ q := by simp [Pointer.withOffset, h]
+    have h₂ : (p.withOffset 16#64).id ≠ q := by simp [Pointer.withOffset, h]
+    have h₁ : (p.withOffset 8#64).id ≠ q := by simp [Pointer.withOffset, h]
+    simp only [getElem?_splice_ne h₄, getElem?_splice_ne h₃, getElem?_splice_ne h₂,
+      getElem?_splice_ne h₁, getElem?_splice_ne h]
+  case pos =>
+    simp only [MemoryState.live?]
+    rw [← h]
+    simp only [getElem?_splice_self (w := 320) (x := e ++ d ++ c ++ b ++ a) hblk]
+    have o₁ : (p.withOffset 8#64).offsetInBits = p.offsetInBits + 64 := by
+      simpa using limbOffsetInBits hp.right (k := 1) (off := 8#64) (by omega) (by simp)
+    have o₂ : (p.withOffset 16#64).offsetInBits = p.offsetInBits + 128 := by
+      simpa using limbOffsetInBits hp.right (k := 2) (off := 16#64) (by omega) (by simp)
+    have o₃ : (p.withOffset 24#64).offsetInBits = p.offsetInBits + 192 := by
+      simpa using limbOffsetInBits hp.right (k := 3) (off := 24#64) (by omega) (by simp)
+    have o₄ : (p.withOffset 32#64).offsetInBits = p.offsetInBits + 256 := by
+      simpa using limbOffsetInBits hp.right (k := 4) (off := 32#64) (by omega) (by simp)
+    -- peel the five stores off the right-hand state, innermost first: each sees
+    -- the block the previous one left. `getElem?_splice_self` states its index
+    -- as `p.id`, which for a gep destination is `p.id` only after unfolding.
+    have hid : ∀ off : BitVec 64, (p.withOffset off).id = p.id := fun _ => rfl
+    have k₀ := getElem?_splice_self (x := a) hblk
+    have k₁ := getElem?_splice_self (p := p.withOffset 8#64) (x := b) k₀
+    rw [hid] at k₁
+    have k₂ := getElem?_splice_self (p := p.withOffset 16#64) (x := c) k₁
+    rw [hid] at k₂
+    have k₃ := getElem?_splice_self (p := p.withOffset 24#64) (x := d) k₂
+    rw [hid] at k₃
+    have k₄ := getElem?_splice_self (p := p.withOffset 32#64) (x := e) k₃
+    rw [hid] at k₄
+    rw [k₄, o₁, o₂, o₃, o₄]
+    simp only [Option.some.injEq, LiveBlock.mk.injEq, true_and, spliceBits_append]
+    rw [show (e ++ d ++ c ++ b ++ a : BitVec (64 + 64 + 64 + 64 + 64))
+        = e ++ (d ++ (c ++ (b ++ a))) from by simp only [BitVec.append_assoc, BitVec.cast_eq]]
 
 /-- `₀`-style index for the per-limb names the tactics below generate. -/
 def subscript (i : Nat) : String :=
@@ -167,6 +238,35 @@ tokens are consumed anyway. -/
 macro "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
     basehblk:ident : tactic =>
   `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk, limb)
+
+open Lean Elab Tactic in
+/-- `store_limbs x, p, hp, s` runs the five limb stores a region ends in: `x i`
+at `p + 8 * i`, each behind its own `getelementptr`. Leaves the states as
+`s<i>`, the gep'd pointers as `p<i>` -- stemmed from the two names passed in --
+and `f<i> : Fits s<i>.mem p (5 * 64)`, since a store changes no block's size. -/
+elab "store_limbs " x:term ", " p:ident ", " hp:term ", " st:ident : tactic => do
+  let pbase := p.getId.eraseMacroScopes.toString
+  let sbase := st.getId.eraseMacroScopes.toString
+  evalTactic (← `(tactic| peel_store ($x 0), $p, $hp, $st))
+  for i in [1:5] do
+    let prevState := if i == 1 then st else mkIdent (Name.mkSimple (sbase ++ subscript (i - 1)))
+    let prevPtr := if i == 1 then p else mkIdent (Name.mkSimple (pbase ++ subscript (i - 1)))
+    let prevFits : Term :=
+      if i == 1 then hp else mkIdent (Name.mkSimple ("f" ++ subscript (i - 1)))
+    let state := mkIdent (Name.mkSimple (sbase ++ subscript i))
+    let hstate := mkIdent (Name.mkSimple ("h" ++ sbase ++ subscript i))
+    let fits := mkIdent (Name.mkSimple ("f" ++ subscript i))
+    let ptr := mkIdent (Name.mkSimple (pbase ++ subscript i))
+    let hptr := mkIdent (Name.mkSimple ("h" ++ pbase ++ subscript i))
+    let iLit := Syntax.mkNumLit (toString i)
+    let prevLit := Syntax.mkNumLit (toString (i - 1))
+    evalTactic (← `(tactic| set $state:ident : GlobalState :=
+      { $prevState with mem := ($prevState).mem.splice $prevPtr ($x $prevLit) }
+      with $hstate:ident))
+    evalTactic (← `(tactic| have $fits:ident : Fits ($state).mem $p (5 * 64) :=
+      fits_splice $prevFits))
+    evalTactic (← `(tactic| peel_gep_limb $iLit, $p, $fits, $state, $p))
+    evalTactic (← `(tactic| peel_store ($x $iLit), $ptr, $hptr, $state))
 
 /-- `skip_lifetime` steps the next instruction, which must be a lifetime
 marker. It moves neither state nor valuation, so it takes no arguments. -/

@@ -76,6 +76,20 @@ theorem splice_splice_append_equiv {s : GlobalState} {p : Pointer} {o : BitVec 6
     rw [live?_splice_ne (p := p.withOffset o) hq, live?_splice_ne (p := p) hq,
       live?_splice_ne (p := p) hq]
 
+/-- Splicing the same bits at the same pointer preserves equivalence: the block
+written is fixed by the (equal) live block there, and no other block moves. -/
+theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
+    (h : s ≈ s') :
+    ({ s with mem := s.mem.splice p x } : GlobalState)
+      ≈ { s' with mem := s'.mem.splice p x } := by
+  refine ⟨h.1, fun q => ?_⟩
+  by_cases hq : p.id = q
+  · subst hq
+    cases hb : s.mem.live? p.id with
+    | none => rw [splicedDead hb, splicedDead ((h.2 p.id).symm.trans hb)]
+    | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.2 p.id).symm.trans hb)]
+  · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.2 q
+
 /-- A store neither resurrects a block nor kills one. -/
 theorem live?_splice_eq_none {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
     {q : BlockId} (h : m.live? q = none) : (m.splice p x).live? q = none := by

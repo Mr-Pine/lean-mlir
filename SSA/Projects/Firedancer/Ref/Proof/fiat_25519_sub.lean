@@ -1,7 +1,9 @@
 import SSA.Projects.Firedancer.Ref.Spec.fiat_25519_sub
 import SSA.Projects.Firedancer.Ref.Mlir.fiat_25519_sub
 import SSA.Projects.Firedancer.MLIR.DenoteStep
+import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+import SSA.Projects.Firedancer.Ref.Proof.Limb
 
 
 namespace Firedancer.Ref
@@ -76,12 +78,8 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     obtain ⟨pblk, hpblk, hplen⟩ := id hp.left
     obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
 
-    obtain ⟨pinput, hpinput⟩ : ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p i s.mem = some (l i) :=
-      ⟨fun i => (pblk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat,
-        fun i => by simp [readLimb?, MemoryState.live?, hpblk]⟩
-    obtain ⟨qinput, hqinput⟩ : ∃ l : Fin 5 → ℕ, ∀ i, readLimb? q i s.mem = some (l i) :=
-      ⟨fun i => (qblk.bytes.extractLsb' (q.offsetInBits + 64 * i.toNat) 64).toNat,
-        fun i => by simp [readLimb?, MemoryState.live?, hqblk]⟩
+    obtain ⟨pinput, hpinput⟩ := exists_limbs hpblk
+    obtain ⟨qinput, hqinput⟩ := exists_limbs hqblk
     let output := sub_repr pinput qinput
     let outputBV := BitVec.ofNat 64 ∘ output
 
@@ -98,9 +96,6 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
       have loose_output_bounds (i: Fin 5) : output i < 18446744073709551616 :=
         (output_bounds i).trans_lt (by norm_num)
       simp [loose_output_bounds, Nat.mod_eq_of_lt]
-      -- both halves read the limbs back out of a literal vector
-      have vec_eq {α : Type} (f: Fin 5 → α) : ![f 0, f 1, f 2, f 3, f 4] = f := by
-        funext i; fin_cases i <;> rfl
       constructor
       simp only [vec_eq, HSub.hSub, output, sub_repr_correct pinput qinput qinput_bounds]
 
@@ -118,61 +113,8 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     refine ⟨output_state, ?_, ?_⟩
     pick_goal 2
 
-    simp [output_state, GlobalState.equiv_def]
-    intro p
-    obtain ⟨oblk, hoblk, holen⟩ := id ho.left
-
-    by_cases h: o.id = p
-    case neg =>
-      -- an unrelated block: every splice here is at `q.id`, so none is visible.
-      -- `getElem?_splice_ne` is stated over `m[_]?`, so it has to fire before
-      -- `getElem?_eq` rewrites that into the underlying map lookup.
-      simp only [MemoryState.live?]
-      have h₄ : (o.withOffset 32#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₃ : (o.withOffset 24#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₂ : (o.withOffset 16#64).id ≠ p := by simp [Pointer.withOffset, h]
-      have h₁ : (o.withOffset 8#64).id ≠ p := by simp [Pointer.withOffset, h]
-      simp only [getElem?_splice_ne h₄, getElem?_splice_ne h₃, getElem?_splice_ne h₂, getElem?_splice_ne h₁, getElem?_splice_ne h]
-    case pos =>
-      simp only [MemoryState.live?]
-      rw [← h]
-      simp only [getElem?_splice_self (w := 320) (x := outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0) hoblk]
-
-      have hoffo : ∀ (k : ℕ) (off : BitVec 64), k ≤ 4 → off.toNat = 8 * k →
-          (o.withOffset off).offsetInBits = o.offsetInBits + 64 * k := by
-        rintro k off hk hoff
-        have hadd : (o.offset + off).toNat = o.offset.toNat + off.toNat := by
-          rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
-        simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, hoff]
-        omega
-      have o₁ : (o.withOffset 8#64).offsetInBits = o.offsetInBits + 64 := by
-        rw [hoffo 1 8#64 (by omega) (by simp)]
-      have o₂ : (o.withOffset 16#64).offsetInBits = o.offsetInBits + 128 := by
-        rw [hoffo 2 16#64 (by omega) (by simp)]
-      have o₃ : (o.withOffset 24#64).offsetInBits = o.offsetInBits + 192 := by
-        rw [hoffo 3 24#64 (by omega) (by simp)]
-      have o₄ : (o.withOffset 32#64).offsetInBits = o.offsetInBits + 256 := by
-        rw [hoffo 4 32#64 (by omega) (by simp)]
-
-      have hid : ∀ off : BitVec 64, (o.withOffset off).id = o.id := fun _ => rfl
-      have k₀ := getElem?_splice_self (x := outputBV 0) hoblk
-      have k₁ := getElem?_splice_self (p := o.withOffset 8#64) (x := outputBV 1) k₀
-      rw [hid] at k₁
-      have k₂ := getElem?_splice_self (p := o.withOffset 16#64) (x := outputBV 2) k₁
-      rw [hid] at k₂
-      have k₃ := getElem?_splice_self (p := o.withOffset 24#64) (x := outputBV 3) k₂
-      rw [hid] at k₃
-      have k₄ := getElem?_splice_self (p := o.withOffset 32#64) (x := outputBV 4) k₃
-      rw [hid] at k₄
-      rw [k₄, o₁, o₂, o₃, o₄]
-      simp only [Option.some.injEq, LiveBlock.mk.injEq, true_and]
-      clear o₁ o₂ o₃ o₄ k₀ k₁ k₂ k₃ k₄
-
-      simp only [spliceBits_append]
-      have assoc : (outputBV 4 ++ outputBV 3 ++ outputBV 2 ++ outputBV 1 ++ outputBV 0) = (outputBV 4 ++ (outputBV 3 ++ (outputBV 2 ++ (outputBV 1 ++ outputBV 0)))) := by
-        simp only [BitVec.append_assoc, BitVec.cast_eq]
-
-      rw [assoc]
+    exact GlobalState.Equiv.symm (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2)
+      (outputBV 3) (outputBV 4) ho)
 
     denote_step_all v 5
     denote_eval v 0 5
@@ -182,70 +124,60 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     peel_limb 0, p, hp.left, pblk, hpblk, plimb
     denote_step_all v 7
     denote_eval v 7 7
-    simp [LLVM.add, LLVM.add?] at hv7
+    eval_llvm 7
     peel_limb 0, q, hq.left, qblk, hqblk, qlimb
     denote_step_all v 9
     denote_eval v 9 9
-    simp [LLVM.sub, LLVM.sub?, hv7] at hv9
-    set x1 := (plimb₀ + 0xfffffffffffda#64) - qlimb₀ with hx1
-    subst hv9
-    denote_clear v 7 9
+    eval_llvm 9 as x1
+    denote_clear v 7 7
 
     peel_gep_limb 1, p, hp.left, s, p
     peel_limb 1, p₁, hp₁, pblk, hpblk, plimb
     denote_step_all v 12
     denote_eval v 12 12
-    simp [LLVM.add, LLVM.add?] at hv12
+    eval_llvm 12
     peel_gep_limb 1, q, hq.left, s, q
     peel_limb 1, q₁, hq₁, qblk, hqblk, qlimb
     denote_step_all v 15
     denote_eval v 15 15
-    simp [LLVM.sub, LLVM.sub?, hv12] at hv15
-    set x2 := (plimb₁ + 0xffffffffffffe#64) - qlimb₁
-    subst hv15
-    denote_clear v 12 15
+    eval_llvm 15 as x2
+    denote_clear v 12 12
 
     peel_gep_limb 2, p, hp.left, s, p
     peel_limb 2, p₂, hp₂, pblk, hpblk, plimb
     denote_step_all v 18
     denote_eval v 18 18
-    simp [LLVM.add, LLVM.add?] at hv18
+    eval_llvm 18
     peel_gep_limb 2, q, hq.left, s, q
     peel_limb 2, q₂, hq₂, qblk, hqblk, qlimb
     denote_step_all v 21
     denote_eval v 21 21
-    simp [LLVM.sub, LLVM.sub?, hv18] at hv21
-    set x3 := (plimb₂ + 0xffffffffffffe#64) - qlimb₂
-    subst hv21
-    denote_clear v 18 21
+    eval_llvm 21 as x3
+    denote_clear v 18 18
 
     peel_gep_limb 3, p, hp.left, s, p
     peel_limb 3, p₃, hp₃, pblk, hpblk, plimb
     denote_step_all v 24
     denote_eval v 24 24
-    simp [LLVM.add, LLVM.add?] at hv24
+    eval_llvm 24
     peel_gep_limb 3, q, hq.left, s, q
     peel_limb 3, q₃, hq₃, qblk, hqblk, qlimb
     denote_step_all v 27
     denote_eval v 27 27
-    simp [LLVM.sub, LLVM.sub?, hv24] at hv27
-    set x4 := (plimb₃ + 0xffffffffffffe#64) - qlimb₃
-    subst hv27
-    denote_clear v 24 27
+    eval_llvm 27 as x4
+    denote_clear v 24 24
 
     peel_gep_limb 4, p, hp.left, s, p
     peel_limb 4, p₄, hp₄, pblk, hpblk, plimb
     denote_step_all v 30
     denote_eval v 30 30
-    simp [LLVM.add, LLVM.add?] at hv30
+    eval_llvm 30
     peel_gep_limb 4, q, hq.left, s, q
     peel_limb 4, q₄, hq₄, qblk, hqblk, qlimb
     denote_step_all v 33
     denote_eval v 33 33
-    simp [LLVM.sub, LLVM.sub?, hv30] at hv33
-    set x5 := (plimb₄ + 0xffffffffffffe#64) - qlimb₄
-    subst hv33
-    denote_clear v 30 33
+    eval_llvm 33 as x5
+    denote_clear v 30 30
 
     -- a loaded limb is the spec's: `readLimb?` reads the same range of the same
     -- block, once the `getelementptr` offset is normalised. `hp'`/`hq'` are what
@@ -254,79 +186,56 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
         (pblk.bytes.extractLsb' (p.withOffset d).offsetInBits 64).toNat = pinput i := by
       rintro i d hd
       have h5 : i.toNat < 5 := i.isLt
-      have hadd : (p.offset + d).toNat = p.offset.toNat + d.toNat := by
-        rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
-      rw [show (p.withOffset d).offsetInBits = p.offsetInBits + 64 * i.toNat by
-        simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, hd]; omega]
+      rw [limbOffsetInBits hp.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hpblk] using hpinput i
     have hql : ∀ (i : Fin 5) (d : BitVec 64), d.toNat = 8 * i.toNat →
         (qblk.bytes.extractLsb' (q.withOffset d).offsetInBits 64).toNat = qinput i := by
       rintro i d hd
       have h5 : i.toNat < 5 := i.isLt
-      have hadd : (q.offset + d).toNat = q.offset.toNat + d.toNat := by
-        rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
-      rw [show (q.withOffset d).offsetInBits = q.offsetInBits + 64 * i.toNat by
-        simp only [Pointer.withOffset, Pointer.offsetInBits, hadd, hd]; omega]
+      rw [limbOffsetInBits hq.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hqblk] using hqinput i
     have pb : ∀ i : Fin 5, pinput i ≤ 0x8000000000000 := fun i => hpbounds i _ (hpinput i)
     have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 := fun i => hqbounds i _ (hqinput i)
     -- limb 0 is loaded straight off the base pointer, with no `getelementptr`
-    have m1 : x1.toNat = (0xfffffffffffda + pinput 0) - qinput 0 :=
-      sub_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
+    have m1 : x1.toNat = (0xfffffffffffda + pinput 0) - qinput 0 := by
+      rw [← hx1]
+      exact sub_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
         (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0)
         (qb 0) (pb 0) (by norm_num) (by norm_num)
-    have m2 : x2.toNat = (0xffffffffffffe + pinput 1) - qinput 1 :=
-      sub_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
+    have m2 : x2.toNat = (0xffffffffffffe + pinput 1) - qinput 1 := by
+      rw [← hx2]
+      exact sub_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
         (by rw [hqlimb₁]; exact hql 1 8#64 (by simp))
         (qb 1) (pb 1) (by norm_num) (by norm_num)
-    have m3 : x3.toNat = (0xffffffffffffe + pinput 2) - qinput 2 :=
-      sub_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
+    have m3 : x3.toNat = (0xffffffffffffe + pinput 2) - qinput 2 := by
+      rw [← hx3]
+      exact sub_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
         (by rw [hqlimb₂]; exact hql 2 16#64 (by simp))
         (qb 2) (pb 2) (by norm_num) (by norm_num)
-    have m4 : x4.toNat = (0xffffffffffffe + pinput 3) - qinput 3 :=
-      sub_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
+    have m4 : x4.toNat = (0xffffffffffffe + pinput 3) - qinput 3 := by
+      rw [← hx4]
+      exact sub_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
         (by rw [hqlimb₃]; exact hql 3 24#64 (by simp))
         (qb 3) (pb 3) (by norm_num) (by norm_num)
-    have m5 : x5.toNat = (0xffffffffffffe + pinput 4) - qinput 4 :=
-      sub_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
+    have m5 : x5.toNat = (0xffffffffffffe + pinput 4) - qinput 4 := by
+      rw [← hx5]
+      exact sub_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
         (by rw [hqlimb₄]; exact hql 4 32#64 (by simp))
         (qb 4) (pb 4) (by norm_num) (by norm_num)
 
-    have hout : ∀ (v : BitVec 64) (i : Fin 5), v.toNat = output i → v = outputBV i := by
-      intro v i h
-      show v = BitVec.ofNat 64 (output i)
-      rw [← h, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+    have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
+      fun _ _ h => eq_ofNat_of_toNat h
     -- `output i` is `sub_repr pinput qinput i`, which reduces straight to `mᵢ`'s
     -- right-hand side. Routing through `![x1.toNat, ..]` instead makes the kernel
     -- unfold the `xᵢ` limb chain and blow its stack.
-    have e1 : x1 = outputBV 0 := hout _ 0 m1
-    have e2 : x2 = outputBV 1 := hout _ 1 m2
-    have e3 : x3 = outputBV 2 := hout _ 2 m3
-    have e4 : x4 = outputBV 3 := hout _ 3 m4
-    have e5 : x5 = outputBV 4 := hout _ 4 m5
-    rw [e1, e2, e3, e4, e5]
+    rw [hout _ 0 m1] at hv9
+    rw [hout _ 1 m2] at hv15
+    rw [hout _ 2 m3] at hv21
+    rw [hout _ 3 m4] at hv27
+    rw [hout _ 4 m5] at hv33
+    rw [hv9, hv15, hv21, hv27, hv33]
 
-    peel_store (outputBV 0), o, ho.left, s
-    set s₁ : GlobalState := { s with mem := s.mem.splice o (outputBV 0) } with hs₁
-    have f₁ : Fits s₁.mem o (5 * 64) := fits_splice ho.left
-
-    peel_gep_limb 1, o, f₁, s₁, o
-    peel_store (outputBV 1), o₁, ho₁, s₁
-    set s₂ : GlobalState := { s₁ with mem := s₁.mem.splice o₁ (outputBV 1) } with hs₂
-    have f₂ : Fits s₂.mem o (5 * 64) := fits_splice f₁
-
-    peel_gep_limb 2, o, f₂, s₂, o
-    peel_store (outputBV 2), o₂, ho₂, s₂
-    set s₃ : GlobalState := { s₂ with mem := s₂.mem.splice o₂ (outputBV 2) } with hs₃
-    have f₃ : Fits s₃.mem o (5 * 64) := fits_splice f₂
-
-    peel_gep_limb 3, o, f₃, s₃, o
-    peel_store (outputBV 3), o₃, ho₃, s₃
-    set s₄ : GlobalState := { s₃ with mem := s₃.mem.splice o₃ (outputBV 3) } with hs₄
-    have f₄ : Fits s₄.mem o (5 * 64) := fits_splice f₃
-
-    peel_gep_limb 4, o, f₄, s₄, o
-    peel_store (outputBV 4), o₄, ho₄, s₄
+    store_limbs outputBV, o, ho.left, s
 
 
     simp only [BlockCom.denote_term, Terminator.denote_ret, output_state,
