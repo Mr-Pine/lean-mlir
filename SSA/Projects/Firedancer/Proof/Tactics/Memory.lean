@@ -132,7 +132,8 @@ macro "peel_memset " b:term ", " len:term ", " p:term ", " hp:term ", " st:term 
 
 /-- `peel_alloca from s as t with ht` runs the next `llvm.alloca` instruction,
 binding the fresh pointer `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩` and advancing the state
-to `t`. `t` and `ht` are what `GlobalState.exists_afterAlloca` provides.
+to `t`. `t` and `ht` are the first two facts
+`GlobalState.exists_afterAlloca_facts` provides.
 
 `s : GlobalState`
 `t : GlobalState`

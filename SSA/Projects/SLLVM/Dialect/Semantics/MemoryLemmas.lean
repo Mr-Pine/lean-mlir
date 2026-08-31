@@ -160,6 +160,79 @@ theorem fits_afterAlloca (s : GlobalState) (w : Nat) :
     by simp [GlobalState.afterAlloca, MemoryState.getElem?_eq],
     by simp [Pointer.offsetInBits, LiveBlock.lengthInBits]; omega⟩
 
+/-! ## `alloca` and `store` against well-formedness
+
+`WF` says every block at or above the counter is dead. Both writers preserve
+it, and both leave the blocks below the counter as they found them -- the
+frame facts every call-spanning proof rests on. -/
+
+/-- A store leaves the blocks it does not address alone. -/
+@[simp]
+theorem live?_splice_ne {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    {q : BlockId} (h : p.id ≠ q) : (m.splice p x).live? q = m.live? q := by
+  simp only [MemoryState.live?, getElem?_splice_ne h]
+
+/-- A store through a pointer that addresses no live block does nothing. -/
+theorem splicedDead {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    (h : m.live? p.id = none) : (m.splice p x).live? p.id = none := by
+  unfold MemoryState.splice
+  cases hb : m[p.id]? with
+  | none => exact h
+  | some blk =>
+    cases blk with
+    | dead => exact h
+    | live b => simp [MemoryState.live?, hb] at h
+
+theorem live?_splice_eq_none {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
+    {q : BlockId} (h : m.live? q = none) : (m.splice p x).live? q = none := by
+  by_cases hq : p.id = q
+  · subst hq; exact splicedDead h
+  · rw [live?_splice_ne hq]; exact h
+
+/-- A store keeps the blocks above the counter dead. -/
+theorem _root_.LeanMLIR.GlobalState.WF.splice {s : GlobalState} {p : Pointer} {w : Nat}
+    {x : BitVec w} (hs : s.WF) : ({ s with mem := s.mem.splice p x } : GlobalState).WF :=
+  fun q hq => live?_splice_eq_none (hs q hq)
+
+/-- An `alloca` leaves the blocks below the counter alone. -/
+theorem live?_afterAlloca_of_lt {s : GlobalState} {w : Nat} {b : BlockId}
+    (h : b.id < s.alloc.nextFreeBlock) : (s.afterAlloca w).mem.live? b = s.mem.live? b := by
+  have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ b := by
+    rintro rfl; change s.alloc.nextFreeBlock < s.alloc.nextFreeBlock at h; omega
+  simp [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq,
+    Std.HashMap.getElem?_insert, hne]
+
+/-- The block an `alloca w` hands back: `(w + 7) / 8` zero bytes at the fresh
+id. `fits_afterAlloca` gives its size; this gives its contents, which a proof
+that reads the slot before storing to it needs. -/
+theorem live?_afterAlloca_self (s : GlobalState) (w : Nat) :
+    (s.afterAlloca w).mem.live? ⟨s.alloc.nextFreeBlock⟩
+      = some { length := (w + 7) / 8, bytes := 0#_ } := by
+  simp [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq]
+
+/-- The pointer and the state an `alloca w` produces, packaged for `obtain`,
+with the facts a frame-carrying proof consumes: the fresh block's `Fits`, id
+and offset, the advanced counter, well-formedness, and the one-block `live?`
+frame. The two defining equations come first, ordered as the binders are, and
+are what `peel_alloca` consumes. -/
+theorem _root_.LeanMLIR.GlobalState.exists_afterAlloca_facts (s : GlobalState) (hs : s.WF)
+    (w : Nat) :
+    ∃ (t : Pointer) (s' : GlobalState),
+      t = ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩
+      ∧ s' = s.afterAlloca w
+      ∧ s'.WF
+      ∧ Fits s'.mem t w
+      ∧ t.id.id = s.alloc.nextFreeBlock
+      ∧ t.offset = 0
+      ∧ s'.alloc.nextFreeBlock = s.alloc.nextFreeBlock + 1
+      ∧ ∀ b : BlockId, b ≠ t.id → s'.mem.live? b = s.mem.live? b :=
+  ⟨⟨⟨s.alloc.nextFreeBlock⟩, 0⟩, s.afterAlloca w, rfl, rfl, hs.afterAlloca w,
+    fits_afterAlloca s w, rfl, rfl, rfl,
+    fun b hb => by
+      have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ b := fun h => hb h.symm
+      simp [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq,
+        Std.HashMap.getElem?_insert, hne]⟩
+
 /-- Popping a frame that allocated nothing is invisible: everything the kill
 could touch is dead already. -/
 theorem _root_.LeanMLIR.GlobalState.WF.popFrame_equiv {s : GlobalState} (hs : s.WF) :

@@ -252,14 +252,6 @@ def _root_.LeanMLIR.GlobalState.afterAlloca (s : GlobalState) (w : Nat) : Global
   mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
             (.live { length := (w + 7) / 8, bytes := 0#_ })⟩
 
-/-- The pointer and the state an `alloca w` produces, packaged for `obtain`:
-`obtain ⟨slot, sAlloc, hslot, hsAlloc⟩ := GlobalState.exists_afterAlloca s w`
-names both opaquely, with their defining equations. -/
-theorem _root_.LeanMLIR.GlobalState.exists_afterAlloca (s : GlobalState) (w : Nat) :
-    ∃ (t : Pointer) (s' : GlobalState),
-      t = ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ ∧ s' = s.afterAlloca w :=
-  ⟨_, _, rfl, rfl⟩
-
 /-- Mark dead every block with id at least `n₀`: the *frame* of a call that
 was entered at `nextFreeBlock = n₀`. Ids come from that monotonic counter and
 `alloca` is the only allocator, so `n₀ ≤ id` says exactly "allocated during
