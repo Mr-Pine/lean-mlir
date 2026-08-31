@@ -15,18 +15,24 @@ open Lean Elab Tactic Meta in
  -/
 elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term : tactic =>
   withMainContext do
-    -- The elaboration is only to classify `x`; the emitted script elaborates it
-    -- again for real. `withMainContext` is load bearing: without the goal's
-    -- local context `x` is not in scope and every store looks scalar.
-    let isVec : Bool ← withoutModifyingState do
-      return (← whnf (← instantiateMVars (← inferType (← Term.elabTerm x none)))).isAppOf ``Vector
+    -- The elaboration is only to classify `x` (and read its width); the
+    -- emitted script elaborates it again for real. `withMainContext` is load
+    -- bearing: without the goal's local context `x` is not in scope and every
+    -- store looks scalar.
+    let xTy ← withoutModifyingState do
+      whnf (← instantiateMVars (← inferType (← Term.elabTerm x none)))
     -- Everything but these four pieces is common to the two shapes.
-    let (bits, ty, val, hflat, width) ← if isVec then
+    let (bits, ty, val, hflat, width) ← if xTy.isAppOf ``Vector then
         pure (← `(vecBV $x), ← `(.vector 8 (.bitvec (.concrete 64))),
           ← `(($x).map PoisonOr.value), ← `(flatten_vecBV $x), ← `(512))
-      else
-        pure (← `($x), ← `(.bitvec (.concrete 64)),
-          ← `(PoisonOr.value $x), ← `(rfl), ← `(64))
+      else do
+        -- a scalar store of `x : BitVec w`, at whatever `w` is
+        let some w := (← whnf (xTy.getArg! 0)).rawNatLit?
+          | throwError "peel_store: cannot reduce the stored value's width to a \
+              literal in {← Meta.ppExpr xTy}"
+        let wLit := Syntax.mkNumLit (toString w)
+        pure (← `($x), ← `(.bitvec (.concrete $wLit)),
+          ← `(PoisonOr.value $x), ← `(rfl), ← `($wLit:num))
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
       rw [BlockCom.run_bind_denote_var_of_nil
