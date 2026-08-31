@@ -21,49 +21,19 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
     simp only [fd_f25519_eq_spec, Cfg.denote]
 
     obtain ⟨r, sAlloc, hrdef, hsAlloc⟩ := GlobalState.exists_afterAlloca s (5 * 64)
-    -- the fresh block is 40 zero bytes at offset 0: exactly one field element,
-    -- and offset 0 cannot wrap.
+    -- the fresh block is 40 zero bytes at offset 0: exactly one field element.
     have hr₁ : IsFieldElemPtr sAlloc.mem r := by
-      subst hrdef hsAlloc
-      refine ⟨⟨{ length := 40, bytes := 0#_ }, ?_, ?_⟩, ?_⟩
-      · simp [GlobalState.afterAlloca, MemoryState.getElem?_eq]
-      · simp [Pointer.offsetInBits, LiveBlock.lengthInBits]
-      · simp
+      subst hrdef hsAlloc; exact isFieldElemPtr_afterAlloca_self s
     -- a pointer live in `s` predates the frame, so the fresh block's id is not
-    -- its own and the insert leaves it alone.
-    have hframe : ∀ t : Pointer, IsFieldElemPtr s.mem t → IsFieldElemPtr sAlloc.mem t := by
-      rintro t ⟨⟨blk, hblk, hlen⟩, hnw⟩
-      refine ⟨⟨blk, ?_, hlen⟩, hnw⟩
-      have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ t.id := by
-        intro hid
-        have hnone := hs t.id (by simp [← hid])
-        simp [MemoryState.live?, hblk] at hnone
-      subst hsAlloc
-      simpa [GlobalState.afterAlloca, MemoryState.getElem?_eq,
-        Std.HashMap.getElem?_insert, hne] using hblk
-    have hp₁ : IsFieldElemPtr sAlloc.mem p := hframe p hp
-    have hq₁ : IsFieldElemPtr sAlloc.mem q := hframe q hq
-    have hsAllocWF : sAlloc.WF := by
-      subst hsAlloc
-      intro t ht
-      simp only [GlobalState.afterAlloca] at ht ⊢
-      have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ t := by
-        intro hid; subst hid; simp at ht
-      simpa [MemoryState.live?, MemoryState.getElem?_eq, Std.HashMap.getElem?_insert, hne]
-        using hs t (by omega)
-
-    -- the insert misses a block that was already live, so a limb read at `p`
-    -- or `q` sees exactly what it saw in `s`.
+    -- its own and the insert leaves it alone: `p` and `q` read as they did.
     have hlive : ∀ t : Pointer, IsFieldElemPtr s.mem t →
         sAlloc.mem.live? t.id = s.mem.live? t.id := by
-      rintro t ⟨⟨blk, hblk, -⟩, -⟩
-      have hne : (⟨s.alloc.nextFreeBlock⟩ : BlockId) ≠ t.id := by
-        intro hid
-        have hnone := hs t.id (by simp [← hid])
-        simp [MemoryState.live?, hblk] at hnone
-      subst hsAlloc
-      simp [GlobalState.afterAlloca, MemoryState.live?, MemoryState.getElem?_eq,
-        Std.HashMap.getElem?_insert, hne]
+      subst hsAlloc; exact fun t ht => live?_afterAlloca_of_fits hs _ ht.left
+    have hframe : ∀ t : Pointer, IsFieldElemPtr s.mem t → IsFieldElemPtr sAlloc.mem t :=
+      fun t ht => isFieldElemPtr_of_live?_eq (hlive t ht) ht
+    have hp₁ : IsFieldElemPtr sAlloc.mem p := hframe p hp
+    have hq₁ : IsFieldElemPtr sAlloc.mem q := hframe q hq
+    have hsAllocWF : sAlloc.WF := by subst hsAlloc; exact hs.afterAlloca _
 
     have hpbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? p i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
       fun i l hl => limbBounds_readLimb? hp hpbounds i l (by simpa [readLimb?, hlive p hp] using hl)

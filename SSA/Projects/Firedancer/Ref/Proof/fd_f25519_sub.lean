@@ -33,13 +33,7 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
       simp
       exact fits_splice ho.left
 
-    -- `o` addresses a live block, so by well-formedness it predates the frame:
-    -- neither call's frame kill can touch it.
-    have hoframe : o.id.id < s.alloc.nextFreeBlock := by
-      obtain ⟨blk, hblk, -⟩ := id ho.left
-      by_contra hcon
-      have hnone := hs o.id (by omega)
-      simp [MemoryState.live?, hblk] at hnone
+    have hoframe : o.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs ho.left
 
     -- the state the `fiat_25519_sub` call returns to, its frame popped: this,
     -- not `substate`, is where `fiat_25519_carry` actually runs. Popping the

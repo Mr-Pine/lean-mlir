@@ -9,9 +9,6 @@ namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-/-- `fd_f25519_mul` is `fiat_25519_carry_mul` plus a returned out-pointer, so
-the callee's postcondition is the whole of the result. The only work here is
-popping the (empty) frame the wrapper adds. -/
 theorem fd_f25519_mul_conforms (o p q : Pointer) (s : GlobalState)
     (hs : s.WF)
     (ho : IsFieldElemPtr s.mem o)
@@ -25,9 +22,6 @@ theorem fd_f25519_mul_conforms (o p q : Pointer) (s : GlobalState)
   obtain ⟨out, hout, ⟨mulstate, hmulstate, hmulstate_eq⟩, hbounds⟩ :=
     fiat_25519_carry_mul_conforms o p q s hs ho hp hq hplimb hqlimb
 
-  -- the state the region returns to. `fd_f25519_mul` allocates nothing, and the
-  -- callee left the state well-formed, so its frame pop is invisible: every
-  -- block the kill could reach is dead already.
   have hmulWF : mulstate.WF := GlobalState.WF.of_equiv hs.splice hmulstate_eq
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → mulstate.mem.live? t = none := by
     rw [hmulstate_eq.1]; exact hmulWF

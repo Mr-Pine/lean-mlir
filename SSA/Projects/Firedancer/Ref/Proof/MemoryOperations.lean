@@ -35,6 +35,46 @@ theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n: Nat}
     split at block_equiv <;> simp_all
   exact ⟨block, block_equiv, hlen⟩
 
+/-! ### Transporting a field element between states
+
+A field-element read at `p` sees only the block `p.id` addresses, so one `live?`
+equation carries `IsFieldElemPtr`, the limb reads and the limb bounds together.
+Chain the equations with `.trans` rather than re-deriving each consequence. -/
+
+/-- A limb read looks only at the block the pointer addresses. -/
+theorem readLimb?_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) (i : Fin 5) :
+    readLimb? p i m' = readLimb? p i m := by
+  simp only [readLimb?, h]
+
+/-- ... and so does `IsFieldElemPtr`. -/
+theorem isFieldElemPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) (hp : IsFieldElemPtr m p) : IsFieldElemPtr m' p :=
+  ⟨fits_of_live?_eq h hp.left, hp.right⟩
+
+/-- ... and the limb bounds, in the `readLimb?`-shaped form. -/
+theorem limbBounds_of_live?_eq {m m' : MemoryState} {p : Pointer} {n : ℕ}
+    (h : m'.live? p.id = m.live? p.id)
+    (hb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i m = some l → l ≤ n) :
+    ∀ (i : Fin 5) (l : ℕ), readLimb? p i m' = some l → l ≤ n :=
+  fun i l hl => hb i l ((readLimb?_of_live?_eq h i).symm.trans hl)
+
+/-- ... and a whole field-element read. -/
+theorem readFieldElem?_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) : readFieldElem? p m' = readFieldElem? p m := by
+  simp only [readFieldElem?, readLimb?_of_live?_eq h]
+
+/-- The total read, once the partial one is known. -/
+theorem readFieldElem_eq_of {m : MemoryState} {ptr : Pointer} {h : IsFieldElemPtr m ptr}
+    {v : ZMod p} (hv : readFieldElem? ptr m = some v) : readFieldElem ptr m h = v := by
+  simp only [readFieldElem, hv, Option.get_some]
+
+/-- An `alloca (5 * 64)` hands back exactly one field element: 40 bytes at
+offset 0, which cannot wrap. -/
+theorem isFieldElemPtr_afterAlloca_self (s : GlobalState) :
+    IsFieldElemPtr (s.afterAlloca (5 * 64)).mem ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ :=
+  ⟨fits_afterAlloca_self s (5 * 64), by simp⟩
+
 lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
     (e ++ d ++ c ++ b ++ q).extractLsb' (64 * i.toNat) 64 = ![q, b, c, d, e] i := by
   fin_cases i <;> simp <;> bv_decide
@@ -64,6 +104,20 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
     Option.pure_def]
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
+
+/-- What a field element spliced at `p` reads back as: only the spliced bits,
+whatever the block underneath held. -/
+theorem readFieldElem?_splice {m : MemoryState} {p : Pointer} (x : BitVec (5 * 64))
+    (hp : Fits m p (5 * 64)) :
+    readFieldElem? p (m.splice p x)
+      = some (decodeFieldElem fun i => (x.extractLsb' (64 * i.toNat) 64).toNat) := by
+  obtain ⟨f, hfdef⟩ : ∃ f : Fin 5 → ℕ,
+      f = fun i : Fin 5 => (x.extractLsb' (64 * i.toNat) 64).toNat := ⟨_, rfl⟩
+  have hf : ∀ i : Fin 5, readLimb? p i (m.splice p x) = some (f i) := by
+    rw [hfdef]; exact fun i => limbSpliceReadback _ _ _ hp i
+  have hvec : (![f 0, f 1, f 2, f 3, f 4] : Fin 5 → ℕ) = f := by funext i; fin_cases i <;> rfl
+  rw [← hfdef]
+  simp only [readFieldElem?, hf, Option.bind_eq_bind, Option.bind_some, Option.pure_def, hvec]
 
 /-- Limb `i` sits exactly `64 * i` bits into the block: the element fits, so
 the offset cannot wrap. -/

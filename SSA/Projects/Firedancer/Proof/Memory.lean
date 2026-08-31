@@ -130,4 +130,42 @@ theorem remainingFits (m: MemoryState) (p: Pointer) (hp: Fits m p n) (o: BitVec 
     BitVec.toNat_add] at hlen ⊢
   omega
 
+/-- Two states that agree on the block `p` addresses fit the same object there:
+`Fits` looks at nothing else. -/
+theorem fits_of_live?_eq {m m' : MemoryState} {p : Pointer} {n : Nat}
+    (h : m'.live? p.id = m.live? p.id) (hp : Fits m p n) : Fits m' p n := by
+  obtain ⟨blk, hblk, hlen⟩ := hp
+  exact ⟨blk, getElem?_of_live? (h.trans (by simp only [MemoryState.live?, hblk])), hlen⟩
+
+/-- A live block predates the counter: `alloca` hands out ids only at or above
+it, and `WF` says those are dead. -/
+theorem lt_nextFreeBlock_of_live {s : GlobalState} (hs : s.WF) {q : BlockId} {b : LiveBlock}
+    (h : s.mem.live? q = some b) : q.id < s.alloc.nextFreeBlock := by
+  by_contra hcon
+  rw [hs q (by omega)] at h
+  exact Option.noConfusion h
+
+/-- `lt_nextFreeBlock_of_live` in `Fits` form: anything the caller can address
+predates the frame, so no frame kill or fresh `alloca` touches it. -/
+theorem lt_nextFreeBlock_of_fits {s : GlobalState} (hs : s.WF) {p : Pointer} {n : Nat}
+    (h : Fits s.mem p n) : p.id.id < s.alloc.nextFreeBlock := by
+  obtain ⟨blk, hblk, -⟩ := h
+  exact lt_nextFreeBlock_of_live hs (show s.mem.live? p.id = some blk by
+    simp only [MemoryState.live?, hblk])
+
+/-- The block an `alloca w` hands back: `w` bits at offset 0. -/
+theorem fits_afterAlloca_self (s : GlobalState) (w : Nat) :
+    Fits (s.afterAlloca w).mem ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ w := by
+  refine ⟨{ length := (w + 7) / 8, bytes := 0#_ }, ?_, ?_⟩
+  · simp [GlobalState.afterAlloca, MemoryState.getElem?_eq]
+  · have h0 : (0 : BitVec 64).toNat = 0 := rfl
+    simp only [Pointer.offsetInBits, LiveBlock.lengthInBits]
+    omega
+
+/-- An `alloca` leaves alone every block the caller could already address. -/
+theorem live?_afterAlloca_of_fits {s : GlobalState} (hs : s.WF) (w : Nat) {p : Pointer}
+    {n : Nat} (h : Fits s.mem p n) :
+    (s.afterAlloca w).mem.live? p.id = s.mem.live? p.id :=
+  live?_afterAlloca_of_lt (lt_nextFreeBlock_of_fits hs h)
+
 end Firedancer
