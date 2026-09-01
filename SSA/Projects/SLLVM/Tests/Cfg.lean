@@ -4,27 +4,32 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Cfg
 
 /-!
-# Forward CFG semantics
+# CFG semantics
 
-Hand-built CFGs pinning the denotation: a `cond_br` diamond joining at a
-φ-carrying block (the `bb4`/`bb8` → `bb10` shape of `fd_f25519_is_zero`), a
-`switch`, skipping over a block (`Target.there`), and UB on a poison
-condition.
+Hand-built CFGs pinning the fueled interpreter (`Cfg.eval`): a `cond_br`
+diamond joining at a φ-carrying block (the `bb4`/`bb8` → `bb10` shape of
+`fd_f25519_is_zero`), a `switch`, UB on a poison condition, a counted loop,
+an out-of-order forward edge, and fuel exhaustion on an infinite loop.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Cfg
 open LeanMLIR
 
+/-- Evaluate through the fueled interpreter (`Cfg.denote` is classical, so
+`#guard` cannot run it). `none` conflates UB with fuel exhaustion; at this
+fuel, every terminating test below is UB when it is `none`. -/
 private def run {Γin : Ctxt SLLVM.Ty} (cfg : Cfg Γin [SLLVM.Ty.bitvec 32])
     (V : Γin.Valuation) : Option (PoisonOr (BitVec 32)) :=
-  ((cfg.denote V).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption.map (·.1.head)
+  match Cfg.eval 100 cfg V ⟨⟨0⟩, ⟨∅⟩⟩ with
+  | some (.value (rs, _)) => some rs.head
+  | _ => none
 
 /-- `c ? x : y`, as a diamond: both edges target the same one-argument block,
 passing different values -- the φ shape. -/
 private def diamond :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32])
       [SLLVM.Ty.bitvec 32] where
-  entry := .term (.condBr ⟨0, rfl⟩ (.here [⟨1, rfl⟩]ₕ) (.here [⟨2, rfl⟩]ₕ))
+  entry := .term (.condBr ⟨0, rfl⟩ ⟨0, rfl, [⟨1, rfl⟩]ₕ⟩ ⟨0, rfl, [⟨2, rfl⟩]ₕ⟩)
   blocks := .cons (.term (.ret [⟨0, rfl⟩]ₕ)) .nil
 
 private def diamondV (c : BitVec 1) :=
@@ -39,15 +44,15 @@ private def diamondV (c : BitVec 1) :=
   [PoisonOr.poison, PoisonOr.value 11#32, PoisonOr.value 22#32]ₕ).isNone
 
 /-- A 3-way switch: case 0 and case `2^51 - 19` pick different region args,
-the default block returns the third. Case blocks are entered through
-`Target.there` chains, so this also covers skipping over blocks. -/
+the default block returns the third. Case blocks sit at distinct indices, so
+this also covers targets past the first block. -/
 private def switch3 :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32,
         SLLVM.Ty.bitvec 32])
       [SLLVM.Ty.bitvec 32] where
   entry := .term (.switch ⟨0, rfl⟩
-    (.there (.there (.here []ₕ)))
-    [(0#64, .here []ₕ), (2251799813685229#64, .there (.here []ₕ))])
+    ⟨2, rfl, []ₕ⟩
+    [(0#64, ⟨0, rfl, []ₕ⟩), (2251799813685229#64, ⟨1, rfl, []ₕ⟩)])
   blocks :=
     .cons (.term (.ret [⟨1, rfl⟩]ₕ)) <|   -- case 0: region arg %1
     .cons (.term (.ret [⟨2, rfl⟩]ₕ)) <|   -- case 2^51-19: region arg %2
@@ -189,21 +194,54 @@ def unboundCallee : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] :
     "llvm.return"(%0) : (i32) -> ()
 }]
 
-/-! ## Rejected shapes -/
+/-! ## Loops and out-of-order edges -/
 
-/--
-error: ^bb1: backward or self branch -- only forward branches are supported (LIMITATIONS 5.1)
--/
-#guard_msgs in
-def backwardBranch : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
-  ^bb0(%arg0: i1):
-    "llvm.br"()[^bb1] : () -> ()
-  ^bb1:
-    "llvm.br"()[^bb1] : () -> ()
-  ^bb2:
+/-- A counted do-while, the artifact's exact latch shape: enter with the
+counter at 1, `add`/`icmp eq`/`cond_br` back to the header until it reaches
+5, then pass the final counter to the exit block. 4 iterations. -/
+def countLoop : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
+  ^bb0(%arg0: i32):
     %0 = "llvm.mlir.constant"() <{value = 1 : i32}> : () -> i32
-    "llvm.return"(%0) : (i32) -> ()
+    %1 = "llvm.mlir.constant"() <{value = 5 : i32}> : () -> i32
+    "llvm.br"(%arg0)[^bb1] : (i32) -> ()
+  ^bb1(%2: i32):  // 2 preds: ^bb0, ^bb1
+    %3 = "llvm.add"(%2, %0) : (i32, i32) -> i32
+    %4 = "llvm.icmp"(%3, %1) <{predicate = 0 : i64}> : (i32, i32) -> i1
+    "llvm.cond_br"(%4, %3, %3)[^bb2, ^bb1] <{operandSegmentSizes = array<i32: 1, 1, 1>}> : (i1, i32, i32) -> ()
+  ^bb2(%5: i32):  // pred: ^bb1
+    "llvm.return"(%5) : (i32) -> ()
 }]
+
+#guard run countLoop (Ctxt.Valuation.singleton (PoisonOr.value 1#32)) == some (.value 5#32)
+#guard run countLoop (Ctxt.Valuation.singleton (PoisonOr.value 4#32)) == some (.value 5#32)
+
+-- A loop that never exits runs out of fuel: `eval` says "still running".
+def spin : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
+  ^bb0(%arg0: i32):
+    "llvm.br"()[^bb1] : () -> ()
+  ^bb1:  // 2 preds: ^bb0, ^bb1
+    "llvm.br"()[^bb1] : () -> ()
+  ^bb2:  // no preds: unreachable, supplies the region's return type
+    "llvm.return"(%arg0) : (i32) -> ()
+}]
+
+#guard (Cfg.eval 100 spin (Ctxt.Valuation.singleton (PoisonOr.value 0#32)) ⟨⟨0⟩, ⟨∅⟩⟩).isNone
+
+/-- An edge that is *forward in the CFG* but backward in the printed block
+order (`^bb2 → ^bb1`) -- the pow22523 shape that indexing targets by the
+remaining list used to reject. -/
+def outOfOrder : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
+  ^bb0(%arg0: i32):
+    "llvm.br"()[^bb2] : () -> ()
+  ^bb1:  // pred: ^bb2
+    "llvm.return"(%arg0) : (i32) -> ()
+  ^bb2:  // pred: ^bb0
+    "llvm.br"()[^bb1] : () -> ()
+}]
+
+#guard run outOfOrder (Ctxt.Valuation.singleton (PoisonOr.value 9#32)) == some (.value 9#32)
+
+/-! ## Rejected shapes -/
 
 /--
 error: 'llvm.mlir.constant' is not a terminator -- every block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch

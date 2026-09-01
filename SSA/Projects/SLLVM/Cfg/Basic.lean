@@ -4,23 +4,34 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 
 /-!
-# A forward CFG for SLLVM
+# A CFG for SLLVM
 
-`Com` is a straight-line let-chain; this module adds the *minimal* control
-flow the Firedancer ref extraction needs: a region of basic blocks whose
-branches only go **forward**. A block's body has exactly `Com`'s cons shape,
-but ends in a `Terminator` (return / br / cond_br / switch) instead of
-`Com.rets`. A branch names a `Target`: which *later* block to enter, plus the
-values passed to its block arguments -- MLIR's φ nodes.
+`Com` is a straight-line let-chain; this module adds the control flow the
+Firedancer ref extraction needs: a region of basic blocks. A block's body has
+exactly `Com`'s cons shape, but ends in a `Terminator` (return / br /
+cond_br / switch) instead of `Com.rets`. A branch names a `Target`: which
+block to enter, plus the values passed to its block arguments -- MLIR's φ
+nodes.
 
-Two deliberate restrictions, both matching the artifacts:
-- **Forward-only.** A `Target` points into the list of blocks *after* the
-  current one, so a back-edge is unrepresentable and `denote` is structural --
-  total, fuel-free. Loops later mean re-indexing `Target` over the full block
-  list and a fuel- or wf-based interpreter; nothing else here encodes
-  forwardness.
-- **Depth-1 dominance.** A non-entry block sees the entry block's definitions
-  (`Γamb`) and its own arguments -- not other blocks' definitions.
+A `Target` may name *any* block -- back-edges included -- so the region is
+lifted verbatim, block order and loop φs intact. The price is that the
+interpreter is no longer structural in the block list. It is factored as:
+
+- `BlockCom.eval` / `Blocks.iterate`: a **fueled**, computable interpreter.
+  Fuel is spent once per block transition; `none` means "still running".
+- `Blocks.run` / `BlockCom.denote` / `Cfg.denote`: the semantics proper,
+  taking the limit over fuel (`Fuel.limit`, classical). A computation with
+  no limit -- a genuinely non-terminating loop -- denotes UB.
+
+**Nontermination is UB** is a deliberate semantics decision (LIMITATIONS
+5.1): the artifacts' loop latches carry `mustProgress = true` (C's
+forward-progress guarantee), so LLVM is already licensed to assume they
+terminate. `#guard`-style testing goes through `Cfg.eval`, the fueled
+top-level interpreter; the agreement theorem lives in `Cfg/Eval.lean`.
+
+One remaining restriction, matching the artifacts: **depth-1 dominance**. A
+non-entry block sees the entry block's definitions (`Γamb`) and its own
+arguments -- not other blocks' definitions.
 
 Block arguments enter contexts in reverse declaration order
 (`Ctxt.ofList argTys.reverse`), the same load-bearing convention as `call`
@@ -31,21 +42,29 @@ Branching on a poison condition or switch scrutinee is UB, as in LLVM.
 
 namespace LeanMLIR.SLLVM
 
-/-- A branch target among the blocks *after* the current one: `succs` lists
-their block-argument signatures. Carries the argument variables the branch
-passes. Sum-shaped rather than index-based, so case lemmas are plain
-equations and no `getElem` casts arise. -/
-inductive Target (Γ : Ctxt SLLVM.Ty) : List (List SLLVM.Ty) → Type
-  | here (args : HVector Γ.Var ts) : Target Γ (ts :: tss)
-  | there (t : Target Γ tss) : Target Γ (ts :: tss)
+/-- A branch target: an index into the region's block list (`all` lists every
+non-entry block's argument signature), plus the argument variables the branch
+passes. Shaped like `Ctxt.Var`: the target's signature `ts` comes out of the
+lookup proof, so no `getElem` cast arises downstream. -/
+structure Target (Γ : Ctxt SLLVM.Ty) (all : List (List SLLVM.Ty)) where
+  {ts : List SLLVM.Ty}
+  idx : Nat
+  hidx : all[idx]? = some ts
+  args : HVector Γ.Var ts
 
-/-- `Target`'s value level: the chosen block together with the argument
+/-- `Target`'s value level: the chosen block index together with the argument
 *values* passed to it. -/
-inductive SuccArgs : List (List SLLVM.Ty) → Type
-  | here (args : HVector toType ts) : SuccArgs (ts :: tss)
-  | there (t : SuccArgs tss) : SuccArgs (ts :: tss)
+structure SuccArgs (all : List (List SLLVM.Ty)) where
+  {ts : List SLLVM.Ty}
+  idx : Nat
+  hidx : all[idx]? = some ts
+  args : HVector toType ts
 
-/-- How a block ends: return from the region, or transfer control to a later
+/-- There is nowhere to branch to in an empty block list. -/
+def SuccArgs.elim {α : Sort _} (t : SuccArgs []) : α :=
+  absurd t.hidx (by simp)
+
+/-- How a block ends: return from the region, or transfer control to another
 block. -/
 inductive Terminator (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty)
     (succs : List (List SLLVM.Ty)) : Type
@@ -77,37 +96,54 @@ inductive BlockCom : (Γ Γout : Ctxt SLLVM.Ty) → (rets : List SLLVM.Ty) →
       {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
       (callee : String)
       (centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout retTys csigs)
-      (cblocks : Blocks cΓout retTys csigs)
+      (cblocks : Blocks cΓout retTys csigs csigs)
       (args : HVector Γ.Var argTys)
       (body : BlockCom (retTys ++ Γ) Γout rets succs) :
       BlockCom Γ Γout rets succs
 
-/-- The non-entry blocks, in source order; the index lists each block's
-argument signature. Block `k` sees the ambient context `Γamb` plus its own
-arguments, and its terminator may only target blocks after `k`. -/
+/-- The non-entry blocks, in source order. `remaining` indexes the blocks
+from here on (the structural recursion); `all` is every block's signature,
+fixed for the whole region (what branch targets name). Block `k` sees the
+ambient context `Γamb` plus its own arguments, and its terminator may target
+any block -- back-edges included. -/
 inductive Blocks : (Γamb : Ctxt SLLVM.Ty) → (rets : List SLLVM.Ty) →
-    List (List SLLVM.Ty) → Type
-  | nil : Blocks Γamb rets []
-  | cons {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} {argTys sigs}
+    (remaining all : List (List SLLVM.Ty)) → Type
+  | nil : Blocks Γamb rets [] all
+  | cons {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+      {argTys : List SLLVM.Ty} {remaining all : List (List SLLVM.Ty)}
       {Γout : Ctxt SLLVM.Ty}
-      (b : BlockCom (Ctxt.ofList argTys.reverse ++ Γamb) Γout rets sigs)
-      (bs : Blocks Γamb rets sigs) : Blocks Γamb rets (argTys :: sigs)
+      (b : BlockCom (Ctxt.ofList argTys.reverse ++ Γamb) Γout rets all)
+      (bs : Blocks Γamb rets remaining all) :
+      Blocks Γamb rets (argTys :: remaining) all
 
 end
 
-/-- A forward CFG: an entry block over the region arguments `Γin`, then the
-remaining blocks with the entry's out-context as their ambient context. -/
+/-- A CFG: an entry block over the region arguments `Γin`, then the remaining
+blocks with the entry's out-context as their ambient context. The tail
+blocks' `remaining` and `all` indices coincide: the list is the whole region. -/
 structure Cfg (Γin : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) where
   {sigs : List (List SLLVM.Ty)}
   {Γout : Ctxt SLLVM.Ty}
   entry : BlockCom Γin Γout rets sigs
-  blocks : Blocks Γout rets sigs
+  blocks : Blocks Γout rets sigs sigs
+
+/-- Look up block `i`: total, because the caller's `remaining[i]? = some ts`
+guarantees the index is in range and pins the block's signature. -/
+def Blocks.get {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} :
+    {remaining : List (List SLLVM.Ty)} → Blocks Γamb rets remaining all →
+    (i : Nat) → {ts : List SLLVM.Ty} → remaining[i]? = some ts →
+    Σ Γout, BlockCom (Ctxt.ofList ts.reverse ++ Γamb) Γout rets all
+  | _, .nil, _, _, h => absurd h (by simp)
+  | _, .cons (Γout := Γout) b _, 0, _, h =>
+      ⟨Γout, (by simpa using h : _ = _) ▸ b⟩
+  | _, .cons _ bs, i + 1, _, h => bs.get i (by simpa using h)
 
 /-! ### Denotation -/
 
-def Target.denote (V : Γ.Valuation) : Target Γ succs → SuccArgs succs
-  | .here args => .here (args.map V)
-  | .there t => .there (t.denote V)
+/-- `Target`'s value level: look the argument variables up in the valuation. -/
+def Target.denote (V : Γ.Valuation) (t : Target Γ all) : SuccArgs all :=
+  ⟨t.idx, t.hidx, t.args.map V⟩
 
 /-- Either the region's results (a `ret` ran) or the target the block
 branched to. Branching on poison is UB. -/
@@ -125,14 +161,127 @@ def Terminator.denote : Terminator Γ rets succs → Γ.Valuation →
       | .value x =>
           return .inr ((((cases.find? (·.1 == x)).map (·.2)).getD dflt).denote V)
 
+/-! ### The fueled interpreter
+
+Computable and total: fuel is spent once per block transition, `none` means
+"still running". A body's own instructions are free -- a block is finite --
+so fuel measures exactly the thing that can be unbounded. Termination of the
+definition itself is lexicographic on (fuel, term): a transition strictly
+decreases fuel, everything else strictly decreases the term.
+-/
+
+/-- Sequence a fueled stage into a continuation: still-running (`none`) and
+UB (`some .poison`) pass through. Everything below has this shape, so the
+monotonicity and limit lemmas (`Cfg/Eval.lean`) each need to be stated once. -/
+def Fuel.andThen : Option (PoisonOr α) → (α → Option (PoisonOr β)) → Option (PoisonOr β)
+  | none, _ => none
+  | some .poison, _ => some .poison
+  | some (.value a), k => k a
+
+@[simp] theorem Fuel.andThen_none {k : α → Option (PoisonOr β)} :
+    Fuel.andThen none k = none := rfl
+@[simp] theorem Fuel.andThen_poison {k : α → Option (PoisonOr β)} :
+    Fuel.andThen (some .poison) k = some .poison := rfl
+@[simp] theorem Fuel.andThen_value {a : α} {k : α → Option (PoisonOr β)} :
+    Fuel.andThen (some (.value a)) k = k a := rfl
+
+/-- Read a completed fueled result; "still running" at every fuel is UB. -/
+def Fuel.force : Option (PoisonOr α) → PoisonOr α
+  | some r => r
+  | none => .poison
+
+@[simp] theorem Fuel.force_some {r : PoisonOr α} : Fuel.force (some r) = r := rfl
+@[simp] theorem Fuel.force_none : Fuel.force (none : Option (PoisonOr α)) = .poison := rfl
+
 mutual
 
-/-- A `call` runs its callee as a function (`runFunction`: the callee's frame
-dies on return), argument values entering the callee's context in reverse
-declaration order exactly as `SLLVMOp.call` does. -/
-def BlockCom.denote : {Γ Γout : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
-    {succs : List (List SLLVM.Ty)} → BlockCom Γ Γout rets succs → Γ.Valuation →
-    EffectM (Γout.Valuation × (HVector toType rets ⊕ SuccArgs succs))
+/-- Run a block body to its terminator. `none` = a callee ran out of fuel. -/
+def BlockCom.eval (fuel : Nat) :
+    {Γ Γout : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
+    {all : List (List SLLVM.Ty)} →
+    BlockCom Γ Γout rets all → Γ.Valuation → GlobalState →
+    Option (PoisonOr ((Γout.Valuation × (HVector toType rets ⊕ SuccArgs all)) × GlobalState))
+  | _, _, _, _, .term t, V, s =>
+      some (StateT.run (do return (V, ← t.denote V)) s)
+  | _, _, _, _, .var e body, V, s =>
+      Fuel.andThen (some (StateT.run (e.denote V) s)) fun (V', s') =>
+        body.eval fuel V' s'
+  | _, _, _, _, .call _ centry cblocks args body, V, s =>
+      -- `runFunction`, fueled: run the callee from `s`, then kill its frame
+      -- and restore the allocation counter (`MemorySemantics.runFunction`).
+      Fuel.andThen
+        (Fuel.andThen
+          (centry.eval fuel (Ctxt.Valuation.ofHVector (args.map V).reverse) s)
+          fun p => cblocks.next fuel p.1.1 p.1.2 p.2)
+        fun p => body.eval fuel (p.1 ++ V) (s.popFrame p.2.mem)
+termination_by _ _ _ _ c _ _ => (fuel, sizeOf c, 0)
+
+/-- Walk the region: enter the targeted block with its arguments bound
+(reverse order, as always), run it, and continue with whatever its terminator
+produced -- one unit of fuel per transition. -/
+def Blocks.iterate :
+    (fuel : Nat) → {Γamb : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
+    {all : List (List SLLVM.Ty)} →
+    Blocks Γamb rets all all → Γamb.Valuation → SuccArgs all → GlobalState →
+    Option (PoisonOr (HVector toType rets × GlobalState))
+  | 0, _, _, _, _, _, _, _ => none
+  | fuel + 1, _, _, _, bs, Vamb, t, s =>
+      Fuel.andThen
+        ((bs.get t.idx t.hidx).2.eval fuel
+          (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb) s)
+        fun p => bs.next fuel Vamb p.1.2 p.2
+termination_by fuel _ _ _ bs _ _ _ => (fuel, sizeOf bs, 0)
+
+/-- Dispatch on a block's outcome: the region's results, or continue walking
+from the branched-to block. A *named* continuation, so the agreement lemmas
+(`Cfg/Eval.lean`) rewrite it syntactically. -/
+def Blocks.next {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)}
+    (bs : Blocks Γamb rets all all) (fuel : Nat) (Vamb : Γamb.Valuation) :
+    (HVector toType rets ⊕ SuccArgs all) → GlobalState →
+    Option (PoisonOr (HVector toType rets × GlobalState))
+  | .inl rets, s => some (.value (rets, s))
+  | .inr t, s => bs.iterate fuel Vamb t s
+termination_by _ _ => (fuel, sizeOf bs, 1)
+
+end
+
+/-- The fueled interpreter for a whole region: entry block, then the walk. -/
+def Cfg.eval (fuel : Nat) (cfg : Cfg Γin rets) (V : Γin.Valuation)
+    (s : GlobalState) : Option (PoisonOr (HVector toType rets × GlobalState)) :=
+  Fuel.andThen (cfg.entry.eval fuel V s) fun p =>
+    cfg.blocks.next fuel p.1.1 p.1.2 p.2
+
+/-! ### From fuel to the limit -/
+
+/-- Fuel-monotone: a completed result never changes with more fuel. Both
+fueled interpreters satisfy this (`Cfg/Eval.lean`). -/
+def FuelMono (f : Nat → Option α) : Prop :=
+  ∀ ⦃m n⦄, m ≤ n → ∀ ⦃r⦄, f m = some r → f n = some r
+
+/-- The limit of a fueled computation: its eventual value, or `none` if it
+never completes. Classical -- this is where "does it halt" is decided. -/
+noncomputable def Fuel.limit (f : Nat → Option α) : Option α :=
+  open Classical in
+  if h : ∃ n, (f n).isSome then f (Nat.find h) else none
+
+/-- The block walk, unfueled. **A walk with no limit -- a genuinely
+non-terminating loop -- is UB**: the artifacts' loop latches carry
+`mustProgress = true`, so LLVM already assumes termination (LIMITATIONS 5.1). -/
+noncomputable def Blocks.run (bs : Blocks Γamb rets all all)
+    (Vamb : Γamb.Valuation) (t : SuccArgs all) :
+    EffectM (HVector toType rets) := fun s =>
+  Fuel.force (Fuel.limit (fun fuel => bs.iterate fuel Vamb t s))
+
+/-- A block body's semantics. Structural: only a `call`'s tail-block walk
+goes through `Blocks.run`; a `call` runs its callee as a function
+(`runFunction`: the callee's frame dies on return), argument values entering
+the callee's context in reverse declaration order exactly as `SLLVMOp.call`
+does. -/
+noncomputable def BlockCom.denote :
+    {Γ Γout : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
+    {all : List (List SLLVM.Ty)} → BlockCom Γ Γout rets all → Γ.Valuation →
+    EffectM (Γout.Valuation × (HVector toType rets ⊕ SuccArgs all))
   | _, _, _, _, .term t, V => do return (V, ← t.denote V)
   | _, _, _, _, .var e body, V => e.denote V >>= body.denote
   | _, _, _, _, .call _ centry cblocks args body, V => do
@@ -140,32 +289,15 @@ def BlockCom.denote : {Γ Γout : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
         let (Vc, r) ← centry.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)
         match r with
         | .inl rs => pure rs
-        | .inr next => cblocks.denote Vc next
+        | .inr next => cblocks.run Vc next
       body.denote (rs ++ V)
 
-/-- Walk the block list: enter the targeted block with its arguments bound
-(reverse order, as always), run it, and continue with whatever its
-terminator produced. Structural on the block list -- forwardness makes the
-interpreter total with no fuel. -/
-def Blocks.denote : {Γamb : Ctxt SLLVM.Ty} → {rets : List SLLVM.Ty} →
-    {sigs : List (List SLLVM.Ty)} → Blocks Γamb rets sigs → Γamb.Valuation →
-    SuccArgs sigs → EffectM (HVector toType rets)
-  | _, _, _, .nil, _, t => nomatch t
-  | _, _, _, .cons b bs, Vamb, .here args => do
-      let (_, r) ← b.denote (Ctxt.Valuation.ofHVector args.reverse ++ Vamb)
-      match r with
-      | .inl rets => return rets
-      | .inr next => bs.denote Vamb next
-  | _, _, _, .cons _ bs, Vamb, .there t => bs.denote Vamb t
-
-end
-
-def Cfg.denote (cfg : Cfg Γin rets) (V : Γin.Valuation) :
+noncomputable def Cfg.denote (cfg : Cfg Γin rets) (V : Γin.Valuation) :
     EffectM (HVector toType rets) :=
   cfg.entry.denote V >>= fun (Vout, r) =>
     match r with
     | .inl rets => pure rets
-    | .inr next => cfg.blocks.denote Vout next
+    | .inr next => cfg.blocks.run Vout next
 
 /-! ### Unfolding lemmas
 
@@ -177,10 +309,9 @@ goal to that branch's continuation in one step.
 section Lemmas
 variable {Γ : Ctxt SLLVM.Ty} {V : Γ.Valuation}
 
-@[simp, simp_denote] theorem Target.denote_here :
-    Target.denote V (.here (tss := tss) args) = .here (args.map V) := rfl
-@[simp, simp_denote] theorem Target.denote_there {t : Target Γ tss} :
-    Target.denote V (.there (ts := ts) t) = .there (t.denote V) := rfl
+@[simp, simp_denote] theorem Target.denote_mk {ts : List SLLVM.Ty} {idx : Nat}
+    {h : all[idx]? = some ts} {args : HVector Γ.Var ts} :
+    Target.denote V ⟨idx, h, args⟩ = ⟨idx, h, args.map V⟩ := rfl
 
 @[simp, simp_denote] theorem Terminator.denote_ret {vs : HVector Γ.Var rets} :
     Terminator.denote (succs := succs) (.ret vs) V = return .inl (vs.map V) := rfl
@@ -231,31 +362,15 @@ theorem Terminator.denote_switch {v : Γ.Var (Ty.bitvec w)} {dflt : Target Γ su
 @[simp, simp_denote] theorem BlockCom.denote_call {Γout cΓout : Ctxt SLLVM.Ty}
     {argTys retTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {callee : String}
     {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout retTys csigs}
-    {cblocks : Blocks cΓout retTys csigs} {args : HVector Γ.Var argTys}
+    {cblocks : Blocks cΓout retTys csigs csigs} {args : HVector Γ.Var argTys}
     {body : BlockCom (retTys ++ Γ) Γout rets succs} :
     BlockCom.denote (.call callee centry cblocks args body) V = (do
       let rs ← runFunction do
         let (Vc, r) ← centry.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)
         match r with
         | .inl rs => pure rs
-        | .inr next => cblocks.denote Vc next
+        | .inr next => cblocks.run Vc next
       body.denote (rs ++ V)) := rfl
-
-@[simp, simp_denote] theorem Blocks.denote_cons_here {Γamb Γout : Ctxt SLLVM.Ty}
-    {Vamb : Γamb.Valuation} {args : HVector toType argTys}
-    {b : BlockCom (Ctxt.ofList argTys.reverse ++ Γamb) Γout rets sigs}
-    {bs : Blocks Γamb rets sigs} :
-    Blocks.denote (.cons b bs) Vamb (.here args) = (do
-      let (_, r) ← b.denote (Ctxt.Valuation.ofHVector args.reverse ++ Vamb)
-      match r with
-      | .inl rets => return rets
-      | .inr next => bs.denote Vamb next) := rfl
-
-@[simp, simp_denote] theorem Blocks.denote_cons_there {Γamb Γout : Ctxt SLLVM.Ty}
-    {argTys : List SLLVM.Ty} {Vamb : Γamb.Valuation} {t : SuccArgs sigs}
-    {b : BlockCom (Ctxt.ofList argTys.reverse ++ Γamb) Γout rets sigs}
-    {bs : Blocks Γamb rets sigs} :
-    Blocks.denote (.cons b bs) Vamb (.there t) = bs.denote Vamb t := rfl
 
 attribute [simp, simp_denote] Cfg.denote
 

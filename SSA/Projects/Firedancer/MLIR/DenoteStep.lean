@@ -242,7 +242,7 @@ theorem BlockCom.run_bind_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets su
     {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
     {callee : String}
     {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
-    {cblocks : Blocks cΓout [] csigs}
+    {cblocks : Blocks cΓout [] csigs csigs}
     {args : HVector Γ.Var argTys}
     {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
@@ -277,7 +277,7 @@ theorem BlockCom.run_bind_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t ret
     {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
     {callee : String}
     {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [t] csigs}
-    {cblocks : Blocks cΓout [t] csigs}
+    {cblocks : Blocks cΓout [t] csigs csigs}
     {args : HVector Γ.Var argTys}
     {body : BlockCom (([t] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState} {x : ⟦t⟧}
@@ -303,49 +303,12 @@ theorem BlockCom.run_bind_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t ret
 
 /-! ### Entering a block
 
-`Blocks.tail` and `Blocks.denoteHead` let the walk into a block be stated over
-an arbitrary `bs`, rather than over a `Blocks.cons` pattern. That is what keeps
-a quoted region folded: `denote_cons_here` can only fire once the region has
-been unfolded to expose the constructor, while these fire on
-`<region>.blocks` as it stands. `Γout` is existential in `Blocks.cons`, so the
-head cannot be projected out as a block -- `denoteHead` returns its denotation
-instead, which is all `Blocks.denote` ever uses. -/
-
-def Blocks.tail {Γamb : Ctxt SLLVM.Ty} {rets argTys sigs} :
-    Blocks Γamb rets (argTys :: sigs) → Blocks Γamb rets sigs
-  | .cons _ bs => bs
-
-def Blocks.denoteHead {Γamb : Ctxt SLLVM.Ty} {rets argTys sigs}
-    (bs : Blocks Γamb rets (argTys :: sigs))
-    (V : (Ctxt.ofList argTys.reverse ++ Γamb).Valuation) :
-    EffectM (HVector toType rets ⊕ SuccArgs sigs) :=
-  match bs with
-  | .cons b _ => do let (_, r) ← b.denote V; return r
-
-theorem Blocks.denoteHead_cons {Γamb Γout : Ctxt SLLVM.Ty} {rets argTys : List SLLVM.Ty}
-    {sigs : List (List SLLVM.Ty)}
-    {b : BlockCom (Ctxt.ofList argTys.reverse ++ Γamb) Γout rets sigs}
-    {bs : Blocks Γamb rets sigs}
-    {V : (Ctxt.ofList argTys.reverse ++ Γamb).Valuation} :
-    (Blocks.cons b bs).denoteHead V = (do let (_, r) ← b.denote V; return r) := rfl
-
-theorem Blocks.denote_there_tail {Γamb : Ctxt SLLVM.Ty} {rets argTys sigs}
-    {bs : Blocks Γamb rets (argTys :: sigs)} {Vamb : Γamb.Valuation} {t : SuccArgs sigs} :
-    bs.denote Vamb (.there t) = bs.tail.denote Vamb t := by
-  cases bs; rfl
-
-theorem Blocks.denote_here_tail {Γamb : Ctxt SLLVM.Ty} {rets argTys sigs}
-    {bs : Blocks Γamb rets (argTys :: sigs)} {Vamb : Γamb.Valuation}
-    {args : HVector toType argTys} :
-    bs.denote Vamb (.here args) = (do
-      match ← bs.denoteHead (Ctxt.Valuation.ofHVector args.reverse ++ Vamb) with
-      | .inl rets => return rets
-      | .inr next => bs.tail.denote Vamb next) := by
-  cases bs
-  rw [Blocks.denote_cons_here]
-  simp only [denoteHead, tail, bind_assoc, pure_bind]
-  rfl
-
+With back-edges, the walk through the tail blocks is `Blocks.run`, and
+`Blocks.run_step` (`Cfg/Eval.lean`) is its one-transition equation. The
+`denote_enter_block` tactic below applies it and then reduces the
+`Blocks.get` lookup away, so only the entered block is materialised -- the
+skipped blocks and the continuation's `bs` stay folded behind the region's
+definition. -/
 
 end LeanMLIR.SLLVM
 
@@ -664,32 +627,27 @@ private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
     goal.assign (← mkEqTrans proof newGoal)
     return some newGoal.mvarId!
 
-open Lean Elab Tactic in
-/-- `denote_enter_block` walks a `Blocks.denote bs Vamb succArgs` goal into the
-block the branch selected: one `Blocks.denote_there_tail` per `SuccArgs.there`,
-then `Blocks.denote_here_tail` and `Blocks.denoteHead_cons` to expose the block
-itself. `denote_step_all` takes over from there.
-
-The point is what is *not* put in the goal. `simp only [<region>,
-Blocks.denote_cons_here]` gets to the same place by unfolding the whole region
--- every block, plus the already-consumed entry block -- because the `cons`
-pattern of `denote_cons_here` cannot match an auxiliary definition. These
-lemmas are stated over an arbitrary `bs` with `Blocks.tail` and
-`Blocks.denoteHead` doing the projecting, so the skipped blocks and the
-fallthrough tail stay folded as `<region>.blocks.tail.tail…` and only the
-entered block is materialised. -/
+open Lean Meta Elab Tactic in
+/-- `denote_enter_block` steps a `Blocks.run bs Vamb t` goal into the block
+`t` selects: one `Blocks.run_step`, then the `Blocks.get` lookup is reduced
+by weak-head evaluation, so only the entered block is materialised -- the
+skipped blocks and the continuation's `bs` stay folded behind the region's
+definition. `denote_step_all` takes over from there. -/
 elab "denote_enter_block" : tactic => do
-  for _ in [0:1000] do
-    let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.denote_there_tail
-      | break
-    replaceMainGoal [g]
-  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.denote_here_tail
-    | throwError "denote_enter_block: the goal is not a `Blocks.denote … (SuccArgs.here …)`. \
+  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.run_step
+    | throwError "denote_enter_block: the goal is not a `Blocks.run … t`. \
         Resolve the terminator first, so the target is a concrete `SuccArgs`."
   replaceMainGoal [g]
-  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.denoteHead_cons
-    | throwError "denote_enter_block: could not expose the entered block"
-  replaceMainGoal [g]
+  let goal ← getMainGoal
+  let goal ← goal.withContext do
+    let tgt ← instantiateMVars (← goal.getType)
+    let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)
+      | throwError "denote_enter_block: could not find the block lookup"
+    let reduced ← whnf getApp
+    let tgt' := tgt.replace fun e => if e == getApp then some reduced else none
+    goal.replaceTargetDefEq tgt'
+  replaceMainGoal [goal]
+  evalTactic (← `(tactic| dsimp only))
 
 open Lean Meta Elab Tactic in
 /-- `denote_step_all v` symbolically executes a pure, single-result-per-op

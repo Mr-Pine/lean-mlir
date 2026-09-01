@@ -45,12 +45,15 @@ private def sigsE (sigs : List (List SLLVM.Ty)) : Lean.Expr :=
 private def targetTyE (Γ : Ctxt SLLVM.Ty) (succs : List (List SLLVM.Ty)) : Lean.Expr :=
   mkApp2 (mkConst ``Target) (ctxtE Γ) (sigsE succs)
 
-private def targetE (Γ : Ctxt SLLVM.Ty) :
-    {succs : List (List SLLVM.Ty)} → Target Γ succs → Lean.Expr
-  | ts :: tss, .here args =>
-      mkAppN (mkConst ``Target.here) #[ctxtE Γ, tyListE ts, sigsE tss, f.mapVarVec args]
-  | ts :: tss, .there t =>
-      mkAppN (mkConst ``Target.there) #[ctxtE Γ, sigsE tss, tyListE ts, targetE Γ t]
+/-- The lookup proof `all[idx]? = some ts` is emitted as `Eq.refl`: both the
+list and the index are literals, so the two sides are definitionally equal. -/
+private def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)}
+    (t : Target Γ succs) : Lean.Expr :=
+  let someTsE := mkApp2 (mkConst ``Option.some [levelZero]) q(List SLLVM.Ty) (tyListE t.ts)
+  let hE := mkApp2 (mkConst ``Eq.refl [levelOne])
+    (mkApp (mkConst ``Option [levelZero]) q(List SLLVM.Ty)) someTsE
+  mkAppN (mkConst ``Target.mk)
+    #[ctxtE Γ, sigsE succs, tyListE t.ts, toExpr t.idx, hE, f.mapVarVec t.args]
 
 private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty)
     (succs : List (List SLLVM.Ty)) : Terminator Γ rets succs → Lean.Expr
@@ -106,22 +109,23 @@ private partial def blockComE (refs : List (String × CalleeRef))
               proj ``Cfg.entry, proj ``Cfg.blocks, f.mapVarVec args, bodyE]
       | none =>
           let centryE ← blockComE refs retTys csigs centry
-          let cblocksE ← blocksE refs retTys cΓout cblocks
+          let cblocksE ← blocksE refs retTys cΓout csigs cblocks
           return mkAppN (mkConst ``BlockCom.call)
             #[ctxtE Γ, ctxtE Γout, tyListE rets, sigsE succs, tyListE argTys, tyListE retTys,
               sigsE csigs, ctxtE cΓout, toExpr callee, centryE, cblocksE, f.mapVarVec args, bodyE]
 
 private partial def blocksE (refs : List (String × CalleeRef))
-    (rets : List SLLVM.Ty) (Γamb : Ctxt SLLVM.Ty) :
-    {sigs : List (List SLLVM.Ty)} → Blocks Γamb rets sigs → MetaM Lean.Expr :=
-  fun {sigs} bs => match sigs, bs with
+    (rets : List SLLVM.Ty) (Γamb : Ctxt SLLVM.Ty) (all : List (List SLLVM.Ty)) :
+    {remaining : List (List SLLVM.Ty)} → Blocks Γamb rets remaining all → MetaM Lean.Expr :=
+  fun {remaining} bs => match remaining, bs with
   | [], .nil =>
-      return mkAppN (mkConst ``Blocks.nil) #[ctxtE Γamb, tyListE rets]
-  | argTys :: sigs, .cons (Γout := Γout) b bs => do
-      let bE ← blockComE refs rets sigs b
-      let bsE ← blocksE refs rets Γamb bs
+      return mkAppN (mkConst ``Blocks.nil) #[ctxtE Γamb, tyListE rets, sigsE all]
+  | argTys :: remaining, .cons (Γout := Γout) b bs => do
+      let bE ← blockComE refs rets all b
+      let bsE ← blocksE refs rets Γamb all bs
       return mkAppN (mkConst ``Blocks.cons)
-        #[ctxtE Γamb, tyListE rets, tyListE argTys, sigsE sigs, ctxtE Γout, bE, bsE]
+        #[ctxtE Γamb, tyListE rets, tyListE argTys, sigsE remaining, sigsE all,
+          ctxtE Γout, bE, bsE]
 
 end
 
@@ -134,7 +138,7 @@ def Cfg.toExprM {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (cfg : Cfg Γin re
   match cfg with
   | .mk (sigs := sigs) (Γout := Γout) entry blocks =>
     let entryE ← blockComE refs rets sigs entry
-    let blocksE ← blocksE refs rets Γout blocks
+    let blocksE ← blocksE refs rets Γout sigs blocks
     return mkAppN (mkConst ``Cfg.mk)
       #[ctxtE Γin, tyListE rets, sigsE sigs, ctxtE Γout, entryE, blocksE]
 

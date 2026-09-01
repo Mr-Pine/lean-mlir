@@ -8,7 +8,7 @@ import SSA.Projects.SLLVM.Dialect.Syntax.Parser
 # AST → `Cfg`
 
 `mkCfg` is `mkCom`'s multi-block sibling: it turns a parsed `MLIR.AST.Region`
-whose blocks branch **forward only** into a `Cfg`. Per-operation building is
+-- back-edges included -- into a `Cfg`. Per-operation building is
 the existing `TransformExpr SLLVM` instance, so everything the straight-line
 parser accepts (gep included) works inside a block.
 
@@ -28,19 +28,12 @@ namespace LeanMLIR.SLLVM
 
 open MLIR.AST
 
-/-- Relative index of successor `name` among the blocks after the current one.
-`resolveSucc` is the *only* forwardness check in the pipeline: when branches
-become loops, this is the check that relaxes (together with `Target`'s
-remaining-list indexing in `Cfg/Basic.lean`). -/
-def resolveSucc (remaining all : List String) (name : String) : ExceptM SLLVM Nat :=
-  match remaining.idxOf? name with
+/-- Index of successor `name` in the region's block list. Any block may be
+named -- back-edges included; see `Cfg/Basic.lean` for the semantics. -/
+def resolveSucc (all : List String) (name : String) : ExceptM SLLVM Nat :=
+  match all.idxOf? name with
   | some r => return r
-  | none =>
-      if name ∈ all then
-        throw <| .generic s!"^{name}: backward or self branch -- only forward branches are \
-          supported (LIMITATIONS 5.1)"
-      else
-        throw <| .generic s!"^{name}: unknown block"
+  | none => throw <| .generic s!"^{name}: unknown block"
 
 /-- The operands `vals`, resolved in `Γ` at the expected types `tys` -- the
 argument vector a branch passes to its target block. -/
@@ -54,21 +47,20 @@ def mkArgsHVector (Γ : Ctxt SLLVM.Ty) :
   | vals, tys => throw <| .generic s!"expected {tys.length} block argument(s), \
       found {vals.length}"
 
-/-- The target `r` blocks ahead, carrying `argVals`. -/
-def mkTarget (Γ : Ctxt SLLVM.Ty) (argVals : List (TypedSSAVal 0)) :
-    (succs : List (List SLLVM.Ty)) → (r : Nat) → ReaderM SLLVM (Target Γ succs)
-  | [], _ => throw <| .generic "internal: successor index out of range"
-  | ts :: _, 0 => return .here (← mkArgsHVector Γ argVals ts)
-  | _ :: tss, r + 1 => return .there (← mkTarget Γ argVals tss r)
+/-- The target at block index `r`, carrying `argVals`. -/
+def mkTarget (Γ : Ctxt SLLVM.Ty) (argVals : List (TypedSSAVal 0))
+    (succs : List (List SLLVM.Ty)) (r : Nat) : ReaderM SLLVM (Target Γ succs) := do
+  match h : succs[r]? with
+  | some ts => return ⟨r, h, ← mkArgsHVector Γ argVals ts⟩
+  | none => throw <| .generic "internal: successor index out of range"
 
 private def segAttr (opStx : Op 0) (attr : String) : ReaderM SLLVM (List Nat) := do
   return (← arrayInts opStx attr).map (·.toNat)
 
-/-- Decode a block's final operation into a `Terminator`. `remaining` names
-the blocks after this one (what its branches may target), `all` every
-non-entry block (for the backward-branch error). -/
+/-- Decode a block's final operation into a `Terminator`. `all` names every
+non-entry block, in order -- what its branches may target. -/
 def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty))
-    (remaining all : List String) (Γ : Ctxt SLLVM.Ty) (opStx : Op 0) :
+    (all : List String) (Γ : Ctxt SLLVM.Ty) (opStx : Op 0) :
     ReaderM SLLVM (Terminator Γ rets succs) := do
   match opStx.name with
   | "llvm.return" =>
@@ -76,7 +68,7 @@ def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty))
   | "llvm.br" => do
       let [s] := opStx.successors
         | throw <| .generic "llvm.br: expected exactly one successor"
-      let r ← resolveSucc remaining all s
+      let r ← resolveSucc all s
       return .br (← mkTarget Γ opStx.args succs r)
   | "llvm.cond_br" => do
       let [sT, sF] := opStx.successors
@@ -88,8 +80,8 @@ def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty))
       unless nC == 1 && rest.length == nT + nF do
         throw <| .generic "llvm.cond_br: operands do not match `operandSegmentSizes`"
       let cVar ← getValFromCtxt Γ (SSAValToString c.1) (Ty.bitvec 1)
-      let tT ← mkTarget Γ (rest.take nT) succs (← resolveSucc remaining all sT)
-      let tF ← mkTarget Γ (rest.drop nT) succs (← resolveSucc remaining all sF)
+      let tT ← mkTarget Γ (rest.take nT) succs (← resolveSucc all sT)
+      let tF ← mkTarget Γ (rest.drop nT) succs (← resolveSucc all sF)
       return .condBr cVar tT tF
   | "llvm.switch" => do
       let dfltName :: caseNames := opStx.successors
@@ -110,11 +102,11 @@ def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty))
       unless caseVals.length == caseNames.length && caseSegs.length == caseNames.length do
         throw <| .generic "llvm.switch: `case_values`/`case_operand_segments` do not match \
           the successor list"
-      let dflt ← mkTarget Γ (restArgs.take nDef) succs (← resolveSucc remaining all dfltName)
+      let dflt ← mkTarget Γ (restArgs.take nDef) succs (← resolveSucc all dfltName)
       let mut caseArgs := restArgs.drop nDef
       let mut cases : List (BitVec w × Target Γ succs) := []
       for (val, name, n) in caseVals.zip (caseNames.zip caseSegs) do
-        let tgt ← mkTarget Γ (caseArgs.take n) succs (← resolveSucc remaining all name)
+        let tgt ← mkTarget Γ (caseArgs.take n) succs (← resolveSucc all name)
         cases := cases ++ [(BitVec.ofInt w val, tgt)]
         caseArgs := caseArgs.drop n
       return .switch vVar dflt cases
@@ -147,10 +139,10 @@ private def isIntrinsicCall (opStx : Op 0) : Bool :=
 straight-line callee is the one-block case). -/
 def mkBlockCom (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
     (rets : List SLLVM.Ty)
-    (succs : List (List SLLVM.Ty)) (remaining all : List String) :
+    (succs : List (List SLLVM.Ty)) (all : List String) :
     (Γ : Ctxt SLLVM.Ty) → List (Op 0) → BuilderM SLLVM (Σ Γout, BlockCom Γ Γout rets succs)
   | Γ, [termStx] => do
-      return ⟨Γ, .term (← mkTerminator rets succs remaining all Γ termStx)⟩
+      return ⟨Γ, .term (← mkTerminator rets succs all Γ termStx)⟩
   | Γ, opStx :: rest => do
       if opStx.name == "llvm.call" && !isIntrinsicCall opStx then
         let some (.symbol callee) := opStx.getAttr? "callee"
@@ -174,7 +166,7 @@ def mkBlockCom (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
             let _ ← (opStx.res.zip retTys).foldlM (init := Γ) fun Γ (var, ty) => do
               let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
               return Γ'
-            let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs remaining all (retTys ++ Γ) rest
+            let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs all (retTys ++ Γ) rest
             return ⟨Γout, .call callee centry cblocks args.toHVector body⟩
           else
             throw <| .generic s!"llvm.call to {callee}: the callee returns \
@@ -194,7 +186,7 @@ def mkBlockCom (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
       let _ ← (opStx.res.zip tys).foldlM (init := Γ) fun Γ (var, ty) => do
         let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
         return Γ'
-      let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs remaining all (tys ++ Γ) rest
+      let ⟨Γout, body⟩ ← mkBlockCom mkCallee valTable rets succs all (tys ++ Γ) rest
       return ⟨Γout, .var (e.changeEffect (EffectKind.le_impure _)) body⟩
   | _, [] => throw <| .generic "empty block: every block must end in a terminator"
 
@@ -207,30 +199,32 @@ private def declareBlockArgNames (args : List (TypedSSAVal 0)) : BuilderM SLLVM 
 
 /-- Build the tail blocks. `snapshot` is the name mapping right after the
 entry block -- restoring it before each block is what enforces depth-1
-dominance. `remainingNames` starts with the current block's own name. -/
+dominance. `sigsAll` is every block's signature: each block's branches may
+target the whole list. -/
 def mkBlocks (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
     (all : List String) (rets : List SLLVM.Ty)
-    (Γamb : Ctxt SLLVM.Ty) (snapshot : NameMapping) :
+    (Γamb : Ctxt SLLVM.Ty) (snapshot : NameMapping)
+    (sigsAll : List (List SLLVM.Ty)) :
     (bs : List (MLIR.AST.Block 0)) → (sigs : List (List SLLVM.Ty)) →
-    (remainingNames : List String) → BuilderM SLLVM (Blocks Γamb rets sigs)
-  | [], [], _ => return .nil
-  | b :: bs, argTys :: sigs, _ :: restNames => do
+    BuilderM SLLVM (Blocks Γamb rets sigs sigsAll)
+  | [], [] => return .nil
+  | b :: bs, argTys :: sigs => do
       unless b.args.length == argTys.length do
         throw <| .generic "internal: block arguments out of sync with signature"
       set snapshot
       declareBlockArgNames b.args
       let ⟨_Γout, body⟩ ←
         try
-          mkBlockCom mkCallee valTable rets sigs restNames all
+          mkBlockCom mkCallee valTable rets sigsAll all
             (Ctxt.ofList argTys.reverse ++ Γamb) b.ops
         catch
           | .undeclaredName n => throw <| .generic s!"%{n} is not in scope in ^{b.name}: \
               a CFG block may only use entry-block definitions and its own arguments \
               (depth-1 dominance)"
           | e => throw e
-      let rest ← mkBlocks mkCallee valTable all rets Γamb snapshot bs sigs restNames
+      let rest ← mkBlocks mkCallee valTable all rets Γamb snapshot sigsAll bs sigs
       return .cons body rest
-  | _, _, _ => throw <| .generic "internal: blocks out of sync with signatures"
+  | _, _ => throw <| .generic "internal: blocks out of sync with signatures"
 
 /-- The region's return types: read off its first `llvm.return`. Every other
 return is checked against them when its terminator is built. -/
@@ -253,9 +247,10 @@ def mkCfgCore (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
   let entryArgTys ← (reg.args.mapM (TypedSSAVal.mkTy ·) : ExceptM SLLVM _)
   declareBlockArgNames reg.args
   let Γin := Ctxt.ofList entryArgTys.reverse
-  let ⟨Γout, entry⟩ ← mkBlockCom mkCallee valTable rets (sigTable.map (·.2)) names names Γin reg.ops
+  let ⟨Γout, entry⟩ ← mkBlockCom mkCallee valTable rets (sigTable.map (·.2)) names Γin reg.ops
   let snapshot ← get
-  let blocks ← mkBlocks mkCallee valTable names rets Γout snapshot reg.blocks (sigTable.map (·.2)) names
+  let blocks ← mkBlocks mkCallee valTable names rets Γout snapshot
+    (sigTable.map (·.2)) reg.blocks (sigTable.map (·.2))
   return ⟨Γin, rets, ⟨entry, blocks⟩⟩
 
 /-- Callee building with a nesting bound: each level of call nesting spends
