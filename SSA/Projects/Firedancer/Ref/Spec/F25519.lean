@@ -86,12 +86,17 @@ theorem readBuf?_isSome {m : MemoryState} {p : Pointer} (h : IsByteBufPtr m p) :
     simp only [MemoryState.live?, hblk]
   simp [readBuf?, hlive]
 
-def readBuf (p: Pointer) (m: MemoryState) (h: IsByteBufPtr m p) := (readBuf? p m).get (readBuf?_isSome h)
+def readBuf {p: Pointer} {m: MemoryState} (h: IsByteBufPtr m p) := (readBuf? p m).get (readBuf?_isSome h)
 
 /-- A store leaves live blocks and their sizes alone, so a field element that
 fitted at `q` before still fits after a splice anywhere. -/
 theorem isFieldElemPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitVec w}
     (h : IsFieldElemPtr m q) : IsFieldElemPtr (m.splice p x) q :=
+  ⟨fits_splice h.left, h.right⟩
+
+/-- The buffer counterpart of `isFieldElemPtr_splice`. -/
+theorem isByteBufPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitVec w}
+    (h : IsByteBufPtr m q) : IsByteBufPtr (m.splice p x) q :=
   ⟨fits_splice h.left, h.right⟩
 
 def readFieldElem {p: Pointer} {m: MemoryState} (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)

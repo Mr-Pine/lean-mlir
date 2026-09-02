@@ -43,7 +43,7 @@ lemma from_bytes_eq_value (buf : BitVec 256) :
 /-- What the buffer read is, once the block behind `p` is known. -/
 lemma bufBits {m : MemoryState} {p : Pointer} {blk : LiveBlock}
     (hblk : m[p.id]? = some (Block.live blk)) (h : IsByteBufPtr m p) :
-    readBuf p m h = blk.bytes.extractLsb' p.offsetInBits 256 := by
+    readBuf h = blk.bytes.extractLsb' p.offsetInBits 256 := by
   have hlive : m.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
   simp [readBuf, readBuf?, hlive]
 
@@ -53,7 +53,7 @@ it. -/
 lemma bufByte {m : MemoryState} {p : Pointer} {blk : LiveBlock}
     (hblk : m[p.id]? = some (Block.live blk)) (h : IsByteBufPtr m p) {k : ℕ} (hk : k < 32)
     {off : ℕ} (hoff : off = p.offsetInBits + 8 * k) :
-    blk.bytes.extractLsb' off 8 = (readBuf p m h).extractLsb' (8 * k) 8 := by
+    blk.bytes.extractLsb' off 8 = (readBuf h).extractLsb' (8 * k) 8 := by
   rw [bufBits hblk h, extractLsb'_extractLsb' _ (by omega), hoff]
 
 set_option maxHeartbeats 8000000 in
@@ -66,7 +66,7 @@ theorem fiat_25519_from_bytes_conforms (o p: Pointer) (s: GlobalState)
     simp only [fiat_25519_from_bytes_spec, Cfg.denote]
 
     obtain ⟨pblk, hpblk, hplen⟩ := id hp.left
-    set buf := readBuf p s.mem hp with hbuf
+    set buf := readBuf hp with hbuf
     let output := from_bytes_repr buf
     let outputBV := BitVec.ofNat 64 ∘ output
 
