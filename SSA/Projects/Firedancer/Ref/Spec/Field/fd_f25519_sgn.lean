@@ -13,7 +13,7 @@ abbrev fd_f25519_sgn_spec (q : Pointer) (s : GlobalState)
     (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_sgn.denote (Ctxt.Valuation.singleton (.value q)))
   let result := StateT.run invocation s
-  let a := readFieldElem q s.mem hq
+  let a := readFieldElem hq
 
   ∃ s' : GlobalState , result = .value ([.value (BitVec.ofNat 32 (a.val % 2))]ₕ, s') ∧ s ≈ s'
 

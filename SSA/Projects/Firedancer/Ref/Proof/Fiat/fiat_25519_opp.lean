@@ -57,9 +57,9 @@ lemma opp_repr_correct (q : Fin 5 → Nat)
 set_option maxHeartbeats 1600000 in
 theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
   (hs : s.WF)
-  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
   (ho: IsFieldElemPtr s.mem o)
-  (hq: IsFieldElemPtr s.mem q) :
+  (hq: IsFieldElemPtr s.mem q)
+  (hqbounds : LimbBounds hq) :
   fiat_25519_opp_spec o q s := by
     simp only [fiat_25519_opp_spec, Cfg.denote]
 
@@ -74,7 +74,7 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
     case right =>
       simp [readFieldElem?, hqinput, ho, limbReadbackPack, outputBV]
       have qinput_bounds (j: Fin 5) : qinput j ≤ 0x8000000000000 := by
-        simp only [hqinput, hqbounds j]
+        simp only [hqinput, limbBounds_readLimb? hq hqbounds j]
       have output_bounds (i: Fin 5) : output i ≤ 0xffffffffffffe := opp_repr_bounds qinput i
       have loose_output_bounds (i: Fin 5) : output i < 18446744073709551616 :=
         (output_bounds i).trans_lt (by norm_num)
@@ -143,7 +143,8 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
       have h5 : i.toNat < 5 := i.isLt
       rw [limbOffsetInBits hq.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hqblk] using hqinput i
-    have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 := fun i => hqbounds i _ (hqinput i)
+    have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 :=
+      fun i => limbBounds_readLimb? hq hqbounds i _ (hqinput i)
     -- limb 0 is loaded straight off the base pointer, with no `getelementptr`
     have m1 : x1.toNat = 0xfffffffffffda - qinput 0 := by
       rw [← hx1]

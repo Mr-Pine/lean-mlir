@@ -15,7 +15,7 @@ abbrev fd_f25519_frombytes_spec (o p: Pointer) (s: GlobalState)
   ∃ out : Fin 5 → BitVec 64,
     let output_state : GlobalState := { s with mem := s.mem.splice o (packLimbs out) }
 
-    readFieldElem o output_state.mem (isFieldElemPtr_splice ho) = decodeBytes p_input
+    readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = decodeBytes p_input
     ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([.value o]ₕ, s') ∧ output_state ≈ s')
 

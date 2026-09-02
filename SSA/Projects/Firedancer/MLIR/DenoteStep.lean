@@ -301,6 +301,87 @@ theorem BlockCom.run_bind_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t ret
     EffectM.run_bind_of_value (a := ([x]ₕ : HVector _ [t])) (s' := s') h,
     single_append]
 
+/-! ### Calls in a bare block denotation
+
+`Blocks.run_loop`'s step obligation states a block's denotation on its own,
+with no `>>=` continuation -- unlike `Cfg.denote`, which binds the entry
+block's result. These are the `k := pure` specialisations of the two lemmas
+above, in the shape a loop-body goal actually has. -/
+
+theorem BlockCom.run_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
+    {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
+    {callee : String}
+    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
+    {cblocks : Blocks cΓout [] csigs csigs}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s s' : GlobalState}
+    (h : StateT.run (runFunction
+        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
+      = .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V) s
+      = StateT.run (body.denote V) s' := by
+  have h2 : StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= pure) s
+      = StateT.run (body.denote V >>= pure) s' :=
+    BlockCom.run_bind_denote_call_of_nil h
+  simpa only [bind_pure] using h2
+
+theorem BlockCom.run_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets succs}
+    {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
+    {callee : String}
+    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [t] csigs}
+    {cblocks : Blocks cΓout [t] csigs csigs}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([t] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s s' : GlobalState} {x : ⟦t⟧}
+    (h : StateT.run (runFunction
+        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
+      = .value ([x]ₕ, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V) s
+      = StateT.run (body.denote (x ::ᵥ V)) s' := by
+  have h2 : StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= pure) s
+      = StateT.run (body.denote (x ::ᵥ V) >>= pure) s' :=
+    BlockCom.run_bind_denote_call_of_value h
+  simpa only [bind_pure] using h2
+
+/-- `run_denote_call_of_value` for a callee embedded *by reference*: the call
+node holds `c.entry`/`c.blocks` for a lifted constant `c`, and the hypothesis
+is that constant's own conformance statement. Stating it over an abstract `c`
+is what keeps it cheap -- the `⟨c.entry, c.blocks⟩ = c` eta step is discharged
+here, once, rather than at each call site where `c` is a large constant. -/
+theorem BlockCom.run_denote_call_cfg_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets succs}
+    {argTys : List SLLVM.Ty} {callee : String}
+    {c : Cfg (Ctxt.ofList argTys.reverse) [t]}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([t] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s s' : GlobalState} {x : ⟦t⟧}
+    {argVals : HVector toType argTys.reverse}
+    (hargs : (args.map V).reverse = argVals)
+    (h : StateT.run (runFunction
+        (c.denote (Ctxt.Valuation.ofHVector argVals))) s
+      = .value ([x]ₕ, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V) s
+      = StateT.run (body.denote (x ::ᵥ V)) s' :=
+  BlockCom.run_denote_call_of_value
+    (by rw [Cfg.denote_mk_self, hargs]; exact h)
+
+/-- `run_denote_call_cfg_of_value`, for a callee that returns nothing. -/
+theorem BlockCom.run_denote_call_cfg_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
+    {argTys : List SLLVM.Ty} {callee : String}
+    {c : Cfg (Ctxt.ofList argTys.reverse) []}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s s' : GlobalState}
+    {argVals : HVector toType argTys.reverse}
+    (hargs : (args.map V).reverse = argVals)
+    (h : StateT.run (runFunction
+        (c.denote (Ctxt.Valuation.ofHVector argVals))) s
+      = .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V) s
+      = StateT.run (body.denote V) s' :=
+  BlockCom.run_denote_call_of_nil
+    (by rw [Cfg.denote_mk_self, hargs]; exact h)
+
 /-! ### Entering a block
 
 With back-edges, the walk through the tail blocks is `Blocks.run`, and
@@ -309,6 +390,86 @@ With back-edges, the walk through the tail blocks is `Blocks.run`, and
 `Blocks.get` lookup away, so only the entered block is materialised -- the
 skipped blocks and the continuation's `bs` stay folded behind the region's
 definition. -/
+
+/-- Walk a loop by its invariant: `t k` is the program point at iteration `k`
+(the header with its φ values), `Inv k` the state invariant there, and each
+step runs the block at `t k` and lands on `t (k + 1)`. After `n` iterations
+the walk stands at `t n` -- typically the loop's exit target -- with `Inv n`.
+Proof-time only: `n` is supplied here, the transform never computes it. -/
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop {Γamb : Ctxt SLLVM.Ty}
+    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
+    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+    (Inv : Nat → GlobalState → Prop) (t : Nat → SuccArgs all) (n : Nat)
+    (hstep : ∀ k s, k < n → Inv k s → ∃ Vout s',
+      StateT.run ((bs.get (t k).idx (t k).hidx).2.denote
+          (Ctxt.Valuation.ofHVector (t k).args.reverse ++ Vamb)) s
+        = .value ((Vout, .inr (t (k + 1))), s') ∧ Inv (k + 1) s')
+    {s₀ : GlobalState} (h₀ : Inv 0 s₀) :
+    ∃ s', StateT.run (bs.run Vamb (t 0)) s₀ = StateT.run (bs.run Vamb (t n)) s'
+      ∧ Inv n s' := by
+  suffices h : ∀ d k s, n = k + d → Inv k s → ∃ s',
+      StateT.run (bs.run Vamb (t k)) s = StateT.run (bs.run Vamb (t n)) s'
+        ∧ Inv n s' from h n 0 s₀ (by omega) h₀
+  intro d
+  induction d with
+  | zero =>
+      intro k s hkd hInv
+      have hk : k = n := by omega
+      subst hk
+      exact ⟨s, rfl, hInv⟩
+  | succ d ih =>
+      intro k s hkd hInv
+      obtain ⟨Vout, s', hrun, hInv'⟩ := hstep k s (by omega) hInv
+      obtain ⟨s'', heq, hInvn⟩ := ih (k + 1) s' (by omega) hInv'
+      refine ⟨s'', ?_, hInvn⟩
+      rw [Blocks.run_step (t := t k), EffectM.run_bind, hrun, PoisonOr.value_bind]
+      show StateT.run (bs.run Vamb (t (k + 1))) s' = _
+      exact heq
+
+/-- The general termination rule: any walk whose steps preserve `Inv` and
+strictly decrease `μ` until a `ret` fires ends in a state satisfying `Q`.
+Covers multi-block and nested loops -- it never mentions loop structure. -/
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_of_variant {Γamb : Ctxt SLLVM.Ty}
+    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
+    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+    (Inv : SuccArgs all → GlobalState → Prop)
+    (μ : SuccArgs all → GlobalState → Nat)
+    (Q : HVector toType rets → GlobalState → Prop)
+    (hstep : ∀ t s, Inv t s → ∃ p s',
+      StateT.run ((bs.get t.idx t.hidx).2.denote
+          (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s = .value (p, s')
+      ∧ (∀ res, p.2 = .inl res → Q res s')
+      ∧ (∀ t', p.2 = .inr t' → Inv t' s' ∧ μ t' s' < μ t s))
+    {t₀ : SuccArgs all} {s₀ : GlobalState} (h₀ : Inv t₀ s₀) :
+    ∃ rs s', StateT.run (bs.run Vamb t₀) s₀ = .value (rs, s') ∧ Q rs s' := by
+  suffices h : ∀ m t s, μ t s ≤ m → Inv t s → ∃ rs s',
+      StateT.run (bs.run Vamb t) s = .value (rs, s') ∧ Q rs s' from
+    h (μ t₀ s₀) t₀ s₀ le_rfl h₀
+  intro m
+  induction m with
+  | zero =>
+      intro t s hμ hInv
+      obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
+      cases r with
+      | inl res =>
+          refine ⟨res, s', ?_, hinl res rfl⟩
+          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+          rfl
+      | inr t' => exact absurd (hinr t' rfl).2 (by omega)
+  | succ m ih =>
+      intro t s hμ hInv
+      obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
+      cases r with
+      | inl res =>
+          refine ⟨res, s', ?_, hinl res rfl⟩
+          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+          rfl
+      | inr t' =>
+          obtain ⟨hInv', hlt⟩ := hinr t' rfl
+          obtain ⟨rs, s'', heq, hQ⟩ := ih t' s' (by omega) hInv'
+          refine ⟨rs, s'', ?_, hQ⟩
+          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+          exact heq
 
 end LeanMLIR.SLLVM
 
@@ -628,26 +789,33 @@ private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
     return some newGoal.mvarId!
 
 open Lean Meta Elab Tactic in
-/-- `denote_enter_block` steps a `Blocks.run bs Vamb t` goal into the block
-`t` selects: one `Blocks.run_step`, then the `Blocks.get` lookup is reduced
-by weak-head evaluation, so only the entered block is materialised -- the
-skipped blocks and the continuation's `bs` stay folded behind the region's
-definition. `denote_step_all` takes over from there. -/
-elab "denote_enter_block" : tactic => do
-  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.run_step
-    | throwError "denote_enter_block: the goal is not a `Blocks.run … t`. \
-        Resolve the terminator first, so the target is a concrete `SuccArgs`."
-  replaceMainGoal [g]
+/-- `denote_reduce_get` reduces a `Blocks.get` lookup in the goal by
+weak-head evaluation, so only the looked-up block is materialised -- the
+skipped blocks stay folded behind the region's definition. Used directly on
+a `Blocks.run_loop` step obligation, which states one block's run;
+`denote_enter_block` composes it with `Blocks.run_step`, and
+`denote_step_all` takes over from there. -/
+elab "denote_reduce_get" : tactic => do
   let goal ← getMainGoal
   let goal ← goal.withContext do
     let tgt ← instantiateMVars (← goal.getType)
     let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)
-      | throwError "denote_enter_block: could not find the block lookup"
+      | throwError "denote_reduce_get: no `Blocks.get` in the goal"
     let reduced ← whnf getApp
     let tgt' := tgt.replace fun e => if e == getApp then some reduced else none
     goal.replaceTargetDefEq tgt'
   replaceMainGoal [goal]
   evalTactic (← `(tactic| dsimp only))
+
+open Lean Meta Elab Tactic in
+/-- `denote_enter_block` steps a `Blocks.run bs Vamb t` goal into the block
+`t` selects: `Blocks.run_step`, then `denote_reduce_get`. -/
+elab "denote_enter_block" : tactic => do
+  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.run_step
+    | throwError "denote_enter_block: the goal is not a `Blocks.run … t`. \
+        Resolve the terminator first, so the target is a concrete `SuccArgs`."
+  replaceMainGoal [g]
+  evalTactic (← `(tactic| denote_reduce_get))
 
 open Lean Meta Elab Tactic in
 /-- `denote_step_all v` symbolically executes a pure, single-result-per-op

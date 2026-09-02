@@ -27,7 +27,7 @@ theorem fd_f25519_add_conforms (o p q: Pointer) (s: GlobalState)
     -- the add's result in the `readLimb?`/`readFieldElem?` form
     -- `fiat_25519_carry_conforms` takes
     have haddval? : readFieldElem? o (s.mem.splice o (packLimbs addres))
-        = some (readFieldElem p s.mem hp + readFieldElem q s.mem hq) := by
+        = some (readFieldElem hp + readFieldElem hq) := by
       rw [← haddval]; exact (Option.some_get _).symm
     have haddbounds? : ∀ (i : Fin 5) (l : ℕ),
         readLimb? o i (s.mem.splice o (packLimbs addres)) = some l → l ≤ 0x18000000000000 :=

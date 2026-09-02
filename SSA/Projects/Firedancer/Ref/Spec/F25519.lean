@@ -94,15 +94,20 @@ theorem isFieldElemPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : B
     (h : IsFieldElemPtr m q) : IsFieldElemPtr (m.splice p x) q :=
   ⟨fits_splice h.left, h.right⟩
 
-def readFieldElem (p: Pointer) (m: MemoryState) (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)
+def readFieldElem {p: Pointer} {m: MemoryState} (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)
 
 def readLimb (p: Pointer) (i : Fin 5) (m : MemoryState) (h: IsFieldElemPtr m p) := (readLimb? p i m).get (readLimb?_isSome i h)
 
 /-- Every limb at `p` is at most `bound`, which defaults to the tight bound
 `2^51` a carried field element satisfies. `fiat_25519_add`/`sub` leave a loose
 element, so they pass the larger bound explicitly. -/
-abbrev LimbBounds {p: Pointer} (h: IsFieldElemPtr m p) (bound : ℕ := 0x8000000000000) :=
-  ∀ i, readLimb p i m h ≤ bound
+abbrev LimbBounds (h: IsFieldElemPtr m q) (bound : ℕ := 0x8000000000000) :=
+  ∀ i, readLimb q i m h ≤ bound
+
+abbrev LimbBounds.Loose (h : IsFieldElemPtr m q) := LimbBounds h 0x18000000000000
+
+lemma LimbBounds.loose (lb : LimbBounds h) : LimbBounds.Loose h :=  fun i => le_trans (lb i) (by norm_num)
+
 
 /-- `LimbBounds` in the `readLimb?`-shaped form the conformance lemmas take.
 `readLimb?` carries no proof argument, so this is also the form to rewrite the
