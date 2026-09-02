@@ -100,14 +100,14 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
         simp [readPoint?, hc]
       simp only [P, readPoint, h4, Option.get_some]
 
-    have x : readFieldElem p s.mem xFieldElemPtr = P.X := by
+    have x : readFieldElem xFieldElemPtr = P.X := by
       have hc0 : readFieldElem? p s.mem = some (c 0) := by
         rw [← hc 0]; simp [readCoordinate?, Pointer.withOffset]
       rw [hPdef]; simp [decodePoint, readFieldElem, hc0]
     have x' : readFieldElem? p s.mem = some P.X := by
       rw [← x]
       exact (Option.some_get _).symm
-    have y : readFieldElem yPtr iszstate.mem yFieldElemPtr = P.Y := by
+    have y : readFieldElem yFieldElemPtr = P.Y := by
       have hc1 : readFieldElem? yPtr iszstate.mem = some (c 1) := by
         rw [← readFieldElem?_of_equiv hiszstate_eq yPtr, ← hc 1]
         simp [readCoordinate?, yPtr, Pointer.withOffset]
@@ -115,7 +115,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     have y' : readFieldElem? yPtr iszstate.mem = some P.Y := by
       rw [← y]
       exact (Option.some_get _).symm
-    have z : readFieldElem zPtr iszstate.mem zFieldElemPtr = P.Z := by
+    have z : readFieldElem zFieldElemPtr = P.Z := by
       have hc3 : readFieldElem? zPtr iszstate.mem = some (c 3) := by
         rw [← readFieldElem?_of_equiv hiszstate_eq zPtr, ← hc 3]
         simp [readCoordinate?, zPtr, Pointer.withOffset]

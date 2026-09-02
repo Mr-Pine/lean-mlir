@@ -653,6 +653,20 @@ theorem Valuation.cons_zero {ty : Ty} (s : Γ.Valuation) (x : toType ty)
     (s.cons x) v.toCons = s v :=
   rfl
 
+/-- `cons_toCons` in the shape a lifted program presents: a variable whose
+index is a *numeral*, so the `Var.toCons` pattern never matches syntactically.
+Peels one `cons` off both the valuation and the index -- what a proof needs
+whenever a block reads an ambient value past its own block arguments.
+
+Not `@[simp]`: matching a numeral against `?i + 1` pulls against the `Nat`
+literal simprocs, so apply it explicitly (`rw [Valuation.cons_succ]`, or in a
+`simp only [...]` list). -/
+theorem Valuation.cons_succ {ty t : Ty} (s : Γ.Valuation) (x : toType ty)
+    (i : Nat) (h : (Ctxt.cons ty Γ)[i + 1]? = some t) :
+    (s.cons x) ⟨i + 1, h⟩ = s ⟨i, h⟩ :=
+  rfl
+
+
 @[simp] theorem Valuation.cons_inj {t : Ty} {x y : ⟦t⟧} :
     (x ::ᵥ V) = (y ::ᵥ V) ↔ x = y where
   mpr := by rintro rfl; rfl

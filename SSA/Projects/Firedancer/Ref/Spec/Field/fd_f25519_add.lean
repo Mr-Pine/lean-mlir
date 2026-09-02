@@ -13,13 +13,13 @@ abbrev fd_f25519_add_spec (o p q: Pointer) (s: GlobalState)
     (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_add.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ ))
   let result := StateT.run invocation s
-  let p_input := readFieldElem p s.mem hp
-  let q_input := readFieldElem q s.mem hq
+  let p_input := readFieldElem hp
+  let q_input := readFieldElem hq
 
   ∃ out : Fin 5 → BitVec 64,
     let output_state : GlobalState := { s with mem := s.mem.splice o (packLimbs out) }
 
-    readFieldElem o output_state.mem (isFieldElemPtr_splice ho) = p_input + q_input
+    readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = p_input + q_input
     ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([.value o]ₕ, s') ∧ output_state ≈ s')
 

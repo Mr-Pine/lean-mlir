@@ -10,8 +10,8 @@ abbrev fd_f25519_mul_spec (o p q: Pointer) (s: GlobalState)
     (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_mul.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))
   let result := StateT.run invocation s
-  let p_input := readFieldElem p s.mem hp
-  let q_input := readFieldElem q s.mem hq
+  let p_input := readFieldElem hp
+  let q_input := readFieldElem hq
 
   ∃ out : BitVec (5 * 64),
     let output_state : GlobalState := { s with mem := s.mem.splice o out }

@@ -66,7 +66,7 @@ theorem readFieldElem?_of_live?_eq {m m' : MemoryState} {p : Pointer}
 
 /-- The total read, once the partial one is known. -/
 theorem readFieldElem_eq_of {m : MemoryState} {ptr : Pointer} {h : IsFieldElemPtr m ptr}
-    {v : ZMod p} (hv : readFieldElem? ptr m = some v) : readFieldElem ptr m h = v := by
+    {v : ZMod p} (hv : readFieldElem? ptr m = some v) : readFieldElem h = v := by
   simp only [readFieldElem, hv, Option.get_some]
 
 /-- An `alloca (5 * 64)` hands back exactly one field element: 40 bytes at
