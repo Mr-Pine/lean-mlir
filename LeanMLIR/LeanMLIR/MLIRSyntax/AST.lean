@@ -72,6 +72,11 @@ inductive MLIRType (φ : Nat) : Type _ where
   `vector<[2]x4xf32>` that this representation cannot express; the parser
   rejects those rather than silently reordering the dimensions. -/
   | vector (fixed scalable : List Nat) (elem : MLIRType φ) : MLIRType φ
+  /-- MLIR's builtin `tensor<…>` type, restricted to ranked, statically shaped
+  tensors: `tensor<2x3xi64>` is `⟨shape := [2, 3], elem := i64⟩`. Dynamic (`?`)
+  and unranked (`*`) dimensions have no representation here, so the parser
+  rejects them rather than dropping the distinction. -/
+  | tensor (shape : List Nat) (elem : MLIRType φ) : MLIRType φ
   /-- Dialect types the generic AST does not model, carried as their source
   text. Parametric ones (`!llvm.struct<…>`, `!llvm.array<…>`) keep their full
   `<…>` payload, which a dialect parser may interpret (SLLVM's

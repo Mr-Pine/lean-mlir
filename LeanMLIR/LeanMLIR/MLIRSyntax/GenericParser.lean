@@ -451,10 +451,12 @@ private partial def takeDims (cs : List Char) (acc : List VectorDim) :
   | some (d, 'x' :: rest) => takeDims rest (d :: acc)
   | _ => (acc.reverse, cs)
 
-/-- Elaborate the element type by handing its text back to `[mlir_type| ·]`. -/
-private def vectorElemType (s : String) (ref : Syntax) : MacroM (TSyntax `term) := do
+/-- Elaborate the element type by handing its text back to `[mlir_type| ·]`.
+`kind` only names the enclosing type (`vector`/`tensor`) in the error. -/
+private def shapedElemType (kind s : String) (ref : Syntax) :
+    MacroM (TSyntax `term) := do
   if s.isEmpty then
-    Macro.throwErrorAt ref "vector type is missing an element type"
+    Macro.throwErrorAt ref s!"{kind} type is missing an element type"
   else if s.startsWith "!" then
     `([mlir_type| ! $(Lean.quote (s.drop 1).toString):str])
   else
@@ -478,8 +480,40 @@ macro_rules
           followed by a scalable suffix"
       let fixedDims ← quoteMList (fixed.map fun d => Lean.quote d.size) (← `(Nat))
       let scaledDims ← quoteMList (scaled.map fun d => Lean.quote d.size) (← `(Nat))
-      let t ← vectorElemType (String.ofList rest) b
+      let t ← shapedElemType "vector" (String.ofList rest) b
       `(MLIRType.vector $fixedDims $scaledDims $t)
+
+-- === TENSOR TYPE ===
+
+-- tensor-type    ::= `tensor` `<` dimension-list tensor-element-type `>`
+-- dimension-list ::= (dimension `x`)*
+-- dimension      ::= decimal-literal | `?`
+--
+-- Same tokenizer problem as `vector` above (`5xi64` lexes as the numeral `5`
+-- followed by the identifier `xi64`), so the payload is captured raw and
+-- decoded during macro expansion.
+syntax "tensor" balancedBrackets : mlir_type
+
+macro_rules
+| `([mlir_type| tensor $b:balancedBrackets ]) => do
+      let .atom _ val := b.raw[0]
+        | Macro.throwErrorAt b "expected balanced brackets to have atom"
+      -- strip the enclosing `<` and `>`
+      let (dims, rest) := takeDims ((val.toList.drop 1).dropLast) []
+      -- Scalability is a `vector`-only notion; `MLIRType.tensor` has nowhere to
+      -- put it, so a bracketed dimension is an error rather than a silent drop.
+      if dims.any (·.scalable) then
+        Macro.throwErrorAt b s!"tensor type '{val}' has a scalable dimension, \
+          which only `vector` types admit"
+      -- `takeDims` stops at anything that is not a decimal dimension, so a
+      -- dynamic (`?`) or unranked (`*`) shape shows up as the element type.
+      if rest.head? == some '?' || rest.head? == some '*' then
+        Macro.throwErrorAt b s!"tensor type '{val}' is not statically shaped; \
+          `MLIRType.tensor` represents only ranked tensors with constant \
+          dimensions"
+      let shape ← quoteMList (dims.map fun d => Lean.quote d.size) (← `(Nat))
+      let t ← shapedElemType "tensor" (String.ofList rest) b
+      `(MLIRType.tensor $shape $t)
 
 -- Parametric dialect types (`!llvm.struct<"…", (…)>`, `!llvm.array<5 x i64>`):
 -- the payload nests types Lean's tokenizer cannot split (`>>`, `5 x i64`), so
@@ -548,6 +582,36 @@ private def vectorTy5 : MLIRTy := [mlir_type| vector<4x!shape.value>]
 
 /-- error: vector type is missing an element type -/
 #guard_msgs in #check ([mlir_type| vector<4x>] : MLIRTy)
+
+-- 0-D tensor: no dimensions at all
+private def tensorTy0 : MLIRTy := [mlir_type| tensor<i32>]
+/-- info: MLIR.AST.MLIRType.tensor [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
+#guard_msgs in #eval tensorTy0
+
+private def tensorTy1 : MLIRTy := [mlir_type| tensor<5xi64>]
+/-- info: MLIR.AST.MLIRType.tensor [5] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 64)) -/
+#guard_msgs in #eval tensorTy1
+
+private def tensorTy2 : MLIRTy := [mlir_type| tensor<2x3xf32>]
+/-- info: MLIR.AST.MLIRType.tensor [2, 3] (MLIR.AST.MLIRType.float 32) -/
+#guard_msgs in #eval tensorTy2
+
+-- dialect types are accepted as element types, as for `vector`
+private def tensorTy3 : MLIRTy := [mlir_type| tensor<4x!shape.value>]
+/-- info: MLIR.AST.MLIRType.tensor [4] (MLIR.AST.MLIRType.undefined "shape.value") -/
+#guard_msgs in #eval tensorTy3
+
+/-- error: tensor type '<?x4xf32>' is not statically shaped; `MLIRType.tensor` represents only ranked tensors with constant dimensions -/
+#guard_msgs in #check ([mlir_type| tensor<?x4xf32>] : MLIRTy)
+
+/-- error: tensor type '<*xf32>' is not statically shaped; `MLIRType.tensor` represents only ranked tensors with constant dimensions -/
+#guard_msgs in #check ([mlir_type| tensor<*xf32>] : MLIRTy)
+
+/-- error: tensor type '<[4]xf32>' has a scalable dimension, which only `vector` types admit -/
+#guard_msgs in #check ([mlir_type| tensor<[4]xf32>] : MLIRTy)
+
+/-- error: tensor type is missing an element type -/
+#guard_msgs in #check ([mlir_type| tensor<4x>] : MLIRTy)
 
 private def tensor1dTest : MLIRTy := [mlir_type| tensor1d]
 
