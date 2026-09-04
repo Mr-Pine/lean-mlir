@@ -9,14 +9,16 @@ open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
 
 open Lean Meta Elab Tactic in
-/-- The body of `peel_call`. `extra` are extra lemmas for the side goal that
-evaluates the call's *operands*.
+/-- The body of `peel_call` and `peel_call_nil`. `extra` are extra lemmas for
+the side goal that evaluates the call's *operands*; `cfgLem`/`bindLem`/`bareLem`
+select the value-returning or the void family of step lemmas.
 
 `argTys` is read off the goal's `BlockCom.call` node and pinned: `argVals`
 has type `HVector toType argTys.reverse`, so leaving it open asks Lean to
 invert `List.reverse` on an unknown list -- which does not fail, it grinds
 until the heartbeat limit. -/
-def peelCallCore (h : Term) (extra : Array Term) : TacticM Unit := do
+def peelCallCore (cfgLemN bindLemN bareLemN : Name) (h : Term) (extra : Array Term) :
+    TacticM Unit := do
   -- `call {Γ Γout rets succs argTys retTys csigs cΓout} callee centry cblocks args body`
   let argTys ← (← getMainGoal).withContext do
     let tgt ← instantiateMVars (← (← getMainGoal).getType)
@@ -33,9 +35,9 @@ def peelCallCore (h : Term) (extra : Array Term) : TacticM Unit := do
   let simpArgs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
     (defaults ++ extra).mapM fun t => `(Lean.Parser.Tactic.simpLemma| $t:term)
   let tys ← argTys.toSyntax
-  let cfgLem  := mkIdent ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value
-  let bindLem := mkIdent ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value
-  let bareLem := mkIdent ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_value
+  let cfgLem  := mkIdent cfgLemN
+  let bindLem := mkIdent bindLemN
+  let bareLem := mkIdent bareLemN
   evalTactic (← `(tactic| first
     -- the `>>=` shape `Cfg.denote` produces: the common case
     | rw [$bindLem:ident (argTys := $tys)
@@ -61,7 +63,10 @@ embedded by reference (`Cfg.ofCom` of a `Com` constant, or a `Cfg` constant)
 is folded back to that constant's own `denote`.
 
 `h : StateT.run (runFunction (callee.denote V)) t = .value ([x]ₕ, t')` -/
-elab "peel_call " h:term : tactic => peelCallCore h #[]
+elab "peel_call " h:term : tactic =>
+  peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_value h #[]
 
 open Lean Elab Tactic in
 /-- `peel_call h with l₁, l₂` is `peel_call h` with extra lemmas for the goal
@@ -70,7 +75,28 @@ valuation is concrete (`Cfg.denote` proofs), but a loop body reads its
 ambient values through an opaque valuation, so there the operands are only
 known from `EntryEnv`-style facts -- pass them here, or destructure the
 structure beforehand and let the `simp [*]` find them. -/
-elab "peel_call " h:term " with " l:term,+ : tactic => peelCallCore h l.getElems
+elab "peel_call " h:term " with " l:term,+ : tactic =>
+  peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_value h l.getElems
+
+open Lean Elab Tactic in
+/-- `peel_call_nil h` is `peel_call h` for a callee that returns nothing --
+every `fiat_25519_*` out-parameter kernel. The valuation is unchanged, so
+nothing enters the context.
+
+`h : StateT.run (runFunction (callee.denote V)) t = .value ([]ₕ, t')` -/
+elab "peel_call_nil " h:term : tactic =>
+  peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_nil h #[]
+
+open Lean Elab Tactic in
+/-- `peel_call_nil h with l₁, l₂`: the void form of `peel_call … with …`. -/
+elab "peel_call_nil " h:term " with " l:term,+ : tactic =>
+  peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_nil h l.getElems
 
 macro "simp_return" : tactic =>
   `(tactic| simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm, Ctxt.Valuation.singleton])

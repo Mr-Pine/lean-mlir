@@ -365,6 +365,28 @@ theorem BlockCom.run_denote_call_cfg_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets
   BlockCom.run_denote_call_of_value
     (by rw [Cfg.denote_mk_self, hargs]; exact h)
 
+/-- `run_bind_denote_call_of_nil` for a callee held by reference, with the
+operand vector supplied rather than inferred.
+
+Without `hargs` the only route is the plain bind lemma, whose `exact` unifies
+the operand vector against the block's valuation by `whnf`. That cost grows
+with every instruction already peeled, so in a long block the later calls
+dominate everything else. Staged here; belongs in `MLIR/DenoteStep.lean`
+beside its non-bind sibling. -/
+theorem BlockCom.run_bind_denote_call_cfg_of_nil
+    {Γ Γout : Ctxt SLLVM.Ty} {rets succs β} {argTys : List SLLVM.Ty} {callee : String}
+    {c : Cfg (Ctxt.ofList argTys.reverse) []}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
+    {argVals : HVector toType argTys.reverse}
+    (hargs : (args.map V).reverse = argVals)
+    (h : StateT.run (runFunction (c.denote (Ctxt.Valuation.ofHVector argVals))) s
+      = .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V >>= k) s
+      = StateT.run (body.denote V >>= k) s' :=
+  BlockCom.run_bind_denote_call_of_nil (by rw [Cfg.denote_mk_self, hargs]; exact h)
+
 /-- `run_denote_call_cfg_of_value`, for a callee that returns nothing. -/
 theorem BlockCom.run_denote_call_cfg_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
     {argTys : List SLLVM.Ty} {callee : String}
@@ -501,6 +523,42 @@ private partial def peelWrappers (e : Lean.Expr) :
   return (e, id, false)
 
 open Lean Meta in
+/-- Is this the denotation a stepper works on? -/
+private def isDenoteTerm (e : Lean.Expr) : MetaM Bool := do
+  let (core, _, _) ← peelWrappers e
+  return core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote
+    || core.isAppOf ``LeanMLIR.SLLVM.Cfg.denote
+
+open Lean Meta in
+/-- The denotation a stepper works on, and the goal's own right-hand side when
+the goal *is* that equation.
+
+Usually it is: the walk's goal is `StateT.run … s = …`. In the exec clause of a
+conformance statement -- `∃ s', StateT.run … = .value (rets, s') ∧ …` -- the
+equation sits inside the binder instead, so the search descends the goal's
+logical structure to find it. Only that structure is descended, never the
+denotation's own subterms, or a `Blocks.run` goal would match something nested
+inside the region it mentions.
+
+The bound state never occurs in the denotation, which is what the
+`hasLooseBVars` guard checks; without a right-hand side the caller rewrites the
+goal in place rather than by transitivity. -/
+private partial def findDenoteTerm? (tgt : Lean.Expr) :
+    MetaM (Option (Lean.Expr × Option Lean.Expr)) := do
+  let tgt ← whnfR tgt
+  -- an equation goal is what the steppers have always worked on: its left-hand
+  -- side is the term, whatever it denotes -- `Blocks.run` included
+  if let some (_, lhs, rhs) := tgt.eq? then
+    if lhs.hasLooseBVars then return none
+    return some (lhs, some rhs)
+  if tgt.isAppOf ``Exists || tgt.isAppOf ``And then
+    for arg in tgt.getAppArgs do
+      let body := if arg.isLambda then arg.bindingBody! else arg
+      if let some (lhs, _) ← findDenoteTerm? body then
+        unless lhs.hasLooseBVars do return some (lhs, none)
+  return none
+
+open Lean Meta in
 /-- A proof of `e.HasPureOp`, or `none` when the operation is not pure.
 
 `mkDecideProof` does *not* check that `decide p` reduces to `true`: it emits
@@ -539,7 +597,7 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
     (inline : Bool := false) : MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
-    let some (_, lhs, rhs) := tgt.eq? | return none
+    let some (lhs, rhs?) ← findDenoteTerm? tgt | return none
     let (core, rebuild, wrapped) ← peelWrappers lhs
     if core.isAppOf ``LeanMLIR.SLLVM.Cfg.denote then
       throwError "denote_step_all: the goal is still a whole `Cfg.denote`. Run \
@@ -607,13 +665,25 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
         pure stepEq
     -- `inline`: drop the value straight into the valuation spine instead of
     -- naming it, so no `v<i>`/`hv<i>` is introduced for this instruction.
+    -- The goal's own equation is rewritten by transitivity; a denotation found
+    -- inside a larger goal, by `Eq.mpr` through the abstraction.
+    let mkNewGoal (newLhs : Lean.Expr) : MetaM Lean.Expr := do
+      match rhs? with
+      | some rhs => mkEq newLhs rhs
+      | none => return (← kabstract tgt lhs).instantiate1 newLhs
+    let close (contPrf : Lean.Expr) : MetaM Lean.Expr := do
+      match rhs? with
+      | some _ => mkEqTrans stepEq contPrf
+      | none =>
+        let motive := Lean.Expr.lam `X (← inferType lhs) (← kabstract tgt lhs) .default
+        mkEqMPR (← mkCongrArg motive stepEq) contPrf
     if inline then
       let consV ← mkAppM ``Ctxt.Valuation.cons #[tVal, V]
       let newLhs ← mkAppM
         (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
       let newLhs := if wrapped then rebuild newLhs else newLhs
-      let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkEq newLhs rhs)
-      goal.assign (← mkEqTrans stepEq newGoal)
+      let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkNewGoal newLhs)
+      goal.assign (← close newGoal)
       return some newGoal.mvarId!
     let vName := baseName.appendAfter (toString i)
     let hName := Name.mkSimple ("h" ++ vName.toString)
@@ -626,14 +696,14 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
       let newLhs ← mkAppM
         (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
       let newLhs := if wrapped then rebuild newLhs else newLhs
-      let concl ← mkEq newLhs rhs
+      let concl ← mkNewGoal newLhs
       withLocalDeclD hName defEq fun h =>
         mkForallFVars #[v, h] concl
     let newGoal ← mkFreshExprSyntheticOpaqueMVar newType
-    -- oldGoal := stepEq.trans (newGoal (e.denoteOp1 V) rfl)
+    -- oldGoal := (goal at the stepped denotation) (e.denoteOp1 V) rfl, cast back
     let rflPrf ← mkEqRefl tVal
     let contPrf := mkApp2 newGoal tVal rflPrf
-    goal.assign (← mkEqTrans stepEq contPrf)
+    goal.assign (← close contPrf)
     let (_, goal2) ← newGoal.mvarId!.introN 2 [vName, hName]
     return some goal2
 
@@ -709,7 +779,7 @@ therefore always agrees with the `%i` of the MLIR program. -/
 def nextStepIndex (goal : MVarId) : MetaM Nat :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
-    let some (_, lhs, _) := tgt.eq? | return 0
+    let some (lhs, _) ← findDenoteTerm? tgt | return 0
     -- goals wrap the denotation in `StateT.run … s` and, for a CFG entry
     -- block, a `bind` as well; see `peelWrappers`.
     let (core, _, _) ← peelWrappers lhs
@@ -742,8 +812,8 @@ elab "denote_number_from" n:num : tactic => do
   let base := n.getNat
   let depth ← goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
-    let some (_, lhs, _) := tgt.eq?
-      | throwError "denote_number_from: the goal is not an equation"
+    let some (lhs, _) ← findDenoteTerm? tgt
+      | throwError "denote_number_from: no denotation in the goal"
     let (core, _, _) ← peelWrappers lhs
     let args := core.getAppArgs
     if args.size ≥ 1 then valuationDepth args[args.size - 1]! else pure 0
@@ -768,7 +838,7 @@ Returns the new goal, or `none` if the equation does not apply. -/
 private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
-    let some (_, lhs, rhs) := tgt.eq? | return none
+    let some (lhs, rhs?) ← findDenoteTerm? tgt | return none
     let (core, rebuild, wrapped) ← peelWrappers lhs
     let lemConst ← mkConstWithFreshMVarLevels lem
     let (mvars, _, concl) ← forallMetaTelescope (← inferType lemConst)
@@ -784,9 +854,17 @@ private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
         mkCongrArg lam proof
       else
         pure proof
-    let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkEq newLhs rhs)
-    goal.assign (← mkEqTrans proof newGoal)
-    return some newGoal.mvarId!
+    match rhs? with
+    | some rhs =>
+      let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkEq newLhs rhs)
+      goal.assign (← mkEqTrans proof newGoal)
+      return some newGoal.mvarId!
+    | none =>
+      let abst ← kabstract tgt lhs
+      let motive := Lean.Expr.lam `X (← inferType lhs) abst .default
+      let newGoal ← mkFreshExprSyntheticOpaqueMVar (abst.instantiate1 newLhs)
+      goal.assign (← mkEqMPR (← mkCongrArg motive proof) newGoal)
+      return some newGoal.mvarId!
 
 open Lean Meta Elab Tactic in
 /-- `denote_reduce_get` reduces a `Blocks.get` lookup in the goal by
