@@ -130,6 +130,20 @@ macro "peel_memset " b:term ", " len:term ", " p:term ", " hp:term ", " st:term 
           rfl)
     ]))
 
+/-- `peel_addressof hg` runs the next `llvm.mlir.addressof`, binding the
+global's address. Simpler than every other peel: the operation only reads the
+symbol table, so the state does not move.
+
+`hg : GlobalPtr s name p` -- or `h.ptr` from a `HoldsGlobal`. What the global
+*holds* is spent later, by the `peel_load`s that read through the pointer. -/
+macro "peel_addressof " hg:term : tactic =>
+  `(tactic|
+    rw [BlockCom.run_bind_denote_var_of_value
+      (x := PoisonOr.value _)
+      (by simp only [denoteOp_addressof, EffectM.run_map]
+          rw [run_addressof $hg]
+          rfl)])
+
 /-- `peel_alloca from s as t with ht` runs the next `llvm.alloca` instruction,
 binding the fresh pointer `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩` and advancing the state
 to `t`. `t` and `ht` are the first two facts
