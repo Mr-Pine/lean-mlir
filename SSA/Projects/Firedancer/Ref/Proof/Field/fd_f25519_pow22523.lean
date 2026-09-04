@@ -124,14 +124,15 @@ theorem mul_step {dst src₀ src₁ : Pointer} {u : GlobalState} (hu : u.WF)
         (Ctxt.Valuation.ofHVector [.value src₁, .value src₀, .value dst]ₕ))) u
         = .value ([.value dst]ₕ, u')
       ∧ StepFacts dst (w₀ * w₁) u u' := by
-  obtain ⟨out, hval, ⟨u', hrun, heq⟩, hbnd⟩ :=
+  obtain ⟨out, hval, hbnd, u', hrun, heq⟩ :=
     fd_f25519_mul_conforms dst src₀ src₁ u hu hd h₀ h₁
       (limbBounds_readLimb? h₀ hb₀) (limbBounds_readLimb? h₁ hb₁)
   refine ⟨u', hrun, ?_⟩
   have hval' : readFieldElem? dst u'.mem = some (w₀ * w₁) := by
     rw [← readFieldElem?_of_equiv heq]
     show readFieldElem? dst (u.mem.splice dst out) = _
-    rw [readFieldElem?_splice out hd.1, hval, hv₀, hv₁]
+    rw [← hv₀, ← hv₁, ← hval]
+    exact (Option.some_get _).symm
   exact {
     wf := GlobalState.WF.of_equiv hu.splice heq
     live := fun b hb => (heq.live b).symm.trans (live?_splice_ne hb)
@@ -139,7 +140,7 @@ theorem mul_step {dst src₀ src₁ : Pointer} {u : GlobalState} (hu : u.WF)
     ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
     val := readFieldElem_eq_of hval'
     bnd := limbBounds_of_readLimb? _
-      fun i l hl => hbnd i l (by rwa [readLimb?_of_equiv heq]) }
+      fun i l hl => limbBounds_readLimb? _ hbnd i l (by rwa [readLimb?_of_equiv heq]) }
 
 /-- One `sqr(dst, src)` call, peeled: the run equation for `peel_call` plus
 `StepFacts`. As with `mul_step`, `dst` may alias `src`. -/

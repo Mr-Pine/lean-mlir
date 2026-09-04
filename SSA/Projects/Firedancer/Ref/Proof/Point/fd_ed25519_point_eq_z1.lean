@@ -75,12 +75,22 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   have py1₂ : IsFieldElemPtr s₂.mem y1 := ⟨hfity1, by simp [hy1off]⟩
 
   -- `fd_f25519_mul( x1, b->X, a->Z )`
-  obtain ⟨x1bits, hx1bits, ⟨x1state, hx1state, hx1state_eq⟩, bx1⟩ :=
+  obtain ⟨x1bits, hx1val, bx1', x1state, hx1state, hx1state_eq⟩ :=
     fd_f25519_mul_conforms x1 b (a.withOffset 120) s₂ hs₂ px1₂
       (isFieldElemPtr_of_live?_eq (hS₂ b pbX) pbX)
       (isFieldElemPtr_of_live?_eq (hS₂ _ paZ) paZ)
       (limbBounds_of_live?_eq (hS₂ b pbX) (fun i l h => (bbX i l h).trans (by norm_num)))
       (limbBounds_of_live?_eq (hS₂ _ paZ) (fun i l h => (baZ i l h).trans (by norm_num)))
+
+  -- the callee states its result as a readback; the limbs it wrote are what
+  -- the comparisons below rewrite with
+  have hx1bits : decodeFieldElem (fun i => (x1bits.extractLsb' (64 * i.toNat) 64).toNat)
+      = readFieldElem (isFieldElemPtr_of_live?_eq (hS₂ b pbX) pbX)
+        * readFieldElem (isFieldElemPtr_of_live?_eq (hS₂ _ paZ) paZ) :=
+    (readFieldElem_eq_of (readFieldElem?_splice x1bits px1₂.left)).symm.trans hx1val
+  have bx1 : ∀ (i : Fin 5) (l : ℕ),
+      readLimb? x1 i (s₂.mem.splice x1 x1bits) = some l → l ≤ 0x8000000000000 :=
+    limbBounds_readLimb? _ bx1'
 
   -- the frame fact speaks only about blocks that predate the region; the
   -- *sibling local* is above the counter, so it needs the write's own equation
@@ -100,12 +110,20 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     isFieldElemPtr_of_live?_eq (hlivex1 y1.id hxy) py1₂
 
   -- `fd_f25519_mul( y1, b->Y, a->Z )`
-  obtain ⟨y1bits, hy1bits, ⟨y1state, hy1state, hy1state_eq⟩, by1⟩ :=
+  obtain ⟨y1bits, hy1val, by1', y1state, hy1state, hy1state_eq⟩ :=
     fd_f25519_mul_conforms y1 (b.withOffset 40) (a.withOffset 120) x1state hx1WF py1X
       (isFieldElemPtr_of_live?_eq (hX _ pbY) pbY)
       (isFieldElemPtr_of_live?_eq (hX _ paZ) paZ)
       (limbBounds_of_live?_eq (hX _ pbY) (fun i l h => (bbY i l h).trans (by norm_num)))
       (limbBounds_of_live?_eq (hX _ paZ) (fun i l h => (baZ i l h).trans (by norm_num)))
+
+  have hy1bits : decodeFieldElem (fun i => (y1bits.extractLsb' (64 * i.toNat) 64).toNat)
+      = readFieldElem (isFieldElemPtr_of_live?_eq (hX _ pbY) pbY)
+        * readFieldElem (isFieldElemPtr_of_live?_eq (hX _ paZ) paZ) :=
+    (readFieldElem_eq_of (readFieldElem?_splice y1bits py1X.left)).symm.trans hy1val
+  have by1 : ∀ (i : Fin 5) (l : ℕ),
+      readLimb? y1 i (x1state.mem.splice y1 y1bits) = some l → l ≤ 0x8000000000000 :=
+    limbBounds_readLimb? _ by1'
 
   have hlivey1 : ∀ r : BlockId, r ≠ y1.id → y1state.mem.live? r = x1state.mem.live? r :=
     fun r hr => (hy1state_eq.live r).symm.trans (live?_splice_ne (Ne.symm hr))

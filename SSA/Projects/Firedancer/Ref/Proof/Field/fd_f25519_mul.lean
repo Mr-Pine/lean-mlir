@@ -16,7 +16,7 @@ theorem fd_f25519_mul_conforms (o p q : Pointer) (s : GlobalState)
     (hq : IsFieldElemPtr s.mem q)
     (hplimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x18000000000000)
     (hqlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x18000000000000) :
-    fd_f25519_mul_spec o p q s hp hq := by
+    fd_f25519_mul_spec o p q s ho hp hq := by
   simp only [fd_f25519_mul_spec, Cfg.denote]
 
   obtain ⟨out, hout, ⟨mulstate, hmulstate, hmulstate_eq⟩, hbounds⟩ :=
@@ -28,8 +28,11 @@ theorem fd_f25519_mul_conforms (o p q : Pointer) (s : GlobalState)
   have hpop : (s.popFrame mulstate.mem : GlobalState) ≈ mulstate :=
     GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hmulstate_eq.1, hmulstate_eq.globals, fun _ => rfl⟩
 
-  refine ⟨out, hout, ⟨s.popFrame mulstate.mem, ?_,
-    GlobalState.Equiv.trans hmulstate_eq (GlobalState.Equiv.symm hpop)⟩, hbounds⟩
+  -- the fiat callee states its result as the limbs it wrote; read them back
+  refine ⟨out, (readFieldElem_eq_of (readFieldElem?_splice out ho.left)).trans hout,
+    limbBounds_of_readLimb? _ hbounds,
+    ⟨s.popFrame mulstate.mem, ?_,
+      GlobalState.Equiv.trans hmulstate_eq (GlobalState.Equiv.symm hpop)⟩⟩
 
   refine run_runFunction (s' := mulstate) ?_
 

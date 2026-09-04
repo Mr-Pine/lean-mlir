@@ -7,6 +7,7 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 abbrev fd_f25519_mul_spec (o p q: Pointer) (s: GlobalState)
+    (ho : IsFieldElemPtr s.mem o)
     (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_mul.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))
   let result := StateT.run invocation s
@@ -16,8 +17,8 @@ abbrev fd_f25519_mul_spec (o p q: Pointer) (s: GlobalState)
   ∃ out : BitVec (5 * 64),
     let output_state : GlobalState := { s with mem := s.mem.splice o out }
 
-    decodeFieldElem (fun i => (out.extractLsb' (64 * i.toNat) 64).toNat) = p_input * q_input
+    readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = p_input * q_input
+    ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([.value o]ₕ, s') ∧ output_state ≈ s')
-    ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? o i output_state.mem = some l → l ≤ 0x8000000000000
 
 end Firedancer.Ref
