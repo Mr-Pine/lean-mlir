@@ -20,7 +20,7 @@ open LeanMLIR
 fuel, every terminating test below is UB when it is `none`. -/
 private def run {Γin : Ctxt SLLVM.Ty} (cfg : Cfg Γin [SLLVM.Ty.bitvec 32])
     (V : Γin.Valuation) : Option (PoisonOr (BitVec 32)) :=
-  match Cfg.eval 100 cfg V ⟨⟨0⟩, ⟨∅⟩⟩ with
+  match Cfg.eval 100 cfg V ⟨⟨0⟩, ⟨∅⟩, ∅⟩ with
   | some (.value (rs, _)) => some rs.head
   | _ => none
 
@@ -225,7 +225,7 @@ def spin : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm
     "llvm.return"(%arg0) : (i32) -> ()
 }]
 
-#guard (Cfg.eval 100 spin (Ctxt.Valuation.singleton (PoisonOr.value 0#32)) ⟨⟨0⟩, ⟨∅⟩⟩).isNone
+#guard (Cfg.eval 100 spin (Ctxt.Valuation.singleton (PoisonOr.value 0#32)) ⟨⟨0⟩, ⟨∅⟩, ∅⟩).isNone
 
 /-- An edge that is *forward in the CFG* but backward in the printed block
 order (`^bb2 → ^bb1`) -- the pow22523 shape that indexing targets by the

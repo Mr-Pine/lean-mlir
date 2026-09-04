@@ -17,7 +17,7 @@ open LeanMLIR
 
 private def runScalar (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :
     Option (PoisonOr (BitVec 64)) :=
-  ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption.map (fun r => r.1.head)
+  ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption.map (fun r => r.1.head)
 
 /-- Element 1 of an i64 pair, written and read back through the gep'd
 pointer: the gep must land at byte offset 8, not 1. -/

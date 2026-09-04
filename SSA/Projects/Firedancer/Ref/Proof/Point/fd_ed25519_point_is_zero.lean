@@ -56,7 +56,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     case refine_2 =>
       have hchain := GlobalState.Equiv.trans hiszstate_eq heqstate_eq
       exact GlobalState.Equiv.symm
-        (GlobalState.killFrom_equiv eqstate.mem hs (fun q _ => (hchain.2 q).symm))
+        (GlobalState.killFrom_equiv eqstate.mem hs (fun q _ => (hchain.live q).symm))
 
     denote_step_all v 2
     denote_eval v 2 2

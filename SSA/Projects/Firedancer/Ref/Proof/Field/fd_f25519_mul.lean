@@ -26,7 +26,7 @@ theorem fd_f25519_mul_conforms (o p q : Pointer) (s : GlobalState)
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → mulstate.mem.live? t = none := by
     rw [hmulstate_eq.1]; exact hmulWF
   have hpop : (s.popFrame mulstate.mem : GlobalState) ≈ mulstate :=
-    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hmulstate_eq.1, fun _ => rfl⟩
+    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hmulstate_eq.1, hmulstate_eq.globals, fun _ => rfl⟩
 
   refine ⟨out, hout, ⟨s.popFrame mulstate.mem, ?_,
     GlobalState.Equiv.trans hmulstate_eq (GlobalState.Equiv.symm hpop)⟩, hbounds⟩

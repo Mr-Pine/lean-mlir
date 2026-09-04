@@ -221,7 +221,7 @@ theorem Blocks.next_mono {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuatio
 theorem run_runFunction_poison {α : Type} {body : EffectM α} {s : GlobalState}
     (h : StateT.run body s = .poison) :
     StateT.run (runFunction body) s = .poison := by
-  simp only [runFunction, EffectM.run_bind, run_getThe_alloc, PoisonOr.value_bind, h]
+  simp only [runFunction, EffectM.run_bind, run_getThe_state, PoisonOr.value_bind, h]
   rfl
 
 /-- `Blocks.run` is *defined* as the limit of `Blocks.iterate`; restated for

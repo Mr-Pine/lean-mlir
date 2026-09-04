@@ -244,6 +244,16 @@ def alloca (w : Nat) : EffectM SLLVM.Ptr := do
     }
   return ptr
 
+/-- `llvm.mlir.addressof`. The address is the one the state records for the
+symbol; an unknown symbol is UB, so a caller has to say the global is there.
+Nothing is read from memory and nothing is checked, so a *mutable* global needs
+no special treatment -- a store through one `addressof` is seen by every other,
+because they name the same block. -/
+def addressof (name : String) : EffectM SLLVM.Ptr := do
+  match (← getThe GlobalState).globals[name]? with
+  | some p => return .value p
+  | none => throwUB
+
 /-- The state an `alloca w` leaves: a zeroed block of `w` bits at the counter,
 the counter advanced past it. The pointer it hands back is
 `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩`; see `run_alloca`. -/
@@ -251,6 +261,7 @@ def _root_.LeanMLIR.GlobalState.afterAlloca (s : GlobalState) (w : Nat) : Global
   alloc := ⟨s.alloc.nextFreeBlock + 1⟩
   mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
             (.live { length := (w + 7) / 8, bytes := 0#_ })⟩
+  globals := s.globals
 
 /-- Mark dead every block with id at least `n₀`: the *frame* of a call that
 was entered at `nextFreeBlock = n₀`. Ids come from that monotonic counter and
@@ -270,6 +281,9 @@ def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) :
 def _root_.LeanMLIR.GlobalState.popFrame (s : GlobalState) (m : MemoryState) : GlobalState where
   alloc := s.alloc
   mem := m.killFrom s.alloc.nextFreeBlock
+  -- Globals outlive every frame: they are not allocated by `alloca`, so no
+  -- frame pop can reach them.
+  globals := s.globals
 
 /-- The returned-to state, packaged for `obtain`:
 `obtain ⟨s'', hs''⟩ := GlobalState.exists_popFrame s s'.mem` names it opaquely,
@@ -283,8 +297,13 @@ every block allocated since the snapshot -- and restore the counter. After it
 the stack is as it was on entry up to the blocks the body wrote through its
 arguments, which is what `GlobalState.Equiv` captures. -/
 def runFunction {α : Type} (body : EffectM α) : EffectM α := do
-  let alloc ← getThe AllocState
+  let entry ← getThe GlobalState
   let r ← body
-  modifyThe MemoryState (MemoryState.killFrom alloc.nextFreeBlock)
-  modifyThe AllocState fun _ => alloc
+  modifyThe MemoryState (MemoryState.killFrom entry.alloc.nextFreeBlock)
+  modifyThe AllocState fun _ => entry.alloc
+  -- The symbol table is restored along with the counter. No operation writes
+  -- it, so this is a no-op in any execution the dialect can produce; it is
+  -- what makes the write-once invariant hold at a call boundary structurally,
+  -- rather than only for bodies built from SLLVM operations.
+  modifyThe GlobalState ({ · with globals := entry.globals })
   return r

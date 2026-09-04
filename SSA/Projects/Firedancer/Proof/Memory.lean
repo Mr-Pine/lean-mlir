@@ -32,7 +32,7 @@ theorem splice_splice_append_equiv {s : GlobalState} {p : Pointer} {o : BitVec 6
     (ho : (p.withOffset o).offsetInBits = p.offsetInBits + w) :
     ({ s with mem := (s.mem.splice p x).splice (p.withOffset o) y } : GlobalState)
       ≈ { s with mem := s.mem.splice p (y ++ x) } := by
-  refine ⟨rfl, fun q => ?_⟩
+  refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
     -- `(p.withOffset o).id` is `p.id`, but only up to projection-of-constructor,
@@ -57,13 +57,13 @@ theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
     (h : s ≈ s') :
     ({ s with mem := s.mem.splice p x } : GlobalState)
       ≈ { s' with mem := s'.mem.splice p x } := by
-  refine ⟨h.1, fun q => ?_⟩
+  refine ⟨h.1, h.globals, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
     cases hb : s.mem.live? p.id with
-    | none => rw [splicedDead hb, splicedDead ((h.2 p.id).symm.trans hb)]
-    | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.2 p.id).symm.trans hb)]
-  · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.2 q
+    | none => rw [splicedDead hb, splicedDead ((h.live p.id).symm.trans hb)]
+    | some b => rw [splicedLive _ _ _ hb, splicedLive _ _ _ ((h.live p.id).symm.trans hb)]
+  · rw [live?_splice_ne hq, live?_splice_ne hq]; exact h.live q
 
 /-- The frame kill at the end of a call that allocated nothing is invisible:
 every block it could kill is dead already. -/
@@ -71,7 +71,7 @@ theorem killFrom_equiv_of_none {s : GlobalState} {m : MemoryState}
     (hnone : ∀ q : BlockId, s.alloc.nextFreeBlock ≤ q.id → m.live? q = none) :
     ({ s with mem := m.killFrom s.alloc.nextFreeBlock } : GlobalState)
       ≈ { s with mem := m } := by
-  refine ⟨rfl, fun q => ?_⟩
+  refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : q.id < s.alloc.nextFreeBlock
   · exact live?_killFrom_of_lt hq
   · rw [live?_killFrom_of_le (by omega), hnone q (by omega)]
@@ -173,7 +173,7 @@ theorem splice {t : Pointer} {w : Nat} {x : BitVec w} (ht : n₀ ≤ t.id.id)
 /-- A callee's result state is equivalent to a splice state; the frame
 transports along the equivalence. -/
 theorem of_equiv (he : s' ≈ s'') (hf : FrameBelow n₀ s s') : FrameBelow n₀ s s'' :=
-  fun b hb => (he.2 b).symm.trans (hf b hb)
+  fun b hb => (he.live b).symm.trans (hf b hb)
 
 /-- The `popFrame` ending: a region entered at `s` whose final state kept the
 frame restores `s` up to equivalence. -/
@@ -203,7 +203,7 @@ theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} 
       m.live? b = s.mem.live? b)
     (hoval : m.live? o.id = (s.mem.splice o x).live? o.id) :
     ({ s with mem := s.mem.splice o x } : GlobalState) ≈ s.popFrame m := by
-  refine ⟨rfl, fun b => ?_⟩
+  refine ⟨rfl, rfl, fun b => ?_⟩
   show (s.mem.splice o x).live? b = (m.killFrom s.alloc.nextFreeBlock).live? b
   by_cases hb : b.id < s.alloc.nextFreeBlock
   · rw [live?_killFrom_of_lt hb]

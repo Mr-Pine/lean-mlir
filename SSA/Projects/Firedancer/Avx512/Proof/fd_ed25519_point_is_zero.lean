@@ -93,7 +93,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     have hslotAlloc : (s.afterAlloca (3 * 8 * 64)).mem.live? slot.id = some ⟨192, 0#1536⟩ :=
       live?_afterAlloca_self s (3 * 8 * 64)
     have hzslotE : zstate.mem[slot.id]? = some (.live zblk) :=
-      getElem?_of_live? <| (hzstate_eq.2 _).symm.trans <| splicedLive _ slot _ hslotAlloc zquad.BV
+      getElem?_of_live? <| (hzstate_eq.live _).symm.trans <| splicedLive _ slot _ hslotAlloc zquad.BV
     have hzslotFits : Fits zstate.mem slot (3 * 8 * 64) :=
       ⟨zblk, hzslotE, by simp [slot, zblk, Pointer.offsetInBits, LiveBlock.lengthInBits]⟩
     have hslotOff : slot.offsetInBits = 0 := by simp [slot, Pointer.offsetInBits]

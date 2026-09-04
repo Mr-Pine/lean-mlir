@@ -12,7 +12,7 @@ open InstCombine (LLVM)
 theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : BitVec w) :
     ({ s with mem := (s.mem.splice p x).splice p y } : GlobalState)
       ≈ { s with mem := s.mem.splice p y } := by
-  refine ⟨rfl, fun q => ?_⟩
+  refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
     cases hb : s.mem.live? p.id with
@@ -26,8 +26,7 @@ theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : Bit
 theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n: Nat}
     (hs: s ≈ s') (h : Fits s.mem p n) : Fits s'.mem p n := by
   obtain ⟨block, hblk, hlen⟩ := h
-  simp only [GlobalState.equiv_def] at hs
-  have block_equiv := hs.right p.id
+  have block_equiv := hs.live p.id
   simp only [MemoryState.live?, hblk] at block_equiv
   -- `live?` is a `match`, so `block_equiv` is one too; splitting it names the
   -- branch and hands over the scrutinee's equation, which is the lookup wanted.

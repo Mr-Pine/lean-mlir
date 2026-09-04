@@ -373,6 +373,15 @@ instance : DialectParse SLLVM 0 where
     | "llvm.intr.memset" => do
         let _ ← args.assumeArity 3
         mkExprOf <| SLLVMOp.memset
+    -- A global's address, read out of the state's symbol table. The
+    -- initialiser is not bound here: the table is keyed by name, so what the
+    -- global holds is a spec-level hypothesis, not something the program
+    -- carries. See `SLLVM.addressof`.
+    | "llvm.mlir.addressof" => do
+        let some (.symbol g) := opStx.getAttr? "global_name"
+          | throw <| .generic "llvm.mlir.addressof: expected a `global_name` \
+              symbol attribute"
+        opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ <| SLLVMOp.addressof g
     -- Stack-coloring metadata: no semantics here, but part of the artifact, so
     -- they parse (and denote to nothing) rather than having to be stripped.
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true

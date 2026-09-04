@@ -23,7 +23,7 @@ theorem fd_f25519_frombytes_conforms (o p : Pointer) (s : GlobalState)
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → decstate.mem.live? t = none := by
     rw [hdecstate_eq.1]; exact hdecWF
   have hpop : (s.popFrame decstate.mem : GlobalState) ≈ decstate :=
-    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hdecstate_eq.1, fun _ => rfl⟩
+    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hdecstate_eq.1, hdecstate_eq.globals, fun _ => rfl⟩
 
   refine ⟨out, hout, hbounds, ⟨s.popFrame decstate.mem, ?_,
     GlobalState.Equiv.trans hdecstate_eq (GlobalState.Equiv.symm hpop)⟩⟩

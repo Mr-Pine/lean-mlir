@@ -37,15 +37,29 @@ structure MemoryState where
   mem : Std.HashMap BlockId Block
   deriving Inhabited
 
-structure GlobalState where
-  alloc : AllocState
-  mem : MemoryState
-
 structure Pointer where
   id : BlockId
   /-- Offset in bytes -/
   offset : BitVec 64
-  deriving Inhabited
+  deriving DecidableEq, Inhabited
+
+/--
+`GlobalState` is the whole machine state: the allocator, the contents of
+memory, and the module's global symbols.
+
+`globals` is *write-once*: `GlobalState.ofGlobals` installs it when a module is
+loaded and no operation may add, remove or repoint an entry -- `addressof` only
+reads it. That is what makes every `addressof` of a symbol, at any call depth,
+name the same block. The invariant is not structural; `GlobalState.Equiv`
+carries it, so a region that touched the table could not satisfy its spec.
+
+The value is a `Pointer` rather than a `BlockId` because an `@alias` points
+*into* an existing global at an offset.
+-/
+structure GlobalState where
+  alloc : AllocState
+  mem : MemoryState
+  globals : Std.HashMap String Pointer
 
 /-! ## Basic Definitions -/
 
@@ -73,7 +87,7 @@ instance : Refinement MemoryState where
 
 instance : Refinement GlobalState where
   IsRefinedBy s t :=
-    s.alloc ⊑ t.alloc ∧ s.mem ⊑ t.mem
+    s.alloc ⊑ t.alloc ∧ s.mem ⊑ t.mem ∧ s.globals = t.globals
 
 
 
@@ -81,7 +95,7 @@ section Lemmas
 
 @[simp_sllvm]
 theorem GlobalState.isRefinedBy_iff (s t : GlobalState) :
-    s ⊑ t ↔ s.alloc ⊑ t.alloc ∧ s.mem ⊑ t.mem := by
+    s ⊑ t ↔ s.alloc ⊑ t.alloc ∧ s.mem ⊑ t.mem ∧ s.globals = t.globals := by
   rfl
 
 @[simp_sllvm]

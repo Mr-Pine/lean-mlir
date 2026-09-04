@@ -79,10 +79,10 @@ theorem fd_f25519_add_conforms (o p q: Pointer) (s: GlobalState)
     have hpop : (s.popFrame carrystate.mem : GlobalState) ≈ carrystate :=
       GlobalState.Equiv.trans
         (killFrom_equiv_of_none (fun t ht => hcarryWF t (by rw [hcalloc]; omega)))
-        ⟨hcalloc.symm, fun _ => rfl⟩
+        ⟨hcalloc.symm, haddstate_eq.globals.trans hcarrystate_eq.globals, fun _ => rfl⟩
 
     have hkill : (addstate : GlobalState)
-        ≈ { alloc := s.alloc, mem := s.mem.splice o (packLimbs addres) } :=
+        ≈ { alloc := s.alloc, mem := s.mem.splice o (packLimbs addres), globals := s.globals } :=
       GlobalState.Equiv.symm haddstate_eq
 
     refine ⟨fun i => carryres.extractLsb' (64 * i.toNat) 64, ?value, ?bounds,

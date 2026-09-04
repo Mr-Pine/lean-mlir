@@ -21,7 +21,7 @@ theorem fiat_25519_cmovznz_u64_conforms (o : Pointer) (c : BitVec 8) (a b : BitV
       rw [houtMem]
       exact fun q hq => live?_splice_eq_none (hs q hq)
     exact GlobalState.Equiv.symm
-      (GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨rfl, fun _ => rfl⟩)
+      (GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨rfl, rfl, fun _ => rfl⟩)
 
   denote_step_all v 2
   denote_eval v 0 2

@@ -29,7 +29,7 @@ theorem fd_ed25519_point_eq_conforms (p q: Pointer) (s: GlobalState)
       spec_run_fd_r43x6_ge_is_eq (readQuad hp) (readQuad hq) hpU46 hqU46 hpzUnit hqzUnit s hs
 
     refine ⟨s.popFrame eqstate.mem, run_runFunction (s' := eqstate) ?_, GlobalState.Equiv.symm
-      (GlobalState.killFrom_equiv eqstate.mem hs fun b _ => heqstate_eq.2 b)⟩
+      (GlobalState.killFrom_equiv eqstate.mem hs fun b _ => heqstate_eq.live b)⟩
 
     denote_step_all v 2
     denote_eval v 0 2

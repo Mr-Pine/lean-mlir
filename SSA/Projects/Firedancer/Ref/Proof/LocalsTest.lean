@@ -89,7 +89,7 @@ theorem localsChain_conforms (o a : Pointer) (s : GlobalState) (hs : s.WF)
     fd_f25519_set_conforms t₁ a s₃ hs₃WF ht₁a pt₁s₃ pas₃
   have hu₁WF : u₁.WF := GlobalState.WF.of_equiv hs₃WF.splice heq₁
   have hlive₁ : ∀ b : BlockId, t₁.id ≠ b → u₁.mem.live? b = s₃.mem.live? b :=
-    fun b hb => (heq₁.2 b).symm.trans (live?_splice_ne hb)
+    fun b hb => (heq₁.live b).symm.trans (live?_splice_ne hb)
   have fbu₁ : FrameBelow s.alloc.nextFreeBlock s u₁ :=
     FrameBelow.of_equiv heq₁ (FrameBelow.splice (by omega) fb₃)
   have pt₂u₁ : IsFieldElemPtr u₁.mem t₂ :=
@@ -102,7 +102,7 @@ theorem localsChain_conforms (o a : Pointer) (s : GlobalState) (hs : s.WF)
     fd_f25519_set_conforms t₂ t₁ u₁ hu₁WF ht₂t₁ pt₂u₁ pt₁u₁
   have hu₂WF : u₂.WF := GlobalState.WF.of_equiv hu₁WF.splice heq₂
   have hlive₂ : ∀ b : BlockId, t₂.id ≠ b → u₂.mem.live? b = u₁.mem.live? b :=
-    fun b hb => (heq₂.2 b).symm.trans (live?_splice_ne hb)
+    fun b hb => (heq₂.live b).symm.trans (live?_splice_ne hb)
   have fbu₂ : FrameBelow s.alloc.nextFreeBlock s u₂ :=
     FrameBelow.of_equiv heq₂ (FrameBelow.splice (by omega) fbu₁)
   have pt₃u₂ : IsFieldElemPtr u₂.mem t₃ :=
@@ -116,7 +116,7 @@ theorem localsChain_conforms (o a : Pointer) (s : GlobalState) (hs : s.WF)
     fd_f25519_set_conforms t₃ t₂ u₂ hu₂WF ht₃t₂ pt₃u₂ pt₂u₂
   have hu₃WF : u₃.WF := GlobalState.WF.of_equiv hu₂WF.splice heq₃
   have hlive₃ : ∀ b : BlockId, t₃.id ≠ b → u₃.mem.live? b = u₂.mem.live? b :=
-    fun b hb => (heq₃.2 b).symm.trans (live?_splice_ne hb)
+    fun b hb => (heq₃.live b).symm.trans (live?_splice_ne hb)
   have fbu₃ : FrameBelow s.alloc.nextFreeBlock s u₃ :=
     FrameBelow.of_equiv heq₃ (FrameBelow.splice (by omega) fbu₂)
   have pou₃ : IsFieldElemPtr u₃.mem o := isFieldElemPtr_of_live?_eq (fbu₃ o.id hno) ho
@@ -146,10 +146,10 @@ theorem localsChain_conforms (o a : Pointer) (s : GlobalState) (hs : s.WF)
     have hf : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o.id →
         u₄.mem.live? b = s.mem.live? b := by
       intro b hb hbo
-      rw [(heq₄.2 b).symm, live?_splice_ne (fun h => hbo h.symm)]
+      rw [(heq₄.live b).symm, live?_splice_ne (fun h => hbo h.symm)]
       exact fbu₃ b hb
     have hoval : u₄.mem.live? o.id = (s.mem.splice o o₄).live? o.id :=
-      (heq₄.2 o.id).symm.trans (live?_splice_congr (fbu₃ o.id hno))
+      (heq₄.live o.id).symm.trans (live?_splice_congr (fbu₃ o.id hno))
     exact popFrame_equiv_splice hs hno hf hoval
 
   case run =>

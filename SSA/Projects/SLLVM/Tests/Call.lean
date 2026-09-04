@@ -112,7 +112,7 @@ value -- and the call returns `7`: internal memory use is unaffected. -/
 
 private def runImpure (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :
     Option (BitVec 64) := do
-  let r ← ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption
+  let r ← ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption
   r.1.head.toOption
 
 def callUsesOwnSlot : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] :=
@@ -134,7 +134,7 @@ def callUsesOwnSlot : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 6
 /-- And the counter is back where it was: the frame is popped, not leaked. -/
 private def counterAfter (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :
     Option Nat := do
-  let r ← ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption
+  let r ← ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption
   pure r.2.alloc.nextFreeBlock
 
 #guard counterAfter callUsesOwnSlot == some 0

@@ -153,10 +153,13 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
       GlobalState.Equiv.trans (splice_equiv (p := r.withOffset 80) (x := oT) c₃) heq₄
     have halloc : u₄.alloc = s.alloc :=
       (heq₁.1.trans (heq₂.1.trans (heq₃.1.trans heq₄.1))).symm
+    -- the symbol table rides through the four callees unchanged, as `≈` says
+    have hglobals : s.globals = u₄.globals :=
+      heq₁.globals.trans (heq₂.globals.trans (heq₃.globals.trans heq₄.globals))
     have hpop : (s.popFrame u₄.mem : GlobalState) ≈ u₄ :=
       GlobalState.Equiv.trans
         (killFrom_equiv_of_none (fun b hb => hu₄WF b (by rw [halloc]; omega)))
-        ⟨halloc.symm, fun _ => rfl⟩
+        ⟨halloc.symm, hglobals, fun _ => rfl⟩
     exact GlobalState.Equiv.trans hchain (GlobalState.Equiv.symm hpop)
 
   case run =>

@@ -134,8 +134,8 @@ theorem mul_step {dst src₀ src₁ : Pointer} {u : GlobalState} (hu : u.WF)
     rw [readFieldElem?_splice out hd.1, hval, hv₀, hv₁]
   exact {
     wf := GlobalState.WF.of_equiv hu.splice heq
-    live := fun b hb => (heq.2 b).symm.trans (live?_splice_ne hb)
-    splice := ⟨out, (heq.2 dst.id).symm⟩
+    live := fun b hb => (heq.live b).symm.trans (live?_splice_ne hb)
+    splice := ⟨out, (heq.live dst.id).symm⟩
     ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
     val := readFieldElem_eq_of hval'
     bnd := limbBounds_of_readLimb? _
@@ -160,8 +160,8 @@ theorem sqr_step {dst src : Pointer} {u : GlobalState} (hu : u.WF)
     rw [readFieldElem?_eq_some (isFieldElemPtr_splice hd) hval, hv]
   exact {
     wf := GlobalState.WF.of_equiv hu.splice heq
-    live := fun b hb' => (heq.2 b).symm.trans (live?_splice_ne hb')
-    splice := ⟨packLimbs out, (heq.2 dst.id).symm⟩
+    live := fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb')
+    splice := ⟨packLimbs out, (heq.live dst.id).symm⟩
     ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
     val := readFieldElem_eq_of hval'
     bnd := limbBounds_of_equiv heq hbnd }

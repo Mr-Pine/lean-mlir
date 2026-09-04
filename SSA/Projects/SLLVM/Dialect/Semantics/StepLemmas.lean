@@ -30,6 +30,10 @@ open InstCombine (LLVM)
 /-! ## Effects on a concrete state -/
 
 @[simp, simp_denote, simp_sllvm]
+theorem run_getThe_state (s : GlobalState) :
+    StateT.run (getThe GlobalState : EffectM GlobalState) s = .value (s, s) := rfl
+
+@[simp, simp_denote, simp_sllvm]
 theorem run_getThe_alloc (s : GlobalState) :
     StateT.run (getThe AllocState : EffectM AllocState) s = .value (s.alloc, s) := rfl
 
@@ -43,13 +47,17 @@ theorem run_modifyThe_alloc (f : AllocState → AllocState) (s : GlobalState) :
     StateT.run (modifyThe AllocState f : EffectM PUnit) s
       = .value (⟨⟩, { s with alloc := f s.alloc }) := rfl
 
+@[simp, simp_denote, simp_sllvm]
+theorem run_modifyThe_state (f : GlobalState → GlobalState) (s : GlobalState) :
+    StateT.run (modifyThe GlobalState f : EffectM PUnit) s = .value (⟨⟩, f s) := rfl
+
 /-- A function whose body runs to `(r, s')` returns `r` in `s'` with the frame
 killed and the entry counter restored. -/
 theorem run_runFunction {α : Type} {body : EffectM α} {s s' : GlobalState} {r : α}
     (h : StateT.run body s = .value (r, s')) :
     StateT.run (runFunction body) s = .value (r, s.popFrame s'.mem) := by
-  simp only [runFunction, EffectM.run_bind, run_getThe_alloc, PoisonOr.value_bind, h,
-    run_modifyThe_mem, run_modifyThe_alloc, EffectM.run_pure]
+  simp only [runFunction, EffectM.run_bind, run_getThe_state, PoisonOr.value_bind, h,
+    run_modifyThe_mem, run_modifyThe_alloc, run_modifyThe_state, EffectM.run_pure]
   rfl
 
 /-- What `alloca` does to a state: the pointer to a fresh zeroed block at the
@@ -58,6 +66,14 @@ theorem run_alloca (w : Nat) (s : GlobalState) :
     StateT.run (SLLVM.alloca w) s
       = .value (PoisonOr.value ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩, s.afterAlloca w) := by
   rfl
+
+/-- What `addressof` does to a state: nothing but read the symbol table. The
+hypothesis is the whole content of a global here -- an entry has to be there,
+or the operation is UB. -/
+theorem run_addressof {name : String} {s : GlobalState} {p : Pointer}
+    (h : s.globals[name]? = some p) :
+    StateT.run (SLLVM.addressof name) s = .value (PoisonOr.value p, s) := by
+  simp [SLLVM.addressof, h]
 
 /-! ## The operations, in `denoteOp` form
 
@@ -70,6 +86,15 @@ expressions a parsed program carries. -/
       (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
         (SLLVMOp.alloca w) rfl (EffectKind.le_refl _) HVector.nil Regions.nil) V
       = (([·]ₕ) <$> SLLVM.alloca w : EffectM _) := by
+  simp [Expr.denoteOp, EffectKind.liftEffect,
+    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+
+@[simp_denote] theorem denoteOp_addressof {Γ : Ctxt SLLVM.Ty} (name : String)
+    (V : Ctxt.Valuation Γ) :
+    Expr.denoteOp
+      (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
+        (SLLVMOp.addressof name) rfl (EffectKind.le_refl _) HVector.nil Regions.nil) V
+      = (([·]ₕ) <$> SLLVM.addressof name : EffectM _) := by
   simp [Expr.denoteOp, EffectKind.liftEffect,
     DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
 

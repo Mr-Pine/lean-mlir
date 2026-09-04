@@ -244,7 +244,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   -- The body: three slots at the entry counter, nothing below it changed --
   -- all `runFunction` needs to pop the frame.
   suffices body : ∃ m, StateT.run (fd_r43x6_ge_is_eq.denote (quadDualValuation x y)) s
-      = .value ([PoisonOr.value (geIsEq x y)]ₕ, ⟨⟨s.alloc.nextFreeBlock + 3⟩, m⟩)
+      = .value ([PoisonOr.value (geIsEq x y)]ₕ, ⟨⟨s.alloc.nextFreeBlock + 3⟩, m, s.globals⟩)
       ∧ ∀ q : BlockId, q.id < s.alloc.nextFreeBlock → m.live? q = s.mem.live? q by
     obtain ⟨m, h, hm⟩ := body
     exact ⟨_, run_runFunction h, GlobalState.killFrom_equiv m hs hm⟩
@@ -391,6 +391,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
 
   let state_after: GlobalState := {
     alloc := ⟨mem_slot_3 + 1⟩,
+    globals := s.globals,
     mem := MemoryState.killFrom (mem_slot_3 + 1) (
       let with_val_1 := MAlloc.writeVec ⟨⟨mem_slot_1⟩, 0⟩ resultQuad.v03
       let with_val_2 := with_val_1.writeVec ⟨⟨mem_slot_2⟩, 0⟩ resultQuad.v14
@@ -422,11 +423,13 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
     rw [denote_fd_r43x6_quad_mul_fast XShuff YShuff hXShuff03' hXShuff14' hXShuff25' hYShuff03' hYShuff14' hYShuff25']
     have h3 := run_storeVec3 (u := (quadMulResult XShuff YShuff).v03)
       (v := (quadMulResult XShuff YShuff).v14) (w := (quadMulResult XShuff YShuff).v25)
-      (s := { alloc := ⟨s.alloc.nextFreeBlock + 1 + 1 + 1⟩, mem := MAlloc }) hfit0 hfit1' hfit2'
+      (s := { alloc := ⟨s.alloc.nextFreeBlock + 1 + 1 + 1⟩, mem := MAlloc,
+              globals := s.globals }) hfit0 hfit1' hfit2'
     -- peel `getThe`, evaluate the three stores with `h3`, peel the frame kill,
     -- the counter restore and `pure`; what is left is `state_after` up to its `let`s
-    simp only [SLLVM.runFunction, EffectM.run_bind, SLLVM.run_getThe_alloc, PoisonOr.value_bind,
-      SLLVM.run_modifyThe_mem, SLLVM.run_modifyThe_alloc, EffectM.run_pure]
+    simp only [SLLVM.runFunction, EffectM.run_bind, SLLVM.run_getThe_state, PoisonOr.value_bind,
+      SLLVM.run_modifyThe_mem, SLLVM.run_modifyThe_alloc, SLLVM.run_modifyThe_state,
+      EffectM.run_pure]
     simp only [EffectM.run_bind, EffectM.run_pure] at h3
     simp only [h3, PoisonOr.value_bind]
     rfl

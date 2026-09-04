@@ -26,7 +26,7 @@ theorem fiat_25519_subborrowx_u51_conforms (o₁ o₂ : Pointer) (c : BitVec 8) 
       rw [houtMem]
       exact fun q hq => live?_splice_eq_none (live?_splice_eq_none (hs q hq))
     exact GlobalState.Equiv.symm
-      (GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨rfl, fun _ => rfl⟩)
+      (GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨rfl, rfl, fun _ => rfl⟩)
 
   denote_step_all v 6
   denote_eval v 0 6

@@ -145,7 +145,7 @@ theorem limbBounds_congr {m : MemoryState} {q₁ q₂ : Pointer} (hq : q₁ = q�
 nothing else. -/
 theorem readLimb?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) (i : Fin 5) :
     readLimb? p i s.mem = readLimb? p i s'.mem := by
-  simp only [readLimb?, h.2 p.id]
+  simp only [readLimb?, h.live p.id]
 
 /-- `LimbBounds` transported along a state equivalence: a limb read looks only
 at the live block, and `≈` preserves that. -/

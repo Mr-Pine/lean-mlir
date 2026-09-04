@@ -29,19 +29,22 @@ instance : LawfulMonad EffectM  := by unfold EffectM; infer_instance
 
 instance : MonadStateOf GlobalState EffectM := by unfold EffectM; infer_instance
 
+-- NOTE: `globals` is threaded through untouched here and in every other
+-- rebuild of a `GlobalState`: the symbol table is write-once, installed by
+-- `GlobalState.ofGlobals` and only ever read.
 instance : MonadStateOf AllocState EffectM where
   get := do return (← getThe GlobalState).alloc
   set alloc := modifyThe GlobalState ({ · with alloc })
-  modifyGet f := modifyGetThe GlobalState fun { mem, alloc } =>
+  modifyGet f := modifyGetThe GlobalState fun { mem, alloc, globals } =>
     let ⟨x, alloc⟩ := f alloc
-    ⟨x, { mem, alloc }⟩
+    ⟨x, { mem, alloc, globals }⟩
 
 instance : MonadStateOf MemoryState EffectM where
   get := do return (← getThe GlobalState).mem
   set mem := modifyThe GlobalState ({ · with mem })
-  modifyGet f := modifyGetThe GlobalState fun { mem, alloc } =>
+  modifyGet f := modifyGetThe GlobalState fun { mem, alloc, globals } =>
     let ⟨x, mem⟩ := f mem
-    ⟨x, { mem, alloc }⟩
+    ⟨x, { mem, alloc, globals }⟩
 
 /-! ## Constructors -/
 
@@ -97,10 +100,10 @@ instance : MonadStateOf MemoryState MemorySSAM := by
   unfold MemorySSAM; infer_instance
 
 instance : MonadLift MemorySSAM EffectM where
-  monadLift x := fun { mem, alloc } =>
+  monadLift x := fun { mem, alloc, globals } =>
     match x mem with
     | .poison => .poison
-    | .value ⟨y, mem⟩ => .value ⟨y, { mem, alloc }⟩
+    | .value ⟨y, mem⟩ => .value ⟨y, { mem, alloc, globals }⟩
 
 instance : HasUB MemorySSAM where
   throwUB := StateT.lift PoisonOr.poison

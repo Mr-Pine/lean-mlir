@@ -19,7 +19,7 @@ open LeanMLIR
 written out concretely rather than left as `⟦…⟧`, so that `BEq` is found. -/
 private def runScalar (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :
     Option (PoisonOr (BitVec 64)) :=
-  ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption.map (fun r => r.1.head)
+  ((com.denote Ctxt.Valuation.nil).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption.map (fun r => r.1.head)
 
 /-! ## A store overwrites
 
@@ -91,7 +91,7 @@ def vecRoundTrip :
 
 private def runVec (x : Vector (PoisonOr (BitVec 64)) 4) :
     Option (Vector (PoisonOr (BitVec 64)) 4) :=
-  ((vecRoundTrip.denote (x ::ᵥ Ctxt.Valuation.nil)).run ⟨⟨0⟩, ⟨∅⟩⟩).toOption.map
+  ((vecRoundTrip.denote (x ::ᵥ Ctxt.Valuation.nil)).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption.map
     (fun r => r.1.head)
 
 -- Lane `0` sits in the low bits, as LLVM lays a vector out in memory.

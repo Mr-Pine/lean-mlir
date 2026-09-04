@@ -45,11 +45,13 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     have hcarryWF : carrystate.WF :=
       GlobalState.WF.of_equiv hsubWF.splice hcarrystate_eq
     have hcalloc : carrystate.alloc = s.alloc := hcarrystate_eq.1.symm.trans halloc
+    have hcglobals : s.globals = carrystate.globals :=
+      hsubstate_eq.globals.trans hcarrystate_eq.globals
 
     have hpop : (s.popFrame carrystate.mem : GlobalState) ≈ carrystate :=
       GlobalState.Equiv.trans
         (killFrom_equiv_of_none (fun t ht => hcarryWF t (by rw [hcalloc]; omega)))
-        ⟨hcalloc.symm, fun _ => rfl⟩
+        ⟨hcalloc.symm, hcglobals, fun _ => rfl⟩
 
     -- a read at `o` sees only the spliced bits, so splicing the carry's result
     -- into `s` and into `substate` agree
@@ -61,7 +63,7 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
       simp only [readFieldElem?, hlimbs]
 
     have hkill : (substate : GlobalState)
-        ≈ { alloc := s.alloc, mem := s.mem.splice o subres } :=
+        ≈ { alloc := s.alloc, mem := s.mem.splice o subres, globals := s.globals } :=
       GlobalState.Equiv.symm hsubstate_eq
 
     refine ⟨carryres, ⟨s.popFrame carrystate.mem,

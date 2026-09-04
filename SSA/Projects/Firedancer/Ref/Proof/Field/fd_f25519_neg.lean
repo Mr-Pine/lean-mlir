@@ -23,7 +23,7 @@ theorem fd_f25519_neg_conforms (o q : Pointer) (s : GlobalState)
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → oppstate.mem.live? t = none := by
     rw [hoppstate_eq.1]; exact hoppWF
   have hpop : (s.popFrame oppstate.mem : GlobalState) ≈ oppstate :=
-    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hoppstate_eq.1, fun _ => rfl⟩
+    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hoppstate_eq.1, hoppstate_eq.globals, fun _ => rfl⟩
 
   refine ⟨out, ⟨s.popFrame oppstate.mem, ?_,
     GlobalState.Equiv.trans hoppstate_eq (GlobalState.Equiv.symm hpop)⟩, hval, hbounds⟩

@@ -6,3 +6,4 @@ import SSA.Projects.SLLVM.Tests.Call
 import SSA.Projects.SLLVM.Tests.Gep
 import SSA.Projects.SLLVM.Tests.Cfg
 import SSA.Projects.SLLVM.Tests.Vpermi2var
+import SSA.Projects.SLLVM.Tests.Globals

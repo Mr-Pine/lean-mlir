@@ -112,25 +112,51 @@ theorem live?_killFrom_of_le {m : MemoryState} {n₀ : Nat} {q : BlockId}
   simp only [MemoryState.live?, getElem?_killFrom_of_le h]
   cases m[q]? <;> rfl
 
-/-- Two states no program can tell apart: the same counter and the same live
-blocks. This is what a function that "does not touch the stack" preserves --
-its frame is dead on return, not absent. -/
-def _root_.LeanMLIR.GlobalState.Equiv (s s' : GlobalState) : Prop :=
-  s.alloc = s'.alloc ∧ ∀ q, s.mem.live? q = s'.mem.live? q
+/-- Two states no program can tell apart: the same counter, the same symbol
+table and the same live blocks. This is what a function that "does not touch
+the stack" preserves -- its frame is dead on return, not absent.
+
+The `globals` conjunct is what holds a region to the write-once symbol table:
+every conformance spec ends in `output_state ≈ s'`, so a region that repointed
+a global could not satisfy its spec. -/
+structure _root_.LeanMLIR.GlobalState.Equiv (s s' : GlobalState) : Prop where
+  /-- The same allocation counter. -/
+  alloc : s.alloc = s'.alloc
+  /-- The same symbol table -- the write-once invariant, stated where every
+  conformance spec already has to discharge it. -/
+  globals : s.globals = s'.globals
+  /-- The same live blocks. Dead and absent are the same to every access, so
+  this is all of memory a program can observe. -/
+  live : ∀ q, s.mem.live? q = s'.mem.live? q
 
 instance : HasEquiv GlobalState := ⟨GlobalState.Equiv⟩
 
-theorem GlobalState.equiv_def {s s' : GlobalState} :
-    s ≈ s' ↔ s.alloc = s'.alloc ∧ ∀ q, s.mem.live? q = s'.mem.live? q := Iff.rfl
+theorem _root_.LeanMLIR.GlobalState.equiv_def {s s' : GlobalState} :
+    s ≈ s' ↔ s.alloc = s'.alloc ∧ s.globals = s'.globals
+      ∧ ∀ q, s.mem.live? q = s'.mem.live? q :=
+  ⟨fun h => ⟨h.alloc, h.globals, h.live⟩, fun ⟨a, g, l⟩ => ⟨a, g, l⟩⟩
 
-@[refl] theorem GlobalState.Equiv.refl (s : GlobalState) : s ≈ s := ⟨rfl, fun _ => rfl⟩
+@[refl] theorem _root_.LeanMLIR.GlobalState.Equiv.refl (s : GlobalState) : s ≈ s := ⟨rfl, rfl, fun _ => rfl⟩
 
-@[symm] theorem GlobalState.Equiv.symm {s s' : GlobalState} (h : s ≈ s') : s' ≈ s :=
-  ⟨h.1.symm, fun q => (h.2 q).symm⟩
+@[symm] theorem _root_.LeanMLIR.GlobalState.Equiv.symm {s s' : GlobalState} (h : s ≈ s') : s' ≈ s :=
+  ⟨h.alloc.symm, h.globals.symm, fun q => (h.live q).symm⟩
 
-@[trans] theorem GlobalState.Equiv.trans {s s' s'' : GlobalState} (h : s ≈ s') (h' : s' ≈ s'') :
+@[trans] theorem _root_.LeanMLIR.GlobalState.Equiv.trans {s s' s'' : GlobalState} (h : s ≈ s') (h' : s' ≈ s'') :
     s ≈ s'' :=
-  ⟨h.1.trans h'.1, fun q => (h.2 q).trans (h'.2 q)⟩
+  ⟨h.alloc.trans h'.alloc, h.globals.trans h'.globals, fun q => (h.live q).trans (h'.live q)⟩
+
+/-! ### The write-once symbol table
+
+Every rebuild of a `GlobalState` in the model carries `globals` through
+unchanged; these are the `rfl`s that let a walk forget about it. -/
+
+@[simp, simp_sllvm]
+theorem globals_afterAlloca (s : GlobalState) (w : Nat) :
+    (s.afterAlloca w).globals = s.globals := rfl
+
+@[simp, simp_sllvm]
+theorem globals_popFrame (s : GlobalState) (m : MemoryState) :
+    (s.popFrame m).globals = s.globals := rfl
 
 /-- `s` is *well-formed* when no block at or above its counter is live, the
 invariant `alloca` and `killFrom` keep. -/
@@ -142,8 +168,8 @@ transports along an equivalence. -/
 theorem _root_.LeanMLIR.GlobalState.WF.of_equiv {s s' : GlobalState}
     (hs : s.WF) (h : s ≈ s') : s'.WF := by
   intro q hq
-  rw [← h.2 q]
-  exact hs q (by rw [h.1]; exact hq)
+  rw [← h.live q]
+  exact hs q (by rw [h.alloc]; exact hq)
 
 theorem _root_.LeanMLIR.GlobalState.WF.afterAlloca {s : GlobalState} (hs : s.WF) (w : Nat) :
     (s.afterAlloca w).WF := by
@@ -237,7 +263,7 @@ theorem _root_.LeanMLIR.GlobalState.exists_afterAlloca_facts (s : GlobalState) (
 could touch is dead already. -/
 theorem _root_.LeanMLIR.GlobalState.WF.popFrame_equiv {s : GlobalState} (hs : s.WF) :
     s ≈ s.popFrame s.mem := by
-  refine ⟨rfl, fun q => ?_⟩
+  refine ⟨rfl, rfl, fun q => ?_⟩
   show s.mem.live? q = (s.mem.killFrom s.alloc.nextFreeBlock).live? q
   by_cases hq : q.id < s.alloc.nextFreeBlock
   · exact (live?_killFrom_of_lt hq).symm
@@ -249,7 +275,7 @@ live-for-live as it found them. -/
 theorem GlobalState.killFrom_equiv {s : GlobalState} (m : MemoryState) (hs : s.WF)
     (hframe : ∀ q : BlockId, q.id < s.alloc.nextFreeBlock → m.live? q = s.mem.live? q) :
     s.popFrame m ≈ s := by
-  refine ⟨rfl, fun q => ?_⟩
+  refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : q.id < s.alloc.nextFreeBlock
   · exact (live?_killFrom_of_lt hq).trans (hframe q hq)
   · exact (live?_killFrom_of_le (not_lt.mp hq)).trans (hs q (not_lt.mp hq)).symm

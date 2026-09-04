@@ -60,6 +60,16 @@ inductive SLLVMOp where
   have to parse for a region to stay verbatim. The `size` attribute is
   accepted and discarded. -/
   | lifetime (start : Bool)
+  /-- `llvm.mlir.addressof`. The address comes from the state's symbol table
+  (`GlobalState.globals`), which is what makes every `addressof` of a symbol --
+  at any call depth -- name the same block, and so what makes a *mutable*
+  global sound. An unknown symbol is UB.
+
+  The initialiser is deliberately *not* carried here. The table is keyed by
+  name, so a bound initialiser region would be a claim nothing could check
+  against the state; what a global holds is a hypothesis at the spec level
+  instead, discharged by `GlobalState.ofGlobals`. -/
+  | addressof (name : String)
   /-- `llvm.call`. `Com` has no symbol table, so the callee's body travels with
   the call as its region argument; `callee` is carried for printing and
   round-tripping only and has no semantic role. The effect is the callee's:
@@ -199,6 +209,7 @@ def_signature for SLLVM
   | Op.const w _val  => () -> bitvec w
   | Op.poison t      => () -> Ty.arith t
   | Op.constDense t _vals => () -> Ty.arith t
+  | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
   | Op.extractelement e l w =>
@@ -235,6 +246,7 @@ def_denote for SLLVM
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
   | .memset => fun p b len => (fun _ => []ₕ) <$> SLLVM.memset p b len
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
+  | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -300,10 +312,12 @@ instance : DialectPrint SLLVM where
     | .memset     => "llvm.intr.memset"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call ..    => "llvm.call"
+    | .addressof _ => "llvm.mlir.addressof"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
     | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"
+    | .addressof name => s!"\{global_name = @{name}}"
     | _ => ""
   printTy
     | .arith llvmTy => printTy llvmTy

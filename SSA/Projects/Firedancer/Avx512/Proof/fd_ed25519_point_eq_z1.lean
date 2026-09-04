@@ -27,7 +27,7 @@ theorem fd_ed25519_point_eq_z1_conforms (p q: Pointer) (s: GlobalState)
         (by rw [hz1]; exact isUnit_one)
 
     refine ⟨s.popFrame eqstate.mem, run_runFunction (s' := eqstate) ?_, GlobalState.Equiv.symm
-      (GlobalState.killFrom_equiv eqstate.mem hs fun b _ => (heqstate_eq.2 b).symm)⟩
+      (GlobalState.killFrom_equiv eqstate.mem hs fun b _ => (heqstate_eq.live b).symm)⟩
 
     -- the entry is just the call: expose its constructor first
     unfold fd_ed25519_point_eq_z1

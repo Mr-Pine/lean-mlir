@@ -85,16 +85,16 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   -- the frame fact speaks only about blocks that predate the region; the
   -- *sibling local* is above the counter, so it needs the write's own equation
   have hlivex1 : ∀ r : BlockId, r ≠ x1.id → x1state.mem.live? r = s₂.mem.live? r :=
-    fun r hr => (hx1state_eq.2 r).symm.trans (live?_splice_ne (Ne.symm hr))
+    fun r hr => (hx1state_eq.live r).symm.trans (live?_splice_ne (Ne.symm hr))
   have fbX : FrameBelow s.alloc.nextFreeBlock s x1state :=
     FrameBelow.of_equiv hx1state_eq (FrameBelow.splice (by omega) fb₂)
   have hX : ∀ r : Pointer, IsFieldElemPtr s.mem r → x1state.mem.live? r.id = s.mem.live? r.id :=
     fun r hr => fbX r.id (hold r hr)
   have hx1WF : x1state.WF := GlobalState.WF.of_equiv hs₂.splice hx1state_eq
   have px1X : IsFieldElemPtr x1state.mem x1 :=
-    isFieldElemPtr_of_live?_eq (hx1state_eq.2 x1.id).symm ⟨fits_splice px1₂.left, px1₂.right⟩
+    isFieldElemPtr_of_live?_eq (hx1state_eq.live x1.id).symm ⟨fits_splice px1₂.left, px1₂.right⟩
   have bx1X : ∀ (i : Fin 5) (l : ℕ), readLimb? x1 i x1state.mem = some l → l ≤ 2 ^ 51 :=
-    limbBounds_of_live?_eq (m := (s₂.mem.splice x1 x1bits)) (hx1state_eq.2 x1.id).symm
+    limbBounds_of_live?_eq (m := (s₂.mem.splice x1 x1bits)) (hx1state_eq.live x1.id).symm
       (fun i l h => (bx1 i l h).trans (by norm_num))
   have py1X : IsFieldElemPtr x1state.mem y1 :=
     isFieldElemPtr_of_live?_eq (hlivex1 y1.id hxy) py1₂
@@ -108,16 +108,16 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
       (limbBounds_of_live?_eq (hX _ paZ) (fun i l h => (baZ i l h).trans (by norm_num)))
 
   have hlivey1 : ∀ r : BlockId, r ≠ y1.id → y1state.mem.live? r = x1state.mem.live? r :=
-    fun r hr => (hy1state_eq.2 r).symm.trans (live?_splice_ne (Ne.symm hr))
+    fun r hr => (hy1state_eq.live r).symm.trans (live?_splice_ne (Ne.symm hr))
   have fbY : FrameBelow s.alloc.nextFreeBlock s y1state :=
     FrameBelow.of_equiv hy1state_eq (FrameBelow.splice (by omega) fbX)
   have hY : ∀ r : Pointer, IsFieldElemPtr s.mem r → y1state.mem.live? r.id = s.mem.live? r.id :=
     fun r hr => fbY r.id (hold r hr)
   have hy1WF : y1state.WF := GlobalState.WF.of_equiv hx1WF.splice hy1state_eq
   have py1Y : IsFieldElemPtr y1state.mem y1 :=
-    isFieldElemPtr_of_live?_eq (hy1state_eq.2 y1.id).symm ⟨fits_splice py1X.left, py1X.right⟩
+    isFieldElemPtr_of_live?_eq (hy1state_eq.live y1.id).symm ⟨fits_splice py1X.left, py1X.right⟩
   have by1Y : ∀ (i : Fin 5) (l : ℕ), readLimb? y1 i y1state.mem = some l → l ≤ 2 ^ 51 :=
-    limbBounds_of_live?_eq (m := (x1state.mem.splice y1 y1bits)) (hy1state_eq.2 y1.id).symm
+    limbBounds_of_live?_eq (m := (x1state.mem.splice y1 y1bits)) (hy1state_eq.live y1.id).symm
       (fun i l h => (by1 i l h).trans (by norm_num))
   have px1Y : IsFieldElemPtr y1state.mem x1 :=
     isFieldElemPtr_of_live?_eq (hlivey1 x1.id (Ne.symm hxy)) px1X
@@ -135,7 +135,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     fun r hr => fbE r.id (hold r hr)
   have heqx1WF : eqx1state.WF := GlobalState.WF.of_equiv hy1WF heqx1state_eq
   have py1E : IsFieldElemPtr eqx1state.mem y1 :=
-    isFieldElemPtr_of_live?_eq (heqx1state_eq.2 y1.id).symm py1Y
+    isFieldElemPtr_of_live?_eq (heqx1state_eq.live y1.id).symm py1Y
   have paYE : IsFieldElemPtr eqx1state.mem (a.withOffset 40) :=
     isFieldElemPtr_of_live?_eq (hE _ paY) paY
 
@@ -143,7 +143,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   obtain ⟨eqy1state, heqy1state, heqy1state_eq⟩ :=
     fd_f25519_eq_conforms y1 (a.withOffset 40) eqx1state heqx1WF py1E paYE
       (limbBounds_of_readLimb? py1E
-        (limbBounds_of_live?_eq (heqx1state_eq.2 y1.id).symm by1Y))
+        (limbBounds_of_live?_eq (heqx1state_eq.live y1.id).symm by1Y))
       (limbBounds_of_readLimb? paYE (limbBounds_of_live?_eq (hE _ paY) baY))
 
   -- the region's frame holds only `x1` and `y1`, so popping it restores `s`
@@ -200,7 +200,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
       readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hS₂ b pbX)).trans hbXval),
       readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hS₂ _ paZ)).trans haZval)]
   have hy1read : readFieldElem? y1 eqx1state.mem = some ((readPoint hb).Y * (readPoint ha).Z) := by
-    rw [readFieldElem?_of_live?_eq (heqx1state_eq.2 y1.id).symm,
+    rw [readFieldElem?_of_live?_eq (heqx1state_eq.live y1.id).symm,
       ← readFieldElem?_of_equiv hy1state_eq y1, readFieldElem?_splice y1bits py1X.left, hy1bits,
       readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hX _ pbY)).trans hbYval),
       readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hX _ paZ)).trans haZval)]

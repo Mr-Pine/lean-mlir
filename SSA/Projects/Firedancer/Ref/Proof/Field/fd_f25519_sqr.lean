@@ -24,7 +24,7 @@ theorem fd_f25519_sqr_conforms (o p : Pointer) (s : GlobalState)
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → sqrstate.mem.live? t = none := by
     rw [hsqrstate_eq.1]; exact hsqrWF
   have hpop : (s.popFrame sqrstate.mem : GlobalState) ≈ sqrstate :=
-    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hsqrstate_eq.1, fun _ => rfl⟩
+    GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hsqrstate_eq.1, hsqrstate_eq.globals, fun _ => rfl⟩
 
   refine ⟨out, hout, hbounds, ⟨s.popFrame sqrstate.mem, ?_,
     GlobalState.Equiv.trans hsqrstate_eq (GlobalState.Equiv.symm hpop)⟩⟩
