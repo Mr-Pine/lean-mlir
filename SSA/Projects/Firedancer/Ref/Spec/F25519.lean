@@ -101,13 +101,14 @@ theorem isByteBufPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : Bit
 
 def readFieldElem {p: Pointer} {m: MemoryState} (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)
 
-def readLimb (p: Pointer) (i : Fin 5) (m : MemoryState) (h: IsFieldElemPtr m p) := (readLimb? p i m).get (readLimb?_isSome i h)
+def readLimb {p: Pointer} (i : Fin 5) {m : MemoryState} (h: IsFieldElemPtr m p) :=
+  (readLimb? p i m).get (readLimb?_isSome i h)
 
 /-- Every limb at `p` is at most `bound`, which defaults to the tight bound
 `2^51` a carried field element satisfies. `fiat_25519_add`/`sub` leave a loose
 element, so they pass the larger bound explicitly. -/
 abbrev LimbBounds (h: IsFieldElemPtr m q) (bound : ℕ := 0x8000000000000) :=
-  ∀ i, readLimb q i m h ≤ bound
+  ∀ i, readLimb i h ≤ bound
 
 abbrev LimbBounds.Loose (h : IsFieldElemPtr m q) := LimbBounds h 0x18000000000000
 

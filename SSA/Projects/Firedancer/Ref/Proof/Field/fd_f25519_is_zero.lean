@@ -38,7 +38,7 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
   -- existential witness, so no later `simp` can unfold it back into `Option.get`.
   obtain ⟨e, he, hbound⟩ :
       ∃ e : Fin 5 → ℕ, (∀ i, readLimb? p i m = some (e i)) ∧ ∀ i, e i ≤ 2 ^ 51 :=
-    ⟨fun i => readLimb p i m hp, fun i => (Option.some_get _).symm,
+    ⟨fun i => readLimb i hp, fun i => (Option.some_get _).symm,
       fun i => le_trans (hlimb i) (by norm_num)⟩
   simp only [readFieldElem?, he 0, he 1, he 2, he 3, he 4, Option.bind_eq_bind,
     Option.bind_some, Option.pure_def, Option.some.injEq]
