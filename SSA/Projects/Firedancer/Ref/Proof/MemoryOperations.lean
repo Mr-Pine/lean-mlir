@@ -341,36 +341,156 @@ macro "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
     basehblk:ident : tactic =>
   `(tactic| peel_limb $i, $ptr, $hptr, $baseblk, $basehblk, limb)
 
+/-! Staged here while the proof is in progress; both belong in
+`Ref/Proof/MemoryOperations.lean` once it is finished. -/
+
+/-- The 32-byte buffer read is the 256-bit scalar read. -/
+theorem readBuf?_eq_readWord? (p : Pointer) (m : MemoryState) :
+    readBuf? p m = readWord? p 256 m := rfl
+
+theorem readBuf?_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
+    (hp : Fits m p (32 * 8)) : readBuf? p (m.splice p x) = some x :=
+  readWord?_splice_self x hp
+
+theorem readBuf_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
+    (hp : IsByteBufPtr m p) :
+    readBuf (m := m.splice p x) (isByteBufPtr_splice hp) = x := by
+  simp only [readBuf, readBuf?_splice x hp.left, Option.get_some]
+
+/-- The remaining room at byte `k` of a 32-byte buffer. `peel_gep_byte` proves
+this inline with `simpa`, which is the same arithmetic once per store; proved
+here it is one application each. Staged; belongs beside `byteOffsetInBits`. -/
+lemma byteFits {m : MemoryState} {p : Pointer} (hp : Fits m p (32 * 8))
+    {k : Nat} {off : BitVec 64} (hk : k ≤ 31) (hoff : off.toNat = k) :
+    Fits m (p.withOffset off) (256 - k * 8) := by
+  simpa [hoff] using remainingFits m p hp off (by rw [hoff]; omega)
+
+open Lean Elab Tactic in
+/-- `fold_cells s, cw, cellPtr, n` folds the `n` chain pointers an `alloca`
+prologue leaves in the valuation back to `cellPtr s k`, the form facts about
+them are stated over and the form `peel_load` matches against. -/
+elab "fold_cells " st:term ", " w:term ", " cp:term ", " n:num : tactic => do
+  let mut lems : Array Term := #[]
+  for k in [0 : n.getNat] do
+    let kn := Syntax.mkNumLit (toString k)
+    lems := lems.push (← `(show
+      (⟨⟨(GlobalState.allocaChain $st $w $kn).alloc.nextFreeBlock⟩, 0⟩ : Pointer)
+        = $cp $st $kn from rfl))
+  evalTactic (← `(tactic| simp only [$[$lems:term],*]))
+
 open Lean Elab Tactic in
 /-- `peel_gep_byte i, p, hp, s, x` is `peel_gep_limb` at byte granularity: the
 gep is off `p` by the constant `i` with `elem_type = i8`, and the pointer it
 yields becomes `x<i> := p.withOffset i`.
 
 Assumes a 32-byte buffer at `p`, i.e. `hp : Fits s.mem p (32 * 8)`; the
-remaining size is `(32 - i) * 8`. -/
+remaining room comes from `byteFits` rather than an inline `simpa`, and the
+pointer's value from a `simp only`. Inline, those two were most of the cost of
+a long store chain. -/
 elab "peel_gep_byte " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident : tactic => do
   let num := i.getNat
   let offBytes := Syntax.mkNumLit (toString num)
-  let remainingBits := Syntax.mkNumLit (toString ((32 - num) * 8))
   let n ← nextStepIndex (← getMainGoal)
   let nLit := Syntax.mkNumLit (toString n)
   let vBase := mkIdent (Name.mkSimple "v")
   let v := mkIdent (Name.mkSimple ("v" ++ toString n))
   let hv := mkIdent (Name.mkSimple ("hv" ++ toString n))
-  let sub := subscript num
   let base := nm.getId.eraseMacroScopes.toString
-  let ptr := mkIdent (Name.mkSimple (base ++ sub))
-  let hptr := mkIdent (Name.mkSimple ("h" ++ base ++ sub))
+  let ptr := mkIdent (Name.mkSimple (base ++ subscript num))
+  let hptr := mkIdent (Name.mkSimple ("h" ++ base ++ subscript num))
   evalTactic (← `(tactic| denote_step_all $vBase $nLit))
   evalTactic (← `(tactic| denote_eval $vBase $nLit $nLit))
   evalTactic (← `(tactic| let $ptr := ($p).withOffset (($offBytes) : BitVec 64)))
-  evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr ($remainingBits) := by
-        simpa using remainingFits ($st).mem $p $hp ($offBytes) (by simp)))
+  evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr (256 - $offBytes * 8) :=
+    byteFits $hp (k := $offBytes) (off := (($offBytes) : BitVec 64)) (by omega) (by simp)))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
-          LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
+        simp only [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset,
+          Ctxt.Valuation.singleton, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?,
+          LLVM.mul?, simp_sllvm, BitVec.ofInt_ofNat, BitVec.ofNat_eq_ofNat,
+          Nat.cast_one, Nat.cast_zero, Nat.cast_ofNat, one_mul, mul_one,
+          add_zero, zero_add, BitVec.mul_one, BitVec.add_zero]))
   evalTactic (← `(tactic| subst vValue))
   evalTactic (← `(tactic| clear $hv))
+
+/-- A limb is a 64-bit read, so it survives the round trip through `BitVec 64`
+the specs' `packLimbs` witness takes. -/
+theorem readLimb_lt {m : MemoryState} {p : Pointer} (i : Fin 5) (h : IsFieldElemPtr m p) :
+    readLimb i h < 2 ^ 64 := by
+  have hlt : ∀ l, readLimb? p i m = some l → l < 2 ^ 64 := by
+    simp only [readLimb?, Option.bind_eq_bind]
+    cases m.live? p.id <;> simp
+    omega
+  exact hlt _ (Option.some_get _).symm
+
+/-- The total field-element read, limbwise. -/
+theorem readFieldElem_eq_decode {m : MemoryState} {p : Pointer} (h : IsFieldElemPtr m p) :
+    readFieldElem h = decodeFieldElem (fun i => readLimb i h) := by
+  refine readFieldElem_eq_of ?_
+  have hl : ∀ i, readLimb? p i m = some (readLimb i h) := fun i => (Option.some_get _).symm
+  simp only [readFieldElem?, hl, Option.bind_eq_bind, Option.bind_some, Option.pure_def]
+  congr 1
+
+/-- A limb, read as a 64-bit word at the pointer a `getelementptr` produced:
+same block, `k` limbs along. This is the bridge between the walk's loads, which
+are `readWord?` at the gep'd pointer, and the spec, which is `readLimb` at the
+base. -/
+theorem readLimb_eq_of_readWord? {m : MemoryState} {p q : Pointer} {k : Fin 5} {v : BitVec 64}
+    (hp : IsFieldElemPtr m p) (hid : q.id = p.id)
+    (hoff : q.offsetInBits = p.offsetInBits + 64 * k.toNat)
+    (hv : readWord? q 64 m = some v) :
+    ((readLimb k hp : ℕ) : BitVec 64) = v := by
+  have hread : readLimb? p k m = some v.toNat := by
+    simp only [readWord?, hid, hoff] at hv
+    cases hb : m.live? p.id with
+    | none => rw [hb] at hv; simp at hv
+    | some blk =>
+      rw [hb] at hv
+      simp only [Option.bind_eq_bind, Option.bind_some, Option.pure_def, Option.some.injEq] at hv
+      simp only [readLimb?, hb, Option.bind_eq_bind, Option.bind_some, Option.pure_def, hv]
+  simp [readLimb, hread]
+
+@[simp] theorem withOffset_id (p : Pointer) (o : BitVec 64) :
+    (p.withOffset o).id = p.id := rfl
+
+/-- Splicing a zero-width value changes nothing. -/
+theorem spliceBits_zero {n : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec 0) :
+    spliceBits bytes off x = bytes := by
+  have hx : x = 0#0 := by
+    apply BitVec.eq_of_toNat_eq
+    have := x.isLt
+    omega
+  subst hx
+  simp [spliceBits]
+
+theorem spliceBits_cast {n w v : Nat} (bytes : BitVec n) (off : Nat) (h : w = v)
+    (x : BitVec w) : spliceBits bytes off (BitVec.cast h x) = spliceBits bytes off x := by
+  subst h; rfl
+
+/-- The memory after writing `b 0 … b (n-1)` at `p`, `p+1`, …, `p+(n-1)`. -/
+def spliceBytes (m : MemoryState) (p : Pointer) (b : Nat → BitVec 8) : Nat → MemoryState
+  | 0 => m
+  | k + 1 => (spliceBytes m p b k).splice (p.withOffset (BitVec.ofNat 64 k)) (b k)
+
+/-- Those bytes as one word, little-endian: byte `k` occupies bits `8*k`. -/
+def packBytes (b : Nat → BitVec 8) : (n : Nat) → BitVec (8 * n)
+  | 0 => 0#0
+  | k + 1 => BitVec.cast (by omega) (b k ++ packBytes b k)
+
+/-- `n` adjacent byte writes are one `8*n`-bit write. -/
+theorem live?_spliceBytes {m : MemoryState} {p : Pointer} {blk : LiveBlock}
+    (hb : m.live? p.id = some blk) (b : Nat → BitVec 8)
+    (hoff : ∀ k, (p.withOffset (BitVec.ofNat 64 k)).offsetInBits = p.offsetInBits + 8 * k) :
+    ∀ n, (spliceBytes m p b n).live? p.id
+      = some ⟨blk.length, spliceBits blk.bytes p.offsetInBits (packBytes b n)⟩
+  | 0 => by rw [spliceBytes, hb, packBytes, spliceBits_zero]
+  | n + 1 => by
+    have ih := live?_spliceBytes hb b hoff n
+    rw [spliceBytes]
+    -- the write is through an offset pointer, which addresses the same block;
+    -- `rw` needs that in matching form, not merely definitionally
+    show ((spliceBytes m p b n).splice (p.withOffset (BitVec.ofNat 64 n)) (b n)).live?
+        (p.withOffset (BitVec.ofNat 64 n)).id = _
+    rw [splicedLive _ (p.withOffset (BitVec.ofNat 64 n)) _ ih (b n), hoff n, packBytes, spliceBits_cast, spliceBits_append]
 
 /-- The byte offset of byte `k`, when the buffer's end cannot wrap. -/
 lemma byteOffsetInBits {p : Pointer} (hp : p.offset.toNat + 32 ≤ 2 ^ 64)
