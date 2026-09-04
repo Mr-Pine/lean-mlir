@@ -146,4 +146,16 @@ macro "peel_alloca" " from " st:term " as " t:term " with " ht:term : tactic =>
           rw [run_alloca, $ht:term]
           rfl)])
 
+open Lean Elab Tactic in
+/-- `peel_alloca_chain s, cw, 21` runs the 21 `alloca`s of `s.allocaChain cw`.
+Staged here; belongs beside `peel_alloca`. -/
+elab "peel_alloca_chain " st:term ", " w:term ", " n:num : tactic => do
+  for k in [0 : n.getNat] do
+    let ki := Syntax.mkNumLit (toString k)
+    let ki1 := Syntax.mkNumLit (toString (k + 1))
+    evalTactic (← `(tactic|
+      peel_alloca from (GlobalState.allocaChain $st $w $ki)
+        as (GlobalState.allocaChain $st $w $ki1)
+        with (allocaChain_step $st $w $ki $ki1 rfl)))
+
 end Firedancer

@@ -141,6 +141,143 @@ and its stores to locals, instead of re-deriving a `live?` chain at every
 step. It is stated to plug directly into `GlobalState.killFrom_equiv`, which
 is how such a region's `popFrame` ending discharges. -/
 
+/-! ### Scalar cells
+
+A fiat out-parameter kernel writes a single machine word through a pointer:
+`subborrowx` a 64-bit limb and an 8-bit borrow, `cmovznz` a 64-bit select.
+`readWord?` is the read that matches, and the three lemmas below are what a
+caller threading several such cells needs -- read back your own write, ignore
+a write elsewhere, and transport across a state that agrees on the block.
+`readLimb?`/`readBuf?` are the 5-limb and 32-byte instances of the same
+pattern; this is the scalar one. -/
+
+/-- The `w`-bit scalar at `p`, or `none` if the block is dead. -/
+def readWord? (p : Pointer) (w : Nat) (m : MemoryState) : Option (BitVec w) := do
+  let blk ← m.live? p.id
+  return blk.bytes.extractLsb' p.offsetInBits w
+
+theorem readWord?_isSome {m : MemoryState} {p : Pointer} {w : Nat} (h : Fits m p w) :
+    (readWord? p w m).isSome := by
+  obtain ⟨blk, hblk, -⟩ := h
+  have hlive : m.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
+  simp [readWord?, hlive]
+
+/-- The `w`-bit scalar at `p`, given that it fits: the total read the callers
+state their facts over. -/
+def readWord {p : Pointer} {w : Nat} {m : MemoryState} (h : Fits m p w) : BitVec w :=
+  (readWord? p w m).get (readWord?_isSome h)
+
+theorem readWord_eq_of {m : MemoryState} {p : Pointer} {w : Nat} {h : Fits m p w}
+    {x : BitVec w} (hv : readWord? p w m = some x) : readWord h = x := by
+  simp only [readWord, hv, Option.get_some]
+
+/-- `readWord` back into the proof-free `readWord?` form. -/
+theorem readWord?_eq_some {m : MemoryState} {p : Pointer} {w : Nat} (h : Fits m p w)
+    {x : BitVec w} (hv : readWord h = x) : readWord? p w m = some x := by
+  rw [← hv]; exact (Option.some_get _).symm
+
+/-- A cell reads back what was just written to it. -/
+theorem readWord?_splice_self {m : MemoryState} {p : Pointer} {w : Nat} (x : BitVec w)
+    (hp : Fits m p w) : readWord? p w (m.splice p x) = some x := by
+  obtain ⟨blk, hblk, hlen⟩ := hp
+  have hlive : m.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
+  simp only [readWord?, splicedLive m p blk hlive x]
+  exact congrArg some (extractLsb'_spliceBits blk.bytes p.offsetInBits x hlen)
+
+/-- A write to another block leaves a cell alone. -/
+theorem readWord?_splice_ne {m : MemoryState} {p q : Pointer} {w w' : Nat} {x : BitVec w'}
+    (h : q.id ≠ p.id) : readWord? p w (m.splice q x) = readWord? p w m := by
+  simp only [readWord?, live?_splice_ne h]
+
+/-- Two states that agree on the block `p` addresses read the same cell. -/
+theorem readWord?_of_live?_eq {m m' : MemoryState} {p : Pointer} {w : Nat}
+    (h : m'.live? p.id = m.live? p.id) : readWord? p w m' = readWord? p w m := by
+  simp only [readWord?, h]
+
+/-! The three lemmas above in total form: the `Fits` witness travels with the
+value, so a caller threading cells never re-derives it. -/
+
+theorem readWord_splice_self {m : MemoryState} {p : Pointer} {w : Nat} (x : BitVec w)
+    (hp : Fits m p w) : ∃ h : Fits (m.splice p x) p w, readWord h = x :=
+  ⟨fits_splice hp, readWord_eq_of (readWord?_splice_self x hp)⟩
+
+theorem readWord_splice_ne {m : MemoryState} {p q : Pointer} {w w' : Nat} {x : BitVec w'}
+    (hq : q.id ≠ p.id) (hp : Fits m p w) :
+    ∃ h : Fits (m.splice q x) p w, readWord h = readWord hp :=
+  ⟨fits_splice hp, readWord_eq_of
+    ((readWord?_splice_ne hq).trans (readWord?_eq_some hp rfl))⟩
+
+/-- Transport a cell across a state that agrees on its block. -/
+theorem readWord_of_live?_eq {m m' : MemoryState} {p : Pointer} {w : Nat}
+    (hl : m'.live? p.id = m.live? p.id) (hp : Fits m p w) :
+    ∃ h : Fits m' p w, readWord h = readWord hp :=
+  ⟨fits_of_live?_eq hl hp, readWord_eq_of
+    ((readWord?_of_live?_eq hl).trans (readWord?_eq_some hp rfl))⟩
+
+/-! ### Alloca chains
+
+A region that opens with several `alloca`s -- 3 for `pow22523`, 21 for
+`to_bytes` -- wants the whole prologue as one object rather than a chain of
+`obtain`s. `allocaChain` is that state, and the step equation is `rfl`, which
+is what `peel_alloca` wants for its defining hypothesis. -/
+
+/-- The state after `k` successive `alloca`s of widths `w 0, …, w (k-1)`. -/
+def _root_.LeanMLIR.GlobalState.allocaChain (s : GlobalState) (w : Nat → Nat) :
+    Nat → GlobalState
+  | 0 => s
+  | k + 1 => (s.allocaChain w k).afterAlloca (w k)
+
+/-- The pointer the `k`-th `alloca` of the chain returns. -/
+def _root_.LeanMLIR.GlobalState.chainPtr (s : GlobalState) (w : Nat → Nat) (k : Nat) :
+    Pointer :=
+  ⟨⟨(s.allocaChain w k).alloc.nextFreeBlock⟩, 0⟩
+
+namespace GlobalState
+
+variable {s : GlobalState} {w : Nat → Nat}
+
+@[simp] theorem nextFreeBlock_allocaChain :
+    ∀ k, (s.allocaChain w k).alloc.nextFreeBlock = s.alloc.nextFreeBlock + k
+  | 0 => rfl
+  | k + 1 => by
+    show (s.allocaChain w k).alloc.nextFreeBlock + 1 = _
+    rw [nextFreeBlock_allocaChain k]; omega
+
+/-- Consecutive ids from the entry counter: the whole separation story. -/
+@[simp] theorem chainPtr_id (k : Nat) :
+    (s.chainPtr w k).id.id = s.alloc.nextFreeBlock + k := by
+  simp only [GlobalState.chainPtr, nextFreeBlock_allocaChain]
+
+@[simp] theorem chainPtr_offset (k : Nat) : (s.chainPtr w k).offset = 0 := rfl
+
+theorem WF.allocaChain (hs : s.WF) : ∀ k, (s.allocaChain w k).WF
+  | 0 => hs
+  | k + 1 => (WF.allocaChain hs k).afterAlloca (w k)
+
+/-- A later `alloca` leaves an earlier cell alone: its id is strictly smaller. -/
+theorem live?_allocaChain_of_lt {j : Nat} :
+    ∀ k, j < k → (s.allocaChain w k).mem.live? (s.chainPtr w j).id
+      = (s.allocaChain w (j + 1)).mem.live? (s.chainPtr w j).id := by
+  intro k hk
+  induction k with
+  | zero => omega
+  | succ n ih =>
+    rcases Nat.lt_or_ge j n with h | h
+    · rw [show (s.allocaChain w (n + 1)) = (s.allocaChain w n).afterAlloca (w n) from rfl,
+        live?_afterAlloca_of_lt (by simp only [chainPtr_id, nextFreeBlock_allocaChain]; omega)]
+      exact ih h
+    · have : j = n := by omega
+      subst this; rfl
+
+/-- Every cell of the chain still fits at the end of it. -/
+theorem fits_chainPtr {j k : Nat} (hj : j < k) :
+    Fits (s.allocaChain w k).mem (s.chainPtr w j) (w j) := by
+  refine fits_of_live?_eq (live?_allocaChain_of_lt k hj) ?_
+  show Fits ((s.allocaChain w j).afterAlloca (w j)).mem _ _
+  exact fits_afterAlloca _ _
+
+end GlobalState
+
 /-- Every block below `n₀` reads in `s'` as it did in `s`. With
 `n₀ = s.alloc.nextFreeBlock` this is the frame condition of a region entered
 at `s`: everything the caller could address is untouched. -/
@@ -162,6 +299,14 @@ the frame. -/
 theorem afterAlloca {w : Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock) (hf : FrameBelow n₀ s s') :
     FrameBelow n₀ s (s'.afterAlloca w) :=
   fun b hb => (live?_afterAlloca_of_lt (by omega)).trans (hf b hb)
+
+/-- A run of `n` successive `alloca`s allocates outside the frame. -/
+theorem allocaChain {w : Nat → Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock)
+    (hf : FrameBelow n₀ s s') : ∀ k, FrameBelow n₀ s (s'.allocaChain w k)
+  | 0 => hf
+  | k + 1 =>
+    FrameBelow.afterAlloca (by rw [GlobalState.nextFreeBlock_allocaChain]; omega)
+      (FrameBelow.allocaChain h hf k)
 
 /-- A store to a local -- a pointer whose block id is at or above `n₀` --
 stays outside the frame. -/
@@ -212,5 +357,22 @@ theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} 
     · rw [hf b hb hbo, live?_splice_ne (fun h => hbo h.symm)]
   · rw [live?_killFrom_of_le (by omega),
       live?_splice_ne (fun h => by rw [← h] at hb; omega), hs b (by omega)]
+
+/-- One step of an `allocaChain`, with the index given as a literal so `rw`
+can key on it: `allocaChain_step s w 0 1 rfl : s.allocaChain w 1 = …`. -/
+theorem allocaChain_step (s : GlobalState) (w : Nat → Nat) (k j : Nat) (h : j = k + 1) :
+    s.allocaChain w j = (s.allocaChain w k).afterAlloca (w k) := by
+  subst h; rfl
+
+/-- Strip the `runFunction` wrapper while keeping the existential in place, so
+the final state is supplied at the end from a name the walk introduced rather
+than a metavariable that predates it. A copy of `fiat_25519_selectznz`'s; they
+move together. -/
+theorem run_runFunction' {α : Type} {body : EffectM α} {rets : α} {s : GlobalState}
+    (P : GlobalState → Prop)
+    (h : ∃ s' : GlobalState, StateT.run body s = .value (rets, s') ∧ P (s.popFrame s'.mem)) :
+    ∃ s' : GlobalState, StateT.run (runFunction body) s = .value (rets, s') ∧ P s' :=
+  let ⟨t, hrun, hP⟩ := h
+  ⟨s.popFrame t.mem, run_runFunction hrun, hP⟩
 
 end Firedancer
