@@ -1089,3 +1089,86 @@ elab "denote_clear " base:ident lo:num hi:num : tactic => do
                       .syntheticOpaque (← goal.getTag)
       goal.assign newGoal
       replaceMainGoal [newGoal.mvarId!]
+
+
+/-! ### Stepping and reducing in one go
+
+`denote_step_all` leaves the stepped instructions as `denoteOp1` applications;
+`denote_eval` evaluates them; a `simp` usually follows. The two tactics below
+run that sequence over an index range, so a stretch of the program is one line.
+-/
+
+syntax reduceArgs := " [" term,* "]"
+
+open Lean Elab Tactic in
+/-- `simp` over `hyps` with `args`, `only` deciding which of the two it is. -/
+private def simpHyps (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
+  match only, args.isEmpty with
+  | true,  true  => evalTactic (← `(tactic| simp only [] at $hyps*))
+  | true,  false => evalTactic (← `(tactic| simp only [$[$args:term],*] at $hyps*))
+  | false, true  => evalTactic (← `(tactic| simp at $hyps*))
+  | false, false => evalTactic (← `(tactic| simp [$[$args:term],*] at $hyps*))
+
+open Lean Elab Tactic in
+/-- `denote_eval base lo hi`, a `simp` over the same hypotheses, and -- with
+`fold` -- one more ascending pass that rewrites each of them into the ones
+after it: the shared body of `reduce_hv` and `denote_step_reduce`. -/
+private def reduceHypsAt (base : Ident) (lo hi : Nat) (only : Bool) (args : Array Term)
+    (fold : Bool) : TacticM Unit := do
+  let loStx := Syntax.mkNumLit (toString lo)
+  let hiStx := Syntax.mkNumLit (toString hi)
+  evalTactic (← `(tactic| denote_eval $base $loStx:num $hiStx:num))
+  let hyps ← denoteHyps base.getId lo hi
+  simpHyps only args hyps
+  if fold then
+    -- ascending, so `hv<i>` is already folded by the time it is used: each
+    -- hypothesis is rewritten by every earlier one at once, which keeps a
+    -- fan-out (`%5` reading both `%3` and `%4`) as cheap as a chain.
+    for j in [1 : hyps.size] do
+      let prev : Array Term := (hyps.extract 0 j).map fun h => (h : Term)
+      -- a hypothesis mentioning none of its predecessors makes no progress,
+      -- which is `simp`'s error and not a failure of the fold
+      try simpHyps only (args ++ prev) #[hyps[j]!] catch _ => pure ()
+
+open Lean Elab in
+/-- The lemma list of `reduce_hv`, read off the syntax. -/
+private def reduceArgTerms (extra : Option (TSyntax ``reduceArgs)) : Array Term :=
+  match extra with
+  | some e => e.raw[1].getSepArgs.map fun s => ⟨s⟩
+  | none => #[]
+
+open Lean Elab Tactic in
+/-- `reduce_hv v 0 5 only [foo, bar]` is `denote_eval v 0 5` followed by
+`simp only [foo, bar] at hv0 … hv5`: the stepping hypotheses of an index range
+are evaluated to their dialect semantics and then simplified in place, without
+either half spelling the names out. Without `only` the second half is the full
+`simp`, and with no bracket the lemma list is empty -- `reduce_hv v 0 5` is
+`denote_eval` plus plain `simp at hv0 …`.
+
+Indices with no hypothesis are skipped, as for `denote_eval`, so a range may
+span `v<i>`s already `subst`ed away. Beyond that the semantics are `simp`'s,
+failure to make progress at a location included.
+
+`reduce_hv v 0 5 only [foo] fold` adds a second, ascending pass that rewrites
+each hypothesis into *every* later one -- `hv0` into `hv1 … hv5`, then the
+folded `hv1` into `hv2 … hv5`, and so on -- so the last hypothesis of the range
+is stated over the values that entered it rather than over the `v<i>` before it.
+A fan-out costs no more than a chain, and a hypothesis mentioning none of its
+predecessors is left alone rather than being an error. -/
+elab "reduce_hv " base:ident lo:num hi:num only:(&" only")? extra:(reduceArgs)?
+    fold:(&" fold")? : tactic => do
+  reduceHypsAt base lo.getNat hi.getNat only.isSome (reduceArgTerms extra) fold.isSome
+
+open Lean Meta Elab Tactic in
+/-- `denote_step_reduce v 5 only [foo]` runs the block to `%5` and reduces what
+that introduced: `denote_step_all v 5` followed by `reduce_hv` over exactly the
+new hypotheses. The range's lower end is where the walk already stood, read off
+the goal by `nextStepIndex`, so a stretch of the program is one line rather than
+three and the index never has to be repeated.
+
+The `only`/bracket clauses are `reduce_hv`'s. -/
+elab "denote_step_reduce " base:ident target:num only:(&" only")? extra:(reduceArgs)?
+    fold:(&" fold")? : tactic => do
+  let lo ← nextStepIndex (← getMainGoal)
+  evalTactic (← `(tactic| denote_step_all $base $target))
+  reduceHypsAt base lo target.getNat only.isSome (reduceArgTerms extra) fold.isSome

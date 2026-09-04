@@ -12,3 +12,4 @@ import SSA.Projects.Firedancer.Ref.Proof.Globals
 import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sgn
 import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_if
 import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_abs
+import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqrt_ratio
