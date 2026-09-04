@@ -6,17 +6,20 @@ namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-abbrev fiat_25519_sub_spec (o p q: Pointer) (s: GlobalState) : Prop :=
+abbrev fiat_25519_sub_spec (o p q: Pointer) (s: GlobalState)
+    (ho : IsFieldElemPtr s.mem o)
+    (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fiat_25519_sub.denote (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ ))
   let result := StateT.run invocation s
-  let p_input := readFieldElem? p s.mem
-  let q_input := readFieldElem? q s.mem
+  let p_input := readFieldElem hp
+  let q_input := readFieldElem hq
 
   ∃ out : BitVec (5 * 64),
     let output_state : GlobalState := { s with mem := s.mem.splice o out }
 
-    (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
-    ∧ readFieldElem? o output_state.mem = Sub.sub <$> p_input <*> q_input
-    ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? o i output_state.mem = some l → l ≤ 0x18000000000000
+    readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = p_input - q_input
+    -- no carry, so the limbs come back at the loose bound
+    ∧ LimbBounds.Loose (m := output_state.mem) (isFieldElemPtr_splice ho)
+    ∧ (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
 
 end Firedancer.Ref

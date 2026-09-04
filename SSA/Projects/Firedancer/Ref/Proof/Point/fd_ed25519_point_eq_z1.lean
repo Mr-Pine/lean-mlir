@@ -145,7 +145,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   obtain ⟨eqx1state, heqx1state, heqx1state_eq⟩ :=
     fd_f25519_eq_conforms x1 a y1state hy1WF px1Y paXY
       (limbBounds_of_readLimb? px1Y (limbBounds_of_live?_eq (hlivey1 x1.id (Ne.symm hxy)) bx1X))
-      (limbBounds_of_readLimb? paXY (limbBounds_of_live?_eq (hY a paX) baX))
+      (LimbBounds.bias (limbBounds_of_readLimb? paXY (limbBounds_of_live?_eq (hY a paX) baX)))
 
   -- the comparison writes nothing at all
   have fbE : FrameBelow s.alloc.nextFreeBlock s eqx1state := FrameBelow.of_equiv heqx1state_eq fbY
@@ -162,7 +162,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     fd_f25519_eq_conforms y1 (a.withOffset 40) eqx1state heqx1WF py1E paYE
       (limbBounds_of_readLimb? py1E
         (limbBounds_of_live?_eq (heqx1state_eq.live y1.id).symm by1Y))
-      (limbBounds_of_readLimb? paYE (limbBounds_of_live?_eq (hE _ paY) baY))
+      (LimbBounds.bias (limbBounds_of_readLimb? paYE (limbBounds_of_live?_eq (hE _ paY) baY)))
 
   -- the region's frame holds only `x1` and `y1`, so popping it restores `s`
   have fbF : FrameBelow s.alloc.nextFreeBlock s eqy1state := FrameBelow.of_equiv heqy1state_eq fbE
@@ -235,8 +235,9 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     simp only [mul_one]
     exact ⟨fun h => ⟨h.2.symm, h.1.symm⟩, fun h => ⟨h.2.symm, h.1.symm⟩⟩
 
-  rw [hv12, hx1read, hy1read, haXread, haYread]
-  simp only [Option.some.injEq]
+  -- the comparisons are stated over the elements themselves, so read each back
+  rw [hv12, readFieldElem_eq_of hx1read, readFieldElem_eq_of hy1read,
+    readFieldElem_eq_of haXread, readFieldElem_eq_of haYread]
   by_cases hA : (readPoint hb).Y * (readPoint ha).Z = (readPoint ha).Y <;>
     by_cases hB : (readPoint hb).X * (readPoint ha).Z = (readPoint ha).X
   · rw [if_pos hA, if_pos hB, if_pos (hsame.mpr ⟨hA, hB⟩)]; rfl

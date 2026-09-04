@@ -1,4 +1,5 @@
 import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_sub
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
@@ -28,12 +29,13 @@ lemma sub_repr_bounds (p q : Fin 5 → Nat) (i: Fin 5)
     simp only [sub_repr]
     fin_cases i <;> simp <;> omega
 
-/-- One limb of the region's `add bias; sub` pair, over `toNat`. At fiat's input
-bound the bias outweighs `q`'s limb on its own, so neither the `add` nor the
-`sub` wraps and the 64-bit chain agrees with `sub_repr`'s `ℕ` one. -/
+/-- One limb of the region's `add bias; sub` pair, over `toNat`. The subtrahend
+is at most the bias limb `c` itself, so neither the `add` nor the `sub` wraps
+and the 64-bit chain agrees with `sub_repr`'s `ℕ` one. A carried operand is
+below `c`; so is a `fiat_25519_opp` result, which is what lets `fd_f25519_eq`
+compare against one. -/
 theorem sub_limb_toNat {a b : BitVec 64} {c m n : ℕ} (ha : a.toNat = m) (hb : b.toNat = n)
-    (hn : n ≤ 0x8000000000000) (hm : m ≤ 0x8000000000000)
-    (hc : 0x8000000000000 ≤ c) (hc' : c < 2 ^ 53) :
+    (hn : n ≤ c) (hm : m ≤ 0x8000000000000) (hc' : c < 2 ^ 53) :
     ((a + BitVec.ofNat 64 c) - b).toNat = (c + m) - n := by
   have hadd : (a + BitVec.ofNat 64 c).toNat = m + c := by
     rw [BitVec.toNat_add, ha, BitVec.toNat_ofNat]; omega
@@ -41,16 +43,16 @@ theorem sub_limb_toNat {a b : BitVec 64} {c m n : ℕ} (ha : a.toNat = m) (hb : 
   omega
 
 lemma sub_repr_correct (q r : Fin 5 → Nat)
-  (hr : ∀ (i : Fin 5), r i ≤ 0x8000000000000) : decodeFieldElem (sub_repr q r) = (decodeFieldElem q) - (decodeFieldElem r) := by
+  (hr : ∀ (i : Fin 5), r i ≤ biasLimb i) : decodeFieldElem (sub_repr q r) = (decodeFieldElem q) - (decodeFieldElem r) := by
   have p_separation : decodeFieldElem (sub_repr q r) = (decodeFieldElem ![0xfffffffffffda, 0xffffffffffffe, 0xffffffffffffe, 0xffffffffffffe, 0xffffffffffffe]) + decodeFieldElem q - decodeFieldElem r := by
     simp [decodeFieldElem, sub_repr]
     -- each limb's `-` is a genuine subtraction: the bias alone already exceeds
     -- `q i`, so `Nat.cast_sub` applies and the whole thing is linear
-    have e0 : r 0 ≤ 0xfffffffffffda + q 0 := by have := hr 0; omega
-    have e1 : r 1 ≤ 0xffffffffffffe + q 1 := by have := hr 1; omega
-    have e2 : r 2 ≤ 0xffffffffffffe + q 2 := by have := hr 2; omega
-    have e3 : r 3 ≤ 0xffffffffffffe + q 3 := by have := hr 3; omega
-    have e4 : r 4 ≤ 0xffffffffffffe + q 4 := by have := hr 4; omega
+    have e0 : r 0 ≤ 0xfffffffffffda + q 0 := by have := hr 0; simp at this; omega
+    have e1 : r 1 ≤ 0xffffffffffffe + q 1 := by have := hr 1; simp at this; omega
+    have e2 : r 2 ≤ 0xffffffffffffe + q 2 := by have := hr 2; simp at this; omega
+    have e3 : r 3 ≤ 0xffffffffffffe + q 3 := by have := hr 3; simp at this; omega
+    have e4 : r 4 ≤ 0xffffffffffffe + q 4 := by have := hr 4; simp at this; omega
     rw [Nat.cast_sub e0, Nat.cast_sub e1, Nat.cast_sub e2, Nat.cast_sub e3, Nat.cast_sub e4]
     push_cast
     ring
@@ -69,12 +71,29 @@ set_option maxHeartbeats 3200000 in
 theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
   (hs : s.WF)
   (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
-  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
+  (hqbounds : BiasBounds? q s.mem)
   (ho: IsFieldElemPtr s.mem o)
   (hp: IsFieldElemPtr s.mem p)
   (hq: IsFieldElemPtr s.mem q) :
-  fiat_25519_sub_spec o p q s := by
-    simp only [fiat_25519_sub_spec, Cfg.denote]
+  fiat_25519_sub_spec o p q s ho hp hq := by
+    -- the walk produces the limbwise forms; read them back once, here
+    suffices h : ∃ out : BitVec (5 * 64),
+        let output_state : GlobalState := { s with mem := s.mem.splice o out }
+        (∃ s' : GlobalState,
+            StateT.run (runFunction (fiat_25519_sub.denote
+                (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))) s = .value ([]ₕ, s')
+          ∧ output_state ≈ s')
+        ∧ readFieldElem? o output_state.mem
+            = Sub.sub <$> readFieldElem? p s.mem <*> readFieldElem? q s.mem
+        ∧ ∀ (i : Fin 5) (l : ℕ),
+            readLimb? o i output_state.mem = some l → l ≤ 0x18000000000000 by
+      obtain ⟨out, hrun, hval, hbnd⟩ := h
+      refine ⟨out, ?_, limbBounds_of_readLimb? _ hbnd, hrun⟩
+      refine readFieldElem_eq_of ?_
+      rw [hval, show readFieldElem? p s.mem = some (readFieldElem hp) from (Option.some_get _).symm,
+        show readFieldElem? q s.mem = some (readFieldElem hq) from (Option.some_get _).symm]
+      rfl
+    simp only [Cfg.denote]
 
     obtain ⟨pblk, hpblk, hplen⟩ := id hp.left
     obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
@@ -90,7 +109,7 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     case right =>
       simp [readFieldElem?, hqinput, hpinput, ho, limbReadbackPack, outputBV]
       have pinput_bounds (j: Fin 5) : pinput j ≤ 0x8000000000000 := by simp only [hpinput, hpbounds j]
-      have qinput_bounds (j: Fin 5) : qinput j ≤ 0x8000000000000 := by simp only [hqinput, hqbounds j]
+      have qinput_bounds (j: Fin 5) : qinput j ≤ biasLimb j := by simp only [hqinput, hqbounds j]
       have output_bounds (i: Fin 5) : output i ≤ 0x18000000000000 := by
         simp only [output]
         simp only [sub_repr_bounds pinput qinput i pinput_bounds]
@@ -198,33 +217,33 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
       rw [limbOffsetInBits hq.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hqblk] using hqinput i
     have pb : ∀ i : Fin 5, pinput i ≤ 0x8000000000000 := fun i => hpbounds i _ (hpinput i)
-    have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 := fun i => hqbounds i _ (hqinput i)
+    have qb : ∀ i : Fin 5, qinput i ≤ biasLimb i := fun i => hqbounds i _ (hqinput i)
     -- limb 0 is loaded straight off the base pointer, with no `getelementptr`
     have m1 : x1.toNat = (0xfffffffffffda + pinput 0) - qinput 0 := by
       rw [← hx1]
       exact sub_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
         (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0)
-        (qb 0) (pb 0) (by norm_num) (by norm_num)
+        (by simpa using qb 0) (pb 0) (by norm_num)
     have m2 : x2.toNat = (0xffffffffffffe + pinput 1) - qinput 1 := by
       rw [← hx2]
       exact sub_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
         (by rw [hqlimb₁]; exact hql 1 8#64 (by simp))
-        (qb 1) (pb 1) (by norm_num) (by norm_num)
+        (by simpa using qb 1) (pb 1) (by norm_num)
     have m3 : x3.toNat = (0xffffffffffffe + pinput 2) - qinput 2 := by
       rw [← hx3]
       exact sub_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
         (by rw [hqlimb₂]; exact hql 2 16#64 (by simp))
-        (qb 2) (pb 2) (by norm_num) (by norm_num)
+        (by simpa using qb 2) (pb 2) (by norm_num)
     have m4 : x4.toNat = (0xffffffffffffe + pinput 3) - qinput 3 := by
       rw [← hx4]
       exact sub_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
         (by rw [hqlimb₃]; exact hql 3 24#64 (by simp))
-        (qb 3) (pb 3) (by norm_num) (by norm_num)
+        (by simpa using qb 3) (pb 3) (by norm_num)
     have m5 : x5.toNat = (0xffffffffffffe + pinput 4) - qinput 4 := by
       rw [← hx5]
       exact sub_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
         (by rw [hqlimb₄]; exact hql 4 32#64 (by simp))
-        (qb 4) (pb 4) (by norm_num) (by norm_num)
+        (by simpa using qb 4) (pb 4) (by norm_num)
 
     have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
       fun _ _ h => eq_ofNat_of_toNat h

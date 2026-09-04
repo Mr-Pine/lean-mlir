@@ -71,7 +71,7 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
   obtain ⟨pa₁, hva₁, hba₁⟩ := carry_of_live?_eq (fb a.id hna) ha hba
 
   -- `fd_f25519_neg( t, a )`: the local takes `-a` at the opp bias bound
-  obtain ⟨negOut, ⟨s₂, hrun₁, heq₁⟩, hnegval, hnegbnd⟩ :=
+  obtain ⟨negOut, hnegval, hnegbnd, s₂, hrun₁, heq₁⟩ :=
     fd_f25519_neg_conforms t a s₁ hs₁WF pt₁ pa₁ (limbBounds_of_readLimb? pa₁ hba₁)
   have hs₂WF : s₂.WF := GlobalState.WF.of_equiv hs₁WF.splice heq₁
   have hlive₁ : ∀ b : BlockId, t.id ≠ b → s₂.mem.live? b = s₁.mem.live? b :=
@@ -80,12 +80,11 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
     ⟨fits_equiv heq₁ (by simpa using fits_splice pt₁.left), pt₁.right⟩
   have hvt₂ : readFieldElem pt₂ = -readFieldElem ha :=
     readFieldElem_eq_of (by
-      rw [← readFieldElem?_of_equiv heq₁ t, hnegval,
-        show readFieldElem? a s₁.mem = some (readFieldElem pa₁) from (Option.some_get _).symm,
-        hva₁]
-      rfl)
+      rw [← readFieldElem?_of_equiv heq₁ t, ← hva₁, ← hnegval]
+      exact (Option.some_get _).symm)
   have hbt₂ : ∀ (i : Fin 5) (l : ℕ), readLimb? t i s₂.mem = some l → l ≤ 0xffffffffffffe :=
-    fun i l hl => hnegbnd i l ((readLimb?_of_equiv heq₁ t i).trans hl)
+    fun i l hl => biasBounds?_le (biasBounds_readLimb? _ hnegbnd) i l
+      ((readLimb?_of_equiv heq₁ t i).trans hl)
   obtain ⟨pa₂, hva₂', hba₂⟩ := carry_of_live?_eq (hlive₁ a.id hta) pa₁ hba₁
   have hva₂ : readFieldElem pa₂ = readFieldElem ha := hva₂'.trans hva₁
 

@@ -16,8 +16,8 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
   (hp : IsFieldElemPtr s.mem p)
   (hq : IsFieldElemPtr s.mem q)
   (hpbounds : LimbBounds hp)
-  (hqbounds : LimbBounds hq) :
-  fd_f25519_eq_spec p q s := by
+  (hqbounds : BiasBounds hq) :
+  fd_f25519_eq_spec p q s hp hq := by
     simp only [fd_f25519_eq_spec, Cfg.denote]
 
     -- `fd_f25519_t r[1]`
@@ -34,17 +34,15 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
 
     have hpbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? p i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
       fun i l hl => limbBounds_readLimb? hp hpbounds i l (by simpa [readLimb?, hlive p hp] using hl)
-    have hqbounds₁ : ∀ (i : Fin 5) (l : ℕ), readLimb? q i sAlloc.mem = some l → l ≤ 0x8000000000000 :=
-      fun i l hl => limbBounds_readLimb? hq hqbounds i l (by simpa [readLimb?, hlive q hq] using hl)
+    have hqbounds₁ : BiasBounds? q sAlloc.mem :=
+      fun i l hl => biasBounds_readLimb? hq hqbounds i l (by simpa [readLimb?, hlive q hq] using hl)
 
-    obtain ⟨subres, ⟨substate, hsubstate, hsubstate_eq⟩, hsubres⟩ := fd_f25519_sub_conforms r p q sAlloc hsAllocWF hpbounds₁ hqbounds₁ hr₁ hp₁ hq₁
+    obtain ⟨subres, hsubval, hsubbnd, substate, hsubstate, hsubstate_eq⟩ :=
+      fd_f25519_sub_conforms r p q sAlloc hsAllocWF hpbounds₁ hqbounds₁ hr₁ hp₁ hq₁
 
-    have hrbounds? : ∀ (i : Fin 5) (l : ℕ), readLimb? r i substate.mem = some l → l ≤ 2 ^ 51 := by
-      simp at hsubres
-      simp [← readLimb?_of_equiv hsubstate_eq]
-      intro i
-      intro l
-      exact hsubres.right i l
+    have hrbounds? : ∀ (i : Fin 5) (l : ℕ), readLimb? r i substate.mem = some l → l ≤ 2 ^ 51 :=
+      fun i l hl => limbBounds_readLimb? _ hsubbnd i l
+        ((readLimb?_of_equiv hsubstate_eq r i).trans hl)
     have hr₂ : IsFieldElemPtr substate.mem r := by
       refine ⟨?_, hr₁.2⟩
       apply fits_equiv hsubstate_eq
@@ -90,16 +88,24 @@ theorem fd_f25519_eq_conforms (p q: Pointer) (s: GlobalState)
 
     skip_lifetime
 
-    simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm]
-    have hpval : readFieldElem? p sAlloc.mem = readFieldElem? p s.mem := by
-      simp only [readFieldElem?, readLimb?, hlive p hp]
-    have hqval : readFieldElem? q sAlloc.mem = readFieldElem? q s.mem := by
-      simp only [readFieldElem?, readLimb?, hlive q hq]
-    obtain ⟨x, hx⟩ := Option.isSome_iff_exists.mp (readFieldElem?_isSome hp)
-    obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (readFieldElem?_isSome hq)
-    have hrval : readFieldElem? r substate.mem = some (x - y) := by
-      rw [← readFieldElem?_of_equiv hsubstate_eq r, hsubres.1, hpval, hqval, hx, hy]
-      rfl
-    grind only [readFieldElem?, readFieldElem?_of_equiv]
+    simp_return
+
+    -- the operands read the same either side of the `alloca`
+    have hpv : readFieldElem hp₁ = readFieldElem hp :=
+      readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hlive p hp)).trans
+        (Option.some_get _).symm)
+    have hqv : readFieldElem hq₁ = readFieldElem hq :=
+      readFieldElem_eq_of ((readFieldElem?_of_live?_eq (hlive q hq)).trans
+        (Option.some_get _).symm)
+    have hrval : readFieldElem? r substate.mem
+        = some (readFieldElem hp - readFieldElem hq) := by
+      rw [← readFieldElem?_of_equiv hsubstate_eq r, ← hpv, ← hqv, ← hsubval]
+      exact (Option.some_get _).symm
+    -- `fd_f25519_is_zero` tests the difference, which vanishes exactly when the
+    -- two elements agree
+    have hiff : (readFieldElem? r substate.mem = some 0)
+        ↔ (readFieldElem hp = readFieldElem hq) := by
+      rw [hrval, Option.some.injEq, sub_eq_zero]
+    simp only [hiff]
 
 end Firedancer.Ref

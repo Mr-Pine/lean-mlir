@@ -6,12 +6,12 @@ namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-abbrev fd_f25519_eq_spec (p q: Pointer) (s: GlobalState) : Prop :=
+abbrev fd_f25519_eq_spec (p q: Pointer) (s: GlobalState)
+    (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_eq.denote (Ctxt.Valuation.ofPair (.value q) (.value p)))
   let result := StateT.run invocation s
-  let pVal := readFieldElem? p s.mem
-  let qVal := readFieldElem? q s.mem
-  let output_value: LLVM.IntW _ := .value (if pVal = qVal then 1#32 else 0#32)
+  let output_value: LLVM.IntW _ :=
+    .value (if readFieldElem hp = readFieldElem hq then 1#32 else 0#32)
 
   ∃ s' : GlobalState , result = .value ([output_value]ₕ, s') ∧ s ≈ s'
 

@@ -15,7 +15,7 @@ def opp_repr (q : Fin 5 → Nat) :=
     0xffffffffffffe - q 3, 0xffffffffffffe - q 4]
 
 set_option linter.unnecessarySeqFocus false in
-lemma opp_repr_bounds (q : Fin 5 → Nat) (i : Fin 5) : opp_repr q i ≤ 0xffffffffffffe := by
+lemma opp_repr_bounds (q : Fin 5 → Nat) (i : Fin 5) : opp_repr q i ≤ biasLimb i := by
   fin_cases i <;> simp [opp_repr] <;> omega
 
 /-- One limb of the region's `const - load`, over `toNat`: at fiat's input
@@ -60,8 +60,22 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
   (ho: IsFieldElemPtr s.mem o)
   (hq: IsFieldElemPtr s.mem q)
   (hqbounds : LimbBounds hq) :
-  fiat_25519_opp_spec o q s := by
-    simp only [fiat_25519_opp_spec, Cfg.denote]
+  fiat_25519_opp_spec o q s ho hq := by
+    -- the walk produces the limbwise forms; read them back once, here
+    suffices h : ∃ out : BitVec (5 * 64),
+        let output_state : GlobalState := { s with mem := s.mem.splice o out }
+        (∃ s' : GlobalState,
+            StateT.run (runFunction (fiat_25519_opp.denote
+                (Ctxt.Valuation.ofHVector [.value q, .value o]ₕ))) s = .value ([]ₕ, s')
+          ∧ output_state ≈ s')
+        ∧ readFieldElem? o output_state.mem = Neg.neg <$> readFieldElem? q s.mem
+        ∧ BiasBounds? o output_state.mem by
+      obtain ⟨out, hrun, hval, hbnd⟩ := h
+      refine ⟨out, ?_, biasBounds_of_readLimb? _ hbnd, hrun⟩
+      refine readFieldElem_eq_of ?_
+      rw [hval, show readFieldElem? q s.mem = some (readFieldElem hq) from (Option.some_get _).symm]
+      rfl
+    simp only [Cfg.denote]
 
     obtain ⟨qblk, hqblk, hqlen⟩ := id hq.left
     obtain ⟨qinput, hqinput⟩ := exists_limbs hqblk
@@ -75,15 +89,18 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
       simp [readFieldElem?, hqinput, ho, limbReadbackPack, outputBV]
       have qinput_bounds (j: Fin 5) : qinput j ≤ 0x8000000000000 := by
         simp only [hqinput, limbBounds_readLimb? hq hqbounds j]
-      have output_bounds (i: Fin 5) : output i ≤ 0xffffffffffffe := opp_repr_bounds qinput i
+      have output_bounds (i: Fin 5) : output i ≤ biasLimb i := opp_repr_bounds qinput i
       have loose_output_bounds (i: Fin 5) : output i < 18446744073709551616 :=
-        (output_bounds i).trans_lt (by norm_num)
-      simp [loose_output_bounds, Nat.mod_eq_of_lt]
+        ((output_bounds i).trans (biasLimb_le i)).trans_lt (by norm_num)
+      simp [BiasBounds?, loose_output_bounds, Nat.mod_eq_of_lt]
       constructor
       simp only [vec_eq, Neg.neg, output, opp_repr_correct qinput qinput_bounds]
 
-      intro i
-      exact output_bounds i
+      intro i l hl
+      rw [limbReadbackPack s.mem o outputBV (show Fits s.mem o (5 * 64) from ho.left) i,
+        Option.some.injEq] at hl
+      subst hl
+      simpa [outputBV, Nat.mod_eq_of_lt (loose_output_bounds i)] using output_bounds i
 
     obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,
         m = ((((s.mem.splice o (outputBV 0)).splice (o.withOffset 8) (outputBV 1)).splice
@@ -181,5 +198,6 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
 
     simp only [BlockCom.denote_term, Terminator.denote_ret, houtMem,
       hs₁, hs₂, hs₃, hs₄, o₁, o₂, o₃, o₄, simp_denote, simp_sllvm]
+
 
 end Firedancer.Ref

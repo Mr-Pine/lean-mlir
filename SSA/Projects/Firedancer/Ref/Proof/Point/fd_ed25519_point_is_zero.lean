@@ -50,7 +50,8 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
       limbBounds_of_equiv hiszstate_eq zCoordBounds₀
 
     obtain ⟨eqstate, heqstate, heqstate_eq⟩ :=
-      fd_f25519_eq_conforms yPtr zPtr iszstate (hs.of_equiv hiszstate_eq) yFieldElemPtr zFieldElemPtr yCoordBounds zCoordBounds
+      fd_f25519_eq_conforms yPtr zPtr iszstate (hs.of_equiv hiszstate_eq) yFieldElemPtr zFieldElemPtr
+        yCoordBounds (LimbBounds.bias zCoordBounds)
 
     refine ⟨s.popFrame eqstate.mem, run_runFunction (s' := eqstate) ?_, ?_⟩
     case refine_2 =>
@@ -78,7 +79,8 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     clear hv4 hv5
 
     refine (BlockCom.run_bind_denote_call_of_value
-        (x := PoisonOr.value (if readFieldElem? yPtr iszstate.mem = readFieldElem? zPtr iszstate.mem then 1#32 else 0#32)) (s' := eqstate) ?_).trans ?_
+        (x := PoisonOr.value (if readFieldElem yFieldElemPtr = readFieldElem zFieldElemPtr
+          then 1#32 else 0#32)) (s' := eqstate) ?_).trans ?_
     · exact heqstate
 
     denote_step_all v 7
@@ -123,7 +125,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     have z' : readFieldElem? zPtr iszstate.mem = some P.Z := by
       rw [← z]
       exact (Option.some_get _).symm
-    rw [x', y', z']
+    rw [x', y, z]
     have hgoal : Ed25519.Point.zero.SamePoint (readPoint hp) ↔ (P.Y = P.Z ∧ P.X = 0) := by
       rw [Ed25519.Point.samePoint_iff_cross isUnit_one hz]
       simp [Ed25519.Point.zero, P, eq_comm, and_comm]

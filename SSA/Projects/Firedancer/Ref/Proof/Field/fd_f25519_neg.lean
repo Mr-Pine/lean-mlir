@@ -13,10 +13,10 @@ theorem fd_f25519_neg_conforms (o q : Pointer) (s : GlobalState)
     (ho : IsFieldElemPtr s.mem o)
     (hq : IsFieldElemPtr s.mem q)
     (hqbounds : LimbBounds hq) :
-    fd_f25519_neg_spec o q s := by
+    fd_f25519_neg_spec o q s ho hq := by
   simp only [fd_f25519_neg_spec, Cfg.denote]
 
-  obtain ⟨out, ⟨oppstate, hoppstate, hoppstate_eq⟩, hval, hbounds⟩ :=
+  obtain ⟨out, hval, hbounds, oppstate, hoppstate, hoppstate_eq⟩ :=
     fiat_25519_opp_conforms o q s hs ho hq hqbounds
 
   have hoppWF : oppstate.WF := GlobalState.WF.of_equiv hs.splice hoppstate_eq
@@ -25,8 +25,8 @@ theorem fd_f25519_neg_conforms (o q : Pointer) (s : GlobalState)
   have hpop : (s.popFrame oppstate.mem : GlobalState) ≈ oppstate :=
     GlobalState.Equiv.trans (killFrom_equiv_of_none hnone) ⟨hoppstate_eq.1, hoppstate_eq.globals, fun _ => rfl⟩
 
-  refine ⟨out, ⟨s.popFrame oppstate.mem, ?_,
-    GlobalState.Equiv.trans hoppstate_eq (GlobalState.Equiv.symm hpop)⟩, hval, hbounds⟩
+  refine ⟨out, hval, hbounds, s.popFrame oppstate.mem, ?_,
+    GlobalState.Equiv.trans hoppstate_eq (GlobalState.Equiv.symm hpop)⟩
 
   refine run_runFunction (s' := oppstate) ?_
 

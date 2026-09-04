@@ -14,20 +14,24 @@ set_option maxHeartbeats 3200000 in
 theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
   (hs : s.WF)
   (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
-  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
+  (hqbounds : BiasBounds? q s.mem)
   (ho : IsFieldElemPtr s.mem o)
   (hp : IsFieldElemPtr s.mem p)
   (hq : IsFieldElemPtr s.mem q) :
-  fd_f25519_sub_spec o p q s := by
+  fd_f25519_sub_spec o p q s ho hp hq := by
     simp only [fd_f25519_sub_spec, Cfg.denote]
 
-    obtain ⟨subres, ⟨substate, hsubstate, hsubstate_eq⟩, hsubres⟩ :=
+    obtain ⟨subres, hsubval, hsubbnd, substate, hsubstate, hsubstate_eq⟩ :=
       fiat_25519_sub_conforms o p q s hs hpbounds hqbounds ho hp hq
-    replace hsubres : readFieldElem? o substate.mem
-          = Sub.sub <$> readFieldElem? p s.mem <*> readFieldElem? q s.mem
-        ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? o i substate.mem = some l → l ≤ 0x18000000000000 :=
-      ⟨(readFieldElem?_of_equiv hsubstate_eq o).symm.trans hsubres.1,
-       fun i l hl => hsubres.2 i l ((readLimb?_of_equiv hsubstate_eq o i).trans hl)⟩
+    -- the callee states its result as a readback; the walk below runs on the
+    -- proof-free forms, so take them once here
+    have hsubval? : readFieldElem? o substate.mem = some (readFieldElem hp - readFieldElem hq) := by
+      rw [← readFieldElem?_of_equiv hsubstate_eq o, ← hsubval]
+      exact (Option.some_get _).symm
+    have hsubbnd? : ∀ (i : Fin 5) (l : ℕ),
+        readLimb? o i substate.mem = some l → l ≤ 0x18000000000000 :=
+      fun i l hl => limbBounds_readLimb? _ hsubbnd i l
+        ((readLimb?_of_equiv hsubstate_eq o i).trans hl)
     have ho_subst : Fits substate.mem o (5 * 64) := by
       apply fits_equiv hsubstate_eq
       simp
@@ -39,7 +43,7 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     have halloc : substate.alloc = s.alloc := hsubstate_eq.1.symm
 
     obtain ⟨carryres, ⟨carrystate, hcarrystate, hcarrystate_eq⟩, hcarryres⟩ :=
-      fiat_25519_carry_conforms o o substate hsubWF hsubres.2 ⟨ho_subst, ho.right⟩
+      fiat_25519_carry_conforms o o substate hsubWF hsubbnd? ⟨ho_subst, ho.right⟩
         ⟨ho_subst, ho.right⟩
 
     have hcarryWF : carrystate.WF :=
@@ -66,8 +70,8 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
         ≈ { alloc := s.alloc, mem := s.mem.splice o subres, globals := s.globals } :=
       GlobalState.Equiv.symm hsubstate_eq
 
-    refine ⟨carryres, ⟨s.popFrame carrystate.mem,
-      run_runFunction (s' := carrystate) ?run, ?equiv⟩, ?value, ?bounds⟩
+    refine ⟨carryres, ?value, ?bounds, s.popFrame carrystate.mem,
+      run_runFunction (s' := carrystate) ?run, ?equiv⟩
 
     case equiv =>
       refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm hpop)
@@ -76,9 +80,9 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
         (splice_splice_equiv (s := s) (p := o) subres carryres)) ?_
       exact GlobalState.Equiv.symm (splice_equiv (p := o) (x := carryres) hkill)
     case value =>
-      exact hfield.trans (hcarryres.1.trans hsubres.1)
+      exact readFieldElem_eq_of (hfield.trans (hcarryres.1.trans hsubval?))
     case bounds =>
-      exact fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)
+      exact limbBounds_of_readLimb? _ fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)
     case run =>
       refine (BlockCom.run_bind_denote_call_of_nil (s' := substate) ?_).trans ?_
       · exact hsubstate
