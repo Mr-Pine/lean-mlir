@@ -15,77 +15,6 @@ open MLIR.AST
 
 private abbrev ReaderM := MLIR.AST.ReaderM SLLVM
 
-/-- The `LLVM.Ty` (i.e. `SLLVM.Ty.arith`) counterpart of an MLIR type. Split
-out of `mkTy` because vectors recurse through their element type, which is again
-an arithmetic type, never `!ptr`. -/
-def mkArithTy : MLIRType 0 → ExceptM SLLVM LLVM.Ty
-  | .int .Signless w => return .bitvec w.toConcrete
-  -- A fixed-length 1-D vector, as in the LLVM dialect: scalable or
-  -- multi-dimensional vectors have no counterpart in `LLVM.Ty`.
-  | .vector [length] [] elemTy => return .vector length (← mkArithTy elemTy)
-  | t => throw <| .unsupportedType (some t)
-
-/-- `!ptr` is SLLVM's own spelling; `!llvm.ptr` is what `mlir-translate
---import-llvm` emits, and is the only one that appears in lifted code. -/
-def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
-  | .undefined "ptr" | .undefined "llvm.ptr" => return Ty.ptr
-  | t => Ty.arith <$> mkArithTy t
-
-instance : TransformTy SLLVM 0 where
-  mkTy := mkTy
-
-
-def getOutputWidth (opStx : MLIR.AST.Op 0) :
-    Except TransformError Nat := do
-  match opStx.res with
-  | res::[] =>
-    match res.2 with
-    | .int _ (.concrete w) => pure w
-    | _ => throw <| .generic s!"The operation {opStx.name} must output an integer type"
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
-
-/-- The declared result type of a single-result operation, as an arithmetic
-(`LLVM.Ty`) type. Unlike `getOutputWidth` this keeps the whole type, which
-poison needs since it exists at vector types too. -/
-def getOutputArithTy (opStx : MLIR.AST.Op 0) :
-    ExceptM SLLVM LLVM.Ty := do
-  match opStx.res with
-  | res::[] => mkArithTy res.2
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
-
-/-- The declared result type of a single-result operation, as a full
-`SLLVM.Ty`. `getOutputArithTy` gives only the arithmetic half, which a call's
-result type need not be. -/
-def getOutputTy (opStx : MLIR.AST.Op 0) : ExceptM SLLVM SLLVM.Ty := do
-  match opStx.res with
-  | res::[] => mkTy res.2
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
-
-/-- The declared type of the `i`-th operand of an operation. -/
-def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
-    ExceptM SLLVM LLVM.Ty := do
-  match opStx.args[i]? with
-  | some (_, t) => mkArithTy t
-  | none => throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
-
-/-- The arithmetic type of an already-parsed operand. Unlike `getArgArithTy`
-this reads the type off the context variable rather than off the syntax, which
-is what `llvm.store` needs: its stored value may be of any arithmetic type. -/
-def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → ReaderM LLVM.Ty
-  | ⟨Ty.arith t, _⟩ => return t
-  | ⟨t, _⟩ => throw <| .generic s!"{opName}: expected an arithmetic operand, but found: {t}"
-
-/-- `llvm.load`/`llvm.store` carry an `ordering` attribute; `0` is
-`not_atomic`, and atomics are not modelled. `alignment`, `tbaa` and
-`nontemporal` are accepted and ignored -- this memory model has no alignment
-constraints and no alias-metadata semantics. -/
-def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
-  match opStx.getAttr? "ordering" with
-  | none => return ()
-  | some (.int 0 _) => return ()
-  | some _ => throw <| .generic s!"{opStx.name}: atomic accesses are not modelled \
-      (expected `ordering = 0`, i.e. non-atomic)"
-
 /-! ### LLVM aggregate types and their layout
 
 `!llvm.struct<"…", (…)>` / `!llvm.array<n x t>` reach the AST as the verbatim
@@ -207,6 +136,103 @@ partial def AggTy.constIndexOffset (k : Nat) : AggTy → ExceptM SLLVM (Nat × A
       return (k * s, t)
   | t => throw <| .generic s!"llvm.getelementptr: cannot index into {repr t}"
 
+/-- The aggregate an `!llvm.…` type text denotes, or `none` when the text is
+not an aggregate. Only `struct<…>` and `array<…>` qualify: `!llvm.ptr` also
+decodes as an `AggTy`, but it is `Ty.ptr`, not a register aggregate. -/
+def aggTyOfText? (s : String) : Option AggTy :=
+  if s.startsWith "llvm.struct<" || s.startsWith "llvm.array<" then
+    match parseAggTy (s.toList.drop "llvm.".length) with
+    | some (t, []) => some t
+    | _ => none
+  else
+    none
+
+/-- The number of bits an aggregate occupies, i.e. its padded size. -/
+def AggTy.widthBits (t : AggTy) : ExceptM SLLVM Nat := do
+  let (sz, al) ← t.sizeAlign
+  return 8 * alignTo sz al
+
+/-- The `LLVM.Ty` (i.e. `SLLVM.Ty.arith`) counterpart of an MLIR type. Split
+out of `mkTy` because vectors recurse through their element type, which is again
+an arithmetic type, never `!ptr`. -/
+def mkArithTy : MLIRType 0 → ExceptM SLLVM LLVM.Ty
+  | .int .Signless w => return .bitvec w.toConcrete
+  -- A fixed-length 1-D vector, as in the LLVM dialect: scalable or
+  -- multi-dimensional vectors have no counterpart in `LLVM.Ty`.
+  | .vector [length] [] elemTy => return .vector length (← mkArithTy elemTy)
+  -- An aggregate held in a register (`!llvm.array<5 x i64>`,
+  -- `!llvm.struct<…>`) becomes LLVM's own flat layout: a bitvector of the
+  -- aggregate's padded size, lowest-addressed field in the low bits. That
+  -- makes `insertvalue` a bit splice and a store of the aggregate a store of
+  -- exactly the bytes LLVM would write. What it cannot express is per-field
+  -- poison -- see `SLLVM.insertvalue`, which is conservative about it.
+  | .undefined s =>
+      match aggTyOfText? s with
+      | some t => .bitvec <$> t.widthBits
+      | none => throw <| .unsupportedType (some (MLIRType.undefined (φ := 0) s))
+  | t => throw <| .unsupportedType (some t)
+
+/-- `!ptr` is SLLVM's own spelling; `!llvm.ptr` is what `mlir-translate
+--import-llvm` emits, and is the only one that appears in lifted code. -/
+def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
+  | .undefined "ptr" | .undefined "llvm.ptr" => return Ty.ptr
+  | t => Ty.arith <$> mkArithTy t
+
+instance : TransformTy SLLVM 0 where
+  mkTy := mkTy
+
+
+def getOutputWidth (opStx : MLIR.AST.Op 0) :
+    Except TransformError Nat := do
+  match opStx.res with
+  | res::[] =>
+    match res.2 with
+    | .int _ (.concrete w) => pure w
+    | _ => throw <| .generic s!"The operation {opStx.name} must output an integer type"
+  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
+/-- The declared result type of a single-result operation, as an arithmetic
+(`LLVM.Ty`) type. Unlike `getOutputWidth` this keeps the whole type, which
+poison needs since it exists at vector types too. -/
+def getOutputArithTy (opStx : MLIR.AST.Op 0) :
+    ExceptM SLLVM LLVM.Ty := do
+  match opStx.res with
+  | res::[] => mkArithTy res.2
+  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
+/-- The declared result type of a single-result operation, as a full
+`SLLVM.Ty`. `getOutputArithTy` gives only the arithmetic half, which a call's
+result type need not be. -/
+def getOutputTy (opStx : MLIR.AST.Op 0) : ExceptM SLLVM SLLVM.Ty := do
+  match opStx.res with
+  | res::[] => mkTy res.2
+  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+
+/-- The declared type of the `i`-th operand of an operation. -/
+def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
+    ExceptM SLLVM LLVM.Ty := do
+  match opStx.args[i]? with
+  | some (_, t) => mkArithTy t
+  | none => throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
+
+/-- The arithmetic type of an already-parsed operand. Unlike `getArgArithTy`
+this reads the type off the context variable rather than off the syntax, which
+is what `llvm.store` needs: its stored value may be of any arithmetic type. -/
+def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → ReaderM LLVM.Ty
+  | ⟨Ty.arith t, _⟩ => return t
+  | ⟨t, _⟩ => throw <| .generic s!"{opName}: expected an arithmetic operand, but found: {t}"
+
+/-- `llvm.load`/`llvm.store` carry an `ordering` attribute; `0` is
+`not_atomic`, and atomics are not modelled. `alignment`, `tbaa` and
+`nontemporal` are accepted and ignored -- this memory model has no alignment
+constraints and no alias-metadata semantics. -/
+def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
+  match opStx.getAttr? "ordering" with
+  | none => return ()
+  | some (.int 0 _) => return ()
+  | some _ => throw <| .generic s!"{opStx.name}: atomic accesses are not modelled \
+      (expected `ordering = 0`, i.e. non-atomic)"
+
 /-- The integers inside a `dense<…>` attribute: either a single value (the
 splat form) or one per lane. -/
 def denseInts : MLIR.AST.AttrValue 0 → ExceptM SLLVM (List Int)
@@ -216,6 +242,39 @@ def denseInts : MLIR.AST.AttrValue 0 → ExceptM SLLVM (List Int)
       | _ => throw <| .generic "llvm.mlir.constant: dense elements must be integers"
   | _ => throw <| .generic
       "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
+
+/-- The aggregate type of a single-result operation, when its result is one. -/
+def getOutputAggTy? (opStx : MLIR.AST.Op 0) : Option AggTy :=
+  match opStx.res with
+  | [(_, .undefined s)] => aggTyOfText? s
+  | _ => none
+
+/-- The flat value of a constant aggregate, as one `w`-bit integer: lane `0` in
+the low bits, matching `LLVM.Ty.flattenBV`.
+
+Only unpadded `array<n x iW>` is supported -- the shape `mlir-translate` emits
+for a constant `uint64_t[n]` initialiser. A padded array, or a struct, would
+have to say what its padding bits hold, and `Op.const` has no way to say
+"undef" for part of a value. -/
+def constAggInt (opStx : MLIR.AST.Op 0) (agg : AggTy) (w : Nat) :
+    ExceptM SLLVM Int := do
+  let some (.dense v _) := opStx.getAttr? "value"
+    | throw <| .generic
+        "llvm.mlir.constant: an aggregate constant needs a `dense<…>` value"
+  let .array n (.int laneW) := agg
+    | throw <| .generic "llvm.mlir.constant: only `array<n x iN>` aggregate \
+        constants are supported"
+  unless laneW * n == w do
+    throw <| .generic s!"llvm.mlir.constant: a padded `array<{n} x i{laneW}>` \
+      constant is not supported"
+  -- `dense<c>` is the splat form: one element standing for every lane.
+  let lanes ← match ← denseInts v with
+    | [c] => pure (List.replicate n c)
+    | lanes => pure lanes
+  unless lanes.length == n do
+    throw <| .generic s!"llvm.mlir.constant: {lanes.length} dense elements for an \
+      `array<{n} x i{laneW}>` constant"
+  return lanes.foldr (fun x acc => acc <<< laneW + x.emod (2 ^ laneW)) 0
 
 /-- The integers of an `array<…>` attribute, as `llvm.shufflevector` writes its
 mask. -/
@@ -356,15 +415,10 @@ instance : DialectParse SLLVM 0 where
         let tStx ← opStx.getTypeAttr "elem_type"
         let w ← match tStx with
           | .undefined s =>
-              if s.startsWith "llvm.struct<" || s.startsWith "llvm.array<" then
-                match parseAggTy (s.toList.drop "llvm.".length) with
-                | some (t, []) => do
-                    let (sz, al) ← (AggTy.sizeAlign t : ExceptM SLLVM _)
-                    pure (8 * alignTo sz al)
-                | _ => throw <| .generic s!"llvm.alloca: cannot decode \
-                    `elem_type = !{s}`"
-              else
-                throw <| .generic s!"llvm.alloca: unsupported `elem_type` !{s}"
+              match aggTyOfText? s with
+              | some t => (AggTy.widthBits t : ExceptM SLLVM _)
+              | none => throw <| .generic s!"llvm.alloca: unsupported \
+                  `elem_type` !{s}"
           | t => do pure (LLVM.Ty.width (← mkArithTy t))
         opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ
           <| .alloca w
@@ -444,13 +498,52 @@ instance : DialectParse SLLVM 0 where
     | "llvm.mlir.constant" => do
       match ← getOutputArithTy opStx with
       | LLVM.Ty.bitvec w =>
-        let ⟨val, _⟩ ← opStx.getIntAttr "value"
-        mkExprOf <| Op.const w val
+        -- A constant *aggregate* (`dense<[…]> : tensor<5xi64>` at
+        -- `!llvm.array<5 x i64>`) reaches here as a bitvector too, since
+        -- `mkArithTy` flattens aggregates. Its lanes pack into one `w`-bit
+        -- constant, lane 0 in the low bits, which is the same layout
+        -- `LLVM.Ty.flattenBV` gives a vector.
+        match getOutputAggTy? opStx with
+        | some agg => mkExprOf <| Op.const w (← constAggInt opStx agg w)
+        | none =>
+          let ⟨val, _⟩ ← opStx.getIntAttr "value"
+          mkExprOf <| Op.const w val
       | t =>
         let some (.dense v _) := opStx.getAttr? "value"
           | throw <| .generic
               "llvm.mlir.constant: a non-scalar constant needs a `dense<…>` value"
         mkExprOf <| Op.constDense t (← denseInts v)
+    -- `llvm.insertvalue` at a constant `position`. Aggregate registers are
+    -- their flat layout, so the position walks the aggregate type down to a
+    -- byte offset and the operation is a splice of the field's bits.
+    -- `extractvalue` is not modelled; nothing in the artifacts reads a field
+    -- back out of a register.
+    | "llvm.insertvalue" => do
+        let args ← args.assumeArity 2
+        let aggW ← getIntWidth args[0]
+        let fieldW ← getIntWidth args[1]
+        let some (_, aggStx) := opStx.args[0]?
+          | throw <| .generic "llvm.insertvalue: expected at least 1 operand"
+        let .undefined s := aggStx
+          | throw <| .generic "llvm.insertvalue: the aggregate operand must have an \
+              `!llvm.…` aggregate type"
+        let some agg := aggTyOfText? s
+          | throw <| .generic s!"llvm.insertvalue: cannot decode aggregate type !{s}"
+        let (offset, fieldTy) ← (← arrayInts opStx "position").foldlM
+            (init := ((0 : Nat), agg)) fun (off, ty) k => do
+          unless k ≥ 0 do
+            throw <| .generic s!"llvm.insertvalue: negative position index {k}"
+          let (step, ty) ← ty.constIndexOffset k.toNat
+          return (off + step, ty)
+        -- The field must be exactly the bits the position selects: a narrower
+        -- one would leave the padding it does not cover unaccounted for.
+        let fieldTyW ← match fieldTy with
+          | .int bits => pure bits
+          | t => t.widthBits
+        unless fieldTyW == fieldW && 8 * offset + fieldW ≤ aggW do
+          throw <| .generic s!"llvm.insertvalue: a {fieldW}-bit operand does not fit \
+            the {fieldTyW}-bit field at byte offset {offset} of a {aggW}-bit aggregate"
+        mkExprOf <| SLLVMOp.insertvalue aggW (8 * offset) fieldW
     -- Vector operations
     | "llvm.insertelement" =>
       let .vector l elem ← getOutputArithTy opStx

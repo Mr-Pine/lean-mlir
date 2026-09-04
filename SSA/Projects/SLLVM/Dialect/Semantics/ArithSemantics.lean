@@ -47,6 +47,25 @@ def srem (x y : LLVM.IntW w) : EffectM (LLVM.IntW w) := do
   else
     pure <| LLVM.srem x y
 
+/-! ### aggregates in registers -/
+
+/-- `llvm.insertvalue` on the flat model of aggregate registers: replace the
+`fieldW` bits of `agg` at bit offset `offBits` by `v`.
+
+Poison: a poison field poisons the whole result, and so does a poison
+aggregate -- except when the field covers every bit of the aggregate, which is
+what `undef` followed by one `insertvalue` produces, and where LLVM's answer is
+just the field. LLVM tracks poison per field and `IntW` only per bitvector, so
+outside that case the model is deliberately the conservative one. -/
+def insertvalue {aggW fieldW : Nat} (offBits : Nat)
+    (agg : LLVM.IntW aggW) (v : LLVM.IntW fieldW) : LLVM.IntW aggW := do
+  let v ← v
+  if offBits = 0 ∧ fieldW = aggW then
+    return v.setWidth aggW
+  let agg ← agg
+  let mask : BitVec aggW := (BitVec.allOnes fieldW).setWidth aggW <<< offBits
+  return (agg &&& ~~~mask) ||| (v.setWidth aggW <<< offBits)
+
 /-! ### pointer arithmetic -/
 
 def ptradd (p : SLLVM.Ptr) (x : LLVM.IntW 64) : SLLVM.Ptr := do

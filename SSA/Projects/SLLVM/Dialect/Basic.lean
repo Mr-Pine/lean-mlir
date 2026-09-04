@@ -70,6 +70,11 @@ inductive SLLVMOp where
   against the state; what a global holds is a hypothesis at the spec level
   instead, discharged by `GlobalState.ofGlobals`. -/
   | addressof (name : String)
+  /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
+  modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
+  size; see the parser's `mkArithTy`), so inserting a field is splicing
+  `fieldW` bits in at bit offset `offBits`. -/
+  | insertvalue (aggW offBits fieldW : Nat)
   /-- `llvm.call`. `Com` has no symbol table, so the callee's body travels with
   the call as its region argument; `callee` is carried for printing and
   round-tripping only and has no semantic role. The effect is the callee's:
@@ -209,6 +214,8 @@ def_signature for SLLVM
   | Op.const w _val  => () -> bitvec w
   | Op.poison t      => () -> Ty.arith t
   | Op.constDense t _vals => () -> Ty.arith t
+  | SLLVMOp.insertvalue aggW _off fieldW =>
+      (bitvec aggW, bitvec fieldW) -> bitvec aggW
   | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
@@ -246,6 +253,8 @@ def_denote for SLLVM
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
   | .memset => fun p b len => (fun _ => []ₕ) <$> SLLVM.memset p b len
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
+  | SLLVMOp.insertvalue _aggW off _fieldW =>
+      fun agg v => [SLLVM.insertvalue off agg v]ₕ
   | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
@@ -312,11 +321,13 @@ instance : DialectPrint SLLVM where
     | .memset     => "llvm.intr.memset"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call ..    => "llvm.call"
+    | .insertvalue .. => "llvm.insertvalue"
     | .addressof _ => "llvm.mlir.addressof"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
     | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"
+    | .insertvalue _ off _ => s!"\{offsetBits = {off}}"
     | .addressof name => s!"\{global_name = @{name}}"
     | _ => ""
   printTy
