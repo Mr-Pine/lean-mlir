@@ -31,6 +31,28 @@ open InstCombine (LLVM)
 
 namespace ToBytes
 
+/-- Name a term without touching the goal. `refine name_of (e) fun x hx => ?_`
+does the same job, but `rcases` builds its motive by *reverting* the goal, and in
+this walk the goal is the whole residual program: about a second, every time.
+Here the motive is an unassigned metavariable, so `refine` fixes it by assignment
+and the goal is never traversed. -/
+theorem name_of {α : Sort u} {b : Prop} (a : α) (h : ∀ x, x = a → b) : b := h a rfl
+
+/-- A cell's value, read straight off its block. The walk needs this once per
+peeled load; spelled as a `simp` at each site it is a *default*-simp-set call
+against the walk's context, and there are nineteen of them. -/
+theorem readWord?_of_block {m : MemoryState} {p : Pointer} {w : Nat} {blk : LiveBlock}
+    (hblk : m[p.id]? = some (.live blk)) :
+    readWord? p w m = some (BitVec.extractLsb' p.offsetInBits w blk.bytes) := by
+  simp [readWord?, MemoryState.live?, hblk]
+
+/-- `Fits`, in continuation form: the block and its two facts arrive as
+arguments, so nothing has to be reverted to build an `Exists` motive. -/
+theorem fits_elim {m : MemoryState} {p : Pointer} {n : Nat} {b : Prop} (h : Fits m p n)
+    (k : ∀ blk : LiveBlock, m[p.id]? = some (.live blk) →
+      p.offsetInBits + n ≤ blk.lengthInBits → b) : b :=
+  h.elim fun blk hb => k blk hb.1 hb.2
+
 /-! ### The scratch frame -/
 
 /-- Widths of the 21 cells, in allocation order: each `subborrowx`/`addcarryx`
@@ -398,6 +420,47 @@ lemma cmovznz_step {a : Pointer} {c : BitVec 8} {x y : BitVec 64}
     other := fun z hz => by
       rw [← heq.live z, live?_splice_ne (fun h => hz h.symm)] }⟩
 
+/-! ### The kernels, in continuation form
+
+`obtain` on a seven-fold `∃`/`∧` builds its motive by reverting the goal --
+once per layer, and in this walk the goal is the whole residual program, so each
+costs about a second. Taking the facts as arguments instead leaves the motive an
+unassigned metavariable, which `refine` fixes by assignment.
+
+`cmovznz` keeps its `obtain`: its condition and two operands stay
+metavariables until the walk's goal assigns them, and `refine` would turn those
+into goals. -/
+
+theorem subborrow_step' {a b : Pointer} {c : BitVec 8} {x y : BitVec 64}
+    {u : GlobalState} (hu : u.WF) (hab : a.id ≠ b.id)
+    (ha : Fits u.mem a 64) (hb : Fits u.mem b 8)
+    (hx : x.toNat ≤ 2 ^ 51) (hcy : 1 ≤ c.toNat + y.toNat) (hcy' : c.toNat + y.toNat ≤ 2 ^ 51)
+    {P : Prop}
+    (k : ∀ (u' : GlobalState) (lo : BitVec 64) (bo : BitVec 8),
+      StateT.run (runFunction (fiat_25519_subborrowx_u51.denote
+        (Ctxt.Valuation.ofHVector [.value y, .value x, .value c, .value b, .value a]ₕ))) u
+        = .value ([]ₕ, u') →
+      lo.toNat < 2 ^ 51 → bo.toNat ≤ 1 →
+      lo.toNat + c.toNat + y.toNat = x.toNat + 2 ^ 51 * bo.toNat →
+      Wrote₂ a b lo bo u u' → P) : P := by
+  obtain ⟨u', lo, bo, h₁, h₂, h₃, h₄, h₅⟩ := subborrow_step hu hab ha hb hx hcy hcy'
+  exact k u' lo bo h₁ h₂ h₃ h₄ h₅
+
+theorem addcarry_step' {a b : Pointer} {c : BitVec 8} {x y : BitVec 64}
+    {u : GlobalState} (hu : u.WF) (hab : a.id ≠ b.id)
+    (ha : Fits u.mem a 64) (hb : Fits u.mem b 8)
+    (hc : c.toNat ≤ 1) (hx : x.toNat < 2 ^ 51) (hy : y.toNat < 2 ^ 51)
+    {P : Prop}
+    (k : ∀ (u' : GlobalState) (lo : BitVec 64) (co : BitVec 8),
+      StateT.run (runFunction (fiat_25519_addcarryx_u51.denote
+        (Ctxt.Valuation.ofHVector [.value y, .value x, .value c, .value b, .value a]ₕ))) u
+        = .value ([]ₕ, u') →
+      lo.toNat < 2 ^ 51 → co.toNat ≤ 1 →
+      lo.toNat + 2 ^ 51 * co.toNat = c.toNat + x.toNat + y.toNat →
+      Wrote₂ a b lo co u u' → P) : P := by
+  obtain ⟨u', lo, co, h₁, h₂, h₃, h₄, h₅⟩ := addcarry_step hu hab ha hb hc hx hy
+  exact k u' lo co h₁ h₂ h₃ h₄ h₅
+
 /-! ### The walk
 
 Cell `2k` holds fiat's `x(2k+1)` and cell `2k+1` its borrow `x(2k+2)`, for
@@ -427,7 +490,7 @@ elab "cell_facts " w:num ", " i:num ", " u:term ", " f:term : tactic => do
   let hlen := mkIdent (Name.mkSimple ("hc" ++ sfx ++ "len"))
   evalTactic (← `(tactic| have $hcell:ident :
     Fits ($u).mem (cellPtr $st $i) $w := ($f).fits $i))
-  evalTactic (← `(tactic| obtain ⟨$blk:ident, $hblk:ident, $hlen:ident⟩ := id $hcell))
+  evalTactic (← `(tactic| refine fits_elim $hcell fun $blk $hblk $hlen => ?_))
 
 open Lean Elab Tactic in
 /-- `peel_cell w, i, u` runs the load of scratch cell `i` against the block
@@ -461,7 +524,7 @@ elab "limb_facts " k:num ", " u:term ", " f:term : tactic => do
   evalTactic (← `(tactic| let $qp:ident := ($qq).withOffset (($off) : BitVec 64)))
   evalTactic (← `(tactic| have $hqp:ident : Fits ($u).mem $qp $rem := by
     simpa using remainingFits ($u).mem $qq $hqu ($off) (by simp)))
-  evalTactic (← `(tactic| obtain ⟨$qblk:ident, $hqblk:ident, $hqlen:ident⟩ := id $hqp))
+  evalTactic (← `(tactic| refine fits_elim $hqp fun $qblk $hqblk $hqlen => ?_))
 
 open Lean Elab Tactic in
 /-- `limb_peel k, u` runs the `getelementptr`/`load` pair for `arg1[k]` against
@@ -553,12 +616,12 @@ elab "borrow_peel " k:num " from " pf:ident " giving " nf:ident
   evalTactic (← `(tactic| have $hqread:ident : ($xin).toNat
       = readLimb ($kFin : Fin 5) $hq :=
     limb_read $hq (($pf).fb ($qq).id ($hcells).idq) (qp := $qpT) (k := ($kFin : Fin 5)) rfl
-      $hoffPf (by simp [readWord?, MemoryState.live?, $qhb:ident])))
+      $hoffPf (readWord?_of_block (w := 64) $qhb)))
   let hqreadBV := mkIdent (Name.mkSimple ("hqreadBV" ++ sfx))
   evalTactic (← `(tactic| have $hqreadBV:ident : $xin
       = ((readLimb ($kFin : Fin 5) $hq : ℕ) : BitVec 64) :=
     limb_readBV $hq (($pf).fb ($qq).id ($hcells).idq) (qp := $qpT) (k := ($kFin : Fin 5)) rfl
-      $hoffPf (by simp [readWord?, MemoryState.live?, $qhb:ident])))
+      $hoffPf (readWord?_of_block (w := 64) $qhb)))
   let hxbound ← `((by rw [$hqread:ident]; exact le_trans ($hqlimb _) (by norm_num)))
   -- the borrow carried in: 0 at the head, else the previous step's bound
   let hcy ← if n == 1 then `((by decide : (1 : ℕ) ≤
@@ -571,12 +634,12 @@ elab "borrow_peel " k:num " from " pf:ident " giving " nf:ident
     else `((by
         have hy : (BitVec.ofInt 64 2251799813685247).toNat = 2251799813685247 := by decide
         omega))
-  evalTactic (← `(tactic| obtain ⟨$u:ident, $xlo:ident, $xbo:ident, $hrun:ident,
-      $hxlo:ident, $hxbo:ident, $hsum:ident, $w:ident⟩ :=
-    subborrow_step (a := cellPtr $st $a) (b := cellPtr $st $b)
+  evalTactic (← `(tactic| refine
+    subborrow_step' (a := cellPtr $st $a) (b := cellPtr $st $b)
       (c := $cin) (x := $xin) (y := $yin)
       ($pf).wf (($hcells).ne (by decide)) (($pf).fits $a) (($pf).fits $b)
-      $hxbound $hcy $hcy'))
+      $hxbound $hcy $hcy'
+      fun $u $xlo $xbo $hrun $hxlo $hxbo $hsum $w => ?_))
   evalTactic (← `(tactic| frame_step₂ $nf from $pf by $w))
   evalTactic (← `(tactic| have $nl:ident :=
     ($pl).grow $hcells (c := ($kFin : Fin 5)) rfl (by decide) $w $hxlo))
@@ -648,21 +711,19 @@ elab "addback_facts " j:num " from " pf:ident " giving " nf:ident
   let kFin := Syntax.mkNumLit (toString (m - 1))
   let hx ← `(($pl) ($kFin : Fin 5) (by omega)
       (BitVec.extractLsb' (cellPtr $st $srcN).offsetInBits 64 ($srcBlk).bytes)
-      (show readWord? (cellPtr $st $srcN) 64 ($pu).mem
-          = some (BitVec.extractLsb' (cellPtr $st $srcN).offsetInBits 64 ($srcBlk).bytes) from by
-        simp [readWord?, MemoryState.live?, $srcHBlk:ident]))
+      (readWord?_of_block (w := 64) $srcHBlk))
   -- the masked constant is below its mask, which is below `2 ^ 51`
   let hy ← `((by
       rw [$hmask:ident]
       split <;> norm_num [pLimb]))
-  evalTactic (← `(tactic| obtain ⟨$u:ident, $xlo:ident, $xco:ident, $hrun:ident,
-      $hxlo:ident, $hxco:ident, $hsum:ident, $w:ident⟩ :=
-    addcarry_step (a := cellPtr $st $a) (b := cellPtr $st $b)
+  evalTactic (← `(tactic| refine
+    addcarry_step' (a := cellPtr $st $a) (b := cellPtr $st $b)
       (c := $cin)
       (x := BitVec.extractLsb' (cellPtr $st $srcN).offsetInBits 64 ($srcBlk).bytes)
       (y := $yin)
       ($pf).wf (($hcells).ne (by decide)) (($pf).fits $a) (($pf).fits $b)
-      $hc $hx $hy))
+      $hc $hx $hy
+      fun $u $xlo $xco $hrun $hxlo $hxco $hsum $w => ?_))
   evalTactic (← `(tactic| frame_step₂ $nf from $pf by $w))
   evalTactic (← `(tactic| have $nl:ident := ($pl).keep₂ $hcells (by decide) (by decide) $w))
   -- The limb added back is what subborrow `m` wrote into cell `2m-2`; the five
@@ -682,13 +743,11 @@ elab "addback_facts " j:num " from " pf:ident " giving " nf:ident
   chain := chain.reverse
   evalTactic (← `(tactic| have $hload:ident :
       BitVec.extractLsb' (cellPtr $st $srcN).offsetInBits 64 ($srcBlk).bytes = $srcX := by
-    have hread : readWord? (cellPtr $st $srcN) 64 ($pu).mem
-        = some (BitVec.extractLsb' (cellPtr $st $srcN).offsetInBits 64 ($srcBlk).bytes) := by
-      simp [readWord?, MemoryState.live?, $srcHBlk:ident]
+    have hread := readWord?_of_block (w := 64) $srcHBlk
     have hchain : readWord? (cellPtr $st $srcN) 64 ($pu).mem
         = readWord? (cellPtr $st $srcN) 64 ($srcU).mem := by
       rw [$[$chain:term],*]
-    simpa using (hread.symm.trans hchain).trans
+    exact Option.some.inj <| (hread.symm.trans hchain).trans
       (readWord?_eq_some ($srcW).fita ($srcW).vala)))
   evalTactic (← `(tactic| rw [$hload:ident] at $hsum:ident))
   -- The call is matched against the slice, so it goes first; then the goal is
@@ -746,6 +805,19 @@ theorem canon {V Y R b5 c5 : ℕ} (hV : V < 2^256 - 38) (hY : Y < 2^255) (hR : R
   obtain rfl | rfl : b5 = 0 ∨ b5 = 1 := by omega
   · simp only [if_true] at hadd; omega
   · simp only [show (1 : ℕ) = 0 ↔ False from by decide, if_false] at hadd; omega
+
+/-- Five digits below `2 ^ 51` weigh less than `2 ^ 255`. Stated closed, like
+`canon`: inside the walk the `omega` would scan a context of several hundred
+hypotheses, and there are two of these. -/
+theorem digitSum_lt {a b c d e : ℕ} (ha : a < 2^51) (hb : b < 2^51) (hc : c < 2^51)
+    (hd : d < 2^51) (he : e < 2^51) :
+    a + 2^51 * b + 2^102 * c + 2^153 * d + 2^204 * e < 2^255 := by omega
+
+/-- ... and the input's limbs, which are bounded inclusively, weigh less than
+`2 ^ 256 - 38`. -/
+theorem limbSum_lt {a b c d e : ℕ} (ha : a ≤ 2^51) (hb : b ≤ 2^51) (hc : c ≤ 2^51)
+    (hd : d ≤ 2^51) (he : e ≤ 2^51) :
+    a + 2^51 * b + 2^102 * c + 2^153 * d + 2^204 * e < 2^256 - 38 := by omega
 
 set_option maxRecDepth 8000 in
 /-- The spec's value is the limb sum reduced: `decodeFieldElem` is that sum cast
@@ -922,6 +994,52 @@ elab "clear_subscript " lo:num hi:num ps:(ppSpace colGt ident)+ : tactic => do
     pure (acc.qsort (fun a b => a.1 > b.1) |>.map Prod.snd)
   replaceMainGoal [← g.tryClearMany fvars]
 
+open Lean Elab Tactic in
+/-- The byte gep's `denote_eval`, spelled out. `denote_eval` runs
+`simp_peephole`, which is a `funext` prelude plus the whole `simp_denote` set,
+in three passes over a hypothesis whose right-hand side carries the walk's
+entire valuation spine -- about 170 `Valuation.cons` nodes by the last store.
+Every one of the thirty-one byte geps fires the *same* twenty-one lemmas, so
+naming them makes it one pass over a small simp set. -/
+elab "gep_eval " n:num : tactic => do
+  let hv := mkIdent (Name.mkSimple ("hv" ++ toString n.getNat))
+  evalTactic (← `(tactic| simp only [Expr.denoteOp1, Expr.denoteOpPure, Expr.denoteOp,
+    Expr.op_toPure, Expr.op_mk, DialectDenote.denote, Ctxt.cons.eq_1, Ctxt.cons,
+    Int.reduceNeg, Ctxt.Valuation.ofHVector, Expr.args_toPure, Expr.args_mk,
+    HVector.map.eq_2, Ctxt.Valuation.cons_eval, Ctxt.Var.zero_eq_last,
+    Ctxt.Valuation.cons_last, HVector.map, Fin.zero_eta, HVector.cons_get_zero,
+    HVector.get.eq_3, HVector.get, cast_eq, EffectKind.liftEffect_rfl, id_eq,
+    HVector.head] at $hv:ident))
+
+open Lean Elab Tactic in
+/-- `peel_gep_byte` with `gep_eval` in place of `denote_eval`; the byte-store
+chain is its only caller. Staged here; belongs in `Ref/Proof/MemoryOperations.lean`
+in place of `peel_gep_byte`. -/
+elab "peel_gep_byte' " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident : tactic => do
+  let num := i.getNat
+  let offBytes := Syntax.mkNumLit (toString num)
+  let n ← nextStepIndex (← getMainGoal)
+  let nLit := Syntax.mkNumLit (toString n)
+  let vBase := mkIdent (Name.mkSimple "v")
+  let v := mkIdent (Name.mkSimple ("v" ++ toString n))
+  let hv := mkIdent (Name.mkSimple ("hv" ++ toString n))
+  let base := nm.getId.eraseMacroScopes.toString
+  let ptr := mkIdent (Name.mkSimple (base ++ subscript num))
+  let hptr := mkIdent (Name.mkSimple ("h" ++ base ++ subscript num))
+  evalTactic (← `(tactic| denote_step_all $vBase $nLit))
+  evalTactic (← `(tactic| gep_eval $nLit))
+  evalTactic (← `(tactic| let $ptr := ($p).withOffset (($offBytes) : BitVec 64)))
+  evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr (256 - $offBytes * 8) :=
+    byteFits $hp (k := $offBytes) (off := (($offBytes) : BitVec 64)) (by omega) (by simp)))
+  evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
+        simp only [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset,
+          Ctxt.Valuation.singleton, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?,
+          LLVM.mul?, simp_sllvm, BitVec.ofInt_ofNat, BitVec.ofNat_eq_ofNat,
+          Nat.cast_one, Nat.cast_zero, Nat.cast_ofNat, one_mul, mul_one,
+          add_zero, zero_add, BitVec.mul_one, BitVec.add_zero]))
+  evalTactic (← `(tactic| subst vValue))
+  evalTactic (← `(tactic| clear $hv))
+
 open Lean Elab Tactic Meta in
 /-- `store_bytes lo hi, o, ho, u` runs bytes `lo` to `hi - 1` of the store chain
 the region ends in: byte `k` at `o + k`, each but byte 0 behind its own
@@ -973,13 +1091,13 @@ elab "store_bytes " lo:num ppSpace hi:num ", " p:ident ", " hp:term ", " st:iden
         evalTactic (← `(tactic| have $gkId:ident : Fits ($cur).mem $p (32 * 8) := by
           rw [$(hmOf k):ident]; exact fits_splice $prevFits))
         gk := ⟨gkId.raw⟩
-      evalTactic (← `(tactic| peel_gep_byte $kLit, $p, $gk, $cur, $p))
+      evalTactic (← `(tactic| peel_gep_byte' $kLit, $p, $gk, $cur, $p))
       ptr := mkIdent (Name.mkSimple (pbase ++ subscript k))
       ptrFits := mkIdent (Name.mkSimple ("h" ++ pbase ++ subscript k))
-    -- name the result first: `obtain` never touches the goal, and the store's
-    -- rewrite then puts the opaque name there directly
-    evalTactic (← `(tactic| obtain ⟨$nxt:ident, $hnxt:ident⟩ :
-      ∃ z, z = { $cur with mem := ($cur).mem.splice $ptr $val } := ⟨_, rfl⟩))
+    -- name the result first -- `name_of` never touches the goal -- and the
+    -- store's rewrite then puts the opaque name there directly
+    evalTactic (← `(tactic| refine name_of
+      { $cur with mem := ($cur).mem.splice $ptr $val } fun $nxt $hnxt => ?_))
     evalTactic (← `(tactic| peel_store_as $val, $ptr, $ptrFits, $cur, $nxt, $hnxt))
   evalTactic (← `(tactic| clear $hvs*))
   -- the final state's `Fits`, so the next run can start from it
@@ -992,7 +1110,7 @@ end ToBytes
 
 open ToBytes in
 set_option linter.all false in
-set_option maxHeartbeats 8000000 in
+set_option maxHeartbeats 4000000 in
 set_option maxRecDepth 2000 in
 theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
     (hs : s.WF) (ho : IsByteBufPtr s.mem o) (hq : IsFieldElemPtr s.mem q)
@@ -1032,10 +1150,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 1 is subborrow 1's borrow byte, read in the state that wrote it
   have hload₁ : BitVec.extractLsb' (cellPtr s 1).offsetInBits 8 c₁blk.bytes
       = x2 := by
-    have hread : readWord? (cellPtr s 1) 8 u₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 1).offsetInBits 8 c₁blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₁.fitb w₁.valb)
+    have hread := readWord?_of_block (w := 8) hc₁blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₁.fitb w₁.valb)
   simp only [hload₁]
   clear hload₁ hc₁blk hc₁len c₁blk hcell₁
   limb_peel 1, u₁
@@ -1046,10 +1162,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 3 is subborrow 2's borrow byte, read in the state that wrote it
   have hload₃ : BitVec.extractLsb' (cellPtr s 3).offsetInBits 8 c₃blk.bytes
       = x4 := by
-    have hread : readWord? (cellPtr s 3) 8 u₂.mem
-        = some (BitVec.extractLsb' (cellPtr s 3).offsetInBits 8 c₃blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₃blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₂.fitb w₂.valb)
+    have hread := readWord?_of_block (w := 8) hc₃blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₂.fitb w₂.valb)
   simp only [hload₃]
   clear hload₃ hc₃blk hc₃len c₃blk hcell₃
   limb_peel 2, u₂
@@ -1060,10 +1174,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 5 is subborrow 3's borrow byte, read in the state that wrote it
   have hload₅ : BitVec.extractLsb' (cellPtr s 5).offsetInBits 8 c₅blk.bytes
       = x6 := by
-    have hread : readWord? (cellPtr s 5) 8 u₃.mem
-        = some (BitVec.extractLsb' (cellPtr s 5).offsetInBits 8 c₅blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₅blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₃.fitb w₃.valb)
+    have hread := readWord?_of_block (w := 8) hc₅blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₃.fitb w₃.valb)
   simp only [hload₅]
   clear hload₅ hc₅blk hc₅len c₅blk hcell₅
   limb_peel 3, u₃
@@ -1074,10 +1186,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 7 is subborrow 4's borrow byte, read in the state that wrote it
   have hload₇ : BitVec.extractLsb' (cellPtr s 7).offsetInBits 8 c₇blk.bytes
       = x8 := by
-    have hread : readWord? (cellPtr s 7) 8 u₄.mem
-        = some (BitVec.extractLsb' (cellPtr s 7).offsetInBits 8 c₇blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₇blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₄.fitb w₄.valb)
+    have hread := readWord?_of_block (w := 8) hc₇blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₄.fitb w₄.valb)
   simp only [hload₇]
   clear hload₇ hc₇blk hc₇len c₇blk hcell₇
   limb_peel 4, u₄
@@ -1087,10 +1197,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 9 is subborrow 5's borrow byte, `x10`: the condition the `cmovznz`
   -- selects on, and read back in the state that wrote it
   have hload₉ : BitVec.extractLsb' (cellPtr s 9).offsetInBits 8 c₉blk.bytes = x10 := by
-    have hread : readWord? (cellPtr s 9) 8 u₅.mem
-        = some (BitVec.extractLsb' (cellPtr s 9).offsetInBits 8 c₉blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₉blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₅.fitb w₅.valb)
+    have hread := readWord?_of_block (w := 8) hc₉blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₅.fitb w₅.valb)
   simp only [hload₉]
   clear hload₉ hc₉blk hc₉len c₉blk hcell₉
   obtain ⟨u₆, x11, hrun₆, hx11, w₆⟩ := cmovznz_step (a := cellPtr s 10) f₅.wf (f₅.fits 10)
@@ -1104,18 +1212,14 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   peel_cell 64, 10, u₆
   -- cell 10 is the `cmovznz` output, read back in the very state that wrote it
   have hload₁₀ : BitVec.extractLsb' (cellPtr s 10).offsetInBits 64 c₁₀blk.bytes = x11 := by
-    have hread : readWord? (cellPtr s 10) 64 u₆.mem
-        = some (BitVec.extractLsb' (cellPtr s 10).offsetInBits 64 c₁₀blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₀blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₆.fit w₆.val)
+    have hread := readWord?_of_block (w := 64) hc₁₀blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₆.fit w₆.val)
   simp only [hload₁₀]
   clear hload₁₀ hc₁₀blk hc₁₀len c₁₀blk hcell₁₀
   -- `%79` and `%82`: `x11` against `p`'s low and upper limbs, named before the
   -- instructions that build them so the add-back operands can be pinned.
-  obtain ⟨mask₀, hmask₀⟩ : ∃ z, z = if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 0) :=
-    ⟨_, rfl⟩
-  obtain ⟨mask₁, hmask₁⟩ : ∃ z, z = if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 1) :=
-    ⟨_, rfl⟩
+  refine name_of (if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 0)) fun mask₀ hmask₀ => ?_
+  refine name_of (if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 1)) fun mask₁ hmask₁ => ?_
   -- %79: the mask meets `p`'s low limb
   denote_step_all v 79
   denote_eval v 79 79
@@ -1129,10 +1233,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 12 is add-back 1's carry byte, read in the state that wrote it
   have hload₁₂ : BitVec.extractLsb' (cellPtr s 12).offsetInBits 8 c₁₂blk.bytes
       = x13 := by
-    have hread : readWord? (cellPtr s 12) 8 u₇.mem
-        = some (BitVec.extractLsb' (cellPtr s 12).offsetInBits 8 c₁₂blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₂blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₇.fitb w₇.valb)
+    have hread := readWord?_of_block (w := 8) hc₁₂blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₇.fitb w₇.valb)
   simp only [hload₁₂]
   clear hload₁₂ hc₁₂blk hc₁₂len c₁₂blk hcell₁₂
   peel_cell 64, 2, u₇
@@ -1149,10 +1251,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 14 is add-back 2's carry byte, read in the state that wrote it
   have hload₁₄ : BitVec.extractLsb' (cellPtr s 14).offsetInBits 8 c₁₄blk.bytes
       = x15 := by
-    have hread : readWord? (cellPtr s 14) 8 u₈.mem
-        = some (BitVec.extractLsb' (cellPtr s 14).offsetInBits 8 c₁₄blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₄blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₈.fitb w₈.valb)
+    have hread := readWord?_of_block (w := 8) hc₁₄blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₈.fitb w₈.valb)
   simp only [hload₁₄]
   clear hload₁₄ hc₁₄blk hc₁₄len c₁₄blk hcell₁₄
   peel_cell 64, 4, u₈
@@ -1163,10 +1263,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 16 is add-back 3's carry byte, read in the state that wrote it
   have hload₁₆ : BitVec.extractLsb' (cellPtr s 16).offsetInBits 8 c₁₆blk.bytes
       = x17 := by
-    have hread : readWord? (cellPtr s 16) 8 u₉.mem
-        = some (BitVec.extractLsb' (cellPtr s 16).offsetInBits 8 c₁₆blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₆blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₉.fitb w₉.valb)
+    have hread := readWord?_of_block (w := 8) hc₁₆blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₉.fitb w₉.valb)
   simp only [hload₁₆]
   clear hload₁₆ hc₁₆blk hc₁₆len c₁₆blk hcell₁₆
   peel_cell 64, 6, u₉
@@ -1177,10 +1275,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 18 is add-back 4's carry byte, read in the state that wrote it
   have hload₁₈ : BitVec.extractLsb' (cellPtr s 18).offsetInBits 8 c₁₈blk.bytes
       = x19 := by
-    have hread : readWord? (cellPtr s 18) 8 u₁₀.mem
-        = some (BitVec.extractLsb' (cellPtr s 18).offsetInBits 8 c₁₈blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₈blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₁₀.fitb w₁₀.valb)
+    have hread := readWord?_of_block (w := 8) hc₁₈blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₁₀.fitb w₁₀.valb)
   simp only [hload₁₈]
   clear hload₁₈ hc₁₈blk hc₁₈len c₁₈blk hcell₁₈
   peel_cell 64, 8, u₁₀
@@ -1192,13 +1288,11 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 19 holds add-back 5's limb, fiat's `x20`
   have hload₁₉ : BitVec.extractLsb' (cellPtr s 19).offsetInBits 64 c₁₉blk.bytes
       = x20 := by
-    have hread : readWord? (cellPtr s 19) 64 u₁₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 19).offsetInBits 64 c₁₉blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₉blk]
-    simpa using hread.symm.trans (readWord?_eq_some w₁₁.fita w₁₁.vala)
+    have hread := readWord?_of_block (w := 64) hc₁₉blk
+    exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₁₁.fita w₁₁.vala)
   simp only [hload₁₉]
   clear hload₁₉ hc₁₉blk hc₁₉len c₁₉blk hcell₁₉
-  obtain ⟨x22, hx22⟩ : ∃ z, z = BitVec.ofNat 64 (16 * x20.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (16 * x20.toNat)) fun x22 hx22 => ?_
   denote_step_all v 90
   denote_eval v 90 90
   eval_llvm 90 [show x20 <<< 4#64 = x22 from by
@@ -1212,17 +1306,15 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 17 holds add-back 4's limb, fiat's `x18`
   have hload₁₇ : BitVec.extractLsb' (cellPtr s 17).offsetInBits 64 c₁₇blk.bytes
       = x18 := by
-    have hread : readWord? (cellPtr s 17) 64 u₁₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 17).offsetInBits 64 c₁₇blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₇blk]
+    have hread := readWord?_of_block (w := 64) hc₁₇blk
     have hchain : readWord? (cellPtr s 17) 64 u₁₁.mem
         = readWord? (cellPtr s 17) 64 u₁₀.mem := by
       rw [w₁₁.survive? 64 (cells.ne (by decide)) (cells.ne (by decide))]
-    simpa using (hread.symm.trans hchain).trans
+    exact Option.some.inj <| (hread.symm.trans hchain).trans
       (readWord?_eq_some w₁₀.fita w₁₀.vala)
   simp only [hload₁₇]
   clear hload₁₇ hc₁₇blk hc₁₇len c₁₇blk hcell₁₇
-  obtain ⟨x23, hx23⟩ : ∃ z, z = BitVec.ofNat 64 (2 * x18.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (2 * x18.toNat)) fun x23 hx23 => ?_
   denote_step_all v 92
   denote_eval v 92 92
   eval_llvm 92 [show x18 <<< 1#64 = x23 from by
@@ -1236,18 +1328,16 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- cell 15 holds add-back 3's limb, fiat's `x16`
   have hload₁₅ : BitVec.extractLsb' (cellPtr s 15).offsetInBits 64 c₁₅blk.bytes
       = x16 := by
-    have hread : readWord? (cellPtr s 15) 64 u₁₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 15).offsetInBits 64 c₁₅blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₅blk]
+    have hread := readWord?_of_block (w := 64) hc₁₅blk
     have hchain : readWord? (cellPtr s 15) 64 u₁₁.mem
         = readWord? (cellPtr s 15) 64 u₉.mem := by
       rw [w₁₁.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₁₀.survive? 64 (cells.ne (by decide)) (cells.ne (by decide))]
-    simpa using (hread.symm.trans hchain).trans
+    exact Option.some.inj <| (hread.symm.trans hchain).trans
       (readWord?_eq_some w₉.fita w₉.vala)
   simp only [hload₁₅]
   clear hload₁₅ hc₁₅blk hc₁₅len c₁₅blk hcell₁₅
-  obtain ⟨x24, hx24⟩ : ∃ z, z = BitVec.ofNat 64 (64 * x16.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (64 * x16.toNat)) fun x24 hx24 => ?_
   denote_step_all v 94
   denote_eval v 94 94
   eval_llvm 94 [show x16 <<< 6#64 = x24 from by
@@ -1261,19 +1351,17 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   cell_facts 64, 13, u₁₁, f₁₁
   peel_cell 64, 13, u₁₁
   have hload₁₃ : BitVec.extractLsb' (cellPtr s 13).offsetInBits 64 c₁₃blk.bytes = x14 := by
-    have hread : readWord? (cellPtr s 13) 64 u₁₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 13).offsetInBits 64 c₁₃blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₃blk]
+    have hread := readWord?_of_block (w := 64) hc₁₃blk
     have hchain : readWord? (cellPtr s 13) 64 u₁₁.mem = readWord? (cellPtr s 13) 64 u₈.mem := by
       rw [w₁₁.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₁₀.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₉.survive? 64 (cells.ne (by decide)) (cells.ne (by decide))]
-    simpa using (hread.symm.trans hchain).trans (readWord?_eq_some w₈.fita w₈.vala)
+    exact Option.some.inj <| (hread.symm.trans hchain).trans (readWord?_eq_some w₈.fita w₈.vala)
   simp only [hload₁₃]
   clear hload₁₃ hc₁₃blk hc₁₃len c₁₃blk hcell₁₃
   -- the shift is plain scaling; the stepper's bit-level form is proved back
   -- from this where it is needed, rather than carried alongside it
-  obtain ⟨x25, hx25⟩ : ∃ z, z = BitVec.ofNat 64 (8 * x14.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (8 * x14.toNat)) fun x25 hx25 => ?_
   denote_step_all v 96
   denote_eval v 96 96
   eval_llvm 96 [show x14 <<< 3#64 = x25 from by
@@ -1288,15 +1376,13 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   cell_facts 64, 11, u₁₁, f₁₁
   peel_cell 64, 11, u₁₁
   have hload₁₁ : BitVec.extractLsb' (cellPtr s 11).offsetInBits 64 c₁₁blk.bytes = x12 := by
-    have hread : readWord? (cellPtr s 11) 64 u₁₁.mem
-        = some (BitVec.extractLsb' (cellPtr s 11).offsetInBits 64 c₁₁blk.bytes) := by
-      simp [readWord?, MemoryState.live?, hc₁₁blk]
+    have hread := readWord?_of_block (w := 64) hc₁₁blk
     have hchain : readWord? (cellPtr s 11) 64 u₁₁.mem = readWord? (cellPtr s 11) 64 u₇.mem := by
       rw [w₁₁.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₁₀.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₉.survive? 64 (cells.ne (by decide)) (cells.ne (by decide)),
         w₈.survive? 64 (cells.ne (by decide)) (cells.ne (by decide))]
-    simpa using (hread.symm.trans hchain).trans (readWord?_eq_some w₇.fita w₇.vala)
+    exact Option.some.inj <| (hread.symm.trans hchain).trans (readWord?_eq_some w₇.fita w₇.vala)
   simp only [hload₁₁]
   clear hload₁₁ hc₁₁blk hc₁₁len c₁₁blk hcell₁₁
   clear_subscript 1 11 w
@@ -1305,8 +1391,7 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- rather than duplicating the chain behind each into every consumer
   -- `x12` is a limb, so its top three bits are all the mask can keep: the
   -- accumulator is the bits `x12`'s six bytes left over, plus `x14` above them
-  obtain ⟨x38, hx38⟩ : ∃ z, z = BitVec.ofNat 64 (x12.toNat / 2 ^ 48 + x25.toNat) :=
-    ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (x12.toNat / 2 ^ 48 + x25.toNat)) fun x38 hx38 => ?_
   -- The accumulator chain in ℕ, stated here while every operand is still an
   -- atom. Each is the previous one's overflow above the bytes just written plus
   -- the next limb scaled to its boundary; the bounds interleave because the
@@ -1323,19 +1408,19 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   have hx38lt : x38.toNat < 2 ^ 55 := by rw [hx38nat]; omega
   have hx38bits : (x12 >>> 48#64 &&& 255#64) + x25 = x38 :=
     (accStep (a := x12) (b := x25) (by omega)).trans hx38.symm
-  obtain ⟨x51, hx51⟩ : ∃ z, z = BitVec.ofNat 64 (x38.toNat / 2 ^ 48 + x24.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (x38.toNat / 2 ^ 48 + x24.toNat)) fun x51 hx51 => ?_
   have hx51nat : x51.toNat = x38.toNat / 2 ^ 48 + x24.toNat := by
     rw [hx51, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   have hx51lt : x51.toNat < 2 ^ 58 := by rw [hx51nat]; omega
   have hx51bits : (x38 >>> 48#64 &&& 255#64) + x24 = x51 :=
     (accStep (a := x38) (b := x24) (by omega)).trans hx51.symm
-  obtain ⟨x66, hx66⟩ : ∃ z, z = BitVec.ofNat 64 (x51.toNat / 2 ^ 56 + x23.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (x51.toNat / 2 ^ 56 + x23.toNat)) fun x66 hx66 => ?_
   have hx66nat : x66.toNat = x51.toNat / 2 ^ 56 + x23.toNat := by
     rw [hx66, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   have hx66lt : x66.toNat < 2 ^ 53 := by rw [hx66nat]; omega
   have hx66bits : (x51 >>> 56#64) + x23 = x66 :=
     (accStep' (a := x51) (b := x23)).trans hx66.symm
-  obtain ⟨x79, hx79⟩ : ∃ z, z = BitVec.ofNat 64 (x66.toNat / 2 ^ 48 + x22.toNat) := ⟨_, rfl⟩
+  refine name_of (BitVec.ofNat 64 (x66.toNat / 2 ^ 48 + x22.toNat)) fun x79 hx79 => ?_
   have hx79nat : x79.toNat = x66.toNat / 2 ^ 48 + x22.toNat := by
     rw [hx79, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   have hx79bits : (x66 >>> 48#64 &&& 255#64) + x22 = x79 :=
@@ -1642,39 +1727,11 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
       · have : x10.toNat ≠ 0 := fun h0 => h (BitVec.eq_of_toNat_eq h0)
         simp [h, this, pLimb]
     rw [hM] at hadd
-    have hV : readLimb 0 hq + 2 ^ 51 * readLimb 1 hq + 2 ^ 102 * readLimb 2 hq
-    + 2 ^ 153 * readLimb 3 hq + 2 ^ 204 * readLimb 4 hq < 2 ^ 256 - 38 :=
-      calc readLimb 0 hq + 2 ^ 51 * readLimb 1 hq + 2 ^ 102 * readLimb 2 hq
-          + 2 ^ 153 * readLimb 3 hq + 2 ^ 204 * readLimb 4 hq
-          ≤ 2 ^ 51 + 2 ^ 51 * 2 ^ 51 + 2 ^ 102 * 2 ^ 51 + 2 ^ 153 * 2 ^ 51 + 2 ^ 204 * 2 ^ 51 := by
-            gcongr <;> exact hqlimb _
-        _ < 2 ^ 256 - 38 := by norm_num
+    have hV := limbSum_lt (hqlimb 0) (hqlimb 1) (hqlimb 2) (hqlimb 3) (hqlimb 4)
     -- Both chains leave five digits below `2 ^ 51`, so each sum is at most
     -- `2 ^ 255 - 1`: the digit bounds, one weight at a time.
-    have hY : x1.toNat + 2 ^ 51 * x3.toNat + 2 ^ 102 * x5.toNat + 2 ^ 153 * x7.toNat
-        + 2 ^ 204 * x9.toNat < 2 ^ 255 := by
-      have hd₁ := Nat.le_sub_one_of_lt hx1
-      have hd₃ := Nat.le_sub_one_of_lt hx3
-      have hd₅ := Nat.le_sub_one_of_lt hx5
-      have hd₇ := Nat.le_sub_one_of_lt hx7
-      have hd₉ := Nat.le_sub_one_of_lt hx9
-      calc x1.toNat + 2 ^ 51 * x3.toNat + 2 ^ 102 * x5.toNat + 2 ^ 153 * x7.toNat
-          + 2 ^ 204 * x9.toNat
-          ≤ (2 ^ 51 - 1) + 2 ^ 51 * (2 ^ 51 - 1) + 2 ^ 102 * (2 ^ 51 - 1)
-            + 2 ^ 153 * (2 ^ 51 - 1) + 2 ^ 204 * (2 ^ 51 - 1) := by gcongr
-        _ < 2 ^ 255 := by norm_num
-    have hR : x12.toNat + 2 ^ 51 * x14.toNat + 2 ^ 102 * x16.toNat + 2 ^ 153 * x18.toNat
-        + 2 ^ 204 * x20.toNat < 2 ^ 255 :=
-      have hd₁₂ := Nat.le_sub_one_of_lt hx12
-      have hd₁₄ := Nat.le_sub_one_of_lt hx14
-      have hd₁₆ := Nat.le_sub_one_of_lt hx16
-      have hd₁₈ := Nat.le_sub_one_of_lt hx18
-      have hd₂₀ := Nat.le_sub_one_of_lt hx20
-      calc x12.toNat + 2 ^ 51 * x14.toNat + 2 ^ 102 * x16.toNat + 2 ^ 153 * x18.toNat
-          + 2 ^ 204 * x20.toNat
-          ≤ (2 ^ 51 - 1) + 2 ^ 51 * (2 ^ 51 - 1) + 2 ^ 102 * (2 ^ 51 - 1)
-            + 2 ^ 153 * (2 ^ 51 - 1) + 2 ^ 204 * (2 ^ 51 - 1) := by gcongr
-        _ < 2 ^ 255 := by norm_num
+    have hY := digitSum_lt hx1 hx3 hx5 hx7 hx9
+    have hR := digitSum_lt hx12 hx14 hx16 hx18 hx20
     have := canon hV hY hR hx10 hbor hadd
     simp only [readFieldElem_val, ← this]
     ring
