@@ -76,6 +76,10 @@ inductive SLLVMOp where
   is `SLLVM.nullBlock`. Only the pointer form is modelled; `llvm.mlir.zero` at
   an integer or aggregate type is `llvm.mlir.constant 0` and parses as one. -/
   | nullptr
+  /-- `llvm.icmp` with `eq`/`ne` at `!llvm.ptr` -- `eq` selects which. The
+  integer predicates are `Op.icmp`; this is the pointer form, which is what a
+  caller's null check on a returned sentinel parses as. -/
+  | ptricmp (eq : Bool)
   /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
   modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
   size; see the parser's `mkArithTy`), so inserting a field is splicing
@@ -224,6 +228,7 @@ def_signature for SLLVM
       (bitvec aggW, bitvec fieldW) -> bitvec aggW
   | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
   | SLLVMOp.nullptr  => () -> Ty.ptr
+  | SLLVMOp.ptricmp _ => (Ty.ptr, Ty.ptr) -> bitvec 1
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
   | Op.extractelement e l w =>
@@ -264,6 +269,7 @@ def_denote for SLLVM
       fun agg v => [SLLVM.insertvalue off agg v]ₕ
   | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
   | SLLVMOp.nullptr => [SLLVM.Ptr.null]ₕ
+  | SLLVMOp.ptricmp eq => fun x y => [SLLVM.ptricmp eq x y]ₕ
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -332,6 +338,7 @@ instance : DialectPrint SLLVM where
     | .insertvalue .. => "llvm.insertvalue"
     | .addressof _ => "llvm.mlir.addressof"
     | .nullptr    => "llvm.mlir.zero"
+    | .ptricmp _  => "llvm.icmp"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"

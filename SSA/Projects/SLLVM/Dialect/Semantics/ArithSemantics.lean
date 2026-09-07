@@ -22,15 +22,25 @@ def Ptr : Type := PoisonOr Pointer
 aliases nothing. `alloca` takes `AllocState.nextFreeBlock` and never rewinds,
 so a state whose counter starts above `0` -- which every loaded module's does,
 `GlobalState.withGlobal` allocating the same way -- never names it. The model
-does not *enforce* the reservation, and nothing needs it to: no operation
-compares pointers, so `null` only ever appears as a returned value that a spec
-states literally. -/
+does not *enforce* the reservation: `ptricmp` compares pointers, so a spec
+whose region null-checks a live pointer carries `id ≠ nullBlock` itself. -/
 def nullBlock : BlockId := ⟨0⟩
 
 /-- The null pointer, `llvm.mlir.zero` at `!llvm.ptr`. Not poison: C code
 returns it as a sentinel and branches on it, so it is a definite value -- one
 that is never live, by `nullBlock`'s reservation. -/
 def Ptr.null : SLLVM.Ptr := .value ⟨nullBlock, 0#64⟩
+
+/-- `llvm.icmp eq`/`ne` at `!llvm.ptr` (`eq` selects which): the null check a
+caller does on a failure sentinel. Poison in either operand is poison out;
+two pointers are equal exactly when block and offset are. LLVM's provenance
+rules make this weaker in general -- comparing pointers into distinct objects
+is unspecified -- but every use here compares against `null`. -/
+@[simp_sllvm]
+def ptricmp (eq : Bool) (x y : SLLVM.Ptr) : LLVM.IntW 1 :=
+  match x, y with
+  | .value a, .value b => .value (if (a == b) == eq then 1#1 else 0#1)
+  | _, _ => .poison
 
 /-! ### div / rem -/
 
