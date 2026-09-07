@@ -70,6 +70,12 @@ inductive SLLVMOp where
   against the state; what a global holds is a hypothesis at the spec level
   instead, discharged by `GlobalState.ofGlobals`. -/
   | addressof (name : String)
+  /-- `llvm.mlir.zero` at `!llvm.ptr`: the null pointer. A *value*, not poison
+  -- C returns it as a failure sentinel and the caller branches on it -- and a
+  pure one: it reads nothing. Which pointer it is, and why it aliases nothing,
+  is `SLLVM.nullBlock`. Only the pointer form is modelled; `llvm.mlir.zero` at
+  an integer or aggregate type is `llvm.mlir.constant 0` and parses as one. -/
+  | nullptr
   /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
   modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
   size; see the parser's `mkArithTy`), so inserting a field is splicing
@@ -217,6 +223,7 @@ def_signature for SLLVM
   | SLLVMOp.insertvalue aggW _off fieldW =>
       (bitvec aggW, bitvec fieldW) -> bitvec aggW
   | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
+  | SLLVMOp.nullptr  => () -> Ty.ptr
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
   | Op.extractelement e l w =>
@@ -256,6 +263,7 @@ def_denote for SLLVM
   | SLLVMOp.insertvalue _aggW off _fieldW =>
       fun agg v => [SLLVM.insertvalue off agg v]ₕ
   | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
+  | SLLVMOp.nullptr => [SLLVM.Ptr.null]ₕ
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -323,6 +331,7 @@ instance : DialectPrint SLLVM where
     | .call ..    => "llvm.call"
     | .insertvalue .. => "llvm.insertvalue"
     | .addressof _ => "llvm.mlir.addressof"
+    | .nullptr    => "llvm.mlir.zero"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"

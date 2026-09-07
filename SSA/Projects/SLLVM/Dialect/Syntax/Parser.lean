@@ -436,6 +436,15 @@ instance : DialectParse SLLVM 0 where
           | throw <| .generic "llvm.mlir.addressof: expected a `global_name` \
               symbol attribute"
         opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ <| SLLVMOp.addressof g
+    -- `llvm.mlir.zero`: the zero value of the result type. At `!llvm.ptr` that
+    -- is the null pointer, which is its own operation; at an arithmetic type it
+    -- is just the constant 0.
+    | "llvm.mlir.zero" => do
+        match ← getOutputTy opStx with
+        | .ptr => opStx.mkExprOf (args? := some (Op.ParsedArgs.ofList [])) Γ <| SLLVMOp.nullptr
+        | .arith (LLVM.Ty.bitvec w) => mkExprOf <| Op.const w 0
+        | _ => throw <| .generic "llvm.mlir.zero: only `!llvm.ptr` and integer \
+            result types are supported"
     -- Stack-coloring metadata: no semantics here, but part of the artifact, so
     -- they parse (and denote to nothing) rather than having to be stripped.
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true

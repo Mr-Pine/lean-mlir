@@ -17,6 +17,21 @@ namespace LeanMLIR.SLLVM
 /-- An LLVM pointer, or `poison` -/
 def Ptr : Type := PoisonOr Pointer
 
+/-- The block `llvm.mlir.zero` points at. Reserved: it is the one id no
+`alloca` may hand out and no global may be loaded at, so that a null pointer
+aliases nothing. `alloca` takes `AllocState.nextFreeBlock` and never rewinds,
+so a state whose counter starts above `0` -- which every loaded module's does,
+`GlobalState.withGlobal` allocating the same way -- never names it. The model
+does not *enforce* the reservation, and nothing needs it to: no operation
+compares pointers, so `null` only ever appears as a returned value that a spec
+states literally. -/
+def nullBlock : BlockId := ⟨0⟩
+
+/-- The null pointer, `llvm.mlir.zero` at `!llvm.ptr`. Not poison: C code
+returns it as a sentinel and branches on it, so it is a definite value -- one
+that is never live, by `nullBlock`'s reservation. -/
+def Ptr.null : SLLVM.Ptr := .value ⟨nullBlock, 0#64⟩
+
 /-! ### div / rem -/
 
 @[simp_sllvm]
