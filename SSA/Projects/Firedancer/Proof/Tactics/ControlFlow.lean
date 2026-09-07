@@ -17,8 +17,8 @@ select the value-returning or the void family of step lemmas.
 has type `HVector toType argTys.reverse`, so leaving it open asks Lean to
 invert `List.reverse` on an unknown list -- which does not fail, it grinds
 until the heartbeat limit. -/
-def peelCallCore (cfgLemN bindLemN bareLemN : Name) (h : Term) (extra : Array Term) :
-    TacticM Unit := do
+def peelCallCore (cfgLemN bindCfgLemN bindLemN bareLemN : Name) (h : Term)
+    (extra : Array Term) : TacticM Unit := do
   -- `call {Γ Γout rets succs argTys retTys csigs cΓout} callee centry cblocks args body`
   let argTys ← (← getMainGoal).withContext do
     let tgt ← instantiateMVars (← (← getMainGoal).getType)
@@ -27,17 +27,34 @@ def peelCallCore (cfgLemN bindLemN bareLemN : Name) (h : Term) (extra : Array Te
     let as := callApp.getAppArgs
     unless as.size ≥ 5 do throwError "peel_call: malformed `BlockCom.call`"
     pure as[4]!
+  -- all four `reverse`/`reverseAux` equations: with an opaque valuation the
+  -- operand list is `(map V args).reverse`, and it only closes if the whole
+  -- `reverseAux` recursion unfolds
   let defaults : Array Term ← #[
-      ← `(HVector.map), ← `(HVector.reverse_cons), ← `(HVector.reverseAux_nil),
+      ← `(HVector.map), ← `(HVector.reverse_nil), ← `(HVector.reverse_cons),
+      ← `(HVector.reverseAux_nil), ← `(HVector.reverseAux_cons),
       ← `(Ctxt.Valuation.ofHVector_nil), ← `(Ctxt.Valuation.ofHVector_cons),
       ← `(Ctxt.Valuation.nil_append), ← `(Ctxt.Valuation.cons_append),
       ← `(Ctxt.Valuation.cons_succ)].mapM pure
   let simpArgs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
     (defaults ++ extra).mapM fun t => `(Lean.Parser.Tactic.simpLemma| $t:term)
   let tys ← argTys.toSyntax
-  let cfgLem  := mkIdent cfgLemN
-  let bindLem := mkIdent bindLemN
-  let bareLem := mkIdent bareLemN
+  let cfgLem     := mkIdent cfgLemN
+  let bindCfgLem := mkIdent bindCfgLemN
+  let bindLem    := mkIdent bindLemN
+  let bareLem    := mkIdent bareLemN
+  -- The `>>=` shape with the operand vector *supplied*, tried only when there
+  -- are `with` lemmas -- that is, only in a tail block, where the ambient
+  -- valuation is opaque and `(args.map V).reverse` is not defeq to the
+  -- callee's argument list until those lemmas have rewritten each lookup. The
+  -- plain bind lemma has no `hargs`, so there its `exact` grinds on a defeq
+  -- check it cannot discharge rather than failing over. With a *concrete*
+  -- valuation the plain path already works, and taking this one instead
+  -- changes which `argVals` gets picked -- hence the gate.
+  unless extra.isEmpty do
+    if ← (do evalTactic (← `(tactic| rw [$bindCfgLem:ident (argTys := $tys)
+        (by simp only [$[$simpArgs],*]) $h])); pure true) <|> pure false then
+      return
   evalTactic (← `(tactic| first
     -- the `>>=` shape `Cfg.denote` produces: the common case
     | rw [$bindLem:ident (argTys := $tys)
@@ -65,6 +82,7 @@ is folded back to that constant's own `denote`.
 `h : StateT.run (runFunction (callee.denote V)) t = .value ([x]ₕ, t')` -/
 elab "peel_call " h:term : tactic =>
   peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_value
     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value
     ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_value h #[]
 
@@ -77,6 +95,7 @@ known from `EntryEnv`-style facts -- pass them here, or destructure the
 structure beforehand and let the `simp [*]` find them. -/
 elab "peel_call " h:term " with " l:term,+ : tactic =>
   peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_value
     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value
     ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_value h l.getElems
 
@@ -88,6 +107,7 @@ nothing enters the context.
 `h : StateT.run (runFunction (callee.denote V)) t = .value ([]ₕ, t')` -/
 elab "peel_call_nil " h:term : tactic =>
   peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_nil
     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil
     ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_nil h #[]
 
@@ -95,6 +115,7 @@ open Lean Elab Tactic in
 /-- `peel_call_nil h with l₁, l₂`: the void form of `peel_call … with …`. -/
 elab "peel_call_nil " h:term " with " l:term,+ : tactic =>
   peelCallCore ``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_nil
+    ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_nil
     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil
     ``LeanMLIR.SLLVM.BlockCom.run_denote_call_of_nil h l.getElems
 

@@ -358,6 +358,25 @@ theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} 
   · rw [live?_killFrom_of_le (by omega),
       live?_splice_ne (fun h => by rw [← h] at hb; omega), hs b (by omega)]
 
+/-- `popFrame_equiv_splice` for a region that wrote its out-parameter block
+more than once -- a point-returning one writes four coordinates. The writes
+show up only as `n`, any memory agreeing with `s.mem` off the block `o`; the
+caller supplies the single readback `hoval` at `o`. -/
+theorem popFrame_equiv_block {s : GlobalState} {m n : MemoryState} {o : BlockId}
+    (hs : s.WF) (ho : o.id < s.alloc.nextFreeBlock)
+    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o →
+      m.live? b = s.mem.live? b)
+    (hfn : ∀ b : BlockId, b ≠ o → n.live? b = s.mem.live? b)
+    (hoval : m.live? o = n.live? o) :
+    s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) := by
+  refine ⟨rfl, rfl, fun b => ?_⟩
+  show (m.killFrom s.alloc.nextFreeBlock).live? b = n.live? b
+  by_cases hbo : b = o
+  · rw [hbo, live?_killFrom_of_lt ho, hoval]
+  · by_cases hb : b.id < s.alloc.nextFreeBlock
+    · rw [live?_killFrom_of_lt hb, hfm b hb hbo, hfn b hbo]
+    · rw [live?_killFrom_of_le (by omega), hfn b hbo, hs b (by omega)]
+
 /-- One step of an `allocaChain`, with the index given as a literal so `rw`
 can key on it: `allocaChain_step s w 0 1 rfl : s.allocaChain w 1 = …`. -/
 theorem allocaChain_step (s : GlobalState) (w : Nat → Nat) (k j : Nat) (h : j = k + 1) :

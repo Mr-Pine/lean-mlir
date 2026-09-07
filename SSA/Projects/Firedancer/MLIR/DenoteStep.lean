@@ -326,6 +326,28 @@ theorem BlockCom.run_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
     BlockCom.run_bind_denote_call_of_nil h
   simpa only [bind_pure] using h2
 
+/-- `run_bind_denote_call_of_value` for a callee held by reference, with the
+operand vector supplied rather than inferred.
+
+This is what a *tail* block needs. There the ambient valuation is an opaque
+variable, so `(args.map V).reverse` is not defeq to the callee's argument list
+-- it becomes so only after the block's pinned-entry facts are rewritten in,
+which is what `hargs` is for. Without it the plain bind lemma's `exact` grinds
+on a defeq check it cannot discharge. -/
+theorem BlockCom.run_bind_denote_call_cfg_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets succs β}
+    {argTys : List SLLVM.Ty} {callee : String}
+    {c : Cfg (Ctxt.ofList argTys.reverse) [t]}
+    {args : HVector Γ.Var argTys}
+    {body : BlockCom (([t] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState} {x : ⟦t⟧}
+    {argVals : HVector toType argTys.reverse}
+    (hargs : (args.map V).reverse = argVals)
+    (h : StateT.run (runFunction (c.denote (Ctxt.Valuation.ofHVector argVals))) s
+      = .value ([x]ₕ, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V >>= k) s
+      = StateT.run (body.denote (x ::ᵥ V) >>= k) s' :=
+  BlockCom.run_bind_denote_call_of_value (by rw [Cfg.denote_mk_self, hargs]; exact h)
+
 theorem BlockCom.run_denote_call_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets succs}
     {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
     {callee : String}

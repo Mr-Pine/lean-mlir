@@ -30,16 +30,16 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
     (hr : IsPointPtr s.mem r)
     (hx : IsFieldElemPtr s.mem x) (hy : IsFieldElemPtr s.mem y)
     (hz : IsFieldElemPtr s.mem z) (ht : IsFieldElemPtr s.mem t) :
-    fd_ed25519_point_from_spec r x y z t s hxne hyne hzne htne := by
+    fd_ed25519_point_from_spec r x y z t s hxne hyne hzne htne hr hx hy hz ht := by
   simp only [fd_ed25519_point_from_spec, Cfg.denote]
 
   -- the four coordinate pointers, as field elements in `s`
   have hc0 : IsFieldElemPtr s.mem r := by
-    simpa [Pointer.withOffset] using isCoordPtr r hr 0
-  have hc1 : IsFieldElemPtr s.mem (r.withOffset 40) := coordPtr_one r ▸ isCoordPtr r hr 1
-  have hc3 : IsFieldElemPtr s.mem (r.withOffset 120) := coordPtr_three r ▸ isCoordPtr r hr 3
+    simpa [Pointer.withOffset] using isCoordPtr hr 0
+  have hc1 : IsFieldElemPtr s.mem (r.withOffset 40) := coordPtr_one r ▸ isCoordPtr hr 1
+  have hc3 : IsFieldElemPtr s.mem (r.withOffset 120) := coordPtr_three r ▸ isCoordPtr hr 3
   have hc2 : IsFieldElemPtr s.mem (r.withOffset 80) := by
-    simpa [Pointer.withOffset] using isCoordPtr r hr 2
+    simpa [Pointer.withOffset] using isCoordPtr hr 2
 
   -- call 1: X ≔ x, in `s`
   obtain ⟨oX, ⟨u₁, hrun₁, heq₁⟩, hcopy₁⟩ :=
@@ -93,6 +93,7 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
 
   case vx =>
     intro i
+    refine readLimb_eq_of_readLimb? ?_
     have hi : i.toNat < 5 := i.isLt
     rw [readLimb?_splice_of_disjoint i (.inr (.inr (by rw [h80]; omega))),
       readLimb?_splice_of_disjoint i (.inr (.inr (by rw [h120]; omega))),
@@ -101,6 +102,7 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
 
   case vy =>
     intro i
+    refine readLimb_eq_of_readLimb? ?_
     have hi : i.toNat < 5 := i.isLt
     rw [readLimb?_splice_of_disjoint i (.inr (.inr (by rw [h40, h80]; omega))),
       readLimb?_splice_of_disjoint i (.inr (.inr (by rw [h40, h120]; omega))),
@@ -112,6 +114,7 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
 
   case vz =>
     intro i
+    refine readLimb_eq_of_readLimb? ?_
     have hi : i.toNat < 5 := i.isLt
     rw [readLimb?_splice_of_disjoint i (.inr (.inl (by rw [h80, h120]; omega))),
       limbSpliceReadback _ _ _ (fits_splice (fits_splice hc3.1)) i]
@@ -128,6 +131,7 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
 
   case vt =>
     intro i
+    refine readLimb_eq_of_readLimb? ?_
     rw [limbSpliceReadback _ _ _ (fits_splice (fits_splice (fits_splice hc2.1))) i]
     have h4 := hcopy₄ i
     rw [limbSpliceReadback _ _ _ hc2u.1 i] at h4

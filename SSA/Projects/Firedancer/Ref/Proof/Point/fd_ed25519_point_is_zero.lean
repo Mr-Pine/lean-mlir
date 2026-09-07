@@ -22,7 +22,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
 
     -- coordinate 0 sits at offset 0, so it *is* `p`
     have xFieldElemPtr : IsFieldElemPtr s.mem p := by
-      simpa [Pointer.withOffset] using isCoordPtr p hp 0
+      simpa [Pointer.withOffset] using isCoordPtr hp 0
     have xCoordBounds : LimbBounds xFieldElemPtr :=
       limbBounds_congr (by simp [Pointer.withOffset]) (coordLimbBounds hp hpbounds 0)
 
@@ -31,7 +31,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
 
     let yPtr := p.withOffset (5 * 8)
     have yPtr₀ : IsFieldElemPtr s.mem yPtr := by
-      simpa [yPtr, Pointer.withOffset] using isCoordPtr p hp 1
+      simpa [yPtr, Pointer.withOffset] using isCoordPtr hp 1
     have yFieldElemPtr : IsFieldElemPtr iszstate.mem yPtr :=
       ⟨fits_equiv hiszstate_eq yPtr₀.1, yPtr₀.2⟩
     have yCoordBounds₀ : LimbBounds yPtr₀ :=
@@ -41,7 +41,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
 
     let zPtr := p.withOffset (3 * 5 * 8)
     have zPtr₀ : IsFieldElemPtr s.mem zPtr := by
-      simpa [zPtr, Pointer.withOffset] using isCoordPtr p hp 3
+      simpa [zPtr, Pointer.withOffset] using isCoordPtr hp 3
     have zFieldElemPtr : IsFieldElemPtr iszstate.mem zPtr :=
       ⟨fits_equiv hiszstate_eq zPtr₀.1, zPtr₀.2⟩
     have zCoordBounds₀ : LimbBounds zPtr₀ :=
@@ -95,7 +95,7 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     -- the four coordinates of `P`, named
     obtain ⟨c, hc⟩ : ∃ c : Fin 4 → ZMod _root_.p, ∀ i, readCoordinate? p i s.mem = some (c i) :=
       ⟨fun i => (readFieldElem? (p.withOffset (i * (5 * 8))) s.mem).get
-          (readFieldElem?_isSome (isCoordPtr p hp i)),
+          (readFieldElem?_isSome (isCoordPtr hp i)),
         fun i => (Option.some_get _).symm⟩
     have hPdef : P = decodePoint ![c 0, c 1, c 2, c 3] := by
       have h4 : readPoint? p s.mem = some (decodePoint ![c 0, c 1, c 2, c 3]) := by

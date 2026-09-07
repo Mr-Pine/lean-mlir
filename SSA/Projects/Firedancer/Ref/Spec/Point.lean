@@ -23,7 +23,7 @@ def readPoint? (p: Pointer) (m: MemoryState) := do
 abbrev IsPointPtr (m: MemoryState) (p: Pointer) : Prop :=
   Fits m p (4 * 5 * 64) ∧ p.offset.toNat + (4 * 5 * 8) ≤ 2^64
 
-theorem isCoordPtr (p : Pointer) (h : IsPointPtr m p) (i : Fin 4) :
+theorem isCoordPtr {p : Pointer} (h : IsPointPtr m p) (i : Fin 4) :
   IsFieldElemPtr m (p.withOffset (i * (5 * 8))) := by
   obtain ⟨⟨blk, hblk, hlen⟩, hnw⟩ := h
   refine ⟨⟨blk, hblk, ?_⟩, ?_⟩ <;>
@@ -32,9 +32,16 @@ theorem isCoordPtr (p : Pointer) (h : IsPointPtr m p) (i : Fin 4) :
       BitVec.toNat_add] at hlen ⊢ <;>
     omega
 
+/-- A store leaves live blocks and their sizes alone, so a point that fitted
+at `q` before still fits after a splice anywhere -- the point counterpart of
+`isFieldElemPtr_splice`. -/
+theorem isPointPtr_splice {m : MemoryState} {q₁ q₂ : Pointer} {w : Nat} {x : BitVec w}
+    (h : IsPointPtr m q₂) : IsPointPtr (m.splice q₁ x) q₂ :=
+  ⟨fits_splice h.left, h.right⟩
+
 abbrev AllLimbBounds {p : Pointer} {m: MemoryState} (h : IsPointPtr m p) := ∀ (i : Fin 4),
   let fieldElemPtr := p.withOffset (i * (5 * 8))
-  have hf : IsFieldElemPtr m fieldElemPtr := by exact isCoordPtr p h i
+  have hf : IsFieldElemPtr m fieldElemPtr := by exact isCoordPtr h i
   LimbBounds hf
 
 theorem readPoint?_isSome {m : MemoryState} {p : Pointer} (h : IsPointPtr m p) :

@@ -33,20 +33,20 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
 
   -- the coordinates the region geps, at the byte offsets it computes. Field 0
   -- gets no gep, so `a` and `b` are themselves `a->X` and `b->X`.
-  have paZ : IsFieldElemPtr s.mem (a.withOffset 120) := isCoordPtr a ha 3
-  have paY : IsFieldElemPtr s.mem (a.withOffset 40) := isCoordPtr a ha 1
-  have pbY : IsFieldElemPtr s.mem (b.withOffset 40) := isCoordPtr b hb 1
-  have paX : IsFieldElemPtr s.mem a := coordPtr_zero a ▸ isCoordPtr a ha 0
-  have pbX : IsFieldElemPtr s.mem b := coordPtr_zero b ▸ isCoordPtr b hb 0
+  have paZ : IsFieldElemPtr s.mem (a.withOffset 120) := isCoordPtr ha 3
+  have paY : IsFieldElemPtr s.mem (a.withOffset 40) := isCoordPtr ha 1
+  have pbY : IsFieldElemPtr s.mem (b.withOffset 40) := isCoordPtr hb 1
+  have paX : IsFieldElemPtr s.mem a := coordPtr_zero a ▸ isCoordPtr ha 0
+  have pbX : IsFieldElemPtr s.mem b := coordPtr_zero b ▸ isCoordPtr hb 0
 
   -- the input bounds, in the `readLimb?` form the callees take
-  have baZ := limbBounds_readLimb? (isCoordPtr a ha 3) (coordLimbBounds ha haLimbs 3)
-  have baY := limbBounds_readLimb? (isCoordPtr a ha 1) (coordLimbBounds ha haLimbs 1)
-  have bbY := limbBounds_readLimb? (isCoordPtr b hb 1) (coordLimbBounds hb hbLimbs 1)
+  have baZ := limbBounds_readLimb? (isCoordPtr ha 3) (coordLimbBounds ha haLimbs 3)
+  have baY := limbBounds_readLimb? (isCoordPtr ha 1) (coordLimbBounds ha haLimbs 1)
+  have bbY := limbBounds_readLimb? (isCoordPtr hb 1) (coordLimbBounds hb hbLimbs 1)
   have baX : ∀ (i : Fin 5) (l : ℕ), readLimb? a i s.mem = some l → l ≤ 2 ^ 51 :=
-    coordPtr_zero a ▸ limbBounds_readLimb? (isCoordPtr a ha 0) (coordLimbBounds ha haLimbs 0)
+    coordPtr_zero a ▸ limbBounds_readLimb? (isCoordPtr ha 0) (coordLimbBounds ha haLimbs 0)
   have bbX : ∀ (i : Fin 5) (l : ℕ), readLimb? b i s.mem = some l → l ≤ 2 ^ 51 :=
-    coordPtr_zero b ▸ limbBounds_readLimb? (isCoordPtr b hb 0) (coordLimbBounds hb hbLimbs 0)
+    coordPtr_zero b ▸ limbBounds_readLimb? (isCoordPtr hb 0) (coordLimbBounds hb hbLimbs 0)
 
   -- `fd_f25519_t x1[1], y1[1]`
   obtain ⟨x1, s₁, hx1def, hs₁def, hs₁, hfitx1, hx1id, hx1off, hctr₁, -⟩ :=
