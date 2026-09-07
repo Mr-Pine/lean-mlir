@@ -358,30 +358,47 @@ theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} 
   · rw [live?_killFrom_of_le (by omega),
       live?_splice_ne (fun h => by rw [← h] at hb; omega), hs b (by omega)]
 
-/-- `popFrame_equiv_splice` for a region that wrote its out-parameter block
-more than once -- a point-returning one writes four coordinates. The writes
-show up only as `n`, any memory agreeing with `s.mem` off the block `o`; the
-caller supplies the single readback `hoval` at `o`. -/
+/-- `popFrame_equiv_splice` for a region that wrote more than once: `written`
+names the caller blocks it touched, `n` is any memory agreeing with `s.mem`
+off them, and the caller supplies the readback at each. -/
+theorem popFrame_equiv_written {s : GlobalState} {m n : MemoryState}
+    (written : BlockId → Prop) [DecidablePred written] (hs : s.WF)
+    (hbelow : ∀ b : BlockId, written b → b.id < s.alloc.nextFreeBlock)
+    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → ¬ written b →
+      m.live? b = s.mem.live? b)
+    (hfn : ∀ b : BlockId, ¬ written b → n.live? b = s.mem.live? b)
+    (hval : ∀ b : BlockId, written b → m.live? b = n.live? b) :
+    s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) := by
+  refine ⟨rfl, rfl, fun b => ?_⟩
+  show (m.killFrom s.alloc.nextFreeBlock).live? b = n.live? b
+  by_cases hw : written b
+  · rw [live?_killFrom_of_lt (hbelow b hw), hval b hw]
+  · by_cases hb : b.id < s.alloc.nextFreeBlock
+    · rw [live?_killFrom_of_lt hb, hfm b hb hw, hfn b hw]
+    · rw [live?_killFrom_of_le (by omega), hfn b hw, hs b (by omega)]
+
+/-- ... and the single-block case: a region writing only its out-parameter,
+`fd_ed25519_point_from`'s four coordinate stores included. -/
 theorem popFrame_equiv_block {s : GlobalState} {m n : MemoryState} {o : BlockId}
     (hs : s.WF) (ho : o.id < s.alloc.nextFreeBlock)
     (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o →
       m.live? b = s.mem.live? b)
     (hfn : ∀ b : BlockId, b ≠ o → n.live? b = s.mem.live? b)
     (hoval : m.live? o = n.live? o) :
-    s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) := by
-  refine ⟨rfl, rfl, fun b => ?_⟩
-  show (m.killFrom s.alloc.nextFreeBlock).live? b = n.live? b
-  by_cases hbo : b = o
-  · rw [hbo, live?_killFrom_of_lt ho, hoval]
-  · by_cases hb : b.id < s.alloc.nextFreeBlock
-    · rw [live?_killFrom_of_lt hb, hfm b hb hbo, hfn b hbo]
-    · rw [live?_killFrom_of_le (by omega), hfn b hbo, hs b (by omega)]
+    s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) :=
+  popFrame_equiv_written (· = o) hs (fun _ h => h ▸ ho) hfm hfn (fun _ h => h ▸ hoval)
 
 /-- One step of an `allocaChain`, with the index given as a literal so `rw`
 can key on it: `allocaChain_step s w 0 1 rfl : s.allocaChain w 1 = …`. -/
 theorem allocaChain_step (s : GlobalState) (w : Nat → Nat) (k j : Nat) (h : j = k + 1) :
     s.allocaChain w j = (s.allocaChain w k).afterAlloca (w k) := by
   subst h; rfl
+
+/-- Supply the second witness of a two-variable existential up front: a spec's
+`∃ s' ret` has to give `ret` before `run_runFunction'` can take the state. -/
+lemma existsISecond {α β : Type} {f : α → β → Prop} (v : β) (h : ∃ x, f x v) : ∃ x y, f x y := by
+  obtain ⟨u, hu⟩ := h
+  refine ⟨u, v, hu⟩
 
 /-- Strip the `runFunction` wrapper while keeping the existential in place, so
 the final state is supplied at the end from a name the walk introduced rather

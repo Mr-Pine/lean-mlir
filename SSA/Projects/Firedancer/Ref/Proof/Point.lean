@@ -46,6 +46,19 @@ theorem readFieldElem_eq_of_readLimb {m m' : MemoryState} {q q' : Pointer}
   rw [readFieldElem_eq_decode, readFieldElem_eq_decode]
   simp only [hl]
 
+/-- A point pointer looks only at the block it addresses -- the point
+counterpart of `isFieldElemPtr_of_live?_eq`. -/
+theorem isPointPtr_of_live?_eq {m m' : MemoryState} {r : Pointer}
+    (h : m'.live? r.id = m.live? r.id) (hr : IsPointPtr m r) : IsPointPtr m' r :=
+  ⟨fits_of_live?_eq h hr.left, hr.right⟩
+
+/-- The point counterpart of `isByteBufPtr_of_equiv`, in the same shape and
+for the same reason. -/
+theorem isPointPtr_of_equiv {w s : GlobalState} {m : MemoryState} {r : Pointer}
+    (he : w ≈ ({ s with mem := m } : GlobalState)) (h : IsPointPtr m r) :
+    IsPointPtr w.mem r :=
+  isPointPtr_of_live?_eq (live?_of_equiv_mem he r.id) h
+
 /-- A point read looks only at the block it addresses, so two memories that
 agree on that block read the same point -- what bridges the caller's memory
 and the callee's, whose frames differ everywhere else. -/

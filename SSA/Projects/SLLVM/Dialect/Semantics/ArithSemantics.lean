@@ -42,6 +42,15 @@ def ptricmp (eq : Bool) (x y : SLLVM.Ptr) : LLVM.IntW 1 :=
   | .value a, .value b => .value (if (a == b) == eq then 1#1 else 0#1)
   | _, _ => .poison
 
+@[simp_sllvm]
+theorem ptricmp_value (eq : Bool) (a b : Pointer) :
+    ptricmp eq (.value a) (.value b) = .value (if (a == b) == eq then 1#1 else 0#1) := rfl
+
+/-- Not a `simp` lemma: specs state the sentinel as `Ptr.null`, and rewriting
+it away would leave both spellings in play. `ptricmp`'s reduction wants it, so
+it is named. -/
+theorem null_eq_value : Ptr.null = .value ⟨nullBlock, 0#64⟩ := rfl
+
 /-! ### div / rem -/
 
 @[simp_sllvm]

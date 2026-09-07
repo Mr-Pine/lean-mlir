@@ -211,6 +211,9 @@ instance [∀ a, Repr (f a)] : Repr (HVector f as) where
 
 /-! ## map -/
 
+@[simp] theorem map_nil {A B : α → Type u} {f : (a : α) → A a → B a} :
+    map f (nil : HVector A []) = nil := rfl
+
 @[simp] theorem map_cons {A B : α → Type u} {as : List α} {f : (a : α) → A a → B a}
     {x : A a} {xs : HVector A as} :
     map f (cons x xs) = cons (f _ x) (map f xs) := by

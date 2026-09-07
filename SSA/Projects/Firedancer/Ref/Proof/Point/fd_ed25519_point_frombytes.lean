@@ -33,15 +33,24 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
 
+/-- The four coordinate stores miss every other block. -/
+theorem live?_pointOutMem_ne {m : MemoryState} {r : Pointer} {b : BlockId}
+    {oX oY oZ oT : Fin 5 → BitVec 64} (h : r.id ≠ b) :
+    (pointOutMem m r oX oY oZ oT).live? b = m.live? b := by
+  simp only [pointOutMem, live?_splice_ne (p := r.withOffset 80) h,
+    live?_splice_ne (p := r.withOffset 120) h, live?_splice_ne (p := r.withOffset 40) h,
+    live?_splice_ne h]
+
+/-- ... and preserve an agreement on `r`'s. -/
+theorem live?_pointOutMem_congr {m m' : MemoryState} {r : Pointer}
+    {oX oY oZ oT : Fin 5 → BitVec 64} (h : m.live? r.id = m'.live? r.id) :
+    (pointOutMem m r oX oY oZ oT).live? r.id
+      = (pointOutMem m' r oX oY oZ oT).live? r.id := by
+  simp only [pointOutMem]
+  exact live?_splice_congr (live?_splice_congr (live?_splice_congr (live?_splice_congr h)))
+
 /- Scaffolding for the `fd_ed25519_point_frombytes` derivation. -/
 namespace PointFromBytes
-
-/-- Supply the second witness of a two-variable existential from the first's
-proof -- the shape the spec's `∃ oX oY oZ oT` tail comes in. -/
-lemma existsISecond {α β : Type} {f : α → β → Prop} (v : β) (h : ∃ x, f x v) : ∃ x y, f x y := by
-  obtain ⟨u, hu⟩ := h
-  refine ⟨u, v, hu⟩
-
 
 /-- The five `fd_f25519_t` locals `%17 … %21` allocate. In allocation order
 they are the locals `fd_curve25519.c` declares --
@@ -333,28 +342,6 @@ theorem stepV (hf : State s₀ r pd pone vx vy vt vu vv w)
 
 end State
 
-/-- The write `fd_ed25519_point_from` leaves at `r`: the four coordinates, in
-the order `%37` stores them (`X, Y, Z, T` at 0, 40, 120, 80). -/
-abbrev frombytesOut (s : GlobalState) (r : Pointer) (oX oY oZ oT : Fin 5 → BitVec 64) :
-    MemoryState :=
-  (((s.mem.splice r (packLimbs oX)).splice (r.withOffset 40#64) (packLimbs oY)).splice
-    (r.withOffset 120#64) (packLimbs oZ)).splice (r.withOffset 80#64) (packLimbs oT)
-
--- TODO: Move this to spec and use it there
-/-- ... and what the spec reads off it. `abbrev`, so that applying `bb3_run`
-against the spec's spelled-out tail is a reducible unfolding rather than a
-defeq search. -/
-abbrev FrombytesPoint (s : GlobalState) (r buf : Pointer) (hr : IsPointPtr s.mem r)
-    (hbuf : IsByteBufPtr s.mem buf) (oX oY oZ oT : Fin 5 → BitVec 64) : Prop :=
-  have hpt : IsPointPtr (frombytesOut s r oX oY oZ oT) r :=
-    isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hr)))
-  let point := readPoint hpt
-  OnCurve point.x point.y
-    ∧ point.Z = 1
-    ∧ point.Y = decodeBytes (readBuf hbuf)
-    ∧ point.T / point.Z = point.x * point.y
-    ∧ (point.X ≠ 0 → (point.X.val % 2 = 0 ↔ (readBuf hbuf)[255] = false))
-
 theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
     (hs : s.WF)
     (hr : IsPointPtr s.mem r) (hbuf : IsByteBufPtr s.mem buf)
@@ -388,9 +375,9 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
       ∧ ret = PoisonOr.value r
       ∧ ∃ oX oY oZ oT : Fin 5 → BitVec 64,
           (s.popFrame s'.mem : GlobalState)
-              ≈ ({ alloc := s.alloc, mem := frombytesOut s r oX oY oZ oT,
+              ≈ ({ alloc := s.alloc, mem := pointOutMem s.mem r oX oY oZ oT,
                    globals := s.globals } : GlobalState)
-          ∧ FrombytesPoint s r buf hr hbuf oX oY oZ oT := by
+          ∧ DecodesTo s.mem r buf hr hbuf oX oY oZ oT := by
   have hmapnil : ∀ {α : Type} {A B : α → Type} (f : (a : α) → A a → B a),
       HVector.map f (.nil : HVector A []) = .nil := fun _ => rfl
   denote_enter_block
@@ -422,7 +409,7 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
           fun i => oY.extractLsb' (64 * i.toNat) 64,
           fun i => oZ.extractLsb' (64 * i.toNat) 64,
           fun i => oT.extractLsb' (64 * i.toNat) 64, ?_⟩
-  simp only [frombytesOut, packLimbs_extractLsb']
+  simp only [pointOutMem, packLimbs_extractLsb']
 
   set y := decodeBytes (readBuf hbuf)
 
@@ -444,8 +431,11 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
       simpa [Ne.symm hbo] using state₁.live b hb
     · simp [Ne.symm hbo]
 
-  unfold FrombytesPoint
-  intro hpt point'
+  have hpt : IsPointPtr (pointOutMem s.mem r (fun i => oX.extractLsb' (64 * i.toNat) 64)
+      (fun i => oY.extractLsb' (64 * i.toNat) 64) (fun i => oZ.extractLsb' (64 * i.toNat) 64)
+      (fun i => oT.extractLsb' (64 * i.toNat) 64)) r :=
+    isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hr)))
+  show IsDecoding (readPoint hpt) (readBuf hbuf)
   -- `hpt` reads the point out of `s.mem`; the four writes `hlX`--`hlZ`
   -- describe land on `w₁.mem`. Both memories agree on `r`'s block -- the
   -- region touches it only through `%37` -- so they read the same point.
@@ -454,15 +444,15 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
     isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice state₁.ptr)))
   have hcongr : readPoint hpt = readPoint hptw := by
     refine readPoint_of_live?_eq ?_ hptw hpt
-    simp only [frombytesOut, packLimbs_extractLsb']
+    simp only [pointOutMem, packLimbs_extractLsb']
     exact hrlive.symm
   -- the four coordinates are the field elements `%36`/`%37` copied in
   have hXv := (readFieldElem_eq_of_readLimb hlX).trans state₁.valx
   have hYv := (readFieldElem_eq_of_readLimb hlY).trans state₁.valy
   have hTv := (readFieldElem_eq_of_readLimb hlT).trans state₁.valt
   have hZv := (readFieldElem_eq_of_readLimb hlZ).trans state₁.valone
-  have : point' = point := hcongr.trans (readPoint_eq_of hptw hXv hYv hTv hZv)
-  rw [this]
+  have hpoint : readPoint hpt = point := hcongr.trans (readPoint_eq_of hptw hXv hYv hTv hZv)
+  rw [hpoint]
   refine ⟨?_, (by simp [point]), by simp [point, y], by simp [point, Point.x, Point.y], ?xsign⟩
 
   case xsign =>

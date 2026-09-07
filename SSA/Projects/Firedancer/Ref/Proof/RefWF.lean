@@ -113,6 +113,35 @@ theorem _root_.LeanMLIR.GlobalState.RefWF.wrote {dst : Pointer} (hw : w.RefWF ap
   gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
   gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
 
+/-- A shorter `apart` list is a weaker claim: the constants stay apart from
+whatever the caller still lists. -/
+theorem _root_.LeanMLIR.GlobalState.RefWF.mono {apart' : List Pointer}
+    (hw : w.RefWF apart) (h : apart' ⊆ apart) : w.RefWF apart' where
+  wf := hw.wf
+  gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, hg, fun p hp => hq p (h hp)⟩
+  gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, hg, fun p hp => hq p (h hp)⟩
+  gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, hg, fun p hp => hq p (h hp)⟩
+
+/-- `RefWF` across a whole call, given only what it left of memory: a step
+that touched no block the state is `Apart` from keeps the constants. `wrote`
+is the single-splice case; a region that writes its out-parameter several
+times -- `fd_ed25519_point_frombytes` -- needs this one. -/
+theorem _root_.LeanMLIR.GlobalState.RefWF.untouched (hw : w.RefWF apart) (hwf : w'.WF)
+    (hg : w'.globals = w.globals)
+    (hlive : ∀ b : BlockId, (∀ p ∈ apart, b ≠ p.id) → w'.mem.live? b = w.mem.live? b) :
+    w'.RefWF apart :=
+  let carry {name : String} {val : ZMod _root_.p} {q : Pointer}
+      (hq : Apart q apart) (hgq : FieldGlobal w name q val) : FieldGlobal w' name q val :=
+    let h := hlive q.id (fun p hp => hq p hp)
+    { addr := by simp only [GlobalPtr, hg]; exact hgq.addr
+      ptr := isFieldElemPtr_of_live?_eq h hgq.ptr
+      value := carryVal h hgq.value
+      bnd := carryBnd h hgq.bnd }
+  { wf := hwf
+    gd := let ⟨q, hg', hq⟩ := hw.gd; ⟨q, carry hq hg', hq⟩
+    gone := let ⟨q, hg', hq⟩ := hw.gone; ⟨q, carry hq hg', hq⟩
+    gm1 := let ⟨q, hg', hq⟩ := hw.gm1; ⟨q, carry hq hg', hq⟩ }
+
 /-- A call that moved nothing -- `fd_f25519_sgn` -- leaves them alone too, and
 needs no `Apart`. -/
 theorem _root_.LeanMLIR.GlobalState.RefWF.of_equiv (hw : w.RefWF apart) (he : w ≈ w') :

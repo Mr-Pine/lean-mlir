@@ -51,6 +51,27 @@ theorem isFieldElemPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
     (h : m'.live? p.id = m.live? p.id) (hp : IsFieldElemPtr m p) : IsFieldElemPtr m' p :=
   ⟨fits_of_live?_eq h hp.left, hp.right⟩
 
+/-- ... and a byte buffer. -/
+theorem isByteBufPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) (hp : IsByteBufPtr m p) : IsByteBufPtr m' p :=
+  ⟨fits_of_live?_eq h hp.left, hp.right⟩
+
+/-- `GlobalState.Equiv.live` with the right-hand state spelled `{ s with mem
+:= m }`: the equation comes back in terms of `m`, so the caller never reduces
+a projection under the callee's write chain. -/
+theorem live?_of_equiv_mem {w s : GlobalState} {m : MemoryState}
+    (he : w ≈ ({ s with mem := m } : GlobalState)) (b : BlockId) :
+    w.mem.live? b = m.live? b := he.live b
+
+/-- A buffer that fitted in the memory a callee returned still fits in the
+state it returned. Stated over `{ s with mem := m }` rather than over a second
+state: `m` then unifies as a whole, instead of the caller's write chain being
+compared against a projection limb by limb. -/
+theorem isByteBufPtr_of_equiv {w s : GlobalState} {m : MemoryState} {q : Pointer}
+    (he : w ≈ ({ s with mem := m } : GlobalState)) (h : IsByteBufPtr m q) :
+    IsByteBufPtr w.mem q :=
+  isByteBufPtr_of_live?_eq (live?_of_equiv_mem he q.id) h
+
 /-- ... and the limb bounds, in the `readLimb?`-shaped form. -/
 theorem limbBounds_of_live?_eq {m m' : MemoryState} {p : Pointer} {n : ℕ}
     (h : m'.live? p.id = m.live? p.id)
@@ -351,6 +372,21 @@ theorem readBuf?_eq_readWord? (p : Pointer) (m : MemoryState) :
 theorem readBuf?_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
     (hp : Fits m p (32 * 8)) : readBuf? p (m.splice p x) = some x :=
   readWord?_splice_self x hp
+
+/-- A buffer read looks only at the block the pointer addresses, so it
+survives any step that left that block alone -- `readLimb?_of_live?_eq` for
+the 32-byte reads. -/
+theorem readBuf_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) {hp : IsByteBufPtr m p} {hp' : IsByteBufPtr m' p} :
+    readBuf hp' = readBuf hp := by
+  simp only [readBuf, readBuf?, h]
+
+/-- ... and the same across a callee's return, in `isByteBufPtr_of_equiv`'s
+shape and for the same reason. -/
+theorem readBuf_of_equiv {w s : GlobalState} {m : MemoryState} {q : Pointer}
+    (he : w ≈ ({ s with mem := m } : GlobalState))
+    {h : IsByteBufPtr w.mem q} {h' : IsByteBufPtr m q} : readBuf h = readBuf h' :=
+  readBuf_of_live?_eq (live?_of_equiv_mem he q.id)
 
 theorem readBuf_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
     (hp : IsByteBufPtr m p) :
