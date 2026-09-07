@@ -1,10 +1,10 @@
-import SSA.Projects.Firedancer.Avx512.Spec.fd_ed25519_point_eq
+import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_eq
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Avx512.Proof.Common
 import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.Avx512.Proof.fd_r43x6_ge_is_eq
+import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_ge_is_eq
 
 
 namespace Firedancer.Avx512

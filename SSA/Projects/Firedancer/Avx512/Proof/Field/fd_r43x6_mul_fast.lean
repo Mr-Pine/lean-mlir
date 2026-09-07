@@ -3,9 +3,9 @@ Released under Apache 2.0 license as described in the file LICENSE.
 NOTE: the bulk of this file was machine-generated; the structure mirrors
 the data flow of `fd_r43x6_mul_fast`.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_mul_fast
+import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_mul_fast
 import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_mul_fast
+import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
 import SSA.Projects.Firedancer.MLIR.Poison
 import SSA.Projects.Firedancer.Ed25519
 

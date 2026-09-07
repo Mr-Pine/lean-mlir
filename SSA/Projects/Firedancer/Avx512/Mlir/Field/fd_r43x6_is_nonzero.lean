@@ -2,7 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_long_if
+import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

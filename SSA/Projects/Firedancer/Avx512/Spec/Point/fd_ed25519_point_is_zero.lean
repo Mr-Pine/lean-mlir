@@ -1,7 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_ed25519_point_is_zero
+import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_is_zero
 import SSA.Projects.Firedancer.Avx512.Spec.Quad
 import SSA.Projects.Firedancer.Curve
 

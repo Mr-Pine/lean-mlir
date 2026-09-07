@@ -1,6 +1,6 @@
 import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_eq_z1
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_eq_z1
-import SSA.Projects.Firedancer.Avx512.Proof.fd_ed25519_point_eq_z1
+import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_eq_z1
 
 namespace Firedancer
 open LeanMLIR SLLVM

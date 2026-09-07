@@ -5,9 +5,9 @@ the 160 instructions of `fd_r43x6_sqr_fast`; unlike its `mul` counterpart it
 has no generator, having been migrated from the earlier two-file
 (`Denote/` + `Spec/`) layout at commit d4d7da2.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_sqr_fast
+import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_sqr_fast
 import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_sqr_fast
+import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
 import SSA.Projects.Firedancer.MLIR.Poison
 import SSA.Projects.Firedancer.Ed25519
 

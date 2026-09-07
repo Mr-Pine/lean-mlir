@@ -1,6 +1,6 @@
 import SSA.Projects.SLLVM.Cfg
 
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_ed25519_point_eq
+import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

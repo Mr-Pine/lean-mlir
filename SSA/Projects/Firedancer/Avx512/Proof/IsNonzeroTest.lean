@@ -1,8 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_is_nonzero
+import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
 
 /-!
 # The lifted `fd_r43x6_is_nonzero` against its specification

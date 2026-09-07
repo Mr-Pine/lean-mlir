@@ -1,4 +1,4 @@
-import SSA.Projects.Firedancer.Avx512.Spec.fd_ed25519_point_set_zero
+import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_set_zero
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Proof.Tactics

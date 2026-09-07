@@ -2,7 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Avx512.Spec.fd_r43x6_sqr_fast
+import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
 
 /-!
 # What `fd_r43x6_quad_sqr_fast` is specified to compute

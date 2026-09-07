@@ -1,6 +1,6 @@
 import SSA.Projects.SLLVM.Cfg
 
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_r43x6_ge_is_eq
+import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

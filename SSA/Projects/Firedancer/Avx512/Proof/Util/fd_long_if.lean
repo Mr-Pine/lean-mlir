@@ -2,8 +2,8 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Tactic
-import SSA.Projects.Firedancer.Avx512.Mlir.fd_long_if
-import SSA.Projects.Firedancer.Avx512.Spec.fd_long_if
+import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
+import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
 
 /-!
 # `fd_long_if` denotes to `fdLongIf`
