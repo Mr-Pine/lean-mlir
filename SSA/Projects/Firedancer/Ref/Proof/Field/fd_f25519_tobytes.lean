@@ -1,4 +1,5 @@
 import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_tobytes
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
@@ -9,17 +10,18 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 /-- The wrapper adds nothing to the callee: one void call, then `return %arg0`.
-`LimbBounds` is the callee's precondition, passed straight through. -/
+`fiat_25519_to_bytes`'s two preconditions -- the per-limb bias bounds and the
+sum bound -- are passed straight through. -/
 theorem fd_f25519_tobytes_conforms (o q : Pointer) (s : GlobalState)
     (hs : s.WF)
     (ho : IsByteBufPtr s.mem o)
     (hq : IsFieldElemPtr s.mem q)
-    (hqlimb : LimbBounds hq) :
+    (hqlimb : BiasBounds hq) (hqlt : limbSum hq < 2 ^ 256 - 38) :
     fd_f25519_tobytes_spec o q s ho hq := by
   simp only [fd_f25519_tobytes_spec, Cfg.denote]
 
   obtain ⟨out, hout, ⟨tostate, htostate, htostate_eq⟩⟩ :=
-    fiat_25519_to_bytes_conforms o q s hs ho hq hqlimb
+    fiat_25519_to_bytes_conforms o q s hs ho hq hqlimb hqlt
 
   have htoWF : tostate.WF := GlobalState.WF.of_equiv hs.splice htostate_eq
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → tostate.mem.live? t = none := by

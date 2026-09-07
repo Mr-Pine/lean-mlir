@@ -3,7 +3,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqrt_ratio
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -22,7 +22,8 @@ there it says `u = 0`, and the region does return `1` exactly then. The root:
 * `v = 0` -- `o = 0`, the exceptional case the ratio does not cover.
 
 `o` is always the *non-negative* representative (`o.val % 2 = 0`); the region's
-last operation is `fd_f25519_abs`, whose result also fixes the limb bound.
+last operation is `fd_f25519_abs`, whose result also fixes the limb bounds --
+per-limb, plus the sum bound `fd_f25519_sgn` needs downstream.
 
 `sqrtm1` is a constant of the field, not a parameter: the region reaches
 `@fd_f25519_sqrtm1` through `llvm.mlir.addressof`, so its address never enters
@@ -56,7 +57,8 @@ abbrev fd_f25519_sqrt_ratio_spec (o u v : Pointer) (s : GlobalState)
     ∧ (isSquare → root ^ 2 * vIn = uIn)
     -- ∧ (¬ isSquare → vIn ≠ 0 → root ^ 2 * vIn = sqrtm1 * uIn) -- I don't think this is a relevant part of the spec
     ∧ (vIn = 0 → root = 0)
-    ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho) 0xffffffffffffe
+    ∧ BiasBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
+    ∧ limbSum (m := output_state.mem) (isFieldElemPtr_splice ho) < 2 ^ 256 - 38
     ∧ (∃ s' : GlobalState,
         result = .value
           ([(.value (if isSquare then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, s')

@@ -2,6 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_to_bytes
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_subborrowx_u51
@@ -343,7 +344,8 @@ next step in the chain needs back. -/
 lemma subborrow_step {a b : Pointer} {c : BitVec 8} {x y : BitVec 64}
     {u : GlobalState} (hu : u.WF) (hab : a.id ≠ b.id)
     (ha : Fits u.mem a 64) (hb : Fits u.mem b 8)
-    (hx : x.toNat ≤ 2 ^ 51) (hcy : 1 ≤ c.toNat + y.toNat) (hcy' : c.toNat + y.toNat ≤ 2 ^ 51) :
+    (hx : x.toNat < 2 ^ 51 + (c.toNat + y.toNat)) (hcy : 1 ≤ c.toNat + y.toNat)
+    (hcy' : c.toNat + y.toNat ≤ 2 ^ 51) :
     ∃ (u' : GlobalState) (lo : BitVec 64) (bo : BitVec 8),
       StateT.run (runFunction (fiat_25519_subborrowx_u51.denote
         (Ctxt.Valuation.ofHVector [.value y, .value x, .value c, .value b, .value a]ₕ))) u
@@ -434,7 +436,8 @@ into goals. -/
 theorem subborrow_step' {a b : Pointer} {c : BitVec 8} {x y : BitVec 64}
     {u : GlobalState} (hu : u.WF) (hab : a.id ≠ b.id)
     (ha : Fits u.mem a 64) (hb : Fits u.mem b 8)
-    (hx : x.toNat ≤ 2 ^ 51) (hcy : 1 ≤ c.toNat + y.toNat) (hcy' : c.toNat + y.toNat ≤ 2 ^ 51)
+    (hx : x.toNat < 2 ^ 51 + (c.toNat + y.toNat)) (hcy : 1 ≤ c.toNat + y.toNat)
+    (hcy' : c.toNat + y.toNat ≤ 2 ^ 51)
     {P : Prop}
     (k : ∀ (u' : GlobalState) (lo : BitVec 64) (bo : BitVec 8),
       StateT.run (runFunction (fiat_25519_subborrowx_u51.denote
@@ -622,7 +625,23 @@ elab "borrow_peel " k:num " from " pf:ident " giving " nf:ident
       = ((readLimb ($kFin : Fin 5) $hq : ℕ) : BitVec 64) :=
     limb_readBV $hq (($pf).fb ($qq).id ($hcells).idq) (qp := $qpT) (k := ($kFin : Fin 5)) rfl
       $hoffPf (readWord?_of_block (w := 64) $qhb)))
-  let hxbound ← `((by rw [$hqread:ident]; exact le_trans ($hqlimb _) (by norm_num)))
+  -- `readLimb k ≤ biasLimb k` against the subtrahend this limb is paired with:
+  -- limb 0's smaller bias is exactly what its smaller `y` needs, which is why
+  -- the bound has to be per-limb.
+  -- `biasLimb k` is `rfl`-equal to its literal at a concrete index, so ascribe
+  -- rather than unfold: `norm_num [biasLimb]` leaves `![…] k` unapplied and
+  -- `omega` then sees an opaque atom.
+  let hxbound ← if n == 1 then `((by
+        rw [$hqread:ident]
+        have hb : readLimb (0 : Fin 5) $hq ≤ 4503599627370458 := $hqlimb _
+        have hy : (BitVec.ofInt 64 2251799813685229).toNat = 2251799813685229 := by decide
+        have hc : (BitVec.ofInt 8 0).toNat = 0 := by decide
+        omega))
+      else `((by
+        rw [$hqread:ident]
+        have hb : readLimb ($kFin : Fin 5) $hq ≤ 4503599627370494 := $hqlimb _
+        have hy : (BitVec.ofInt 64 2251799813685247).toNat = 2251799813685247 := by decide
+        omega))
   -- the borrow carried in: 0 at the head, else the previous step's bound
   let hcy ← if n == 1 then `((by decide : (1 : ℕ) ≤
         (BitVec.ofInt 8 0).toNat + (BitVec.ofInt 64 2251799813685229).toNat))
@@ -1112,9 +1131,16 @@ open ToBytes in
 set_option linter.all false in
 set_option maxHeartbeats 4000000 in
 set_option maxRecDepth 2000 in
+/-- The limbs need only the *per-limb* bias bounds, and the value only
+`< 2 · p`. The tight bound the callers used to pass was a proxy for both --
+`subborrow_step` needs each limb below `2 ^ 51 + (c + y)`, which
+`biasLimb k` gives against the `y` that limb is paired with, and the
+canonicalisation needs one conditional subtraction to suffice, which is the
+sum bound. Splitting them is what admits a `fiat_25519_opp` result, whose
+limbs are bias-bounded and never tight. -/
 theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
     (hs : s.WF) (ho : IsByteBufPtr s.mem o) (hq : IsFieldElemPtr s.mem q)
-    (hqlimb : LimbBounds hq) :
+    (hqlimb : BiasBounds hq) (hqlt : limbSum hq < 2 ^ 256 - 38) :
     fiat_25519_to_bytes_spec o q s ho hq := by
   simp only [fiat_25519_to_bytes_spec]
   -- Facts first, while the goal is still one line. Every `obtain` below
@@ -1727,7 +1753,8 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
       · have : x10.toNat ≠ 0 := fun h0 => h (BitVec.eq_of_toNat_eq h0)
         simp [h, this, pLimb]
     rw [hM] at hadd
-    have hV := limbSum_lt (hqlimb 0) (hqlimb 1) (hqlimb 2) (hqlimb 3) (hqlimb 4)
+    have hV : readLimb 0 hq + 2 ^ 51 * readLimb 1 hq + 2 ^ 102 * readLimb 2 hq
+        + 2 ^ 153 * readLimb 3 hq + 2 ^ 204 * readLimb 4 hq < 2 ^ 256 - 38 := hqlt
     -- Both chains leave five digits below `2 ^ 51`, so each sum is at most
     -- `2 ^ 255 - 1`: the digit bounds, one weight at a time.
     have hY := digitSum_lt hx1 hx3 hx5 hx7 hx9

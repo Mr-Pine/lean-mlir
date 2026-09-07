@@ -1,4 +1,5 @@
 import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sgn
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
@@ -17,7 +18,7 @@ state comes back equivalent. -/
 theorem fd_f25519_sgn_conforms (q : Pointer) (s : GlobalState)
     (hs : s.WF)
     (hq : IsFieldElemPtr s.mem q)
-    (hqlimb : LimbBounds hq) :
+    (hqlimb : BiasBounds hq) (hqlt : limbSum hq < 2 ^ 256 - 38) :
     fd_f25519_sgn_spec q s hq := by
   simp only [fd_f25519_sgn_spec, Cfg.denote]
 
@@ -32,12 +33,12 @@ theorem fd_f25519_sgn_conforms (q : Pointer) (s : GlobalState)
   have hvq₁ : readFieldElem pq₁ = readFieldElem hq :=
     readFieldElem_eq_of
       ((readFieldElem?_of_live?_eq (fb q.id hnq)).trans (Option.some_get _).symm)
-  have hqlimb₁ : LimbBounds pq₁ :=
-    limbBounds_of_readLimb? pq₁
-      (limbBounds_of_live?_eq (fb q.id hnq) (limbBounds_readLimb? hq hqlimb))
+  have hqlimb₁ : BiasBounds pq₁ := biasBounds_of_live?_eq (fb q.id hnq) hqlimb
+  have hqlt₁ : limbSum pq₁ < 2 ^ 256 - 38 := by
+    rw [limbSum_of_live?_eq (fb q.id hnq) (h := hq)]; exact hqlt
 
   obtain ⟨out, hout, s₂, hrun, heq⟩ :=
-    fd_f25519_tobytes_conforms t q s₁ hs₁WF hbuf₁ pq₁ hqlimb₁
+    fd_f25519_tobytes_conforms t q s₁ hs₁WF hbuf₁ pq₁ hqlimb₁ hqlt₁
 
   have hout' : out = BitVec.ofNat 256 (readFieldElem hq).val := by
     rw [← hvq₁, ← hout, readBuf_splice out hbuf₁]

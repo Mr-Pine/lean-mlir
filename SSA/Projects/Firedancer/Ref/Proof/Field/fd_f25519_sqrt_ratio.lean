@@ -113,6 +113,7 @@ theorem pow_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
     exact (Option.some_get _).symm
   exact {
     wf := GlobalState.WF.of_equiv hw.splice heq
+    globals := heq.globals.symm
     live := fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb')
     splice := ⟨packLimbs out, (heq.live dst.id).symm⟩
     ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
@@ -125,6 +126,8 @@ field element. `StepFacts` is this plus the value and the tight bound, which
 `fd_f25519_neg` does not give. -/
 structure Wrote (dst : Pointer) (u u' : GlobalState) : Prop where
   wf : u'.WF
+  /-- The symbol table is untouched; see `Pow22523.StepFacts.globals`. -/
+  globals : u'.globals = u.globals
   live : ∀ b : BlockId, dst.id ≠ b → u'.mem.live? b = u.mem.live? b
   ptr : IsFieldElemPtr u'.mem dst
   splice : ∃ x : BitVec (5 * 64), u'.mem.live? dst.id = (u.mem.splice dst x).live? dst.id
@@ -133,7 +136,8 @@ namespace Pow22523
 
 /-- Every peeled `sqr`/`mul`/`pow22523` is one. -/
 theorem StepFacts.wrote {dst : Pointer} {x : ZMod p} {u u' : GlobalState}
-    (st : StepFacts dst x u u') : Wrote dst u u' := ⟨st.wf, st.live, st.ptr, st.splice⟩
+    (st : StepFacts dst x u u') : Wrote dst u u' :=
+  ⟨st.wf, st.globals, st.live, st.ptr, st.splice⟩
 
 end Pow22523
 
@@ -149,7 +153,7 @@ theorem neg_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
         = .value ([.value dst]ₕ, w')
       ∧ readFieldElem hw'.ptr = -x ∧ BiasBounds hw'.ptr := by
   obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := fd_f25519_neg_conforms dst src w hw hd h₀ hb
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq,
+  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
     fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb'),
     ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
     ⟨out, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_⟩
@@ -182,7 +186,7 @@ theorem if_step {dst a₀ a₁ : Pointer} {w : GlobalState} (hw : w.WF)
   obtain ⟨hval, w', hrun, heq⟩ :=
     fd_f25519_if_conforms dst (if c then 1#32 else 0#32) a₀ a₁ w hw hd h₀ h₁
   simp only [setWidth_flag] at hval heq
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq,
+  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
     fun b hb => (heq.live b).symm.trans (live?_splice_ne hb),
     ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
     ⟨_, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_⟩
@@ -200,8 +204,9 @@ theorem if_step {dst a₀ a₁ : Pointer} {w : GlobalState} (hw : w.WF)
     · simpa [hc] using hb₁ i
 
 /-- One `fd_f25519_abs( dst, src )` call, peeled: the non-negative
-representative, at `fd_f25519_neg`'s bound since `fd_f25519_if` copies out
-whichever of the two `abs` built. -/
+representative, at `fd_f25519_neg`'s per-limb bound since `fd_f25519_if`
+copies out whichever of the two `abs` built, plus the sum bound `abs`
+establishes per branch. -/
 theorem abs_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
     (hd : IsFieldElemPtr w.mem dst) (h₀ : IsFieldElemPtr w.mem src)
     {x : ZMod p} (hv : readFieldElem h₀ = x) (hb : LimbBounds h₀) :
@@ -210,18 +215,22 @@ theorem abs_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
           (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
         = .value ([.value dst]ₕ, w')
       ∧ readFieldElem hw'.ptr = (if x.val % 2 = 1 then -x else x)
-      ∧ LimbBounds hw'.ptr 0xffffffffffffe := by
-  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := fd_f25519_abs_conforms dst src w hw hd h₀ hb
+      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38 := by
+  obtain ⟨out, hval, hbnd, hsum, w', hrun, heq⟩ := fd_f25519_abs_conforms dst src w hw hd h₀ hb
 
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq,
+  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
     fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb'),
     ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
-    ⟨packLimbs out, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_⟩
+    ⟨packLimbs out, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_, ?_⟩
   · refine readFieldElem_eq_of ?_
     rw [← readFieldElem?_of_equiv heq, ← hv, ← hval]
     exact (Option.some_get _).symm
-  · exact limbBounds_of_readLimb? _ fun i l hl =>
-      limbBounds_readLimb? _ hbnd i l ((readLimb?_of_equiv heq dst i).trans hl)
+  · exact biasBounds_of_readLimb? _ fun i l hl =>
+      biasBounds_readLimb? _ hbnd i l ((readLimb?_of_equiv heq dst i).trans hl)
+  · have hlive : w'.mem.live? dst.id = (w.mem.splice dst (packLimbs out)).live? dst.id :=
+      (heq.live dst.id).symm
+    rw [limbSum_of_live?_eq hlive (h := isFieldElemPtr_splice hd)]
+    exact hsum
 
 /-- One `fd_f25519_eq( a, b )` call, peeled: the comparison the region branches
 on, and the state it leaves -- `eq` only reads, so that is the same state up to
@@ -332,11 +341,12 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
                 * readFieldElem hv = readFieldElem hu)
           ∧ (readFieldElem hv = 0 →
               readFieldElem (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr) = 0)
-          ∧ LimbBounds (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr)
-              0xffffffffffffe
+          ∧ BiasBounds (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr)
+          ∧ limbSum (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr)
+              < 2 ^ 256 - 38
           ∧ ({ s with mem := s.mem.splice r (packLimbs out) } : GlobalState) ≈ s' by
-    obtain ⟨s', hrun, out, heven, hsquare, hzero, hbnd, heqv⟩ := h
-    exact ⟨out, heven, hsquare, hzero, hbnd, s', hrun, heqv⟩
+    obtain ⟨s', hrun, out, heven, hsquare, hzero, hbnd, hsum, heqv⟩ := h
+    exact ⟨out, heven, hsquare, hzero, hbnd, hsum, s', hrun, heqv⟩
 
   refine run_runFunction' _ ?_
   simp only [Cfg.denote]
@@ -653,7 +663,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   clear pr₁₆ hrval₁₆ hrbnd₁₆ pr₁₅ hrval₁₅ hrbnd₁₅
 
   -- %35 `fd_f25519_abs( r, r )` -- the region's last write
-  obtain ⟨s₁₈, w₁₈, hrun₁₈, habsval, habsbnd⟩ :=
+  obtain ⟨s₁₈, w₁₈, hrun₁₈, habsval, habsbnd, habssum⟩ :=
     abs_step F₁₇.wf w₁₇.ptr w₁₇.ptr hifval hifbnd
   peel_call hrun₁₈
   clear hrun₁₈
@@ -793,7 +803,8 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     simp only [extractLsb'_packLimbs, BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
     exact Nat.mod_eq_of_lt (readLimb_lt i hq)
 
-  refine ⟨fun i => (readLimb i w₁₈.ptr : BitVec 64), ?even, ?_, ?zeroV, ?bounds, ?stateEq⟩
+  refine ⟨fun i => (readLimb i w₁₈.ptr : BitVec 64), ?even, ?_, ?zeroV, ?bounds, ?sum,
+    ?stateEq⟩
 
   case even =>
     -- `fd_f25519_abs` returns the representative with an even canonical form:
@@ -817,12 +828,31 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     norm_num
 
   case bounds =>
-    -- the write copies `abs`'s limbs, which sit at its bias bound
-    refine limbBounds_of_readLimb? _ fun i l hl => ?_
+    -- the write copies `abs`'s limbs, which sit at its per-limb bias bound
+    refine biasBounds_of_readLimb? _ fun i l hl => ?_
     rw [limbReadbackPack _ _ _ hr.left i, Option.some.injEq] at hl
     subst hl
     simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
     exact le_trans (Nat.mod_le _ _) (habsbnd i)
+
+  case sum =>
+    -- ... and each limb is *equal* to `abs`'s, not merely bounded by it: the
+    -- readback's `% 2 ^ 64` is inert below the bias bound
+    have hlimb : ∀ i : Fin 5,
+        readLimb i (m := s.mem.splice r (packLimbs fun i => (readLimb i w₁₈.ptr : BitVec 64)))
+          (isFieldElemPtr_splice hr) = readLimb i w₁₈.ptr := by
+      intro i
+      have hread := limbReadbackPack s.mem r (fun i => (readLimb i w₁₈.ptr : BitVec 64))
+        hr.left i
+      have hcast : ((readLimb i w₁₈.ptr : BitVec 64)).toNat = readLimb i w₁₈.ptr := by
+        simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
+        exact Nat.mod_eq_of_lt (by have := le_trans (habsbnd i) (biasLimb_le i); omega)
+      rw [hcast] at hread
+      exact Option.get_of_eq_some _ hread
+    rw [limbSum_eq]
+    simp only [hlimb]
+    rw [← limbSum_eq]
+    exact habssum
 
   case stateEq =>
     -- `r`'s block: untouched until %23, then four writes, each a 320-bit

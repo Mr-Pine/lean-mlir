@@ -82,15 +82,15 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
     readFieldElem_eq_of (by
       rw [← readFieldElem?_of_equiv heq₁ t, ← hva₁, ← hnegval]
       exact (Option.some_get _).symm)
-  have hbt₂ : ∀ (i : Fin 5) (l : ℕ), readLimb? t i s₂.mem = some l → l ≤ 0xffffffffffffe :=
-    fun i l hl => biasBounds?_le (biasBounds_readLimb? _ hnegbnd) i l
-      ((readLimb?_of_equiv heq₁ t i).trans hl)
+  have hbt₂ : ∀ (i : Fin 5) (l : ℕ), readLimb? t i s₂.mem = some l → l ≤ biasLimb i :=
+    fun i l hl => biasBounds_readLimb? _ hnegbnd i l ((readLimb?_of_equiv heq₁ t i).trans hl)
   obtain ⟨pa₂, hva₂', hba₂⟩ := carry_of_live?_eq (hlive₁ a.id hta) pa₁ hba₁
   have hva₂ : readFieldElem pa₂ = readFieldElem ha := hva₂'.trans hva₁
 
   -- `fd_f25519_sgn( a )`: a read, so the memory comes back unchanged
   obtain ⟨s₃, hrun₂, heq₂⟩ :=
-    fd_f25519_sgn_conforms a s₂ hs₂WF pa₂ (limbBounds_of_readLimb? pa₂ hba₂)
+    fd_f25519_sgn_conforms a s₂ hs₂WF pa₂ (limbBounds_of_readLimb? pa₂ hba₂).bias
+      (limbSum_lt_of_limbBounds (limbBounds_of_readLimb? pa₂ hba₂))
   have hs₃WF : s₃.WF := GlobalState.WF.of_equiv hs₂WF heq₂
   have hlive₂ : ∀ b : BlockId, s₃.mem.live? b = s₂.mem.live? b := fun b => (heq₂.live b).symm
 
@@ -100,7 +100,12 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
       ((hlive₁ b (fun h => by rw [← h] at hb; omega)).trans (fb b hb))
   have po₃ : IsFieldElemPtr s₃.mem o := isFieldElemPtr_of_live?_eq (hframe o.id hno) ho
   obtain ⟨pa₃, hva₃, hba₃⟩ := carry_of_live?_eq (hframe a.id hna) ha hba
-  obtain ⟨pt₃, hvt₃', hbt₃⟩ := carry_of_live?_eq (hlive₂ t.id) pt₂ hbt₂
+  have pt₃ : IsFieldElemPtr s₃.mem t := isFieldElemPtr_of_live?_eq (hlive₂ t.id) pt₂
+  have hvt₃' : readFieldElem pt₃ = readFieldElem pt₂ :=
+    readFieldElem_eq_of
+      ((readFieldElem?_of_live?_eq (hlive₂ t.id)).trans (Option.some_get _).symm)
+  have hbt₃ : ∀ (i : Fin 5) (l : ℕ), readLimb? t i s₃.mem = some l → l ≤ biasLimb i :=
+    fun i l hl => hbt₂ i l ((readLimb?_of_live?_eq (hlive₂ t.id) i).symm.trans hl)
   have hvt₃ : readFieldElem pt₃ = -readFieldElem ha := hvt₃'.trans hvt₂
 
   -- `sgn` reaches `selectznz` truncated, so only its low byte decides -- and
@@ -120,21 +125,46 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
   set src : Pointer := if (readFieldElem ha).val % 2 = 1 then t else a with hsrcdef
   have hsrc : IsFieldElemPtr s₃.mem src := by rw [hsrcdef]; split <;> assumption
   have hbsrc : ∀ (i : Fin 5) (l : ℕ),
-      readLimb? src i s₃.mem = some l → l ≤ 0xffffffffffffe := by
+      readLimb? src i s₃.mem = some l → l ≤ biasLimb i := by
     rw [hsrcdef]; split
     · exact hbt₃
-    · exact fun i l hl => le_trans (hba₃ i l hl) (by norm_num)
+    · exact fun i l hl => le_trans (hba₃ i l hl) (tight_le_biasLimb i)
 
-  refine ⟨fun i => (readLimb i hsrc : BitVec 64), ?val, ?bnd, ?run⟩
+  refine ⟨fun i => (readLimb i hsrc : BitVec 64), ?val, ?bnd, ?sum, ?run⟩
 
   case val => rw [readFieldElem_splice_congr ho po₃, hifval, hvt₃, hva₃]
 
   case bnd =>
-    refine limbBounds_of_readLimb? _ fun i l hl => ?_
+    refine biasBounds_of_readLimb? _ fun i l hl => ?_
     rw [limbReadbackPack _ _ _ ho.left i, Option.some.injEq] at hl
     subst hl
     simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
     exact le_trans (Nat.mod_le _ _) (hbsrc i _ (Option.some_get _).symm)
+
+  case sum =>
+    -- bias bounds give only `≤ 2 · p`, with equality at the all-maximal
+    -- vector, whose value is `0`. The negate branch escapes it because `-a`
+    -- is non-zero there; the copy branch because `a` is tight.
+    by_cases hpar : (readFieldElem ha).val % 2 = 1
+    · refine limbSum_lt_of_biasBounds ?bias ?ne
+      case bias =>
+        refine biasBounds_of_readLimb? _ fun i l hl => ?_
+        rw [limbReadbackPack _ _ _ ho.left i, Option.some.injEq] at hl
+        subst hl
+        simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
+        exact le_trans (Nat.mod_le _ _) (hbsrc i _ (Option.some_get _).symm)
+      case ne =>
+        rw [readFieldElem_splice_congr ho po₃, hifval, hvt₃, hva₃, if_pos hpar]
+        refine neg_ne_zero.mpr fun h0 => ?_
+        rw [h0] at hpar
+        simp at hpar
+    · refine limbSum_lt_of_limbBounds (limbBounds_of_readLimb? _ fun i l hl => ?_)
+      rw [limbReadbackPack _ _ _ ho.left i, Option.some.injEq] at hl
+      subst hl
+      simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
+      refine le_trans (Nat.mod_le _ _) ?_
+      have : src = a := by rw [hsrcdef, if_neg hpar]
+      exact hba₃ i _ (this ▸ (Option.some_get _).symm)
 
   case run =>
     refine ⟨s.popFrame s₄.mem, run_runFunction (s' := s₄) ?walk, ?equiv⟩

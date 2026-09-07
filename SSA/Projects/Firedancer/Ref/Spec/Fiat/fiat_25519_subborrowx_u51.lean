@@ -23,7 +23,8 @@ abbrev fiat_25519_subborrowx_u51_spec (o₁ o₂ : Pointer) (c : BitVec 8) (a b 
     (Ctxt.Valuation.ofHVector [.value b, .value a, .value c, .value o₂, .value o₁]ₕ))
   let result := StateT.run invocation s
 
-  a.toNat ≤ 2 ^ 51 → 1 ≤ c.toNat + b.toNat → c.toNat + b.toNat ≤ 2 ^ 51 →
+  a.toNat < 2 ^ 51 + (c.toNat + b.toNat) → 1 ≤ c.toNat + b.toNat →
+  c.toNat + b.toNat ≤ 2 ^ 51 →
   ∃ (low : BitVec 64) (borrow : BitVec 8),
     low.toNat < 2 ^ 51
     ∧ low.toNat + c.toNat + b.toNat = a.toNat + 2 ^ 51 * borrow.toNat
