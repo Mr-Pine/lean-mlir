@@ -146,4 +146,10 @@ theorem limbSum_lt_of_biasBounds {m : MemoryState} {q : Pointer} {h : IsFieldEle
   · exact absurd (by rw [readFieldElem_eq_limbSum, h']; decide) hne
 
 
+/-- ... and a bias-bounded element is a loose one, which is the bound
+`fiat_25519_carry_mul` / `carry_square` take. -/
+theorem BiasBounds.loose {m : MemoryState} {q : Pointer} {h : IsFieldElemPtr m q}
+    (hb : BiasBounds h) : LimbBounds.Loose h :=
+  fun i => le_trans (hb i) (le_trans (biasLimb_le i) (by norm_num))
+
 end Firedancer.Ref

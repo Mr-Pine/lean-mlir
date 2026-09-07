@@ -1,0 +1,25 @@
+/-
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
+import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr
+
+namespace Firedancer.Ref
+open LeanMLIR SLLVM
+
+/-- One `fd_f25519_sqr( dst, src )` call, peeled. As with `mul_step`, `dst`
+may alias `src`. -/
+theorem sqr_step {dst src : Pointer} {u : GlobalState} (hu : u.WF)
+    (hd : IsFieldElemPtr u.mem dst) (h₀ : IsFieldElemPtr u.mem src)
+    {w : ZMod _root_.p} (hv : readFieldElem h₀ = w)
+    (hb : LimbBounds.Loose h₀) :
+    ∃ u', StateT.run (runFunction (fd_f25519_sqr.denote
+        (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) u
+        = .value ([.value dst]ₕ, u')
+      ∧ StepFacts dst (w * w) u u' := by
+  obtain ⟨out, hval, hbnd, u', hrun, heq⟩ :=
+    fd_f25519_sqr_conforms dst src u hu hd h₀ (limbBounds_readLimb? h₀ hb)
+  refine ⟨u', hrun, StepFacts.of_splice hu hd heq ?_ (limbBounds_readLimb? _ hbnd)⟩
+  rw [readFieldElem?_eq_some (isFieldElemPtr_splice hd) hval, hv]
+
+end Firedancer.Ref

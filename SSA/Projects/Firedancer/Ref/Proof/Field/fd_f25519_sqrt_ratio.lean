@@ -4,9 +4,12 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sqrt_ratio
 import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.Ref.Proof.Globals
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_abs
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_pow22523
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
+import SSA.Projects.Firedancer.Ref.Proof.Locals
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_abs
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_neg
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_if
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_eq
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_pow22523
 
 import SSA.Projects.Firedancer.Prime
 
@@ -33,219 +36,12 @@ private theorem splice_trans (s₀ : GlobalState) {m₁ m₂ : MemoryState} {q :
     m₂.live? q.id = (s₀.mem.splice q y).live? q.id :=
   h₂.trans ((live?_splice_congr h₁).trans ((splice_splice_equiv (s := s₀) x y).live q.id))
 
-/-- `m'` holds `q`'s block exactly as `m` did -- the whole of what a field
-element at `q` is read out of, so every fact about it carries across. -/
-abbrev Untouched (q : Pointer) (m m' : MemoryState) : Prop := m'.live? q.id = m.live? q.id
+/-- The ten `fd_f25519_t` locals `%7 … %16` allocate. In allocation order --
+`%7 … %16` of the region -- they are the locals `fd_f25519.c` declares:
 
-/-- A field element survives any step that leaves its block alone: the pointer,
-the value and the limb bounds carry together. -/
-private theorem carry {m m' : MemoryState} {q : Pointer} {bound : ℕ}
-    (h : Untouched q m m') (hq : IsFieldElemPtr m q) (hb : LimbBounds hq bound) :
-    ∃ hq' : IsFieldElemPtr m' q, readFieldElem hq' = readFieldElem hq ∧ LimbBounds hq' bound :=
-  ⟨isFieldElemPtr_of_live?_eq h hq,
-   readFieldElem_eq_of ((readFieldElem?_of_live?_eq h).trans (Option.some_get _).symm),
-   limbBounds_of_readLimb? _ (limbBounds_of_live?_eq h (limbBounds_readLimb? hq hb))⟩
-
-/-- The per-limb counterpart, for a `fd_f25519_neg` result. -/
-private theorem carryBias {m m' : MemoryState} {q : Pointer} {w : ZMod p}
-    (h : Untouched q m m') (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = w)
-    (hb : BiasBounds hq) :
-    ∃ hq' : IsFieldElemPtr m' q, readFieldElem hq' = w ∧ BiasBounds hq' :=
-  ⟨isFieldElemPtr_of_live?_eq h hq,
-   (readFieldElem_eq_of ((readFieldElem?_of_live?_eq h).trans (Option.some_get _).symm)).trans hv,
-   biasBounds_of_readLimb? _ fun i l hl =>
-     biasBounds_readLimb? hq hb i l ((readLimb?_of_live?_eq h i).symm.trans hl)⟩
-
-/-- ... and with the value pinned to whatever it was already known to be. -/
-private theorem survive {m m' : MemoryState} {q : Pointer} {bound : ℕ} {w : ZMod p}
-    (h : Untouched q m m') (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = w)
-    (hb : LimbBounds hq bound) :
-    ∃ hq' : IsFieldElemPtr m' q, readFieldElem hq' = w ∧ LimbBounds hq' bound :=
-  let ⟨hq', hv', hb'⟩ := carry h hq hb
-  ⟨hq', hv'.trans hv, hb'⟩
-
-/-- The ten `fd_f25519_t` locals `%7 … %16` allocate, all 40 bytes. Indexed by
-`Nat`, as `GlobalState.allocaChain` is. -/
-def sqrtRatioW (_ : Nat) : Nat := 320
-
-/-- Those ten, as the chain's pointers: consecutive block ids from the entry
-counter, each at offset 0. In allocation order -- `%7 … %16` of the region --
-they are the locals `fd_f25519.c` declares:
-
-    0 v2      1 v3      2 uv3          3 v6        4 v7
-    5 uv7     6 check   7 u_neg        8 u_neg_sqrtm1   9 r_prime -/
-def sqrtRatioLocal (s : GlobalState) : Fin 10 → Pointer := fun i => s.chainPtr sqrtRatioW i.val
-
-/-- The locals' block ids: consecutive from the entry counter. -/
-@[simp] theorem sqrtRatioLocal_id (s : GlobalState) (k : Fin 10) :
-    (sqrtRatioLocal s k).id.id = s.alloc.nextFreeBlock + k.val := by
-  simp [sqrtRatioLocal]
-
-/-- ... so distinct locals are distinct blocks. -/
-theorem sqrtRatioLocal_ne {s : GlobalState} {j k : Fin 10} (h : j ≠ k) :
-    (sqrtRatioLocal s j).id ≠ (sqrtRatioLocal s k).id := fun he => by
-  have hid := congrArg BlockId.id he
-  rw [sqrtRatioLocal_id, sqrtRatioLocal_id] at hid
-  exact h (Fin.val_injective (by omega))
-
-/-- ... and no local is a block the caller holds. -/
-theorem sqrtRatioLocal_ne_below {s : GlobalState} {k : Fin 10} {b : BlockId}
-    (hb : b.id < s.alloc.nextFreeBlock) : (sqrtRatioLocal s k).id ≠ b := fun he => by
-  have hid := congrArg BlockId.id he
-  rw [sqrtRatioLocal_id] at hid
-  omega
-
-open Pow22523 in
-/-- One `fd_f25519_pow22523( dst, src )` call, peeled, in `sqr_step`'s shape. -/
-theorem pow_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
-    (hd : IsFieldElemPtr w.mem dst) (h₀ : IsFieldElemPtr w.mem src)
-    {x : ZMod p} (hv : readFieldElem h₀ = x) (hb : LimbBounds.Loose h₀) :
-    ∃ w', StateT.run (runFunction (fd_f25519_pow22523.denote
-        (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
-        = .value ([.value dst]ₕ, w')
-      ∧ StepFacts dst (x ^ (2 ^ 252 - 3)) w w' := by
-  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := fd_f25519_pow22523_conforms dst src w hw hd h₀ hb
-  refine ⟨w', hrun, ?_⟩
-  have hval' : readFieldElem? dst w'.mem = some (x ^ (2 ^ 252 - 3)) := by
-    rw [← readFieldElem?_of_equiv heq]
-    show readFieldElem? dst (w.mem.splice dst (packLimbs out)) = _
-    rw [← hv, ← hval]
-    exact (Option.some_get _).symm
-  exact {
-    wf := GlobalState.WF.of_equiv hw.splice heq
-    globals := heq.globals.symm
-    live := fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb')
-    splice := ⟨packLimbs out, (heq.live dst.id).symm⟩
-    ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
-    val := readFieldElem_eq_of hval'
-    bnd := limbBounds_of_equiv heq hbnd }
-
-/-- The part of a peeled call the frame invariant needs: the state is still
-well-formed, `dst`'s block is the only one that moved, and `dst` is still a
-field element. `StepFacts` is this plus the value and the tight bound, which
-`fd_f25519_neg` does not give. -/
-structure Wrote (dst : Pointer) (u u' : GlobalState) : Prop where
-  wf : u'.WF
-  /-- The symbol table is untouched; see `Pow22523.StepFacts.globals`. -/
-  globals : u'.globals = u.globals
-  live : ∀ b : BlockId, dst.id ≠ b → u'.mem.live? b = u.mem.live? b
-  ptr : IsFieldElemPtr u'.mem dst
-  splice : ∃ x : BitVec (5 * 64), u'.mem.live? dst.id = (u.mem.splice dst x).live? dst.id
-
-namespace Pow22523
-
-/-- Every peeled `sqr`/`mul`/`pow22523` is one. -/
-theorem StepFacts.wrote {dst : Pointer} {x : ZMod p} {u u' : GlobalState}
-    (st : StepFacts dst x u u') : Wrote dst u u' :=
-  ⟨st.wf, st.globals, st.live, st.ptr, st.splice⟩
-
-end Pow22523
-
-/-- One `fd_f25519_neg( dst, src )` call, peeled. The limbs come back at
-`fiat_25519_opp`'s bias bound, per limb, not at the tight one -- so this is
-`Wrote` plus the value and that bound rather than a `StepFacts`. -/
-theorem neg_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
-    (hd : IsFieldElemPtr w.mem dst) (h₀ : IsFieldElemPtr w.mem src)
-    {x : ZMod p} (hv : readFieldElem h₀ = x) (hb : LimbBounds h₀) :
-    ∃ w' : GlobalState, ∃ hw' : Wrote dst w w',
-      StateT.run (runFunction (fd_f25519_neg.denote
-          (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
-        = .value ([.value dst]ₕ, w')
-      ∧ readFieldElem hw'.ptr = -x ∧ BiasBounds hw'.ptr := by
-  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := fd_f25519_neg_conforms dst src w hw hd h₀ hb
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
-    fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb'),
-    ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
-    ⟨out, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_⟩
-  · refine readFieldElem_eq_of ?_
-    rw [← readFieldElem?_of_equiv heq]
-    show readFieldElem? dst (w.mem.splice dst out) = _
-    rw [← hv, ← hval]
-    exact (Option.some_get _).symm
-  · exact biasBounds_of_readLimb? _ fun i l hl =>
-      biasBounds_readLimb? _ hbnd i l (by rwa [readLimb?_of_equiv heq])
-
-/-- The flag `fd_f25519_if` branches on: it truncates its condition to a byte,
-and the region hands it a 0/1. -/
-theorem setWidth_flag {A : Prop} [Decidable A] :
-    ((if A then 1#32 else 0#32 : BitVec 32).setWidth 8 ≠ 0) ↔ A := by
-  by_cases h : A <;> simp [h]
-
-/-- One `fd_f25519_if( dst, c, a₀, a₁ )` call, peeled. Stated over the *Prop*
-the flag stands for, so the region's condition never has to be unfolded again:
-everything the spec has to say about the byte truncation is spent here. -/
-theorem if_step {dst a₀ a₁ : Pointer} {w : GlobalState} (hw : w.WF)
-    (hd : IsFieldElemPtr w.mem dst) (h₀ : IsFieldElemPtr w.mem a₀) (h₁ : IsFieldElemPtr w.mem a₁)
-    {x y : ZMod p} (hv₀ : readFieldElem h₀ = x) (hv₁ : readFieldElem h₁ = y)
-    (hb₀ : LimbBounds h₀) (hb₁ : LimbBounds h₁) (c : Prop) [Decidable c] :
-    ∃ w' : GlobalState, ∃ hw' : Wrote dst w w',
-      StateT.run (runFunction (fd_f25519_if.denote (Ctxt.Valuation.ofHVector
-          [.value a₁, .value a₀, .value (if c then 1#32 else 0#32), .value dst]ₕ))) w
-        = .value ([.value dst]ₕ, w')
-      ∧ readFieldElem hw'.ptr = (if c then x else y) ∧ LimbBounds hw'.ptr := by
-  obtain ⟨hval, w', hrun, heq⟩ :=
-    fd_f25519_if_conforms dst (if c then 1#32 else 0#32) a₀ a₁ w hw hd h₀ h₁
-  simp only [setWidth_flag] at hval heq
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
-    fun b hb => (heq.live b).symm.trans (live?_splice_ne hb),
-    ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
-    ⟨_, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_⟩
-  · refine readFieldElem_eq_of ?_
-    rw [← readFieldElem?_of_equiv heq, ← hv₀, ← hv₁, ← hval]
-    exact (Option.some_get _).symm
-  · -- the winner's limbs are copied verbatim, and both are tight
-    refine limbBounds_of_readLimb? _ fun i l hl => ?_
-    rw [← readLimb?_of_equiv heq, limbReadbackPack _ _ _ hd.left i, Option.some.injEq] at hl
-    subst hl
-    simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
-    refine le_trans (Nat.mod_le _ _) ?_
-    by_cases hc : c
-    · simpa [hc] using hb₀ i
-    · simpa [hc] using hb₁ i
-
-/-- One `fd_f25519_abs( dst, src )` call, peeled: the non-negative
-representative, at `fd_f25519_neg`'s per-limb bound since `fd_f25519_if`
-copies out whichever of the two `abs` built, plus the sum bound `abs`
-establishes per branch. -/
-theorem abs_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
-    (hd : IsFieldElemPtr w.mem dst) (h₀ : IsFieldElemPtr w.mem src)
-    {x : ZMod p} (hv : readFieldElem h₀ = x) (hb : LimbBounds h₀) :
-    ∃ w' : GlobalState, ∃ hw' : Wrote dst w w',
-      StateT.run (runFunction (fd_f25519_abs.denote
-          (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
-        = .value ([.value dst]ₕ, w')
-      ∧ readFieldElem hw'.ptr = (if x.val % 2 = 1 then -x else x)
-      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38 := by
-  obtain ⟨out, hval, hbnd, hsum, w', hrun, heq⟩ := fd_f25519_abs_conforms dst src w hw hd h₀ hb
-
-  refine ⟨w', ⟨GlobalState.WF.of_equiv hw.splice heq, heq.globals.symm,
-    fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb'),
-    ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩,
-    ⟨packLimbs out, (heq.live dst.id).symm⟩⟩, hrun, ?_, ?_, ?_⟩
-  · refine readFieldElem_eq_of ?_
-    rw [← readFieldElem?_of_equiv heq, ← hv, ← hval]
-    exact (Option.some_get _).symm
-  · exact biasBounds_of_readLimb? _ fun i l hl =>
-      biasBounds_readLimb? _ hbnd i l ((readLimb?_of_equiv heq dst i).trans hl)
-  · have hlive : w'.mem.live? dst.id = (w.mem.splice dst (packLimbs out)).live? dst.id :=
-      (heq.live dst.id).symm
-    rw [limbSum_of_live?_eq hlive (h := isFieldElemPtr_splice hd)]
-    exact hsum
-
-/-- One `fd_f25519_eq( a, b )` call, peeled: the comparison the region branches
-on, and the state it leaves -- `eq` only reads, so that is the same state up to
-`≈`. -/
-theorem eq_step {a b : Pointer} {w : GlobalState} (hw : w.WF)
-    (ha : IsFieldElemPtr w.mem a) (hb : IsFieldElemPtr w.mem b)
-    (hab : LimbBounds ha) (hbb : BiasBounds hb) {x y : ZMod p}
-    (hva : readFieldElem ha = x) (hvb : readFieldElem hb = y) :
-    ∃ w', StateT.run (runFunction (fd_f25519_eq.denote
-        (Ctxt.Valuation.ofPair (.value b) (.value a)))) w
-        = .value ([(.value (if x = y then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, w')
-      ∧ w ≈ w' := by
-  obtain ⟨w', hrun, heq⟩ := fd_f25519_eq_conforms a b w hw ha hb hab hbb
-  rw [hva, hvb] at hrun
-  exact ⟨w', hrun, heq⟩
+    0 v2      1 v3      2 uv3          3 v6              4 v7
+    5 uv7     6 check   7 u_neg        8 u_neg_sqrtm1    9 r_prime -/
+abbrev sqrtRatioLocal (s : GlobalState) : Fin 10 → Pointer := fieldLocal s
 
 open Pow22523 in
 /-- What holds at every point of the walk: the ten locals and the
@@ -278,16 +74,16 @@ theorem stepLocal (hf : Frame s₀ r w) (hr : r.id.id < s₀.alloc.nextFreeBlock
   wf := st.wf
   locals := fun j =>
     if h : j = k then h ▸ st.ptr
-    else isFieldElemPtr_of_live?_eq (st.live _ (sqrtRatioLocal_ne (Ne.symm h))) (hf.locals j)
-  ptr := isFieldElemPtr_of_live?_eq (st.live _ (sqrtRatioLocal_ne_below hr)) hf.ptr
-  live := fun b hb hbr => (st.live b (sqrtRatioLocal_ne_below hb)).trans (hf.live b hb hbr)
+    else isFieldElemPtr_of_live?_eq (st.live _ (fieldLocal_ne (Ne.symm h))) (hf.locals j)
+  ptr := isFieldElemPtr_of_live?_eq (st.live _ (fieldLocal_ne_below hr)) hf.ptr
+  live := fun b hb hbr => (st.live b (fieldLocal_ne_below hb)).trans (hf.live b hb hbr)
 
 /-- A step that writes the out-parameter. -/
 theorem stepOut (hf : Frame s₀ r w) (hr : r.id.id < s₀.alloc.nextFreeBlock)
     (st : Wrote r w w') : Frame s₀ r w' where
   wf := st.wf
   locals := fun j =>
-    isFieldElemPtr_of_live?_eq (st.live _ (Ne.symm (sqrtRatioLocal_ne_below hr))) (hf.locals j)
+    isFieldElemPtr_of_live?_eq (st.live _ (Ne.symm (fieldLocal_ne_below hr))) (hf.locals j)
   ptr := st.ptr
   live := fun b hb hbr => (st.live b (Ne.symm hbr)).trans (hf.live b hb hbr)
 
@@ -365,26 +161,26 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have hng : psqrtm1.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs hpsqrtm1.left
 
   -- The frame, and everything the walk needs of it, while it is still
-  -- transparent: `s.allocaChain sqrtRatioW 10` unfolds into ten `HashMap`
+  -- transparent: `s.allocaChain fieldW 10` unfolds into ten `HashMap`
   -- inserts, so left exposed it makes defeq walk the buckets on every `live?`.
-  have fb : FrameBelow s.alloc.nextFreeBlock s (s.allocaChain sqrtRatioW 10) :=
+  have fb : FrameBelow s.alloc.nextFreeBlock s (s.allocaChain fieldW 10) :=
     FrameBelow.allocaChain (le_refl _) (FrameBelow.refl _ _) 10
-  have hwf : (s.allocaChain sqrtRatioW 10).WF := GlobalState.WF.allocaChain hs 10
+  have hwf : (s.allocaChain fieldW 10).WF := GlobalState.WF.allocaChain hs 10
   have hlf : ∀ k : Fin 10,
-      Fits (s.allocaChain sqrtRatioW 10).mem (sqrtRatioLocal s k) 320 :=
+      Fits (s.allocaChain fieldW 10).mem (sqrtRatioLocal s k) 320 :=
     fun k => GlobalState.fits_chainPtr k.isLt
-  have hrc : IsFieldElemPtr (s.allocaChain sqrtRatioW 10).mem r :=
+  have hrc : IsFieldElemPtr (s.allocaChain fieldW 10).mem r :=
     isFieldElemPtr_of_live?_eq (fb r.id hnr) hr
 
   -- The locals are the blocks this frame allocated, so they miss everything the
   -- caller holds, and they are consecutive, so they miss each other.
 
-  set sLocals : GlobalState := s.allocaChain sqrtRatioW 10 with hsLocals
+  set sLocals : GlobalState := s.allocaChain fieldW 10 with hsLocals
   clear_value sLocals
 
   -- %7 … %16, folded to `sqrtRatioLocal s k` and sealed as `sLocals`
-  peel_alloca_chain s, sqrtRatioW, 10
-  fold_cells s, sqrtRatioW, sqrtRatioLocal, 10
+  peel_alloca_chain s, fieldW, 10
+  fold_cells s, fieldW, sqrtRatioLocal, 10
   rw [← hsLocals]
 
   -- the stepper's `v0 … v5`: the alloca count, and the `@fd_f25519_sqrtm1`
@@ -409,7 +205,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   -- exactly as it was
   have F₀ : Frame s r sLocals :=
     { wf := hwf
-      locals := fun k => ⟨hlf k, by simp [sqrtRatioLocal]⟩
+      locals := fun k => ⟨hlf k, by simp [fieldLocal]⟩
       ptr := hrc
       live := fun b hb _ => fb b hb }
 
@@ -455,7 +251,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   -- %20 `fd_f25519_sqr( v6, v3 )` -- `v3` survives the write at `uv3`
   peel_lifetime
   obtain ⟨pv3₃, hv3₃, hb3₃⟩ :=
-    survive (f₃.live v3.id (by rw [huv3ptr, hv3ptr]; exact sqrtRatioLocal_ne (by decide)))
+    survive (f₃.live v3.id (by rw [huv3ptr, hv3ptr]; exact fieldLocal_ne (by decide)))
       f₂.ptr f₂.val f₂.bnd
   have pv6₃ : IsFieldElemPtr s₃.mem v6 := by rw [hv6ptr]; exact F₃.locals 3
   obtain ⟨s₄, hrun₄, f₄⟩ := sqr_step F₃.wf pv6₃ pv3₃ hv3₃ hb3₃.loose
@@ -494,16 +290,16 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
 
   -- %24 `fd_f25519_mul( r, r, uv3 )` -- `uv3` survives the four writes since %19
   obtain ⟨puv3₄, huv3₄, hbuv3₄⟩ :=
-    survive (f₄.live uv3.id (by rw [hv6ptr, huv3ptr]; exact sqrtRatioLocal_ne (by decide)))
+    survive (f₄.live uv3.id (by rw [hv6ptr, huv3ptr]; exact fieldLocal_ne (by decide)))
       f₃.ptr f₃.val f₃.bnd
   obtain ⟨puv3₅, huv3₅, hbuv3₅⟩ :=
-    survive (f₅.live uv3.id (by rw [hv7ptr, huv3ptr]; exact sqrtRatioLocal_ne (by decide)))
+    survive (f₅.live uv3.id (by rw [hv7ptr, huv3ptr]; exact fieldLocal_ne (by decide)))
       puv3₄ huv3₄ hbuv3₄
   obtain ⟨puv3₆, huv3₆, hbuv3₆⟩ :=
-    survive (f₆.live uv3.id (by rw [huv7ptr, huv3ptr]; exact sqrtRatioLocal_ne (by decide)))
+    survive (f₆.live uv3.id (by rw [huv7ptr, huv3ptr]; exact fieldLocal_ne (by decide)))
       puv3₅ huv3₅ hbuv3₅
   obtain ⟨puv3₇, huv3₇, hbuv3₇⟩ :=
-    survive (f₇.live uv3.id (by rw [huv3ptr]; exact Ne.symm (sqrtRatioLocal_ne_below hnr)))
+    survive (f₇.live uv3.id (by rw [huv3ptr]; exact Ne.symm (fieldLocal_ne_below hnr)))
       puv3₆ huv3₆ hbuv3₆
   obtain ⟨s₈, hrun₈, f₈⟩ :=
     mul_step F₇.wf F₇.ptr f₇.ptr puv3₇ f₇.val huv3₇ f₇.bnd.loose hbuv3₇.loose
@@ -534,7 +330,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pu₁₀, huval₁₀, hubnd₁₀⟩ := uAt F₁₀
   have puneg₁₀ : IsFieldElemPtr s₁₀.mem u_neg := by rw [hu_negptr]; exact F₁₀.locals 7
-  obtain ⟨s₁₁, w₁₁, hrun₁₁, hnegval, hnegbnd⟩ := neg_step F₁₀.wf puneg₁₀ pu₁₀ huval₁₀ hubnd₁₀
+  obtain ⟨s₁₁, w₁₁, hrun₁₁, hnegval, hnegbnd⟩ := neg_step F₁₀.wf puneg₁₀ pu₁₀ huval₁₀ hubnd₁₀.bias
   peel_call hrun₁₁
   clear hrun₁₁
   have F₁₁ : Frame s r s₁₁ := F₁₀.stepLocal hnr (hu_negptr ▸ w₁₁)
@@ -556,15 +352,15 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
 
   -- the three comparands, carried to where the `eq`s read them
   obtain ⟨pchk₁₁, hchkval₁₁, hchkbnd₁₁⟩ :=
-    survive (w₁₁.live check.id (by rw [hu_negptr, hcheckptr]; exact sqrtRatioLocal_ne (by decide)))
+    survive (w₁₁.live check.id (by rw [hu_negptr, hcheckptr]; exact fieldLocal_ne (by decide)))
       f₁₀.ptr f₁₀.val f₁₀.bnd
   obtain ⟨pchk₁₂, hchkval₁₂, hchkbnd₁₂⟩ :=
     survive (f₁₂.live check.id
-        (by rw [hu_neg_sqrtm1ptr, hcheckptr]; exact sqrtRatioLocal_ne (by decide)))
+        (by rw [hu_neg_sqrtm1ptr, hcheckptr]; exact fieldLocal_ne (by decide)))
       pchk₁₁ hchkval₁₁ hchkbnd₁₁
   obtain ⟨puneg₁₂, hnegval₁₂, hnegbnd₁₂⟩ :=
-    carryBias (f₁₂.live u_neg.id
-        (by rw [hu_neg_sqrtm1ptr, hu_negptr]; exact sqrtRatioLocal_ne (by decide)))
+    surviveBias (f₁₂.live u_neg.id
+        (by rw [hu_neg_sqrtm1ptr, hu_negptr]; exact fieldLocal_ne (by decide)))
       w₁₁.ptr hnegval hnegbnd
 
   -- %29 `fd_f25519_eq( check, u )` -- `correct_sign_sqrt`. `eq` only reads, so
@@ -579,7 +375,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨pchk₁₃, hchkval₁₃, hchkbnd₁₃⟩ :=
     survive (heq₁₃.live check.id).symm pchk₁₂ hchkval₁₂ hchkbnd₁₂
   obtain ⟨puneg₁₃, hnegval₁₃, hnegbnd₁₃⟩ :=
-    carryBias (heq₁₃.live u_neg.id).symm puneg₁₂ hnegval₁₂ hnegbnd₁₂
+    surviveBias (heq₁₃.live u_neg.id).symm puneg₁₂ hnegval₁₂ hnegbnd₁₂
   obtain ⟨pusq₁₃, husqval₁₃, husqbnd₁₃⟩ :=
     survive (heq₁₃.live u_neg_sqrtm1.id).symm f₁₂.ptr f₁₂.val f₁₂.bnd
 
@@ -607,14 +403,14 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
 
   -- `r` has held `(u v⁷)^((p-5)/8) · u v³` since %24; carry it past the four
   -- writes and the three comparisons to where %32 multiplies it by `√-1`
-  have hcheckr : check.id ≠ r.id := by rw [hcheckptr]; exact sqrtRatioLocal_ne_below hnr
+  have hcheckr : check.id ≠ r.id := by rw [hcheckptr]; exact fieldLocal_ne_below hnr
   obtain ⟨pr₉, hrval₉, hrbnd₉⟩ := survive (f₉.live r.id hcheckr) f₈.ptr f₈.val f₈.bnd
   obtain ⟨pr₁₀, hrval₁₀, hrbnd₁₀⟩ := survive (f₁₀.live r.id hcheckr) pr₉ hrval₉ hrbnd₉
   obtain ⟨pr₁₁, hrval₁₁, hrbnd₁₁⟩ :=
-    survive (w₁₁.live r.id (by rw [hu_negptr]; exact sqrtRatioLocal_ne_below hnr))
+    survive (w₁₁.live r.id (by rw [hu_negptr]; exact fieldLocal_ne_below hnr))
       pr₁₀ hrval₁₀ hrbnd₁₀
   obtain ⟨pr₁₂, hrval₁₂, hrbnd₁₂⟩ :=
-    survive (f₁₂.live r.id (by rw [hu_neg_sqrtm1ptr]; exact sqrtRatioLocal_ne_below hnr))
+    survive (f₁₂.live r.id (by rw [hu_neg_sqrtm1ptr]; exact fieldLocal_ne_below hnr))
       pr₁₁ hrval₁₁ hrbnd₁₁
   obtain ⟨pr₁₃, hrval₁₃, hrbnd₁₃⟩ := survive (heq₁₃.live r.id).symm pr₁₂ hrval₁₂ hrbnd₁₂
   obtain ⟨pr₁₄, hrval₁₄, hrbnd₁₄⟩ := survive (heq₁₄.live r.id).symm pr₁₃ hrval₁₃ hrbnd₁₃
@@ -651,7 +447,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
 
   -- `r` survives the write at `r_prime`
   obtain ⟨pr₁₆, hrval₁₆, hrbnd₁₆⟩ :=
-    survive (f₁₆.live r.id (by rw [hr_primeptr]; exact sqrtRatioLocal_ne_below hnr))
+    survive (f₁₆.live r.id (by rw [hr_primeptr]; exact fieldLocal_ne_below hnr))
       pr₁₅ hrval₁₅ hrbnd₁₅
 
   -- %34 `fd_f25519_if( r, flipped_sign_sqrt | flipped_sign_sqrt_i, r_prime, r )`
@@ -858,7 +654,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     -- `r`'s block: untouched until %23, then four writes, each a 320-bit
     -- splice, which `splice_trans` collapses to the last one
     have hlr : ∀ k : Fin 10, (sqrtRatioLocal s k).id ≠ r.id :=
-      fun _ => sqrtRatioLocal_ne_below hnr
+      fun _ => fieldLocal_ne_below hnr
     have hpre : s₆.mem.live? r.id = s.mem.live? r.id :=
       (f₆.live r.id (huv7ptr ▸ hlr 5)).trans <|
       (f₅.live r.id (hv7ptr ▸ hlr 4)).trans <|

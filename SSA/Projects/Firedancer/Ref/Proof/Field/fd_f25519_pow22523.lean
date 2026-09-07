@@ -4,8 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_pow22523
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
+import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
 
 /-!
 # `fd_f25519_pow22523` conforms to its spec
@@ -92,81 +92,6 @@ structure State (t₀ t₁ t₂ : Pointer) (n₀ : Nat) (s₀ : GlobalState)
   b₁ : LimbBounds p₁
   b₂ : LimbBounds p₂
 
-/-- What one peeled call leaves behind, for `dst` any of the tracked blocks:
-the frame is intact below `dst`, `dst` holds the new value with tight limbs,
-and the write was a single splice (the witness the ending's
-`live?_splice_congr` wants). -/
-structure StepFacts (dst : Pointer) (w : ZMod _root_.p) (u u' : GlobalState) : Prop where
-  wf : u'.WF
-  live : ∀ b : BlockId, dst.id ≠ b → u'.mem.live? b = u.mem.live? b
-  splice : ∃ x : BitVec (5 * 64),
-    u'.mem.live? dst.id = (u.mem.splice dst x).live? dst.id
-  ptr : IsFieldElemPtr u'.mem dst
-  val : readFieldElem ptr = w
-  bnd : LimbBounds ptr
-
-/-- `readFieldElem` back into the proof-free `readFieldElem?` form. -/
-private theorem readFieldElem?_eq_some {m : MemoryState} {q : Pointer}
-    (h : IsFieldElemPtr m q) {v : ZMod _root_.p}
-    (hv : readFieldElem h = v) : readFieldElem? q m = some v := by
-  rw [← hv]; exact (Option.some_get _).symm
-
-/-- One `mul(dst, src₀, src₁)` call, peeled: the run equation for `peel_call`
-plus `StepFacts`. `dst` may alias a source -- the kernels read before they
-write, and the conformance lemmas carry no disjointness hypotheses. -/
-theorem mul_step {dst src₀ src₁ : Pointer} {u : GlobalState} (hu : u.WF)
-    (hd : IsFieldElemPtr u.mem dst)
-    (h₀ : IsFieldElemPtr u.mem src₀) (h₁ : IsFieldElemPtr u.mem src₁)
-    {w₀ w₁ : ZMod _root_.p}
-    (hv₀ : readFieldElem h₀ = w₀) (hv₁ : readFieldElem h₁ = w₁)
-    (hb₀ : LimbBounds.Loose h₀) (hb₁ : LimbBounds.Loose h₁) :
-    ∃ u', StateT.run (runFunction (fd_f25519_mul.denote
-        (Ctxt.Valuation.ofHVector [.value src₁, .value src₀, .value dst]ₕ))) u
-        = .value ([.value dst]ₕ, u')
-      ∧ StepFacts dst (w₀ * w₁) u u' := by
-  obtain ⟨out, hval, hbnd, u', hrun, heq⟩ :=
-    fd_f25519_mul_conforms dst src₀ src₁ u hu hd h₀ h₁
-      (limbBounds_readLimb? h₀ hb₀) (limbBounds_readLimb? h₁ hb₁)
-  refine ⟨u', hrun, ?_⟩
-  have hval' : readFieldElem? dst u'.mem = some (w₀ * w₁) := by
-    rw [← readFieldElem?_of_equiv heq]
-    show readFieldElem? dst (u.mem.splice dst out) = _
-    rw [← hv₀, ← hv₁, ← hval]
-    exact (Option.some_get _).symm
-  exact {
-    wf := GlobalState.WF.of_equiv hu.splice heq
-    live := fun b hb => (heq.live b).symm.trans (live?_splice_ne hb)
-    splice := ⟨out, (heq.live dst.id).symm⟩
-    ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
-    val := readFieldElem_eq_of hval'
-    bnd := limbBounds_of_readLimb? _
-      fun i l hl => limbBounds_readLimb? _ hbnd i l (by rwa [readLimb?_of_equiv heq]) }
-
-/-- One `sqr(dst, src)` call, peeled: the run equation for `peel_call` plus
-`StepFacts`. As with `mul_step`, `dst` may alias `src`. -/
-theorem sqr_step {dst src : Pointer} {u : GlobalState} (hu : u.WF)
-    (hd : IsFieldElemPtr u.mem dst) (h₀ : IsFieldElemPtr u.mem src)
-    {w : ZMod _root_.p} (hv : readFieldElem h₀ = w)
-    (hb : LimbBounds.Loose h₀) :
-    ∃ u', StateT.run (runFunction (fd_f25519_sqr.denote
-        (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) u
-        = .value ([.value dst]ₕ, u')
-      ∧ StepFacts dst (w * w) u u' := by
-  obtain ⟨out, hval, hbnd, ⟨u', hrun, heq⟩⟩ :=
-    fd_f25519_sqr_conforms dst src u hu hd h₀ (limbBounds_readLimb? h₀ hb)
-  refine ⟨u', hrun, ?_⟩
-  have hval' : readFieldElem? dst u'.mem = some (w * w) := by
-    rw [← readFieldElem?_of_equiv heq]
-    show readFieldElem? dst (u.mem.splice dst (packLimbs out)) = _
-    rw [readFieldElem?_eq_some (isFieldElemPtr_splice hd) hval, hv]
-  exact {
-    wf := GlobalState.WF.of_equiv hu.splice heq
-    live := fun b hb' => (heq.live b).symm.trans (live?_splice_ne hb')
-    splice := ⟨packLimbs out, (heq.live dst.id).symm⟩
-    ptr := ⟨fits_equiv heq (by simpa using fits_splice hd.1), hd.2⟩
-    val := readFieldElem_eq_of hval'
-    bnd := limbBounds_of_equiv heq hbnd }
-
 /-! ### Rebuilding the state assertion after a step
 
 One lemma per written local: the new facts come from `StepFacts`, everything
@@ -176,19 +101,6 @@ section Update
 
 variable {t₀ t₁ t₂ a o : Pointer} {n₀ : Nat} {s₀ : GlobalState}
   {v₀ v₁ v₂ w : ZMod _root_.p} {u u' : GlobalState}
-
-/-- Transport a tracked local's facts along a write to a *different* block. -/
-private theorem survive {q : Pointer} {v : ZMod _root_.p}
-    (hlq : u'.mem.live? q.id = u.mem.live? q.id)
-    (hq : IsFieldElemPtr u.mem q) (hv : readFieldElem hq = v)
-    (hb : LimbBounds hq) :
-    ∃ hq' : IsFieldElemPtr u'.mem q,
-      readFieldElem hq' = v ∧ LimbBounds hq' := by
-  refine ⟨isFieldElemPtr_of_live?_eq hlq hq, ?_, ?_⟩
-  · exact readFieldElem_eq_of
-      ((readFieldElem?_of_live?_eq hlq).trans (readFieldElem?_eq_some hq hv))
-  · exact limbBounds_of_readLimb? _ fun i l hl =>
-      limbBounds_readLimb? hq hb i l (by rwa [readLimb?_of_live?_eq hlq] at hl)
 
 theorem State.update₀ (ids : Ids t₀ t₁ t₂ a o n₀)
     (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u) (st : StepFacts t₀ w u u') :

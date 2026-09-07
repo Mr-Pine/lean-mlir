@@ -1,5 +1,9 @@
 import SSA.Projects.Firedancer.Ed25519
+import SSA.Projects.Firedancer.Prime
 import Mathlib.Tactic.LinearCombination
+import Mathlib.FieldTheory.Finite.Basic
+import Mathlib.NumberTheory.LegendreSymbol.Basic
+import Mathlib.Algebra.Group.Even
 
 /-!
 # Ed25519 group elements / curve points
@@ -158,4 +162,53 @@ example : ¬ SamePoint ⟨0, 2, 2, 0⟩ ⟨0, 1, 2, 0⟩ := by
   decide
 
 end Point
+
+/-! ## `d` is a quadratic non-residue
+
+What makes edwards25519 complete, and what says point decompression's
+denominator `d·y² + 1` never vanishes. `fd_f25519_sqrt_ratio`'s flag is
+`∃ x, x² · v = u` while a spec is stated as `IsSquare (u / v)`; `ZMod`
+division is total (`a / 0 = 0`, a square), so the two agree only where
+`v ≠ 0`. -/
+
+/-- `d` is a quadratic non-residue mod `p` -- the fact that makes edwards25519
+complete, and here the one that says the decompression denominator never
+vanishes. Euler's criterion, with the 255-bit exponentiation done in the
+kernel by `Pratt.powModAux` rather than by `npowRec`. -/
+theorem d_not_isSquare : ¬ IsSquare (d : ZMod p) := by
+  have hd : (d : ZMod p)
+      = ((37095705934669439343138083508754565189542113879843219016388785533085940283555 : ℕ)
+          : ZMod p) := by
+    rw [d]; norm_num
+  have hd0 : (d : ZMod p) ≠ 0 := by
+    rw [hd, Ne, ZMod.natCast_eq_zero_iff]
+    decide +kernel
+  rw [ZMod.euler_criterion p hd0, hd]
+  exact Pratt.pow_ne_one (by norm_num [p]) (by norm_num [p]) (by decide +kernel)
+
+/-- ... so `v = d·y² + 1` is never `0`: if it were, `d = (√-1 / y)²` would be a
+square. -/
+theorem denom_ne_zero (y : ZMod p) : d * y ^ 2 + 1 ≠ 0 := by
+  intro h
+  have hy : y ≠ 0 := by rintro rfl; simp at h
+  refine d_not_isSquare ⟨sqrtm1 * y⁻¹, ?_⟩
+  field_simp
+  rw [sqrtm1_sq]
+  linear_combination h
+
+/-- ... and with a non-zero denominator the region's flag and the spec's
+`IsSquare` are the same statement.
+
+Only `mp` needs `b ≠ 0`: `x² · 0 = a` forces `a = 0`, and `0 / 0 = 0` is a
+square, so the converse holds outright. -/
+theorem isSquare_div_iff {a b : ZMod p} (hb : b ≠ 0) :
+    IsSquare (a / b) ↔ ∃ x, x ^ 2 * b = a := by
+  constructor
+  · rintro ⟨z, hz⟩
+    field_simp at hz
+    exact ⟨z, by linear_combination -hz⟩
+  · rintro ⟨x, rfl⟩
+    exact ⟨x, by field_simp⟩
+
 end Ed25519
+

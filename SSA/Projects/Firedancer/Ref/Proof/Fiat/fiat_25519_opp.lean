@@ -21,24 +21,24 @@ lemma opp_repr_bounds (q : Fin 5 → Nat) (i : Fin 5) : opp_repr q i ≤ biasLim
 /-- One limb of the region's `const - load`, over `toNat`: at fiat's input
 bound the bias limb dominates, so the `sub` does not wrap. -/
 theorem opp_limb_toNat {b : BitVec 64} {c n : ℕ} (hb : b.toNat = n)
-    (hn : n ≤ 0x8000000000000) (hc : 0x8000000000000 ≤ c) (hc' : c < 2 ^ 64) :
+    (hn : n ≤ c) (hc' : c < 2 ^ 64) :
     (BitVec.ofNat 64 c - b).toNat = c - n := by
   rw [BitVec.toNat_sub, BitVec.toNat_ofNat, hb]
   omega
 
 lemma opp_repr_correct (q : Fin 5 → Nat)
-    (hq : ∀ (i : Fin 5), q i ≤ 0x8000000000000) :
+    (hq : ∀ (i : Fin 5), q i ≤ biasLimb i) :
     decodeFieldElem (opp_repr q) = -(decodeFieldElem q) := by
   have p_separation : decodeFieldElem (opp_repr q)
       = decodeFieldElem ![0xfffffffffffda, 0xffffffffffffe, 0xffffffffffffe,
           0xffffffffffffe, 0xffffffffffffe] - decodeFieldElem q := by
     simp [decodeFieldElem, opp_repr]
     -- each limb's `-` is genuine: the bias limb alone exceeds `q i`
-    have e0 : q 0 ≤ 0xfffffffffffda := by have := hq 0; omega
-    have e1 : q 1 ≤ 0xffffffffffffe := by have := hq 1; omega
-    have e2 : q 2 ≤ 0xffffffffffffe := by have := hq 2; omega
-    have e3 : q 3 ≤ 0xffffffffffffe := by have := hq 3; omega
-    have e4 : q 4 ≤ 0xffffffffffffe := by have := hq 4; omega
+    have e0 : q 0 ≤ 0xfffffffffffda := hq 0
+    have e1 : q 1 ≤ 0xffffffffffffe := hq 1
+    have e2 : q 2 ≤ 0xffffffffffffe := hq 2
+    have e3 : q 3 ≤ 0xffffffffffffe := hq 3
+    have e4 : q 4 ≤ 0xffffffffffffe := hq 4
     rw [Nat.cast_sub e0, Nat.cast_sub e1, Nat.cast_sub e2, Nat.cast_sub e3, Nat.cast_sub e4]
     push_cast
     ring
@@ -59,7 +59,7 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
   (hs : s.WF)
   (ho: IsFieldElemPtr s.mem o)
   (hq: IsFieldElemPtr s.mem q)
-  (hqbounds : LimbBounds hq) :
+  (hqbounds : BiasBounds hq) :
   fiat_25519_opp_spec o q s ho hq := by
     -- the walk produces the limbwise forms; read them back once, here
     suffices h : ∃ out : BitVec (5 * 64),
@@ -87,8 +87,8 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
     constructor
     case right =>
       simp [readFieldElem?, hqinput, ho, limbReadbackPack, outputBV]
-      have qinput_bounds (j: Fin 5) : qinput j ≤ 0x8000000000000 := by
-        simp only [hqinput, limbBounds_readLimb? hq hqbounds j]
+      have qinput_bounds (j: Fin 5) : qinput j ≤ biasLimb j := by
+        simp only [hqinput, biasBounds_readLimb? hq hqbounds j]
       have output_bounds (i: Fin 5) : output i ≤ biasLimb i := opp_repr_bounds qinput i
       have loose_output_bounds (i: Fin 5) : output i < 18446744073709551616 :=
         ((output_bounds i).trans (biasLimb_le i)).trans_lt (by norm_num)
@@ -160,30 +160,30 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
       have h5 : i.toNat < 5 := i.isLt
       rw [limbOffsetInBits hq.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hqblk] using hqinput i
-    have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 :=
-      fun i => limbBounds_readLimb? hq hqbounds i _ (hqinput i)
+    have qb : ∀ i : Fin 5, qinput i ≤ biasLimb i :=
+      fun i => biasBounds_readLimb? hq hqbounds i _ (hqinput i)
     -- limb 0 is loaded straight off the base pointer, with no `getelementptr`
     have m1 : x1.toNat = 0xfffffffffffda - qinput 0 := by
       rw [← hx1]
       exact opp_limb_toNat
         (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0)
-        (qb 0) (by norm_num) (by norm_num)
+        (qb 0) (by norm_num)
     have m2 : x2.toNat = 0xffffffffffffe - qinput 1 := by
       rw [← hx2]
       exact opp_limb_toNat (by rw [hqlimb₁]; exact hql 1 8#64 (by simp))
-        (qb 1) (by norm_num) (by norm_num)
+        (qb 1) (by norm_num)
     have m3 : x3.toNat = 0xffffffffffffe - qinput 2 := by
       rw [← hx3]
       exact opp_limb_toNat (by rw [hqlimb₂]; exact hql 2 16#64 (by simp))
-        (qb 2) (by norm_num) (by norm_num)
+        (qb 2) (by norm_num)
     have m4 : x4.toNat = 0xffffffffffffe - qinput 3 := by
       rw [← hx4]
       exact opp_limb_toNat (by rw [hqlimb₃]; exact hql 3 24#64 (by simp))
-        (qb 3) (by norm_num) (by norm_num)
+        (qb 3) (by norm_num)
     have m5 : x5.toNat = 0xffffffffffffe - qinput 4 := by
       rw [← hx5]
       exact opp_limb_toNat (by rw [hqlimb₄]; exact hql 4 32#64 (by simp))
-        (qb 4) (by norm_num) (by norm_num)
+        (qb 4) (by norm_num)
 
     have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
       fun _ _ h => eq_ofNat_of_toNat h

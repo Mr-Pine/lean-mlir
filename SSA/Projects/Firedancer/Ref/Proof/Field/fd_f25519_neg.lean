@@ -12,7 +12,7 @@ theorem fd_f25519_neg_conforms (o q : Pointer) (s : GlobalState)
     (hs : s.WF)
     (ho : IsFieldElemPtr s.mem o)
     (hq : IsFieldElemPtr s.mem q)
-    (hqbounds : LimbBounds hq) :
+    (hqbounds : BiasBounds hq) :
     fd_f25519_neg_spec o q s ho hq := by
   simp only [fd_f25519_neg_spec, Cfg.denote]
 

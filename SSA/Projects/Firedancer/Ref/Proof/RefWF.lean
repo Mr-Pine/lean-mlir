@@ -1,0 +1,127 @@
+/-
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
+import SSA.Projects.Firedancer.Ref.Proof.Globals
+import SSA.Projects.Firedancer.Curve
+import SSA.Projects.Firedancer.Ed25519
+
+/-!
+# A state the `ref` module can run in
+
+`GlobalState.WF` says the state is well-formed; `RefWF` says it also carries
+the three constants `ref.mlir` declares, so that a region -- or a callee doing
+its own `llvm.mlir.addressof` -- finds them where it expects. The carry
+lemmas take it past a step, which is where the `apart` list is spent.
+-/
+
+namespace Firedancer.Ref
+open LeanMLIR SLLVM
+
+/-- A `constant` field element the module loads: `ref.mlir` records `q` as
+`name`'s address, and `val` is what lives there, tight.
+
+The address half is carried separately from the value because the two are
+spent in different places: a region that reaches the global itself needs only
+the value at `q`, while a *callee* that does its own `llvm.mlir.addressof`
+needs `addr` at the state it is called in. Nothing here says two globals are
+apart -- LLVM does not (`unnamed_addr` licenses constant merging, an `@alias`
+points into its aliasee), so a spec that needs it says so. -/
+structure FieldGlobal (s : GlobalState) (name : String) (q : Pointer)
+    (val : ZMod _root_.p) : Prop where
+  addr : GlobalPtr s name q
+  ptr : IsFieldElemPtr s.mem q
+  value : readFieldElem ptr = val
+  bnd : LimbBounds ptr
+
+namespace FieldGlobal
+
+variable {s s' : GlobalState} {name : String} {q : Pointer} {val : ZMod _root_.p}
+
+/-- A loaded global predates every frame the module then runs in. -/
+theorem below (hg : FieldGlobal s name q val) (hs : s.WF) :
+    q.id.id < s.alloc.nextFreeBlock :=
+  lt_nextFreeBlock_of_fits hs hg.ptr.left
+
+/-- A call that moved nothing leaves the global where it was -- table, value
+and bound. -/
+theorem of_equiv (hg : FieldGlobal s name q val) (he : s ≈ s') :
+    FieldGlobal s' name q val where
+  addr := hg.addr.of_equiv he
+  ptr := isFieldElemPtr_of_live?_eq (he.live _).symm hg.ptr
+  value := carryVal (he.live _).symm hg.value
+  bnd := carryBnd (he.live _).symm hg.bnd
+
+end FieldGlobal
+
+/-- `q` is none of the blocks in `apart`. The region's writes are what these
+keep it off: a spec lists the pointers it writes through, and a global apart
+from all of them survives the walk. -/
+abbrev Apart (q : Pointer) (apart : List Pointer) : Prop := ∀ p ∈ apart, q.id ≠ p.id
+
+/-- `s` loads `name` at *some* address, holding `val`, apart from everything in
+`apart`. The address is existential -- a caller that needs to name it does so
+by `obtain`, and one that only needs the value never mentions it. -/
+abbrev Loaded (s : GlobalState) (name : String) (val : ZMod _root_.p)
+    (apart : List Pointer) : Prop :=
+  ∃ q : Pointer, FieldGlobal s name q val ∧ Apart q apart
+
+/-- `s` is a state the `ref` module can run in: well-formed in
+`GlobalState.WF`'s sense, and carrying the three `ref.mlir` constants the call
+graph below it reads, each apart from every pointer the region writes through
+-- here just `r`, so the theorem passes `[r]`.
+
+`@fd_f25519_d` and `@fd_f25519_one` the region addresses itself, at `%7` and
+`%13`, so only their *values* are wanted after entry. `@fd_f25519_sqrtm1` the
+region never mentions: `fd_f25519_sqrt_ratio` reaches it at its own `%6`, so
+its `addr` half has to survive the walk as far as `%29` -- which is what makes
+the symbol table, not just memory, part of what a step must carry.
+
+`wf` is what puts the three blocks below the frame, via `FieldGlobal.below`. -/
+structure _root_.LeanMLIR.GlobalState.RefWF (s : GlobalState) (apart : List Pointer) : Prop where
+  wf : s.WF
+  gd : Loaded s "fd_f25519_d" Ed25519.d apart
+  gone : Loaded s "fd_f25519_one" 1 apart
+  gm1 : Loaded s "fd_f25519_sqrtm1" _root_.sqrtm1 apart
+
+section RefWFCarry
+
+variable {s w w' : GlobalState} {apart : List Pointer}
+
+/-- One constant across one write that misses it: `Wrote.globals` carries the
+address, `Wrote.live` carries the value and the bound. -/
+theorem carryGlobal {name : String} {val : ZMod _root_.p} {q dst : Pointer}
+    (st : Wrote dst w w') (hne : q.id ≠ dst.id) (hg : FieldGlobal w name q val) :
+    FieldGlobal w' name q val :=
+  let h := st.live q.id (Ne.symm hne)
+  { addr := by simp only [GlobalPtr, st.globals]; exact hg.addr
+    ptr := isFieldElemPtr_of_live?_eq h hg.ptr
+    value := carryVal h hg.value
+    bnd := carryBnd h hg.bnd }
+
+/-- A write through a pointer the state is declared apart from leaves the
+module's constants alone -- so a `Wrote` step preserves `RefWF`.
+
+`Apart` is what pays for it: the write misses each global's block. That is why
+`apart` is a *list*: a region's write set is its out-parameters plus its own
+locals, and a walk that lists all of them gets every step's carry from this
+one lemma. -/
+theorem _root_.LeanMLIR.GlobalState.RefWF.wrote {dst : Pointer} (hw : w.RefWF apart)
+    (hdst : dst ∈ apart) (st : Wrote dst w w') : w'.RefWF apart where
+  wf := st.wf
+  gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
+  gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
+  gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
+
+/-- A call that moved nothing -- `fd_f25519_sgn` -- leaves them alone too, and
+needs no `Apart`. -/
+theorem _root_.LeanMLIR.GlobalState.RefWF.of_equiv (hw : w.RefWF apart) (he : w ≈ w') :
+    w'.RefWF apart where
+  wf := GlobalState.WF.of_equiv hw.wf he
+  gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, hg.of_equiv he, hq⟩
+  gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, hg.of_equiv he, hq⟩
+  gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, hg.of_equiv he, hq⟩
+
+end RefWFCarry
+
+end Firedancer.Ref

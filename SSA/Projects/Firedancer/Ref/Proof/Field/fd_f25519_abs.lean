@@ -72,7 +72,7 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
 
   -- `fd_f25519_neg( t, a )`: the local takes `-a` at the opp bias bound
   obtain ⟨negOut, hnegval, hnegbnd, s₂, hrun₁, heq₁⟩ :=
-    fd_f25519_neg_conforms t a s₁ hs₁WF pt₁ pa₁ (limbBounds_of_readLimb? pa₁ hba₁)
+    fd_f25519_neg_conforms t a s₁ hs₁WF pt₁ pa₁ (limbBounds_of_readLimb? pa₁ hba₁).bias
   have hs₂WF : s₂.WF := GlobalState.WF.of_equiv hs₁WF.splice heq₁
   have hlive₁ : ∀ b : BlockId, t.id ≠ b → s₂.mem.live? b = s₁.mem.live? b :=
     fun b hb => (heq₁.live b).symm.trans (live?_splice_ne hb)

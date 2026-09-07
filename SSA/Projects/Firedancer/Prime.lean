@@ -77,8 +77,12 @@ private theorem pow_eq_one {n a k : ℕ} (hk : k < 2 ^ 256)
   rw [cast_pow_eq hk h, Nat.cast_one]
 
 /-- Transfer of the `≠ 1` Lucas condition.  The residue is automatically `< n`,
-so no separate bound on it is needed. -/
-private theorem pow_ne_one {n a k : ℕ} (hn : 1 < n) (hk : k < 2 ^ 256)
+so no separate bound on it is needed.
+
+Public, because it is not specific to the certificate: it is the general
+"`a ^ k ≠ 1` in `ZMod n`, by kernel computation" step, and Euler's criterion
+for a 255-bit exponent wants exactly that. -/
+theorem pow_ne_one {n a k : ℕ} (hn : 1 < n) (hk : k < 2 ^ 256)
     (h : powModAux 256 a k n ≠ 1) : ((a : ℕ) : ZMod n) ^ k ≠ 1 := by
   rw [cast_pow_eq hk rfl]
   intro hc
