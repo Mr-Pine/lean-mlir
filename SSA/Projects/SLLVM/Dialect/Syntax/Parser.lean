@@ -427,6 +427,15 @@ instance : DialectParse SLLVM 0 where
     | "llvm.intr.memset" => do
         let _ ← args.assumeArity 3
         mkExprOf <| SLLVMOp.memset
+    | "llvm.intr.memcpy" => do
+        let _ ← args.assumeArity 3
+        mkExprOf <| SLLVMOp.memcpy
+    -- A reinterpretation of the operand's flat bits; the two types must have
+    -- the same width, which MLIR checks and `SLLVM.bitcast` re-establishes.
+    | "llvm.bitcast" => do
+        let args ← args.assumeArity 1
+        mkExprOf <| SLLVMOp.bitcast (← argArithTy opStx.name args[0])
+          (← getOutputArithTy opStx)
     -- A global's address, read out of the state's symbol table. The
     -- initialiser is not bound here: the table is keyed by name, so what the
     -- global holds is a spec-level hypothesis, not something the program
@@ -450,10 +459,11 @@ instance : DialectParse SLLVM 0 where
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true
     | "llvm.intr.lifetime.end"   => mkExprOf <| SLLVMOp.lifetime false
     -- Ternary Operations
-    | "llvm.select" =>
+    | "llvm.select" => do
         let args ← args.assumeArity 3
-        let w ← getIntWidth args[1]
-        mkExprOf <| Op.select w
+        match args[1] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ => mkExprOf <| SLLVMOp.vselect l w
+        | _ => mkExprOf <| Op.select (← getIntWidth args[1])
     -- Binary Operations
     | "llvm.and"      => mkBinary .and
     | "llvm.or"       => mkBinary (.or ⟨opStx.hasAttr "isDisjoint"⟩)

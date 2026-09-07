@@ -222,6 +222,37 @@ def memset (p : SLLVM.Ptr) (b : LLVM.IntW 8) (len : LLVM.IntW 64) : MemorySSAM U
   }
   return ()
 
+/-- `llvm.bitcast` at arithmetic types: the source's flat bit pattern, read
+back as the destination. The widths agree in any well-formed module;
+`setWidth` is what makes that an equation rather than a hypothesis. -/
+def bitcast (src dst : LLVM.Ty) (x : TyDenote.toType src) : TyDenote.toType dst :=
+  match LLVM.Ty.flatten src x with
+  | .poison => LLVM.Ty.poison dst
+  | .value b => LLVM.Ty.unflatten dst (b.setWidth (LLVM.Ty.width dst))
+
+/-- `llvm.select` at vector types: lane for lane, the scalar select. -/
+def vselect {l w : Nat} (c : Vector (LLVM.IntW 1) l) (x y : Vector (LLVM.IntW w) l) :
+    Vector (LLVM.IntW w) l :=
+  Vector.ofFn fun i => LLVM.select c[i] x[i] y[i]
+
+/-- `llvm.intr.memcpy`: copy `len` bytes from `src` to `dst`. Read before
+write, so a call whose ranges overlap -- which LLVM leaves undefined -- copies
+what was there rather than being UB. -/
+def memcpy (dst src : SLLVM.Ptr) (len : LLVM.IntW 64) : MemorySSAM Unit := do
+  let dst ← dst.getOrUB
+  let src ← src.getOrUB
+  let len ← len.getOrUB
+  let sblock ← getLiveBlockOrUB src
+  throwUBIf <| src.offsetInBits + 8 * len.toNat > sblock.lengthInBits
+  let bytes := sblock.bytes.extractLsb' src.offsetInBits (8 * len.toNat)
+  let dblock ← getLiveBlockOrUB dst
+  throwUBIf <| dst.offsetInBits + 8 * len.toNat > dblock.lengthInBits
+  modifyThe MemoryState fun m => { m with
+    mem := m.mem.insert dst.id <| .live
+      { dblock with bytes := spliceBits dblock.bytes dst.offsetInBits bytes }
+  }
+  return ()
+
 /--
 Allocate the next available block of `w` bits on the stack.
 

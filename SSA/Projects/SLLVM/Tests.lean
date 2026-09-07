@@ -10,3 +10,4 @@ import SSA.Projects.SLLVM.Tests.Aggregate
 import SSA.Projects.SLLVM.Tests.Globals
 import SSA.Projects.SLLVM.Tests.Null
 import SSA.Projects.SLLVM.Tests.PtrIcmp
+import SSA.Projects.SLLVM.Tests.Bitcast

@@ -54,6 +54,17 @@ inductive SLLVMOp where
   The `isVolatile` attribute is accepted and ignored, as alignment is
   everywhere else in this dialect. -/
   | memset
+  /-- `llvm.intr.memcpy`: copy `len` bytes between two pointers. The
+  `isVolatile` attribute is accepted and ignored. -/
+  | memcpy
+  /-- `llvm.bitcast` between two arithmetic types of the same flat width: the
+  bits are reinterpreted and nothing else happens. Poison in any lane is
+  poison out -- a lane of the result may draw on several of the source's, so
+  there is no finer answer. -/
+  | bitcast (src dst : LLVM.Ty)
+  /-- `llvm.select` at vector types: `l` lanes of `w` bits, chosen lane for
+  lane by an `l`-lane mask. The scalar form is `Op.select`. -/
+  | vselect (l w : Nat)
   /-- `llvm.intr.lifetime.start` / `.end` (`start` selects which). Stack
   coloring metadata: the model gives them no semantics at all -- they denote
   to nothing -- but the compiler brackets every `alloca` with them, so they
@@ -196,6 +207,10 @@ def_signature for SLLVM
   | .storePure t     => (mem, ptr, Ty.arith t) -> [mem]
   | .alloca _w       => () -[.impure]-> ptr
   | .memset          => (ptr, bitvec 8, bitvec 64) -[.impure]-> []
+  | .memcpy          => (ptr, ptr, bitvec 64) -[.impure]-> []
+  | .bitcast src dst => (Ty.arith src) -> Ty.arith dst
+  | .vselect l w     => (Ty.arith (.vector l (.bitvec 1)), Ty.arith (.vector l (.bitvec w)),
+                          Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w))
   | .lifetime _      => (ptr) -[.impure]-> []
   -- LLVM operations with modified effect signature
   | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
@@ -264,6 +279,9 @@ def_denote for SLLVM
   | .storePure t => fun m p x => [SLLVM.storePure m p t x]ₕ
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
   | .memset => fun p b len => (fun _ => []ₕ) <$> SLLVM.memset p b len
+  | .memcpy => fun d s len => (fun _ => []ₕ) <$> SLLVM.memcpy d s len
+  | .bitcast src dst => fun x => [SLLVM.bitcast src dst x]ₕ
+  | .vselect _l _w => fun c x y => [SLLVM.vselect c x y]ₕ
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
   | SLLVMOp.insertvalue _aggW off _fieldW =>
       fun agg v => [SLLVM.insertvalue off agg v]ₕ
@@ -338,6 +356,9 @@ instance : DialectPrint SLLVM where
     | .insertvalue .. => "llvm.insertvalue"
     | .addressof _ => "llvm.mlir.addressof"
     | .nullptr    => "llvm.mlir.zero"
+    | .memcpy     => "llvm.intr.memcpy"
+    | .bitcast .. => "llvm.bitcast"
+    | .vselect .. => "llvm.select"
     | .ptricmp _  => "llvm.icmp"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp

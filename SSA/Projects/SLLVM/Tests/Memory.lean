@@ -170,4 +170,39 @@ def memsetOutOfRange : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 
 
 #guard (runScalar memsetOutOfRange).isNone
 
+/-! ## `llvm.intr.memcpy`
+
+The copy moves exactly `len` bytes, and reads the source before writing the
+destination -- so overlapping ranges, which LLVM leaves undefined, copy what
+was there. -/
+
+/-- 32 bytes; `7` written at offset 0, copied to offset 8, read back. -/
+def memcpyMoves : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i256}> : () -> (!ptr)
+    %one  = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %len  = "llvm.mlir.constant"() <{value = 8 : i64}> : () -> (i64)
+    %v    = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p, %one) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%v, %p) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    "llvm.intr.memcpy"(%q, %p, %len) <{isVolatile = false}> : (!llvm.ptr, !llvm.ptr, i64) -> ()
+    %r = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%r) : (i64) -> ()
+}]
+
+#guard runScalar memcpyMoves == some (.value 7#64)
+
+/-- ... and a copy that runs off the end of the source block is UB. -/
+def memcpyOutOfRange : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p    = "ptr.alloca"() <{elem_type = i64}> : () -> (!ptr)
+    %q    = "ptr.alloca"() <{elem_type = i64}> : () -> (!ptr)
+    %len  = "llvm.mlir.constant"() <{value = 16 : i64}> : () -> (i64)
+    "llvm.intr.memcpy"(%q, %p, %len) <{isVolatile = false}> : (!llvm.ptr, !llvm.ptr, i64) -> ()
+    %r = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%r) : (i64) -> ()
+}]
+
+#guard (runScalar memcpyOutOfRange).isNone
+
 end LeanMLIR.SLLVM.Tests
