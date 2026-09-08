@@ -146,7 +146,7 @@ elab "cmov_peel " k:num : tactic => do
       `(($p).withOffset (($off) : BitVec 64))
     evalTactic (← `(tactic| peel_load (.bitvec (.concrete 64)),
       $(nm (base ++ "blk") sfx), $ptr, $(nm ("h" ++ base ++ "blk") sfx), $st))
-  evalTactic (← `(tactic| peel_call_nil $(nm "hrun" sfx)))
+  evalTactic (← `(tactic| peel_call $(nm "hrun" sfx)))
   -- the step's scaffolding: the blocks' hypotheses, the gep's `Fits`, and the
   -- call's splice equivalence, all consumed by `cmov_facts`
   evalTactic (← `(tactic| clear $(nm "hrun" sfx) $(nm "heq" sfx) $(nm "hxblk" sfx)

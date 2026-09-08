@@ -334,7 +334,7 @@ theorem limb_bound {s u : GlobalState} {q qp : Pointer} {bound : ℕ}
 /-! ### The kernels, peeled
 
 One lemma per callee, turning its conformance statement into the run equation
-`peel_call_nil` consumes plus a `Wrote₁`/`Wrote₂`. The output values are
+`peel_call` consumes plus a `Wrote₁`/`Wrote₂`. The output values are
 spelled as the callee's spec spells them; the arithmetic that identifies them
 with the borrow chain is a separate, memory-free argument. -/
 
@@ -1230,7 +1230,7 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   obtain ⟨u₆, x11, hrun₆, hx11, w₆⟩ := cmovznz_step (a := cellPtr s 10) f₅.wf (f₅.fits 10)
   have f₆ := f₅.step₁ cells rfl w₆
   have l₆ := l₅.keep₁ cells (by decide) w₆
-  peel_call_nil hrun₆
+  peel_call hrun₆
   clear hrun₆ l₅ f₅
   cell_facts 64, 0, u₆, f₆
   cell_facts 64, 10, u₆, f₆

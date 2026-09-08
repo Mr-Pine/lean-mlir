@@ -109,7 +109,7 @@ end Wrote2
 
 /-! ## The call -/
 
-/-- **One `fd_r43x6_repsqr_mul2` call**, in the form `peel_call_nil` takes it:
+/-- **One `fd_r43x6_repsqr_mul2` call**, in the form `peel_call` takes it:
 the run equation, and a `Wrote2` holding `[xa^(2^n)] ya` and `[xb^(2^n)] yb`.
 
 `n` arrives as the `i64` the region's constant supplies, so the exponent comes

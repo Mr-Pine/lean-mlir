@@ -42,7 +42,7 @@ theorem fd_f25519_if_conforms (r : Pointer) (cond : BitVec 32) (a0 a1 : Pointer)
     denote_eval v 0 0
     eval_llvm 0
     subst hv0
-    peel_call_nil hselstate
+    peel_call hselstate
     simp_return
 
 end Firedancer.Ref
