@@ -334,6 +334,83 @@ theorem denote_foldVec (z : Vector (BitVec 64) 8)
       and_mask43, and_mask40, Nat.shiftRight_eq_div_pow, ← BitVec.ofNat_add] <;>
     congr 1 <;> omega
 
+/-! ## `fd_r43x6_fold_signed`
+
+The other fold: `fd_r43x6_approx_carry_propagate` conjugated by a bias,
+
+    fold_signed x = approx_carry_propagate (x - _b) + _b
+
+with `_b = wwl( 19·2^23, 2^20, 2^20, 2^20, 2^20, 2^20, 0, 0 )`. Subtracting it
+first is what keeps the carry propagate from overflowing on a *signed* input,
+and adding it back leaves the element alone.
+
+The carry pattern is `foldLimb`'s -- each limb keeps its low 43 bits (40 for
+limb 5) and passes the rest up, limb 5's wrapping to limb 0 scaled by `19` --
+but over `ℤ`, with `Int.emod`/`Int.ediv`. That is exactly what the `and`
+against a mask and the *arithmetic* `wwl_shr_vector` do to a two's-complement
+lane, which is the one place the two folds differ: the unsigned one shifts
+logically, `wwl_shru_vector`, and so can stay in `ℕ`. -/
+
+/-- The bias `_b`. -/
+def biasLimb : Fin 6 → ℤ
+  | 0 => 19 * 2 ^ 23
+  | _ => 2 ^ 20
+
+/-- **`fd_r43x6_approx_carry_propagate`** on signed limbs. -/
+def acpLimb (x : Fin 6 → ℤ) : Fin 6 → ℤ
+  | 0 => x 0 % 2 ^ 43 + 19 * (x 5 / 2 ^ 40)
+  | 1 => x 1 % 2 ^ 43 + x 0 / 2 ^ 43
+  | 2 => x 2 % 2 ^ 43 + x 1 / 2 ^ 43
+  | 3 => x 3 % 2 ^ 43 + x 2 / 2 ^ 43
+  | 4 => x 4 % 2 ^ 43 + x 3 / 2 ^ 43
+  | 5 => x 5 % 2 ^ 40 + x 4 / 2 ^ 43
+
+/-- **`fd_r43x6_fold_signed`** on limbs. -/
+def foldSignedLimb (x : Fin 6 → ℤ) : Fin 6 → ℤ :=
+  fun k => acpLimb (fun j => x j - biasLimb j) k + biasLimb k
+
+/-- **The carry propagate changes the packed value by exactly limb 5's
+overflow times `p`** -- `decodeNat_foldLimb_add` over `ℤ`. -/
+theorem decodeNat_acpLimb_add (x : Fin 6 → ℤ) :
+    decodeNat (acpLimb x) + (p : ℤ) * (x 5 / 2 ^ 40) = decodeNat x := by
+  have d0 := Int.ediv_add_emod (x 0) (2 ^ 43)
+  have d1 := Int.ediv_add_emod (x 1) (2 ^ 43)
+  have d2 := Int.ediv_add_emod (x 2) (2 ^ 43)
+  have d3 := Int.ediv_add_emod (x 3) (2 ^ 43)
+  have d4 := Int.ediv_add_emod (x 4) (2 ^ 43)
+  have d5 := Int.ediv_add_emod (x 5) (2 ^ 40)
+  simp only [decodeNat_eq, acpLimb, p]
+  push_cast
+  omega
+
+/-- `decodeNat` is additive, which is all the bias conjugation needs. -/
+theorem decodeNat_sub (x y : Fin 6 → ℤ) :
+    decodeNat (fun k => x k - y k) = decodeNat x - decodeNat y := by
+  simp only [decodeNat_eq]; ring
+
+theorem decodeNat_add (x y : Fin 6 → ℤ) :
+    decodeNat (fun k => x k + y k) = decodeNat x + decodeNat y := by
+  simp only [decodeNat_eq]; ring
+
+/-- **Ring correctness of the signed fold**, in `ZMod p`: the bias cancels and
+the carry propagate moves a multiple of `p`. -/
+theorem decodeNat_foldSignedLimb_zmod (x : Fin 6 → ℤ) :
+    ((decodeNat (foldSignedLimb x) : ℤ) : ZMod p) = ((decodeNat x : ℤ) : ZMod p) := by
+  have hb := decodeNat_acpLimb_add (fun j => x j - biasLimb j)
+  have hsplit : decodeNat (foldSignedLimb x)
+      = decodeNat (acpLimb fun j => x j - biasLimb j) + decodeNat biasLimb :=
+    decodeNat_add _ _
+  have hx : decodeNat (fun j => x j - biasLimb j) = decodeNat x - decodeNat biasLimb :=
+    decodeNat_sub _ _
+  have : decodeNat (foldSignedLimb x)
+      = decodeNat x - (p : ℤ) * ((fun j => x j - biasLimb j) 5 / 2 ^ 40) := by
+    rw [hx] at hb
+    rw [hsplit]
+    linarith
+  rw [this]
+  push_cast
+  simp [ZMod.natCast_self]
+
 /-! ## The tactic
 
 Every call site of the fold does the same two lines: name the vector the four
