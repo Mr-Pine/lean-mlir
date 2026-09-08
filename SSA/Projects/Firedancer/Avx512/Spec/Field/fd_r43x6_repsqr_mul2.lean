@@ -35,8 +35,11 @@ abbrev fd_r43x6_repsqr_mul2_spec (za zb : Pointer)
     s' ≈ ({ s with mem := outMem } : GlobalState)
     ∧ vecValue oa = vecValue xa ^ (2 ^ n.toNat) * vecValue ya
     ∧ vecValue ob = vecValue xb ^ (2 ^ n.toNat) * vecValue yb
-    -- what `FD_R43X6_MUL2_INL` leaves, and what the next call takes
+    -- what `FD_R43X6_MUL2_INL` leaves, and what the next call takes: the
+    -- `u44` limbs and the two lanes the fold zeroes, which are the input
+    -- contract of the `fd_r43x6_sqr_fast`/`mul_fast` this feeds
     ∧ R43x6.U44 (oa.take R43x6.limbCount)
     ∧ R43x6.U44 (ob.take R43x6.limbCount)
+    ∧ oa[6] = 0 ∧ oa[7] = 0 ∧ ob[6] = 0 ∧ ob[7] = 0
 
 end Firedancer.Avx512

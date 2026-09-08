@@ -88,11 +88,6 @@ structure SqrInl (x z : Vector (BitVec 64) 8) : Prop where
   /-- The element it holds. -/
   value : vecValue z = vecValue x ^ 2
 
-/-- `u44 ⊆ u47`: the fold's output is the next kernel's input. -/
-theorem u47_of_u44 {l : Nat} {x : Vector (BitVec 64) l} (h : R43x6.U44 x) :
-    R43x6.U47 x :=
-  ⟨fun i => le_trans (h.1 i) (by norm_num), h.2⟩
-
 /-- **`FD_R43X6_SQR_INL` conforms**: the call of `sqr_step` and the fold of
 `Fold.lean`, at the ℕ level, with nothing about the program left. -/
 theorem sqr_inl {x : Vector (BitVec 64) 8} (hx : R43x6.U47 (x.take R43x6.limbCount)) :

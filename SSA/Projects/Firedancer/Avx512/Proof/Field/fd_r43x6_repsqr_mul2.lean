@@ -44,9 +44,6 @@ open InstCombine (LLVM)
 `fd_r43x6_repsqr_mul2_conforms`, below, escapes. -/
 namespace RepsqrMul2
 
-/-- The region's vector type, `vector<8xi64>`. -/
-private abbrev V8 : SLLVM.Ty := SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64)))
-
 /-! ### The two tail blocks as branch targets
 
 `^bb1` is block 0 and `^bb2` block 1. The `^bb1` φs are `(%7, %8, %9)`: the
@@ -157,15 +154,13 @@ private lemma bb1_step {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
   -- `only`: a full `simp` here normalises the lanes out of the shape
   -- `denote_foldVec` is stated in, and the `exact` below then grinds
   denote_step_reduce v 7 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
-  replace hv7 : v7 = (foldVec (sqrVec a)).map PoisonOr.value := by
-    rw [hv7]; exact denote_foldVec (sqrVec a) (limbNat_sqr_lt ha.u47) _
+  fold_unsigned hv7, (sqrVec a), (limbNat_sqr_lt ha.u47)
   -- %15-%19: the same on the `b` chain, one frame pop further on
   denote_clear v 4 6
   set s' := (s.popFrame s.mem) with hs'
   peel_call (sqr_step_of_take hb.u47 hb.z6 hb.z7 s' _ rfl) with simp_spine
   denote_step_reduce v 12 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
-  replace hv12 : v12 = (foldVec (sqrVec b)).map PoisonOr.value := by
-    rw [hv12]; exact denote_foldVec (sqrVec b) (limbNat_sqr_lt hb.u47) _
+  fold_unsigned hv12, (sqrVec b), (limbNat_sqr_lt hb.u47)
   denote_clear v 8 11
 
   denote_step_reduce v 14 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison,
@@ -349,23 +344,22 @@ private lemma bb2_run {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
         ∧ vecValue oa = vecValue a * vecValue ya
         ∧ vecValue ob = vecValue b * vecValue yb
         ∧ R43x6.U44 (oa.take R43x6.limbCount)
-        ∧ R43x6.U44 (ob.take R43x6.limbCount) := by
+        ∧ R43x6.U44 (ob.take R43x6.limbCount)
+        ∧ oa[6] = 0 ∧ oa[7] = 0 ∧ ob[6] = 0 ∧ ob[7] = 0 := by
   denote_enter_block
   -- `%24 = call @fd_r43x6_mul_fast(%23, %arg2)`: the `a` chain by `ya`
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, env.vya])
     (mul_step_of_take ha ha6 ha7 hya hya6 hya7 s)]
   denote_step_reduce v 6 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
-  replace hv6 : v6 = (foldVec (mulVec a ya)).map PoisonOr.value := by
-    rw [hv6]; exact denote_foldVec (mulVec a ya) (limbNat_mul_lt ha hya) _
+  fold_unsigned hv6, (mulVec a ya), (limbNat_mul_lt ha hya)
   denote_clear v 3 5
   -- `%29 = call @fd_r43x6_mul_fast(%22, %arg5)`, then `%30`-`%33`: the fold
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, env.vyb])
     (mul_step_of_take hb hb6 hb7 hyb hyb6 hyb7 _)]
   denote_step_reduce v 11 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
-  replace hv11 : v11 = (foldVec (mulVec b yb)).map PoisonOr.value := by
-    rw [hv11]; exact denote_foldVec (mulVec b yb) (limbNat_mul_lt hb hyb) _
+  fold_unsigned hv11, (mulVec b yb), (limbNat_mul_lt hb hyb)
   denote_clear v 8 10
   -- The two frame pops the calls made. Neither can touch `za`/`zb`: they are
   -- the caller's blocks, so they sit below the counter both pops kill from.
@@ -410,7 +404,9 @@ private lemma bb2_run {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
   simp_return
   refine ⟨foldVec (mulVec a ya), foldVec (mulVec b yb), ?_,
     (mul_inl ha hya).value, (mul_inl hb hyb).value,
-    (mul_inl ha hya).u44, (mul_inl hb hyb).u44⟩
+    (mul_inl ha hya).u44, (mul_inl hb hyb).u44,
+    foldVec_getElem_six _, foldVec_getElem_seven _,
+    foldVec_getElem_six _, foldVec_getElem_seven _⟩
   -- The memory the region leaves is the caller's, with `za` and `zb` written.
   refine popFrame_equiv_written (fun q => q = za.id ∨ q = zb.id) hs₀ ?_ ?_ ?_ ?_
   · rintro b (rfl | rfl)
@@ -462,18 +458,20 @@ theorem fd_r43x6_repsqr_mul2_conforms (za zb : Pointer)
   · -- no squarings: `^bb0` branches straight past the loop, `xa ^ 2 ^ 0 = xa`
     subst hn
     rw [if_pos rfl]
-    obtain ⟨s', hrun, oa, ob, hmem, hoa, hob, hoa44, hob44⟩ :=
+    obtain ⟨s', hrun, oa, ob, hmem, hoa, hob, hoa44, hob44, z6a, z7a, z6b, z7b⟩ :=
       RepsqrMul2.bb2_run env hxa hxa6 hxa7 hxb hxb6 hxb7 hya hya6 hya7 hyb hyb6 hyb7
         hs (.refl _) hza hzb hne
-    exact ⟨s', hrun, oa, ob, hmem, by simpa using hoa, by simpa using hob, hoa44, hob44⟩
+    exact ⟨s', hrun, oa, ob, hmem, by simpa using hoa, by simpa using hob, hoa44, hob44,
+      z6a, z7a, z6b, z7b⟩
   · rw [if_neg hn]
     obtain ⟨a, b, s₁, hloop, hs₁, hs₁wf, ha44, hb44, ha6, ha7, hb6, hb7, hva, hvb⟩ :=
       RepsqrMul2.bb1_run env hn hn63 hxa hxa6 hxa7 hxb hxb6 hxb7 hs
     rw [hloop]
-    obtain ⟨s', hrun, oa, ob, hmem, hoa, hob, hoa44, hob44⟩ :=
+    obtain ⟨s', hrun, oa, ob, hmem, hoa, hob, hoa44, hob44, z6a, z7a, z6b, z7b⟩ :=
       RepsqrMul2.bb2_run env (u47_of_u44 ha44) ha6 ha7
         (u47_of_u44 hb44) hb6 hb7 hya hya6 hya7 hyb hyb6 hyb7
         hs₁wf hs₁ hza hzb hne
-    exact ⟨s', hrun, oa, ob, hmem, by rw [hoa, hva], by rw [hob, hvb], hoa44, hob44⟩
+    exact ⟨s', hrun, oa, ob, hmem, by rw [hoa, hva], by rw [hob, hvb], hoa44, hob44,
+      z6a, z7a, z6b, z7b⟩
 
 end Firedancer.Avx512

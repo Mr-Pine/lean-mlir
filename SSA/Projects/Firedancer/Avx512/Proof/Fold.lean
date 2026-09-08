@@ -183,6 +183,13 @@ theorem UNN_of_take {n : ℕ} {v : Vector (BitVec 64) 8}
       | (rw [h6]; omega)
       | (rw [h7]; omega)
 
+/-- `u44 ⊆ u47`: the fold's output is the input contract of the next
+`fd_r43x6_sqr_fast`/`mul_fast`, which is what lets a chain of them stay in
+contract without a bound ever being re-derived. -/
+theorem u47_of_u44 {l : Nat} {x : Vector (BitVec 64) l} (h : R43x6.U44 x) :
+    R43x6.U47 x :=
+  ⟨fun i => le_trans (h.1 i) (by norm_num), h.2⟩
+
 /-- A `UNN` on all eight lanes restricts to the six limb lanes, the form the
 `fd_r43x6` specs state their contracts in. -/
 theorem UNN_take {n : ℕ} {v : Vector (BitVec 64) 8} (h : R43x6.UNN n v) :
@@ -326,5 +333,32 @@ theorem denote_foldVec (z : Vector (BitVec 64) 8)
       toBitVecValue, foldVec, limbVec, foldLimb, limbNat,
       and_mask43, and_mask40, Nat.shiftRight_eq_div_pow, ← BitVec.ofNat_add] <;>
     congr 1 <;> omega
+
+/-! ## The tactic
+
+Every call site of the fold does the same two lines: name the vector the four
+instructions denote to, and prove it by `denote_foldVec`. The hypothesis name
+follows `denote_step_reduce`'s convention, so the value's name is the
+hypothesis's with the `h` dropped. -/
+
+open Lean Elab Tactic in
+/-- `fold_unsigned hv, z, hz` rewrites the `denote_step_reduce` hypothesis for
+the four `fd_r43x6_fold_unsigned` instructions into `hv : v = foldVec z`.
+
+`hz : ∀ i : Fin 6, limbNat z i < 2 ^ 63` is the bound the fold needs of what it
+is folding; at a call site it is `limbNat_sqr_lt` or `limbNat_mul_lt`.
+
+    fold_unsigned hv7, (sqrVec a), (limbNat_sqr_lt ha.u47)
+
+`hv7` must be named for its value `v7`, which is what `denote_step_reduce`
+produces. -/
+elab "fold_unsigned " hv:ident ", " z:term ", " hz:term : tactic => do
+  let n := hv.getId.eraseMacroScopes.toString
+  unless n.startsWith "h" do
+    throwError "fold_unsigned: expected a hypothesis named `h<value>`, got `{n}`"
+  let v := mkIdent (Name.mkSimple (n.drop 1).toString)
+  evalTactic (← `(tactic|
+    replace $hv:ident : $v = (foldVec $z).map PoisonOr.value := by
+      rw [$hv:ident]; exact denote_foldVec $z $hz _))
 
 end Firedancer.Avx512

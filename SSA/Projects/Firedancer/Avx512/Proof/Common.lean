@@ -43,6 +43,10 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
+/-- The type every `fd_r43x6` value has: `vector<8xi64>`. Spelled here once --
+`argTys` arguments and `Cfg` contexts both need it written out. -/
+abbrev V8 : SLLVM.Ty := SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64)))
+
 def toBitVecValue (w: Nat) {n: Nat} (v: Vector Nat n): Vector (PoisonOr (BitVec w)) n :=
   v.map (fun i => PoisonOr.value <| BitVec.ofNat w i)
 
