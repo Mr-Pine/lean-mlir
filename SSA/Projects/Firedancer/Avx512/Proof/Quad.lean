@@ -131,16 +131,6 @@ macro "quad_vecbin_ring " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : ta
 What a whole-vector load or store sees of `Quad.BV`: the bit-level lemmas the
 `fd_ed25519_point_*` derivations run on. None of them appear in a spec. -/
 
-/-- An inner extract window sits at the sum of the two offsets. -/
-theorem extractLsb'_extractLsb'_of_le {w : Nat} {x : BitVec w} {s n s' n' : Nat}
-    (h : s' + n' ≤ n) :
-    (x.extractLsb' s n).extractLsb' s' n' = x.extractLsb' (s + s') n' := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [BitVec.getLsbD_extractLsb']
-  rw [show s + (s' + i) = s + s' + i from by omega]
-  simp [hi, show s' + i < n from by omega]
-
 /-- A whole-vector load at `p` reads back the QUAD's `v03`. -/
 theorem unflatten_readQuad_v03 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m p)
     {blk : LiveBlock} (hblk : m.live? p.id = some blk) :
@@ -152,7 +142,7 @@ theorem unflatten_readQuad_v03 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m 
   simp [readQuad, readQuad?, hblk, LLVM.Ty.unflatten]
   show (blk.bytes.extractLsb' p.offsetInBits 512).extractLsb' (i * 64) 64
       = blk.bytes.extractLsb' (p.offsetInBits + 64 * i) 64
-  rw [extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
+  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
 
 /-- 512 bits up from `p`: `v14`. -/
 theorem unflatten_readQuad_v14 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m p)
@@ -165,7 +155,7 @@ theorem unflatten_readQuad_v14 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m 
   simp [readQuad, readQuad?, hblk, LLVM.Ty.unflatten]
   show (blk.bytes.extractLsb' (p.offsetInBits + 512) 512).extractLsb' (i * 64) 64
       = blk.bytes.extractLsb' (p.offsetInBits + 512 + 64 * i) 64
-  rw [extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
+  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
 
 /-- 1024 bits up from `p`: `v25`. -/
 theorem unflatten_readQuad_v25 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m p)
@@ -178,7 +168,7 @@ theorem unflatten_readQuad_v25 {m : MemoryState} {p : Pointer} (h : IsQuadPtr m 
   simp [readQuad, readQuad?, hblk, LLVM.Ty.unflatten]
   show (blk.bytes.extractLsb' (p.offsetInBits + 1024) 512).extractLsb' (i * 64) 64
       = blk.bytes.extractLsb' (p.offsetInBits + 1024 + 64 * i) 64
-  rw [extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
+  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega), Nat.mul_comm i 64]
 
 /-- A whole-vector load reads back what a whole-vector store wrote. -/
 theorem unflatten_vecBV (v : Vector (BitVec 64) 8) :

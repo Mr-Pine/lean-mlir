@@ -124,6 +124,13 @@ abbrev S62 {l} := @SNN l 62
 
 abbrev Unreduced {l} := @U47 l
 
+/-- `unpacked`: limbs 0-4 in `[0,2^43)`, limb 5 in `[0,2^41)`, with no bound on
+the value. What `fd_r43x6_unpack` returns and what `fd_r43x6_pack` accepts. -/
+def Unpacked (x : Vector (BitVec 64) 8) : Prop :=
+    (∀ i : Fin limbCount, (i : ℕ) < 5 →
+      0 ≤ extractLimbs x i ∧ extractLimbs x i < 2 ^ 43)
+  ∧ (0 ≤ extractLimbs x 5 ∧ extractLimbs x 5 < 2 ^ 41)
+
 def NearlyReduced (x : Vector (BitVec 64) 8) : Prop :=
     (∀ i : Fin limbCount, (i : ℕ) < 5 →
       0 ≤ extractLimbs x i ∧ extractLimbs x i < 2 ^ 43)
@@ -141,6 +148,10 @@ theorem Reduced.nearlyReduced {x : Vector (BitVec 64) 8} (h : Reduced x) :
     NearlyReduced x := by
   obtain ⟨h04, ⟨h50, h51⟩, hs⟩ := h
   exact ⟨h04, ⟨h50, by omega⟩, by have := p_pos; omega⟩
+
+/-- `nearly reduced ⊆ unpacked`, as the header's table says. -/
+theorem NearlyReduced.unpacked {x : Vector (BitVec 64) 8} (h : NearlyReduced x) :
+    Unpacked x := ⟨h.1, h.2.1⟩
 
 /-- A two-sided bound on the six limb lanes, as a bound on `extractLimbs`.
 How an `snn` or `unn` contract on an `fd_r43x6_t` reaches the macros, which

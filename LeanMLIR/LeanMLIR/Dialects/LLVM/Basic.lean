@@ -672,6 +672,100 @@ theorem _root_.BitVec.extractLsb'_packLanes {we : Nat} :
       rw [key, BitVec.extractLsb'_packLanes v.tail i hi]
       simp [Nat.add_comm]
 
+/-- Splitting an extract: the low `n` bits of a run and the `m` above them.
+The `++` order is `BitVec.append`'s -- the first operand is the high half. -/
+theorem _root_.BitVec.extractLsb'_append_split {w : Nat} (b : BitVec w) (s m n : Nat) :
+    b.extractLsb' s (m + n) = b.extractLsb' (s + n) m ++ b.extractLsb' s n := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i _
+  simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_append]
+  split
+  · rename_i hi
+    rw [decide_eq_decide.mpr (show (i < m + n) ↔ (i < n) from ⟨fun _ => hi, fun _ => by omega⟩)]
+  · rename_i hi
+    rw [show s + n + (i - n) = s + i from by omega,
+      decide_eq_decide.mpr (show (i < m + n) ↔ (i - n < m) from by omega)]
+
+/-- A run of `m` lanes starting at lane `i` extracts as the packing of exactly
+those lanes. `extractLsb'_packLanes` is the `m = 1` case. -/
+theorem _root_.BitVec.extractLsb'_packLanes_run {we : Nat} {n : Nat} (v : Vector (BitVec we) n) :
+    ∀ (m i : Nat) (h : i + m ≤ n),
+      (BitVec.packLanes v).extractLsb' (we * i) (we * m)
+        = BitVec.packLanes (Vector.ofFn fun (k : Fin m) =>
+            v[i + k.val]'(by have := k.isLt; omega))
+  | 0,   i, _ => by
+      apply BitVec.eq_of_getLsbD_eq
+      intro k hk
+      omega
+  | m+1, i, h => by
+      have hstep : (BitVec.packLanes v).extractLsb' (we * i) (we * (m + 1))
+          = (BitVec.packLanes v).extractLsb' (we * (i + 1)) (we * m)
+            ++ (BitVec.packLanes v).extractLsb' (we * i) we :=
+        BitVec.extractLsb'_append_split _ _ _ _
+      have htail : (Vector.ofFn fun (q : Fin (m + 1)) =>
+            v[i + q.val]'(by have := q.isLt; omega)).tail
+          = Vector.ofFn fun (q : Fin m) => v[(i + 1) + q.val]'(by have := q.isLt; omega) := by
+        apply Vector.ext
+        intro k hk
+        have hk' : (Vector.ofFn fun (q : Fin (m + 1)) =>
+              v[i + q.val]'(by have := q.isLt; omega)).tail[k]
+            = (Vector.ofFn fun (q : Fin (m + 1)) =>
+                v[i + q.val]'(by have := q.isLt; omega))[1 + k]'(by omega) := by simp
+        rw [hk']
+        simp only [Vector.getElem_ofFn, ← Nat.add_assoc]
+        simp
+      have hlane : (BitVec.packLanes v).extractLsb' (we * i) we = v[i]'(by omega) := by
+        rw [Nat.mul_comm we i]
+        exact BitVec.extractLsb'_packLanes _ i (by omega)
+      rw [hstep, BitVec.extractLsb'_packLanes_run v m (i + 1) (by omega), hlane,
+        BitVec.packLanes, htail]
+      simp
+
+/-- An inner extract window sits at the sum of the two offsets. -/
+theorem _root_.BitVec.extractLsb'_extractLsb'_of_le {w : Nat} {x : BitVec w} {s n s' n' : Nat}
+    (h : s' + n' ≤ n) :
+    (x.extractLsb' s n).extractLsb' s' n' = x.extractLsb' (s + s') n' := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb']
+  rw [show s + (s' + i) = s + s' + i from by omega]
+  simp [hi, show s' + i < n from by omega]
+
+/-- Dropping the head of an `ofFn` shifts its index. `Vector.tail`'s own simp
+lemma goes to `extract`, which `BitVec.packLanes` cannot see through. -/
+theorem _root_.Vector.tail_ofFn {α : Type} {n : Nat} (f : Fin (n+1) → α) :
+    (Vector.ofFn f).tail = Vector.ofFn (fun i : Fin n => f i.succ) := by
+  apply Vector.ext
+  intro i hi
+  simp [Fin.succ]
+  exact congrArg f (Fin.eq_of_val_eq (show 1 + i = i + 1 by omega))
+
+/-- Eight bytes packed, written out: lane `0` in the low bits. The width is
+fixed at `8` so that both sides are `BitVec 64` on the nose -- at a symbolic
+lane width the two ways of adding it up are not definitionally equal. The
+leading `0#0` is `packLanes` on the empty vector, which no rewrite can drop
+without changing the enclosing widths. -/
+theorem _root_.BitVec.packLanes_bytes8 (f : Fin 8 → BitVec 8) :
+    BitVec.packLanes (Vector.ofFn f)
+      = 0#0 ++ f 7 ++ f 6 ++ f 5 ++ f 4 ++ f 3 ++ f 2 ++ f 1 ++ f 0 := by
+  simp [BitVec.packLanes, Vector.tail_ofFn, Vector.getElem_ofFn, Fin.succ,
+    -Vector.tail_eq_cast_extract]
+
+/-- Packing all-zero lanes gives zero. -/
+theorem _root_.BitVec.packLanes_eq_zero {we : Nat} :
+    ∀ {n : Nat} (v : Vector (BitVec we) n), (∀ (i : Nat) (h : i < n), v[i] = 0) →
+      BitVec.packLanes v = 0
+  | 0,   _, _ => rfl
+  | n+1, v, h => by
+      have htail : ∀ (i : Nat) (hi : i < n), v.tail[i] = 0 := by
+        intro i hi
+        have hv : v.tail[i] = v[1 + i] := by simp
+        rw [hv]
+        exact h (1 + i) (by omega)
+      rw [BitVec.packLanes, BitVec.packLanes_eq_zero v.tail htail, h 0 (by omega)]
+      simp
+      rfl
+
 /-! `TyDenote.toType (bitvec w)` and `TyDenote.toType (vector l e)` reduce to
 `LLVM.IntW w` and `Vector _ l`, but only by unfolding `denote`, which instance
 search will not do. These two identity functions put the reduced type in head
@@ -754,6 +848,84 @@ theorem unflatten_flatten (t : LLVM.Ty) (x : TyDenote.toType t) (b : BitVec (wid
   · rw [← PoisonOr.value_inj.mp h]
     exact unflatten_flattenBV t x ‹_›
   · exact absurd h (PoisonOr.poison_ne_value b)
+
+/-! ### Poison, carried alongside the flat encoding
+
+`flatten` is all-or-nothing: it exists for memory, which stores fully defined
+values only. A `bitcast` has to be finer -- one poison lane of `<8 x i64>` must
+not poison the whole `<64 x i8>` reading of it -- so it carries a *mask* of
+which flat bits come from a poison lane next to the bits themselves, and a
+destination lane is poison exactly when the mask meets it. -/
+
+/-- The flat bits a poison lane occupies: all of a poison scalar's, none of a
+value's. Laid out by `packLanes`, so it lines up with `flattenBV`. -/
+def poisonMask : (t : LLVM.Ty) → TyDenote.toType t → BitVec (width t)
+  | bitvec w, x => match ofBitvec x with
+    | .poison  => BitVec.allOnes w
+    | .value _ => 0#w
+  | vector l e, v =>
+      BitVec.packLanes (Vector.ofFn fun (i : Fin l) => poisonMask e (ofVector v)[i])
+
+/-- `unflatten` against a poison mask: a scalar lane is poison as soon as the
+mask covers one of its bits. -/
+def unflattenMasked : (t : LLVM.Ty) → BitVec (width t) → BitVec (width t) → TyDenote.toType t
+  | bitvec _, b, m => if m = 0 then .value b else .poison
+  | vector l e, b, m =>
+      Vector.ofFn fun (i : Fin l) =>
+        unflattenMasked e (b.extractLsb' (i.val * width e) (width e))
+          (m.extractLsb' (i.val * width e) (width e))
+
+/-- An all-zero mask says nothing is poison, so `unflattenMasked` is `unflatten`
+there. The `Defined` case of every `bitcast`. -/
+theorem unflattenMasked_zero : ∀ (t : LLVM.Ty) (b : BitVec (width t)),
+    unflattenMasked t b 0 = unflatten t b
+  | bitvec _, b => by simp [unflattenMasked, unflatten]
+  | vector l e, b => by
+      show (Vector.ofFn _ : Vector (TyDenote.toType e) l) = Vector.ofFn _
+      ext i hi
+      simp only [Vector.getElem_ofFn]
+      rw [show (0 : BitVec (width e * l)).extractLsb' (i * width e) (width e) = 0 by simp]
+      exact unflattenMasked_zero e _
+
+/-- The mask of a defined value is zero: nothing is poison. -/
+theorem poisonMask_eq_zero : ∀ (t : LLVM.Ty) (x : TyDenote.toType t), Defined t x →
+    poisonMask t x = 0
+  | bitvec _, x, h => by
+      rcases hx : ofBitvec x with _ | b
+      · exact absurd hx h
+      · simp only [poisonMask, hx]; rfl
+  | vector l e, v, h => by
+      simp only [Defined] at h
+      have : ∀ (i : Nat) (hi : i < l),
+          (Vector.ofFn fun (i : Fin l) => poisonMask e (ofVector v)[i])[i] = 0 := by
+        intro i hi
+        simpa using poisonMask_eq_zero e _ (h ⟨i, hi⟩)
+      rw [poisonMask, BitVec.packLanes_eq_zero _ (fun i hi => by simpa using this i hi)]
+
+/-- Lane `i` of an unflattening is the unflattening of lane `i`'s slice. -/
+theorem getElem_unflatten_vector {l : Nat} {e : LLVM.Ty}
+    (x : BitVec (width (vector l e))) (i : Nat) (hi : i < l) :
+    (ofVector (unflatten (vector l e) x))[i]
+      = unflatten e (x.extractLsb' (i * width e) (width e)) := by
+  simp [unflatten]
+
+/-- Lane `i` of a masked unflattening is the unflattening of lane `i`'s slice
+of the bits and of the mask. -/
+theorem getElem_unflattenMasked_vector {l : Nat} {e : LLVM.Ty}
+    (b m : BitVec (width (vector l e))) (i : Nat) (hi : i < l) :
+    (ofVector (unflattenMasked (vector l e) b m))[i]
+      = unflattenMasked e (b.extractLsb' (i * width e) (width e))
+          (m.extractLsb' (i * width e) (width e)) := by
+  simp [unflattenMasked]
+
+/-- `extractLsb'_flattenBV_vector` for the poison mask: the two are laid out
+alike, which is the point of carrying them together. -/
+theorem extractLsb'_poisonMask_vector {l : Nat} {e : LLVM.Ty}
+    (v : TyDenote.toType (vector l e)) (i : Nat) (h : i < l) :
+    (poisonMask (vector l e) v).extractLsb' (i * width e) (width e)
+      = poisonMask e ((ofVector v)[i]'h) := by
+  rw [poisonMask, BitVec.extractLsb'_packLanes _ i h, Vector.getElem_ofFn]
+  rfl
 
 /-- The poison value at a type; a vector is poison in every lane. -/
 def poison : (ty : LLVM.Ty) → TyDenote.toType ty
