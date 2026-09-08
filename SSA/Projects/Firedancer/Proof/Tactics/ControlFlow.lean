@@ -53,7 +53,17 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN bareLemN : Name) (h : Term)
   -- changes which `argVals` gets picked -- hence the gate.
   unless extra.isEmpty do
     if ← (do evalTactic (← `(tactic| rw [$bindCfgLem:ident (argTys := $tys)
-        (by simp only [$[$simpArgs],*]) $h])); pure true) <|> pure false then
+        (by first | rfl | simp only [$[$simpArgs],*]) $h])); pure true) <|> pure false then
+      return
+  -- ... and the same for a *bare* block, where the call is the block's own
+  -- denotation rather than a `>>=`. Without this the `first` below reaches
+  -- `cfgLem`, whose `hargs` is a full `simp` over the local context: on a
+  -- `fd_r43x6` loop body that runs for 27s and then fails on the step limit,
+  -- all before the alternative that does work is tried. The `simp only` here
+  -- discharges the same goal instantly.
+  unless extra.isEmpty do
+    if ← (do evalTactic (← `(tactic| rw [$cfgLem:ident (argTys := $tys)
+        (by first | rfl | simp only [$[$simpArgs],*]) $h])); pure true) <|> pure false then
       return
   evalTactic (← `(tactic| first
     -- the `>>=` shape `Cfg.denote` produces: the common case

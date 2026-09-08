@@ -426,6 +426,24 @@ theorem BlockCom.run_denote_call_cfg_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets suc
   BlockCom.run_denote_call_of_nil
     (by rw [Cfg.denote_mk_self, hargs]; exact h)
 
+/-! ### The valuation spine
+
+A tail block reads its own arguments and the region's ambient values through
+one valuation: `Ctxt.Valuation.ofHVector args.reverse ++ Vamb`. Every lookup in
+such a block therefore needs the same handful of lemmas before it reduces, and
+before that spelling every `EntryEnv`-style fact is unusable. `simp_spine`
+collects them, so a call site names only what is specific to it.
+
+`Ctxt.Var.last` and `HVector.map` are unfolded rather than rewritten: the
+lifted region spells every variable as a numeral, so `cons_zero` is what
+matches, and `Var.last` has to become `⟨0, _⟩` first. -/
+
+attribute [simp_spine]
+  HVector.map HVector.reverse_cons HVector.reverseAux_nil HVector.reverseAux_cons
+  Ctxt.Valuation.ofHVector_cons Ctxt.Valuation.ofHVector_nil
+  Ctxt.Valuation.cons_append Ctxt.Valuation.nil_append
+  Ctxt.Valuation.cons_succ Ctxt.Var.last Ctxt.Valuation.cons_zero
+
 /-! ### Entering a block
 
 With back-edges, the walk through the tail blocks is `Blocks.run`, and

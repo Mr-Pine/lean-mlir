@@ -1,7 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
+import SSA.Projects.SLLVM.Cfg
 
 /-!
 # `fd_r43x6_mul_fast`, lifted from Firedancer's AVX-512 ed25519 implementation
@@ -14,7 +14,9 @@ build artifact `build/native/gcc/mlir/avx512/region/fd_r43x6_mul_fast.mlir`.
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
-def fd_r43x6_mul_fast := [sllvm|
+/-- The region as an AST value, so that a multi-block caller -- which binds
+its callees by region, not by `Com` -- can inline it. -/
+def fd_r43x6_mul_fast_region : MLIR.AST.Region 0 := [mlir_region|
 {
   ^bb0(%arg0: vector<8xi64>, %arg1: vector<8xi64>):
     %0 = "llvm.mlir.poison"() : () -> vector<8xi64>
@@ -230,5 +232,13 @@ def fd_r43x6_mul_fast := [sllvm|
     "llvm.return"(%209) : (vector<8xi64>) -> ()
 }
 ]
+
+def fd_r43x6_mul_fast := [sllvm_of| fd_r43x6_mul_fast_region]
+
+/-- The kernel as a `Cfg`, for callers that embed it *by reference*: the call
+node then holds `fd_r43x6_mul_fast_cfg.entry`/`.blocks` rather than the
+whole body inlined, and `Cfg.denote_mk_self` lets its denotation theorem apply
+syntactically. -/
+def fd_r43x6_mul_fast_cfg := Cfg.ofCom (fd_r43x6_mul_fast.castPureToEff .impure)
 
 end Firedancer.Avx512
