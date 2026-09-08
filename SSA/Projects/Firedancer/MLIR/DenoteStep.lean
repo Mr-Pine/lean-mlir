@@ -470,6 +470,42 @@ theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop {Γamb : Ctxt SLLVM.Ty}
       show StateT.run (bs.run Vamb (t (k + 1))) s' = _
       exact heq
 
+/-- `run_loop` for a header whose φs carry data: the target at each iteration
+is produced by the step rather than fixed in advance, so the loop-carried
+values need no closed form. `Inv k t s` is the invariant at iteration `k`,
+standing at program point `t` in state `s`; after `n` iterations the walk
+stands at some `t'` with `Inv n t' s'`. `run_loop` is the special case where
+`t` is a function of `k` alone. -/
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop_args {Γamb : Ctxt SLLVM.Ty}
+    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
+    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+    (Inv : Nat → SuccArgs all → GlobalState → Prop) (n : Nat)
+    (hstep : ∀ k t s, k < n → Inv k t s → ∃ Vout t' s',
+      StateT.run ((bs.get t.idx t.hidx).2.denote
+          (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s
+        = .value ((Vout, .inr t'), s') ∧ Inv (k + 1) t' s')
+    {t₀ : SuccArgs all} {s₀ : GlobalState} (h₀ : Inv 0 t₀ s₀) :
+    ∃ (t' : SuccArgs all) (s' : GlobalState),
+      StateT.run (bs.run Vamb t₀) s₀ = StateT.run (bs.run Vamb t') s'
+        ∧ Inv n t' s' := by
+  suffices h : ∀ d k t s, n = k + d → Inv k t s → ∃ t' s',
+      StateT.run (bs.run Vamb t) s = StateT.run (bs.run Vamb t') s'
+        ∧ Inv n t' s' from h n 0 t₀ s₀ (by omega) h₀
+  intro d
+  induction d with
+  | zero =>
+      intro k t s hkd hInv
+      have hk : k = n := by omega
+      subst hk
+      exact ⟨t, s, rfl, hInv⟩
+  | succ d ih =>
+      intro k t s hkd hInv
+      obtain ⟨Vout, t', s', hrun, hInv'⟩ := hstep k t s (by omega) hInv
+      obtain ⟨t'', s'', heq, hInvn⟩ := ih (k + 1) t' s' (by omega) hInv'
+      refine ⟨t'', s'', ?_, hInvn⟩
+      rw [Blocks.run_step (t := t), EffectM.run_bind, hrun, PoisonOr.value_bind]
+      exact heq
+
 /-- The general termination rule: any walk whose steps preserve `Inv` and
 strictly decrease `μ` until a `ret` fires ends in a state satisfying `Q`.
 Covers multi-block and nested loops -- it never mentions loop structure. -/
@@ -1194,3 +1230,33 @@ elab "denote_step_reduce " base:ident target:num only:(&" only")? extra:(reduceA
   let lo ← nextStepIndex (← getMainGoal)
   evalTactic (← `(tactic| denote_step_all $base $target))
   reduceHypsAt base lo target.getNat only.isSome (reduceArgTerms extra) fold.isSome
+
+open Lean Meta Elab Tactic in
+/-- `denote_assert_folded v 21 39 [val]` fails unless the right-hand side of
+every `hv21 … hv39` is a value: an application of `PoisonOr.value`, or of one
+of the constants named in the bracket (`val`, for the `Proof/Long.lean` form
+of a `long`).
+
+`denote_step_reduce`'s reduction is a `simp`, and a `simp` argument that does
+not match is not an error -- it leaves the instruction half-evaluated, and the
+failure surfaces many lines later, wherever the unreduced term first has to be
+matched. This is the check that turns that into an error at the block that
+caused it. -/
+elab "denote_assert_folded " base:ident lo:num hi:num heads:(reduceArgs)? : tactic => do
+  let extra ← (reduceArgTerms heads).mapM fun t => do
+    unless t.raw.isIdent do throwError "denote_assert_folded: {t} is not a name"
+    realizeGlobalConstNoOverload t.raw
+  let allowed := extra.push ``PoisonOr.value
+  let hyps ← denoteHyps base.getId lo.getNat hi.getNat
+  (← getMainGoal).withContext do
+    for h in hyps do
+      let some decl := (← getLCtx).findFromUserName? h.getId | continue
+      let ty ← instantiateMVars decl.type
+      let some (_, _, rhs) := ty.eq?
+        | throwError "denote_assert_folded: {h.getId} is not an equation"
+      let ok := match rhs.getAppFn with
+        | .const n _ => allowed.contains n
+        | _ => false
+      unless ok do
+        throwError "denote_assert_folded: {h.getId} did not reduce to a value -- a \
+          lemma of this block's `denote_step_reduce` did not fire:{indentExpr rhs}"
