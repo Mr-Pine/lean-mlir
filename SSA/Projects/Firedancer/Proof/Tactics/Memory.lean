@@ -51,7 +51,7 @@ open Lean Elab Tactic Meta in
 /-- `peel_load t, blk, p, hblk, s` runs the next `llvm.load` of type `t`,
 binding the value the live block `blk` holds at `p`.
 
-`t : LLVM.Ty` (`.bitvec (.concrete 64)` or `.vector 8 (.bitvec (.concrete 64))`)
+`t : LLVM.Ty` (a `.bitvec`, or a `.vector` of them at any lane count)
 `blk : LiveBlock`
 `p : Pointer`
 `hblk : (s.mem)[p.id]? = some (.live blk)`
@@ -61,17 +61,17 @@ elab "peel_load " t:term ", " blk:term ", " p:term ", " hblk:term ", " st:term :
     let isVec : Bool ← withoutModifyingState do
       let ty ← Term.elabTerm (← `((($t) : LLVM.Ty))) none
       return (← whnf (← instantiateMVars ty)).isAppOf ``InstCombine.MTy.vector
-    let (val, width) ← if isVec then
-        pure (← `(LLVM.Ty.unflatten $t (($blk).bytes.extractLsb' ($p).offsetInBits 512)),
-          ← `(512))
-      else do
-        -- the scalar width, as a literal: the `omega` obligation below needs one
-        let w ← withoutModifyingState do
-          let e ← Term.elabTerm (← `((LLVM.Ty.width (($t) : LLVM.Ty) : Nat))) none
-          let some n := (← whnf (← instantiateMVars e)).rawNatLit?
-            | throwError "peel_load: cannot reduce the width of {← ppExpr e} to a literal"
-          `(term| $(Syntax.mkNumLit (toString n)):num)
-        pure (← `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits $w)), w)
+    -- the loaded width, as a literal: the `omega` obligation below needs one
+    let width ← withoutModifyingState do
+      let e ← Term.elabTerm (← `((LLVM.Ty.width (($t) : LLVM.Ty) : Nat))) none
+      let some n := (← whnf (← instantiateMVars e)).rawNatLit?
+        | throwError "peel_load: cannot reduce the width of {← ppExpr e} to a literal"
+      `(term| $(Syntax.mkNumLit (toString n)):num)
+    -- a vector decodes lane by lane, a scalar is the extract itself
+    let val ← if isVec then
+        `(LLVM.Ty.unflatten $t (($blk).bytes.extractLsb' ($p).offsetInBits $width))
+      else
+        `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits $width))
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
       rw [BlockCom.run_bind_denote_var_of_value (x := $val) (s' := $st)
