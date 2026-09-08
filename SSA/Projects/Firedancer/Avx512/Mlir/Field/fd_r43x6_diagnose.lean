@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
@@ -110,5 +111,12 @@ def fd_r43x6_diagnose :=
   [sllvm_of| fd_r43x6_diagnose_region with
     @fd_int_if := fd_int_if_region,
     @fd_long_if := fd_long_if_region]
+
+/-- The kernel as a `Cfg`, for callers that embed it *by reference*: the call
+node then holds `fd_r43x6_diagnose_cfg.entry`/`.blocks` rather than the
+whole body inlined, and `Cfg.denote_mk_self` lets its denotation theorem apply
+syntactically. This is what `peel_call` keys on; a caller binding the region
+instead gets a call node the tactic cannot match. -/
+def fd_r43x6_diagnose_cfg := Cfg.ofCom (fd_r43x6_diagnose.castPureToEff .impure)
 
 end Firedancer.Avx512

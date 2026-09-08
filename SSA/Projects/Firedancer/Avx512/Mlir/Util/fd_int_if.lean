@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.SLLVM.Dialect
 
 /-!
@@ -26,5 +27,12 @@ def fd_int_if_region : MLIR.AST.Region 0 := [mlir_region|
 
 def fd_int_if :=
   [sllvm_of| fd_int_if_region]
+
+/-- The kernel as a `Cfg`, for callers that embed it *by reference*: the call
+node then holds `fd_int_if_cfg.entry`/`.blocks` rather than the
+whole body inlined, and `Cfg.denote_mk_self` lets its denotation theorem apply
+syntactically. This is what `peel_call` keys on; a caller binding the region
+instead gets a call node the tactic cannot match. -/
+def fd_int_if_cfg := Cfg.ofCom (fd_int_if.castPureToEff .impure)
 
 end Firedancer.Avx512
