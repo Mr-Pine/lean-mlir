@@ -29,11 +29,26 @@ example :
       = #v[.value 0x55667788#32, .value 0x11223344#32,
            .value 0xddeeff00#32, .value 0x99aabbcc#32] := rfl
 
-/-- A poison lane poisons the whole result: a 32-bit lane may straddle two
-64-bit ones, so there is no finer answer. -/
+/-- Poison travels with the bits it occupies: the poison 64-bit lane poisons
+the two 32-bit lanes over it and leaves the other two alone. -/
 example :
     (split.denote (Ctxt.Valuation.singleton (#v[.poison, .value 0#64]))).head
-      = #v[.poison, .poison, .poison, .poison] := rfl
+      = #v[.poison, .poison, .value 0#32, .value 0#32] := rfl
+
+/-- The other direction: four 32-bit lanes read as two 64-bit ones. -/
+def join : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32)))])
+    .pure [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 64)))] := [sllvm| {
+  ^entry(%v : vector<4xi32>):
+    %r = "llvm.bitcast"(%v) : (vector<4xi32>) -> vector<2xi64>
+    "llvm.return"(%r) : (vector<2xi64>) -> ()
+}]
+
+/-- A destination lane straddling a poison and a defined source lane is
+poison: it meets the mask. -/
+example :
+    (join.denote (Ctxt.Valuation.singleton
+      (#v[.value 0#32, .poison, .value 0#32, .value 0#32]))).head
+      = #v[.poison, .value 0#64] := rfl
 
 -- `Ctxt.ofList` takes the block arguments in reverse declaration order.
 def pick : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 64))),

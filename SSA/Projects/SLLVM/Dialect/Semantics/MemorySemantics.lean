@@ -223,12 +223,25 @@ def memset (p : SLLVM.Ptr) (b : LLVM.IntW 8) (len : LLVM.IntW 64) : MemorySSAM U
   return ()
 
 /-- `llvm.bitcast` at arithmetic types: the source's flat bit pattern, read
-back as the destination. The widths agree in any well-formed module;
-`setWidth` is what makes that an equation rather than a hypothesis. -/
+back as the destination, poison and all. Poison travels with the *bits* it
+occupies (`LLVM.Ty.poisonMask`), so a destination lane is poison exactly when
+it meets a poison source lane -- one poison lane of a `<8 x i64>` poisons the
+eight `<64 x i8>` bytes over it and no others. The widths agree in any
+well-formed module; `setWidth` is what makes that an equation rather than a
+hypothesis. -/
 def bitcast (src dst : LLVM.Ty) (x : TyDenote.toType src) : TyDenote.toType dst :=
-  match LLVM.Ty.flatten src x with
-  | .poison => LLVM.Ty.poison dst
-  | .value b => LLVM.Ty.unflatten dst (b.setWidth (LLVM.Ty.width dst))
+  LLVM.Ty.unflattenMasked dst
+    ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst))
+    ((LLVM.Ty.poisonMask src x).setWidth (LLVM.Ty.width dst))
+
+/-- On a fully defined source `bitcast` is the plain flat round trip. -/
+theorem bitcast_of_defined {src dst : LLVM.Ty} {x : TyDenote.toType src}
+    (h : LLVM.Ty.Defined src x) :
+    bitcast src dst x
+      = LLVM.Ty.unflatten dst ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst)) := by
+  rw [bitcast, LLVM.Ty.poisonMask_eq_zero src x h,
+    show BitVec.setWidth (LLVM.Ty.width dst) 0 = 0 by simp,
+    LLVM.Ty.unflattenMasked_zero]
 
 /-- `llvm.select` at vector types: lane for lane, the scalar select. -/
 def vselect {l w : Nat} (c : Vector (LLVM.IntW 1) l) (x y : Vector (LLVM.IntW w) l) :

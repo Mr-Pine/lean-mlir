@@ -346,6 +346,120 @@ theorem run_load_splice_ne {t : LLVM.Ty} {m : MemoryState} {p q : Pointer} {w : 
           (block.bytes.extractLsb' p.offsetInBits (LLVM.Ty.width t)), m.splice q x) :=
   run_load (by rw [getElem?_splice_ne h, hblk]) hlen
 
+/-! ## `llvm.bitcast` between `<8 x i64>` and `<64 x i8>`
+
+The two shapes a byte permute (`vpermb`) is spelled with: the operand vector
+cut into bytes and the permuted bytes read back as lanes. The first is where
+partial poison earns its keep -- a source vector with poison lanes still has
+defined bytes over the lanes that hold values. -/
+
+/-- `<8 x i64>`, the lane side of the permute. -/
+abbrev v8i64 : LLVM.Ty := .vector 8 (.bitvec (.concrete 64))
+
+/-- `<64 x i8>`, the byte side. -/
+abbrev v64i8 : LLVM.Ty := .vector 64 (.bitvec (.concrete 8))
+
+/-- `LLVM.Ty.flattenBV` at `i8`, at the width `BitVec 8` rather than the
+`BitVec (width (bitvec 8))` the general form carries: a poison byte flattens
+to zero, which only a `Defined` hypothesis makes irrelevant. -/
+def byteOf (x : LLVM.IntW 8) : BitVec 8 := x.toOption.getD 0
+
+/-- **A `<8 x i64>` read as bytes**, one lane. Byte `k` is byte `k % 8` of lane
+`k / 8`, and it is poison exactly when that lane is -- the poison mask reaches
+this byte and no other. -/
+theorem bitcast_bytes_lane (w : Vector (LLVM.IntW 64) 8) (k : Nat) (hk : k < 64) :
+    (LLVM.Ty.ofVector (bitcast v8i64 v64i8 w))[k]
+      = match w[k / 8]'(by omega) with
+        | .poison => .poison
+        | .value b => .value (b.extractLsb' (8 * (k % 8)) 8) := by
+  have h1 : (LLVM.Ty.flattenBV v8i64 w).setWidth (LLVM.Ty.width v64i8)
+      = LLVM.Ty.flattenBV v8i64 w := BitVec.setWidth_eq _
+  have h2 : (LLVM.Ty.poisonMask v8i64 w).setWidth (LLVM.Ty.width v64i8)
+      = LLVM.Ty.poisonMask v8i64 w := BitVec.setWidth_eq _
+  rw [bitcast, LLVM.Ty.getElem_unflattenMasked_vector _ _ k hk, h1, h2]
+  have hsplit : ∀ (x : BitVec (LLVM.Ty.width v8i64)),
+      x.extractLsb' (k * LLVM.Ty.width (LLVM.Ty.bitvec 8)) (LLVM.Ty.width (LLVM.Ty.bitvec 8))
+        = (x.extractLsb' ((k / 8) * LLVM.Ty.width (LLVM.Ty.bitvec 64))
+            (LLVM.Ty.width (LLVM.Ty.bitvec 64))).extractLsb' (8 * (k % 8)) 8 := by
+    intro x
+    show x.extractLsb' (k * 8) 8
+      = (x.extractLsb' ((k / 8) * 64) 64).extractLsb' (8 * (k % 8)) 8
+    rw [BitVec.extractLsb'_extractLsb'_of_le (show 8 * (k % 8) + 8 ≤ 64 from by omega)]
+    congr 1
+    omega
+  have hne : (BitVec.allOnes 64).extractLsb' (8 * (k % 8)) 8 ≠ 0 := by
+    have h0 : ((BitVec.allOnes 64).extractLsb' (8 * (k % 8)) 8).getLsbD 0 = true := by
+      simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_allOnes]
+      simp
+      omega
+    intro hcon
+    rw [hcon] at h0
+    simp at h0
+  have hz : (0#64).extractLsb' (8 * (k % 8)) 8 = 0 := by simp
+  rw [hsplit, hsplit,
+    LLVM.Ty.extractLsb'_flattenBV_vector (l := 8) (e := LLVM.Ty.bitvec 64) w (k / 8) (by omega),
+    LLVM.Ty.extractLsb'_poisonMask_vector (l := 8) (e := LLVM.Ty.bitvec 64) w (k / 8) (by omega)]
+  rcases hlane : w[k / 8]'(show k / 8 < 8 by omega) with _ | b
+  · simp only [LLVM.Ty.unflattenMasked, LLVM.Ty.poisonMask, LLVM.Ty.flattenBV]
+    rw [if_neg hne]
+  · simp only [LLVM.Ty.unflattenMasked, LLVM.Ty.poisonMask, LLVM.Ty.flattenBV]
+    rw [if_pos hz]
+    rfl
+
+/-- **Bytes read back as a `<8 x i64>`**, one lane. On a fully defined source
+there is no poison to place, so lane `j` is just its eight bytes packed. -/
+theorem bitcast_join_lane (b : Vector (LLVM.IntW 8) 64) (hdef : LLVM.Ty.Defined v64i8 b)
+    (j : Nat) (hj : j < 8) :
+    (LLVM.Ty.ofVector (bitcast v64i8 v8i64 b))[j]
+      = .value (BitVec.packLanes (Vector.ofFn fun q : Fin 8 =>
+          byteOf (b[8 * j + q.val]'(by have := q.isLt; omega)))) := by
+  have hsw : (LLVM.Ty.flattenBV v64i8 b).setWidth (LLVM.Ty.width v8i64)
+      = LLVM.Ty.flattenBV v64i8 b := BitVec.setWidth_eq _
+  rw [bitcast_of_defined hdef, hsw]
+  rw [LLVM.Ty.getElem_unflatten_vector (l := 8) (e := LLVM.Ty.bitvec 64) _ j hj]
+  have hrun := BitVec.extractLsb'_packLanes_run
+    (Vector.ofFn fun (k : Fin 64) => LLVM.Ty.flattenBV (LLVM.Ty.bitvec 8) b[k.val]) 8 (8 * j)
+    (by omega)
+  have hflat : LLVM.Ty.flattenBV v64i8 b
+      = BitVec.packLanes (Vector.ofFn fun (k : Fin 64) =>
+          LLVM.Ty.flattenBV (LLVM.Ty.bitvec 8) b[k.val]) := rfl
+  have hrun' : (BitVec.packLanes (Vector.ofFn fun (k : Fin 64) =>
+        LLVM.Ty.flattenBV (LLVM.Ty.bitvec 8) b[k.val])).extractLsb'
+          (j * LLVM.Ty.width (LLVM.Ty.bitvec 64)) (LLVM.Ty.width (LLVM.Ty.bitvec 64))
+      = BitVec.packLanes (Vector.ofFn fun (q : Fin 8) =>
+          (Vector.ofFn fun (k : Fin 64) =>
+            LLVM.Ty.flattenBV (LLVM.Ty.bitvec 8) b[k.val])[8 * j + q.val]'
+              (by have := q.isLt; omega)) := by
+    rw [show j * LLVM.Ty.width (LLVM.Ty.bitvec 64) = 8 * (8 * j) from by
+      simp only [LLVM.Ty.width]; omega]
+    exact hrun
+  rw [hflat, hrun']
+  simp only [Vector.getElem_ofFn]
+  rfl
+
+/-- `bitcast_bytes_lane` as one vector equation. -/
+theorem bitcast_bytes (w : Vector (LLVM.IntW 64) 8) :
+    bitcast v8i64 v64i8 w
+      = Vector.ofFn (fun k : Fin 64 =>
+          match w[k.val / 8]'(by have := k.isLt; omega) with
+          | .poison => .poison
+          | .value b => .value (b.extractLsb' (8 * (k.val % 8)) 8)) := by
+  apply Vector.ext (n := 64)
+  intro k hk
+  rw [Vector.getElem_ofFn]
+  exact bitcast_bytes_lane w k hk
+
+/-- `bitcast_join_lane` as one vector equation. -/
+theorem bitcast_join (b : Vector (LLVM.IntW 8) 64) (hdef : LLVM.Ty.Defined v64i8 b) :
+    bitcast v64i8 v8i64 b
+      = Vector.ofFn (fun j : Fin 8 =>
+          .value (BitVec.packLanes (Vector.ofFn fun q : Fin 8 =>
+            byteOf (b[8 * j.val + q.val]'(by have := j.isLt; have := q.isLt; omega))))) := by
+  apply Vector.ext (n := 8)
+  intro j hj
+  rw [Vector.getElem_ofFn]
+  exact bitcast_join_lane b hdef j hj
+
 /-! ## Lifting into `EffectM` -/
 
 /-- The `MemorySSAM → EffectM` lift, in success form. -/
