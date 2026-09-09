@@ -30,9 +30,20 @@ rather than an `fvar`. That is the cost `frameState` had before
 `exists_slots_frame` handed its state out opaquely. A single store does not
 care, so the clause is optional and the tactic writes the state out.
 
-The trailing `with` list is extra simp lemmas for the operand side goal: in a
-tail block the ambient valuation is opaque and the destination is only known
-from an `EntryEnv`-style fact. -/
+The trailing `with` list is extra simp lemmas for the operand side goal --
+whatever says what the stored value or the destination is, when the default
+set does not reduce them on its own.
+
+They join the *same* `simp only` as the default set, so they cannot reach a
+term that pass itself first exposes. That is the limit worth knowing in a
+**tail block**, whose operands sit behind
+`Ctxt.Valuation.ofHVector args.reverse ++ Vamb`: unfolding `Expr.denoteOp`
+exposes the lookups, but `simp` does not revisit them, the spine stands, and
+the `run_store` rewrite below then matches nothing. Adding `simp_spine` to the
+list does not help -- it is in the same pass. A tail block wants two passes,
+the default set and then the ambient facts; `GeDecode2.peel_store_amb`
+(`Avx512/Proof/Point/fd_r43x6_ge_decode2_blocks.lean`) is that form for a
+whole-vector store. -/
 elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
     named:(stateNaming)? extra:(" with " term,+)? : tactic =>
   withMainContext do

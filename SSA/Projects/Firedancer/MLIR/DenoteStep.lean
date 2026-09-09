@@ -436,10 +436,16 @@ collects them, so a call site names only what is specific to it.
 
 `Ctxt.Var.last` and `HVector.map` are unfolded rather than rewritten: the
 lifted region spells every variable as a numeral, so `cons_zero` is what
-matches, and `Var.last` has to become `⟨0, _⟩` first. -/
+matches, and `Var.last` has to become `⟨0, _⟩` first.
+
+`reverse_nil` is here beside `reverse_cons` for the block with *no* arguments,
+whose spine is `ofHVector HVector.nil.reverse ++ Vamb`: without it the reverse
+does not reduce, so `ofHVector_nil` and `nil_append` never fire and the whole
+spine stands. -/
 
 attribute [simp_spine]
-  HVector.map HVector.reverse_cons HVector.reverseAux_nil HVector.reverseAux_cons
+  HVector.map HVector.reverse_nil HVector.reverse_cons
+  HVector.reverseAux_nil HVector.reverseAux_cons
   Ctxt.Valuation.ofHVector_cons Ctxt.Valuation.ofHVector_nil
   Ctxt.Valuation.cons_append Ctxt.Valuation.nil_append
   Ctxt.Valuation.cons_succ Ctxt.Var.last Ctxt.Valuation.cons_zero
