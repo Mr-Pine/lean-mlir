@@ -732,4 +732,82 @@ theorem subOneAcp_bounds {x : Vector (BitVec 64) 8}
       ∧ R43x6.extractLimbs (subOneAcp x) k < 2 ^ 44 :=
   acpVec_bounds (extractLimbs_addSubOne_bounds hx) k
 
+/-! ### What the `sub_fast`/`add_fast` pair holds, in the field
+
+`^bb0` of `fd_r43x6_ge_decode2` tests `v·x² ∓ u` against zero, and the two
+vectors it tests are these. -/
+
+private theorem toInt_eq_toNat62 {a : BitVec 64} (h0 : 0 ≤ a.toInt) (h1 : a.toInt < 2 ^ 62) :
+    a.toInt = (a.toNat : ℤ) :=
+  BitVec.toInt_eq_toNat_of_lt (by
+    have := toNat_lt_of_bounds (le_refl (2 ^ 62)) (by omega) h0
+    omega)
+
+/-- `decode'_cast_eq_vecValue` at the widest bound the two readings share: a
+limb below `2 ^ 62` reads the same as an `Int` and as a `Nat`. -/
+theorem decode'_cast_eq_vecValue62 (v : Vector (BitVec 64) 8)
+    (h : ∀ k : Fin R43x6.limbCount,
+      0 ≤ R43x6.extractLimbs v k ∧ R43x6.extractLimbs v k < 2 ^ 62) :
+    ((R43x6.decode' v : ℤ) : ZMod p) = vecValue v := by
+  have hnat : ∀ k : Fin R43x6.limbCount, R43x6.extractLimbs v k = (limbNat v k : ℤ) := by
+    intro k
+    have hb := h k
+    fin_cases k <;>
+      · simp only [R43x6.extractLimbs, LimbRepresentations.toInts, limbNat, Fin.val_castLE] at hb ⊢
+        exact toInt_eq_toNat62 (by omega) (by omega)
+  have hd : R43x6.decode' v = decodeNat (fun k => (limbNat v k : ℤ)) := by
+    rw [← R43x6.decodeLimbs_extractLimbs v]
+    simp only [decodeNat]
+    congr 1
+    funext k
+    exact hnat k
+  rw [hd, vecValue_eq_decodeNat]
+  simp only [decodeNat_eq]
+  push_cast
+  ring
+
+/-- **`fd_r43x6_sub_fast( x, y )` where `y` is a `fd_r43x6_sub( ·, one )`'s
+pre-bias vector**: the constant carries `p` less the bias, so the two cancel
+and the difference of the two elements is what is left. -/
+theorem decode'_subFast_subOneAcp {x y : Vector (BitVec 64) 8}
+    (hx : ∀ k, 0 ≤ R43x6.extractLimbs x k ∧ R43x6.extractLimbs x k < 2 ^ 44)
+    (hy : ∀ k, 0 ≤ R43x6.extractLimbs y k ∧ R43x6.extractLimbs y k < 2 ^ 44) :
+    ((R43x6.decode' (subFastVec x (subOneAcp y)) : ℤ) : ZMod p)
+      = ((R43x6.decode' x : ℤ) : ZMod p) - ((R43x6.decode' (subOneVec y) : ℤ) : ZMod p) := by
+  have hacp := subOneAcp_bounds hy
+  have h1 : ∀ k, R43x6.FitsLong
+      (R43x6.extractLimbs x k - R43x6.extractLimbs (subOneAcp y) k) := by
+    intro k; have := hx k; have := hacp k; simp only [R43x6.FitsLong]; omega
+  have h2 : ∀ k, R43x6.FitsLong
+      (R43x6.extractLimbs x k - R43x6.extractLimbs (subOneAcp y) k + subFastLimb k) := by
+    intro k
+    have := hx k; have := hacp k; have := subFastLimb_bounds k
+    simp only [R43x6.FitsLong]; omega
+  have hz := (subOneAdd_limbs hy).2
+  have hb : ∀ j, R43x6.FitsLong (acpLimb (R43x6.extractLimbs
+      (Vector.ofFn fun i : Fin 8 => y[i.val] + BitVec.ofNat 64 subOneConst[i.val])) j) := by
+    have h0 := hz 0; have h1 := hz 1; have h2 := hz 2
+    have h3 := hz 3; have h4 := hz 4; have h5 := hz 5
+    intro j; fin_cases j <;> simp only [acpLimb, R43x6.FitsLong] <;> omega
+  have hsplit : R43x6.decode' (subOneVec y)
+      = R43x6.decode' (subOneAcp y) + decodeNat biasLimb := by
+    rw [subOneVec, subOneAcp]; exact decode'_acpBiasVec_eq hb (acpBias_fitsLong hz)
+  have hp : ((decodeNat subFastLimb + decodeNat biasLimb : ℤ) : ZMod p) = 0 := by
+    rw [← decodeNat_add, decodeNat_subFastLimb]
+    simp
+  rw [decode'_subFastVec h1 h2, hsplit]
+  push_cast at hp ⊢
+  linear_combination hp
+
+/-- **`fd_r43x6_add_fast( x, y )`**, in the field. -/
+theorem decode'_addVec_cast {x y : Vector (BitVec 64) 8}
+    (hx : ∀ k, 0 ≤ R43x6.extractLimbs x k ∧ R43x6.extractLimbs x k < 2 ^ 44)
+    (hy : ∀ k, 0 ≤ R43x6.extractLimbs y k ∧ R43x6.extractLimbs y k < 2 ^ 44) :
+    ((R43x6.decode' (Vector.ofFn fun i : Fin 8 => x[i.val] + y[i.val]) : ℤ) : ZMod p)
+      = ((R43x6.decode' x : ℤ) : ZMod p) + ((R43x6.decode' y : ℤ) : ZMod p) := by
+  rw [decode'_addVec (fun k => by
+    have := hx k; have := hy k; simp only [R43x6.FitsLong]; omega)]
+  push_cast
+  ring
+
 end Firedancer.Avx512

@@ -210,5 +210,81 @@ theorem isSquare_div_iff {a b : ZMod p} (hb : b ≠ 0) :
   · rintro ⟨x, rfl⟩
     exact ⟨x, by field_simp⟩
 
-end Ed25519
+/-! ## The point a decoding names
 
+RFC 8032 §5.1.3 ends the same way in both backends: a square root `x` of
+`(y² - 1)/(d y² + 1)` in hand, the point is `(x : y : 1 : x·y)`. The ref's
+`fd_ed25519_point_frombytes` and the avx512 `fd_r43x6_ge_decode2` differ in how
+they get `x` and `y` and in how they spell the sign bit, but not in this. -/
+
+/-- The point a root and a `y` name. -/
+def decodedPoint (xv yv : ZMod p) : Point := ⟨xv, yv, 1, xv * yv⟩
+
+@[simp] theorem decodedPoint_X (xv yv : ZMod p) : (decodedPoint xv yv).X = xv := rfl
+@[simp] theorem decodedPoint_Y (xv yv : ZMod p) : (decodedPoint xv yv).Y = yv := rfl
+@[simp] theorem decodedPoint_Z (xv yv : ZMod p) : (decodedPoint xv yv).Z = 1 := rfl
+@[simp] theorem decodedPoint_T (xv yv : ZMod p) : (decodedPoint xv yv).T = xv * yv := rfl
+
+@[simp] theorem decodedPoint_x (xv yv : ZMod p) : (decodedPoint xv yv).x = xv := by
+  simp [Point.x, decodedPoint]
+
+@[simp] theorem decodedPoint_y (xv yv : ZMod p) : (decodedPoint xv yv).y = yv := by
+  simp [Point.y, decodedPoint]
+
+/-- **The root's defining equation is the curve equation** for that point. -/
+theorem onCurve_decodedPoint {xv yv : ZMod p}
+    (h : xv ^ 2 * (d * yv ^ 2 + 1) = yv ^ 2 - 1) :
+    OnCurve (decodedPoint xv yv).x (decodedPoint xv yv).y := by
+  simp only [decodedPoint_x, decodedPoint_y, OnCurve]
+  linear_combination -h
+
+/-- ... and its `T` is the product the spec asks for. -/
+@[simp] theorem decodedPoint_T_div_Z (xv yv : ZMod p) :
+    (decodedPoint xv yv).T / (decodedPoint xv yv).Z
+      = (decodedPoint xv yv).x * (decodedPoint xv yv).y := by
+  simp [decodedPoint, Point.x, Point.y]
+
+/-! ## The candidate root
+
+Both backends form the same candidate: `x = u·v³·(u·v⁷)^((p-5)/8)`, then test
+`x²·v` against `±u`. The test succeeds exactly when `u/v` is a square, which
+is what makes it the decision the specifications are stated with. -/
+
+/-- The exponent both `fd_f25519_pow22523` and `fd_r43x6_pow22523_2` raise to. -/
+theorem p_sub_five_div_eight : (p - 5) / 8 = 2 ^ 252 - 3 := by norm_num [p]
+
+/-- **The candidate root's test.** `x²·v = ±u` exactly when `u/v` is a
+square: `x²·v = u·(u v⁷)^((p-1)/4)`, whose square is Euler's criterion for
+`u v⁷`, and `u v⁷` differs from `u/v` by the square `v⁸`. -/
+theorem sqrtCandidate_iff {u v x : ZMod p} (hv : v ≠ 0)
+    (hx : x = u * v ^ 3 * (u * v ^ 7) ^ ((p - 5) / 8)) :
+    (x ^ 2 * v = u ∨ x ^ 2 * v = -u) ↔ IsSquare (u / v) := by
+  by_cases hu : u = 0
+  · subst hu
+    simp [hx]
+  · have ht0 : u * v ^ 7 ≠ 0 := mul_ne_zero hu (pow_ne_zero _ hv)
+    have e1 : (p - 5) / 8 * 2 = (p - 5) / 4 := by norm_num [p]
+    have e2 : (p - 5) / 4 + 1 = (p - 1) / 4 := by norm_num [p]
+    have e3 : (p - 1) / 4 * 2 = p / 2 := by norm_num [p]
+    have h8 : ((u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 = (u * v ^ 7) ^ ((p - 5) / 4) := by
+      rw [← pow_mul, e1]
+    have key : x ^ 2 * v = u * (u * v ^ 7) ^ ((p - 1) / 4) := by
+      rw [hx, ← e2, pow_add, pow_one, mul_pow, h8]
+      ring
+    have hsq : IsSquare (u * v ^ 7) ↔ IsSquare (u / v) := by
+      have v8 : IsSquare ((v : ZMod p) ^ 8) := Even.isSquare_pow (Even.two_nsmul 4) _
+      have hrw : u * v ^ 7 = (u / v) * v ^ 8 := by field_simp
+      rw [hrw]
+      refine ⟨fun h => ?_, fun h => IsSquare.mul h v8⟩
+      have := IsSquare.div h v8
+      rwa [mul_div_cancel_right₀ _ (pow_ne_zero 8 hv)] at this
+    rw [key, ← hsq, ZMod.euler_criterion p ht0, ← e3, pow_mul, sq, mul_self_eq_one_iff]
+    constructor
+    · rintro (h | h)
+      · exact Or.inl (mul_left_cancel₀ hu (by rw [h]; ring))
+      · exact Or.inr (mul_left_cancel₀ hu (by rw [h]; ring))
+    · rintro (h | h)
+      · exact Or.inl (by rw [h]; ring)
+      · exact Or.inr (by rw [h]; ring)
+
+end Ed25519

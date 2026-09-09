@@ -33,5 +33,8 @@ abbrev fd_r43x6_pow22523_2_spec (za zb : Pointer) (xa xb : Vector (BitVec 64) 8)
     -- the header's `u44` out
     ∧ R43x6.U44 (oa.take R43x6.limbCount)
     ∧ R43x6.U44 (ob.take R43x6.limbCount)
+    -- ... and the two ignored lanes, which the next kernel's `y` operand needs
+    ∧ oa[6] = 0 ∧ oa[7] = 0
+    ∧ ob[6] = 0 ∧ ob[7] = 0
 
 end Firedancer.Avx512

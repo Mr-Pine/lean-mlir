@@ -643,7 +643,8 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
   peel_call hrunF
   iterate 20 peel_lifetime
   simp_return
-  refine ⟨oa, ob, ?mem, ?va, ?vb, wroteF.u44A, wroteF.u44B⟩
+  refine ⟨oa, ob, ?mem, ?va, ?vb, wroteF.u44A, wroteF.u44B,
+    wroteF.z6A, wroteF.z7A, wroteF.z6B, wroteF.z7B⟩
   case mem => exact final_mem hs rfl slots.ida slots.idb hne fb₁₂ wroteF
   -- The eleven rungs at the exponent, `rung_value` a step at a time, ending at
   -- the `2^252 - 3` `rung_final` says the C's factorisation reaches.

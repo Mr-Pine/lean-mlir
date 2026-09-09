@@ -61,12 +61,18 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
     -- through `Blocks.run_loop` is stated one block at a time, so there is
     -- nothing after it. Unlike by-reference-vs-general, this one is a fact
     -- about the goal rather than a preference, so it is read rather than tried.
-    let denoteApp := tgt.find? fun e =>
+    --
+    -- Asked directly -- is some `bind` applied to a call's denotation -- rather
+    -- than by finding one denotation and looking for it as a `bind` argument.
+    -- The latter compares two `Expr`s with `==`, which a walk far enough into a
+    -- region gets wrong: the residual program holds the *later* calls too, so
+    -- the denotation `find?` returns need not be the one the head `bind` holds,
+    -- and the check then reads `false` on a block whose call is plainly bound.
+    let isDenoteCall (e : Expr) : Bool :=
       e.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote
         && e.getAppArgs.any (·.isAppOf ``LeanMLIR.SLLVM.BlockCom.call)
-    let isBind := match denoteApp with
-      | none => false
-      | some d => (tgt.find? fun e => e.isAppOf ``Bind.bind && e.getAppArgs.any (· == d)).isSome
+    let isBind := (tgt.find? fun e =>
+      e.isAppOf ``Bind.bind && e.getAppArgs.any (fun a => isDenoteCall a.consumeMData)).isSome
     pure (as[4]!, isBind)
   -- all four `reverse`/`reverseAux` equations: with an opaque valuation the
   -- operand list is `(map V args).reverse`, and it only closes if the whole
@@ -94,6 +100,15 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
   let byRef ← callArgsAreOfHVector h
   unless !byRef || !isBind do
     if ← (do evalTactic (← `(tactic| rw [$bindCfgLem:ident (argTys := $tys)
+        (by first | (simp only [$[$simpArgs],*]; done) | rfl) $h])); pure true) <|> pure false then
+      return
+  -- ... and, if that read of the goal was wrong, the other one: both by-reference
+  -- lemmas are tried before the general path, whose `hargs`-free `exact` needs
+  -- the operands to be *defeq* to the callee's argument list -- which at a call
+  -- site whose operands are hypotheses rather than substituted values they are
+  -- not, so the caller would have to `subst` them into the residual program.
+  unless !byRef || !isBind do
+    if ← (do evalTactic (← `(tactic| rw [$cfgLem:ident (argTys := $tys)
         (by first | (simp only [$[$simpArgs],*]; done) | rfl) $h])); pure true) <|> pure false then
       return
   -- ... and the same for a *bare* block, where the call is the block's own

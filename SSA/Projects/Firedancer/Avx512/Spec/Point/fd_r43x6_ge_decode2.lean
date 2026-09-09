@@ -35,8 +35,6 @@ abbrev wvY (u : Vector (BitVec 64) 4) : ZMod p := ((wvNat u % 2 ^ 255 : ℕ) : Z
 /-- ... and the sign bit of `x` it carries, the top bit of the last lane. -/
 abbrev wvSign (u : Vector (BitVec 64) 4) : Bool := u[3].getLsbD 63
 
-/-- The encoding names a point: `fd_r43x6_sqrt_ratio`'s condition, spelled
-over the field. -/
 abbrev Decodable (u : Vector (BitVec 64) 4) : Prop :=
   IsSquare ((wvY u ^ 2 - 1) / (d * wvY u ^ 2 + 1))
 
