@@ -9,12 +9,23 @@ open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
 
 open Lean Elab Tactic Meta in
-/-- `peel_store x, p, hp, s` runs the next `llvm.store` instruction, storing
-`x` (of type `Vector (BitVec 64) 8` or `BitVec 64` at `p` where `hp` states
-`Fits s.mem p (512 or 64)`.
- -/
+/-- `peel_store x, p, hp, s` runs the next `llvm.store`, storing `x` (a
+`Vector (BitVec 64) 8` or a `BitVec w`) at `p`, where `hp` states
+`Fits s.mem p (512 or w)`.
+
+`… as s' := hs'` names the state it lands in, `peel_alloca`-style, with
+`hs' : s' = { s with mem := s.mem.splice p … }`. Worth it once stores chain:
+without it the next one spells the whole spliced state inline -- as its own
+`s`, and again inside its `Fits` -- and every later `isDefEq` walks that term
+rather than an `fvar`. That is the cost `frameState` had before
+`exists_slots_frame` handed its state out opaquely. A single store does not
+care, so the clause is optional and the tactic writes the state out.
+
+The trailing `with` list is extra simp lemmas for the operand side goal: in a
+tail block the ambient valuation is opaque and the destination is only known
+from an `EntryEnv`-style fact. -/
 elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
-    extra:(" with " term,+)? : tactic =>
+    named:(" as " term " := " term)? extra:(" with " term,+)? : tactic =>
   withMainContext do
     -- The elaboration is only to classify `x` (and read its width); the
     -- emitted script elaborates it again for real. `withMainContext` is load
@@ -41,18 +52,27 @@ elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
     let extras : Array Term := match extra with
       | some e => e.raw[1].getSepArgs.map fun s => ⟨s⟩
       | none => #[]
+    -- The state the store lands in. Without `as`, the tactic writes it out, as
+    -- it always did; with it, the caller's local stands in and `hst'` puts the
+    -- definition back inside the side goal, where the term is harmless.
+    let (stOut, putBack) ← match named with
+      | some n => do
+          let st' : Term := ⟨n.raw[1]⟩
+          let hst' : Term := ⟨n.raw[3]⟩
+          pure (st', ← `(tactic| (rw [$hst':term]; rfl)))
+      | none => do
+          pure (← `({ $st with mem := ($st).mem.splice $p $bits }), ← `(tactic| rfl))
     let simpArgs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
       ((← #[← `(Expr.denoteOp), ← `(Ctxt.Valuation.singleton), ← `(simp_denote),
           ← `(simp_sllvm)].mapM pure) ++ extras).mapM fun t =>
         `(Lean.Parser.Tactic.simpLemma| $t:term)
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
-      rw [BlockCom.run_bind_denote_var_of_nil
-        (s' := { $st with mem := ($st).mem.splice $p $bits })
+      rw [BlockCom.run_bind_denote_var_of_nil (s' := $stOut)
         (by simp only [$[$simpArgs],*]
             rw [run_liftM (run_store (t := $ty) (x := $val) $hflat
               (show Fits (($st).mem) $p $width from Fits.mono $hp (by omega)))]
-            rfl)])))
+            $putBack:tactic)])))
 
 /-- `peel_lifetime` runs the next `llvm.lifetime` marker, which moves neither
 the state nor the valuation. -/
@@ -149,6 +169,9 @@ of `len` *bytes* from `src` to `dst`.
 source's block comes out of `hsrc` by `choose` rather than being passed, since
 destructing the `∃` in `Fits` at a call site reverts the walk goal.
 
+`peel_memcpy_as` below names the state it lands in, as `peel_store`'s `as`
+clause does.
+
 `memcpy` reads before it writes, so what lands at `dst` is the source block's
 bytes in the *pre-copy* state. -/
 macro "peel_memcpy " len:term ", " dst:term ", " src:term ", "
@@ -165,6 +188,25 @@ macro "peel_memcpy " len:term ", " dst:term ", " src:term ", "
                 omega)
             (by rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]; exact $hdst))]
           rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+          rfl)]))
+
+/-- `peel_memcpy_as len, dst, src, hsrc, hdst, s as s' := hs'`: `peel_memcpy`
+with the state it lands in named, for the same reason `peel_store`'s `as`
+clause exists -- the second copy of a pair would otherwise spell the first's
+spliced state inline three times over. -/
+macro "peel_memcpy_as " len:term ", " dst:term ", " src:term ", "
+    hsrc:term ", " hdst:term ", " st:term " as " st':term " := " hst':term : tactic =>
+  `(tactic|
+   (try simp only [bind_assoc]
+    rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
+      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+          rw [run_liftM (run_memcpy (len := BitVec.ofNat 64 $len)
+            (($hsrc).choose_spec.1)
+            (by have := ($hsrc).choose_spec.2
+                rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+                omega)
+            (by rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]; exact $hdst))]
+          rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp, $hst':term]
           rfl)]))
 
 /-- `peel_addressof hg` runs the next `llvm.mlir.addressof`, binding the

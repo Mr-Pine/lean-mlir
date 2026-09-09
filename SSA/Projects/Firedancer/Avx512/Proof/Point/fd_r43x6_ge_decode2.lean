@@ -137,7 +137,12 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 sa b03 b14 b25 sb : Pointer)
     fits_of_live?_eq (frame.fb sa.id (lt_nextFreeBlock_of_fits hs hsa.1)) hsa.1
   have hvsb : Fits sAlloc.mem sb (8 * 32) :=
     fits_of_live?_eq (frame.fb sb.id (lt_nextFreeBlock_of_fits hs hsb.1)) hsb.1
-  peel_memcpy 32, (slotPtr s Slot.sa), sa, hvsa, hsaF, sAlloc
+  refine name_of ({ sAlloc with mem := sAlloc.mem.splice (slotPtr s Slot.sa) (BitVec.extractLsb' sa.offsetInBits (8 * 32) hvsa.choose.bytes) }) fun m₁ hm₁ => ?_
+  peel_memcpy_as 32, (slotPtr s Slot.sa), sa, hvsa, hsaF, sAlloc as m₁ := hm₁
+  -- and `memcpy( _sb, _vsb, 32 )`, at the state the first one left
+  peel_memcpy 32, (slotPtr s Slot.sb), sb,
+    (hm₁ ▸ fits_splice hvsb : Fits m₁.mem sb (8 * 32)),
+    (hm₁ ▸ fits_splice hsbF : Fits m₁.mem (slotPtr s Slot.sb) (8 * 32)), m₁
   sorry
 
 end Firedancer.Avx512
