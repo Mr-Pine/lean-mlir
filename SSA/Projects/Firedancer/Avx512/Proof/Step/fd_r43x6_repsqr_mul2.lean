@@ -82,5 +82,40 @@ theorem repsqr_mul2_step (da db : Pointer) (xa ya xb yb : Vector (BitVec 64) 8)
     rw [readVec?_of_live?_eq (heq.live db.id)]
     exact readVec?_splice_self vb ⟨fits_splice hdb.1, hdb.2⟩
 
-end Firedancer.Avx512
+/-- **`repsqr_mul2_step` in continuation form.** Same content; the difference
+is what it costs to use.
 
+`obtain` on the `∃`-form builds its `casesOn` motive by *reverting* the goal,
+and in a walk the goal is the whole residual program plus the valuation spine.
+Measured on this ladder that is 46 seconds a rung -- eleven rungs, and the
+`obtain`s are essentially the entire proof. Passing a continuation leaves the
+motive an unassigned metavariable that `refine` fixes by assignment, which is
+O(1).
+
+    refine repsqr_mul2_step' da db xa ya xb yb n … fun u' va vb hrun hva hvb w => ?_
+
+See `fiat_25519_to_bytes`'s `subborrow_step'`/`addcarry_step'`, which are the
+same trick for the same reason. -/
+theorem repsqr_mul2_step' (da db : Pointer) (xa ya xb yb : Vector (BitVec 64) 8)
+    (n : BitVec 64) {u : GlobalState} (hu : u.WF)
+    (hda : IsVecPtr u.mem da) (hdb : IsVecPtr u.mem db) (hne : da.id ≠ db.id)
+    (hn63 : n.toNat < 2 ^ 63)
+    (hxa : R43x6.U47 (xa.take R43x6.limbCount)) (hxa6 : xa[6] = 0) (hxa7 : xa[7] = 0)
+    (hya : R43x6.U47 (ya.take R43x6.limbCount)) (hya6 : ya[6] = 0) (hya7 : ya[7] = 0)
+    (hxb : R43x6.U47 (xb.take R43x6.limbCount)) (hxb6 : xb[6] = 0) (hxb7 : xb[7] = 0)
+    (hyb : R43x6.U47 (yb.take R43x6.limbCount)) (hyb6 : yb[6] = 0) (hyb7 : yb[7] = 0)
+    {P : Prop}
+    (k : ∀ (u' : GlobalState) (va vb : Vector (BitVec 64) 8),
+      StateT.run (runFunction (fd_r43x6_repsqr_mul2.denote (Ctxt.Valuation.ofHVector
+          [.value n, yb.map PoisonOr.value, xb.map PoisonOr.value, .value db,
+            ya.map PoisonOr.value, xa.map PoisonOr.value, .value da]ₕ))) u
+        = .value ([]ₕ, u') →
+      vecValue va = vecValue xa ^ 2 ^ n.toNat * vecValue ya →
+      vecValue vb = vecValue xb ^ 2 ^ n.toNat * vecValue yb →
+      Wrote2 da db va vb u u' → P) : P := by
+  obtain ⟨u', va, vb, h₁, h₂, h₃, h₄⟩ :=
+    repsqr_mul2_step da db xa ya xb yb n hu hda hdb hne hn63
+      hxa hxa6 hxa7 hya hya6 hya7 hxb hxb6 hxb7 hyb hyb6 hyb7
+  exact k u' va vb h₁ h₂ h₃ h₄
+
+end Firedancer.Avx512

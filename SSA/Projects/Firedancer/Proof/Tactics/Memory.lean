@@ -13,7 +13,8 @@ open Lean Elab Tactic Meta in
 `x` (of type `Vector (BitVec 64) 8` or `BitVec 64` at `p` where `hp` states
 `Fits s.mem p (512 or 64)`.
  -/
-elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term : tactic =>
+elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
+    extra:(" with " term,+)? : tactic =>
   withMainContext do
     -- The elaboration is only to classify `x` (and read its width); the
     -- emitted script elaborates it again for real. `withMainContext` is load
@@ -33,11 +34,22 @@ elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term : tactic =>
         let wLit := Syntax.mkNumLit (toString w)
         pure (← `($x), ← `(.bitvec (.concrete $wLit)),
           ← `(PoisonOr.value $x), ← `(rfl), ← `($wLit:num))
+    -- The operands are `Ctxt.Var`s: in an entry block the valuation is
+    -- concrete and the default set reduces them, but in a *tail* block the
+    -- ambient valuation is opaque and the destination is only known from an
+    -- `EntryEnv`-style fact. Those go in the `with` list.
+    let extras : Array Term := match extra with
+      | some e => e.raw[1].getSepArgs.map fun s => ⟨s⟩
+      | none => #[]
+    let simpArgs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
+      ((← #[← `(Expr.denoteOp), ← `(Ctxt.Valuation.singleton), ← `(simp_denote),
+          ← `(simp_sllvm)].mapM pure) ++ extras).mapM fun t =>
+        `(Lean.Parser.Tactic.simpLemma| $t:term)
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
       rw [BlockCom.run_bind_denote_var_of_nil
         (s' := { $st with mem := ($st).mem.splice $p $bits })
-        (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+        (by simp only [$[$simpArgs],*]
             rw [run_liftM (run_store (t := $ty) (x := $val) $hflat
               (show Fits (($st).mem) $p $width from Fits.mono $hp (by omega)))]
             rfl)])))

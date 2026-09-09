@@ -22,6 +22,12 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
+/-- Name a term without touching the goal: `refine name_of e fun x hx => ?_`.
+`obtain ⟨x, hx⟩ : ∃ x, x = e := ⟨_, rfl⟩` does the same thing by reverting the
+goal, which in a walk is the whole residual program. The ref's copy is in
+`fiat_25519_to_bytes`. -/
+theorem name_of {α : Sort u} {b : Prop} (a : α) (h : ∀ x, x = a → b) : b := h a rfl
+
 /-! ## Reading a `wwl_t` slot across a call -/
 
 /-- A slot in a state that agrees on its block reads the same. -/

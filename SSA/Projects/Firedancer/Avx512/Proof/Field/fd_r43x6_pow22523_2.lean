@@ -433,7 +433,7 @@ is restated here. -/
 end Pow22523_2
 
 open Pow22523_2 in
-set_option maxHeartbeats 0 in
+set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 100000 in
 /-- **`fd_r43x6_pow22523_2` conforms to its spec.** -/
 theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 64) 8)
@@ -464,8 +464,8 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
 
   -- The result states, named up front: `peel_call` then puts a local into the
   -- goal rather than a `popFrame` term needing a whole-goal `set`.
-  obtain ⟨u₁, hu₁def⟩ : ∃ t : GlobalState, t = sAlloc.popFrame sAlloc.mem := ⟨_, rfl⟩
-  obtain ⟨u₂, hu₂def⟩ : ∃ t : GlobalState, t = u₁.popFrame u₁.mem := ⟨_, rfl⟩
+  refine name_of (sAlloc.popFrame sAlloc.mem) fun u₁ hu₁def => ?_
+  refine name_of (u₁.popFrame u₁.mem) fun u₂ hu₂def => ?_
   peel_call (sqr_step_of_take hxa hxa6 hxa7 sAlloc u₁ hu₁def)
   -- %34-%37: `z2a`
   denote_step_all v 37
@@ -499,15 +499,13 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
   have h2a := sqr_inl hxa
   have h2b := sqr_inl hxb
   -- `repsqr_mul2( &z9a, z2a, za,  &z9b, z2b, zb,  2 )`
-  have repmul_step := repsqr_mul2_step (slotPtr s Slot.z9a) (slotPtr s Slot.z9b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z9a) (slotPtr s Slot.z9b)
       (foldVec (sqrVec xa)) xa (foldVec (sqrVec xb)) xb 2#64 hu₂wf
       (hslot _ (by decide)) (hslot _ (by decide)) (slots.ne (by decide)) (by decide)
       h2a.u47 h2a.z6 h2a.z7 hxa hxa6 hxa7
       h2b.u47 h2b.z6 h2b.z7 hxb hxb6 hxb7
-  obtain ⟨u₃, v9a, v9b, hrun9, hv9a, hv9b, wrote9⟩ := repmul_step
-  -- `with`: without it `peel_call` takes the plain bind lemma, whose
-  -- `exact` unifies the operand vector against this block's spine by `whnf`
-  peel_call hrun9 with True.intro
+    fun u₃ v9a v9b hrun9 hv9a hv9b wrote9 => ?_
+  peel_call hrun9
   clear hrun9
   iterate 2 peel_lifetime
   -- %43, %44: the rung just written, read back out of its two slots
@@ -515,109 +513,109 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
   peel_load_vec v9b, (slotPtr s Slot.z9b), wrote9.ptrB, wrote9.valB, u₃
   -- `repsqr_mul2( &z11a, z9a, z2a,  &z11b, z9b, z2b,  0 )`
   have hslot₃ := slots_after slots wrote9 hslot
-  obtain ⟨u₄, v11a, v11b, hrun11, hval11a, hval11b, wrote11⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z11a) (slotPtr s Slot.z11b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z11a) (slotPtr s Slot.z11b)
       v9a (foldVec (sqrVec xa)) v9b (foldVec (sqrVec xb)) 0#64 wrote9.wf
       (hslot₃ _ (by decide)) (hslot₃ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote9.u44A) wrote9.z6A wrote9.z7A h2a.u47 h2a.z6 h2a.z7
       (u47_of_u44 wrote9.u44B) wrote9.z6B wrote9.z7B h2b.u47 h2b.z6 h2b.z7
-  peel_call hrun11 with True.intro
+    fun u₄ v11a v11b hrun11 hval11a hval11b wrote11 => ?_
+  peel_call hrun11
   iterate 2 peel_lifetime
   peel_load_vec v11a, (slotPtr s Slot.z11a), wrote11.ptrA, wrote11.valA, u₄
   peel_load_vec v11b, (slotPtr s Slot.z11b), wrote11.ptrB, wrote11.valB, u₄
   -- `repsqr_mul2( &z2e5m1a, z11a, z9a,  &z2e5m1b, …,  1 )`
   have hslot₄ := slots_after slots wrote11 hslot₃
-  obtain ⟨u₅, v5a, v5b, hrunv5, hvalv5a, hvalv5b, wrote5⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e5m1a) (slotPtr s Slot.z2e5m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e5m1a) (slotPtr s Slot.z2e5m1b)
       v11a v9a v11b v9b 1#64 wrote11.wf
       (hslot₄ _ (by decide)) (hslot₄ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote11.u44A) wrote11.z6A wrote11.z7A (u47_of_u44 wrote9.u44A) wrote9.z6A wrote9.z7A
       (u47_of_u44 wrote11.u44B) wrote11.z6B wrote11.z7B (u47_of_u44 wrote9.u44B) wrote9.z6B wrote9.z7B
-  peel_call hrunv5 with True.intro
+    fun u₅ v5a v5b hrunv5 hvalv5a hvalv5b wrote5 => ?_
+  peel_call hrunv5
   iterate 2 peel_lifetime
   peel_load_vec v5a, (slotPtr s Slot.z2e5m1a), wrote5.ptrA, wrote5.valA, u₅
   peel_load_vec v5b, (slotPtr s Slot.z2e5m1b), wrote5.ptrB, wrote5.valB, u₅
   -- `repsqr_mul2( &z2e10m1a, z5a, z5a,  &z2e10m1b, …,  5 )`
   have hslot₅ := slots_after slots wrote5 hslot₄
-  obtain ⟨u₆, v10a, v10b, hrunv10, hvalv10a, hvalv10b, wrote10⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e10m1a) (slotPtr s Slot.z2e10m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e10m1a) (slotPtr s Slot.z2e10m1b)
       v5a v5a v5b v5b 5#64 wrote5.wf
       (hslot₅ _ (by decide)) (hslot₅ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote5.u44A) wrote5.z6A wrote5.z7A (u47_of_u44 wrote5.u44A) wrote5.z6A wrote5.z7A
       (u47_of_u44 wrote5.u44B) wrote5.z6B wrote5.z7B (u47_of_u44 wrote5.u44B) wrote5.z6B wrote5.z7B
-  peel_call hrunv10 with True.intro
+    fun u₆ v10a v10b hrunv10 hvalv10a hvalv10b wrote10 => ?_
+  peel_call hrunv10
   iterate 2 peel_lifetime
   peel_load_vec v10a, (slotPtr s Slot.z2e10m1a), wrote10.ptrA, wrote10.valA, u₆
   peel_load_vec v10b, (slotPtr s Slot.z2e10m1b), wrote10.ptrB, wrote10.valB, u₆
   -- `repsqr_mul2( &z2e20m1a, z10a, z10a,  &z2e20m1b, …,  10 )`
   have hslot₆ := slots_after slots wrote10 hslot₅
-  obtain ⟨u₇, v20a, v20b, hrunv20, hvalv20a, hvalv20b, wrote20⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e20m1a) (slotPtr s Slot.z2e20m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e20m1a) (slotPtr s Slot.z2e20m1b)
       v10a v10a v10b v10b 10#64 wrote10.wf
       (hslot₆ _ (by decide)) (hslot₆ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote10.u44A) wrote10.z6A wrote10.z7A (u47_of_u44 wrote10.u44A) wrote10.z6A wrote10.z7A
       (u47_of_u44 wrote10.u44B) wrote10.z6B wrote10.z7B (u47_of_u44 wrote10.u44B) wrote10.z6B wrote10.z7B
-  peel_call hrunv20 with True.intro
+    fun u₇ v20a v20b hrunv20 hvalv20a hvalv20b wrote20 => ?_
+  peel_call hrunv20
   iterate 2 peel_lifetime
   peel_load_vec v20a, (slotPtr s Slot.z2e20m1a), wrote20.ptrA, wrote20.valA, u₇
   peel_load_vec v20b, (slotPtr s Slot.z2e20m1b), wrote20.ptrB, wrote20.valB, u₇
   -- `repsqr_mul2( &z2e40m1a, z20a, z20a,  &z2e40m1b, …,  20 )`
   have hslot₇ := slots_after slots wrote20 hslot₆
-  obtain ⟨u₈, v40a, v40b, hrunv40, hvalv40a, hvalv40b, wrote40⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e40m1a) (slotPtr s Slot.z2e40m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e40m1a) (slotPtr s Slot.z2e40m1b)
       v20a v20a v20b v20b 20#64 wrote20.wf
       (hslot₇ _ (by decide)) (hslot₇ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote20.u44A) wrote20.z6A wrote20.z7A (u47_of_u44 wrote20.u44A) wrote20.z6A wrote20.z7A
       (u47_of_u44 wrote20.u44B) wrote20.z6B wrote20.z7B (u47_of_u44 wrote20.u44B) wrote20.z6B wrote20.z7B
-  peel_call hrunv40 with True.intro
+    fun u₈ v40a v40b hrunv40 hvalv40a hvalv40b wrote40 => ?_
+  peel_call hrunv40
   iterate 2 peel_lifetime
   peel_load_vec v40a, (slotPtr s Slot.z2e40m1a), wrote40.ptrA, wrote40.valA, u₈
   peel_load_vec v40b, (slotPtr s Slot.z2e40m1b), wrote40.ptrB, wrote40.valB, u₈
   -- `repsqr_mul2( &z2e50m1a, z40a, z10a,  &z2e50m1b, …,  10 )`
   have hslot₈ := slots_after slots wrote40 hslot₇
-  obtain ⟨u₉, v50a, v50b, hrunv50, hvalv50a, hvalv50b, wrote50⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e50m1a) (slotPtr s Slot.z2e50m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e50m1a) (slotPtr s Slot.z2e50m1b)
       v40a v10a v40b v10b 10#64 wrote40.wf
       (hslot₈ _ (by decide)) (hslot₈ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote40.u44A) wrote40.z6A wrote40.z7A (u47_of_u44 wrote10.u44A) wrote10.z6A wrote10.z7A
       (u47_of_u44 wrote40.u44B) wrote40.z6B wrote40.z7B (u47_of_u44 wrote10.u44B) wrote10.z6B wrote10.z7B
-  peel_call hrunv50 with True.intro
+    fun u₉ v50a v50b hrunv50 hvalv50a hvalv50b wrote50 => ?_
+  peel_call hrunv50
   iterate 2 peel_lifetime
   peel_load_vec v50a, (slotPtr s Slot.z2e50m1a), wrote50.ptrA, wrote50.valA, u₉
   peel_load_vec v50b, (slotPtr s Slot.z2e50m1b), wrote50.ptrB, wrote50.valB, u₉
   -- `repsqr_mul2( &z2e100m1a, z50a, z50a,  &z2e100m1b, …,  50 )`
   have hslot₉ := slots_after slots wrote50 hslot₈
-  obtain ⟨u₁₀, v100a, v100b, hrunv100, hvalv100a, hvalv100b, wrote100⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e100m1a) (slotPtr s Slot.z2e100m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e100m1a) (slotPtr s Slot.z2e100m1b)
       v50a v50a v50b v50b 50#64 wrote50.wf
       (hslot₉ _ (by decide)) (hslot₉ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote50.u44A) wrote50.z6A wrote50.z7A (u47_of_u44 wrote50.u44A) wrote50.z6A wrote50.z7A
       (u47_of_u44 wrote50.u44B) wrote50.z6B wrote50.z7B (u47_of_u44 wrote50.u44B) wrote50.z6B wrote50.z7B
-  peel_call hrunv100 with True.intro
+    fun u₁₀ v100a v100b hrunv100 hvalv100a hvalv100b wrote100 => ?_
+  peel_call hrunv100
   iterate 2 peel_lifetime
   peel_load_vec v100a, (slotPtr s Slot.z2e100m1a), wrote100.ptrA, wrote100.valA, u₁₀
   peel_load_vec v100b, (slotPtr s Slot.z2e100m1b), wrote100.ptrB, wrote100.valB, u₁₀
   -- `repsqr_mul2( &z2e200m1a, z100a, z100a,  &z2e200m1b, …,  100 )`
   have hslot₁₀ := slots_after slots wrote100 hslot₉
-  obtain ⟨u₁₁, v200a, v200b, hrunv200, hvalv200a, hvalv200b, wrote200⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e200m1a) (slotPtr s Slot.z2e200m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e200m1a) (slotPtr s Slot.z2e200m1b)
       v100a v100a v100b v100b 100#64 wrote100.wf
       (hslot₁₀ _ (by decide)) (hslot₁₀ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote100.u44A) wrote100.z6A wrote100.z7A (u47_of_u44 wrote100.u44A) wrote100.z6A wrote100.z7A
       (u47_of_u44 wrote100.u44B) wrote100.z6B wrote100.z7B (u47_of_u44 wrote100.u44B) wrote100.z6B wrote100.z7B
-  peel_call hrunv200 with True.intro
+    fun u₁₁ v200a v200b hrunv200 hvalv200a hvalv200b wrote200 => ?_
+  peel_call hrunv200
   iterate 2 peel_lifetime
   peel_load_vec v200a, (slotPtr s Slot.z2e200m1a), wrote200.ptrA, wrote200.valA, u₁₁
   peel_load_vec v200b, (slotPtr s Slot.z2e200m1b), wrote200.ptrB, wrote200.valB, u₁₁
   -- `repsqr_mul2( &z2e250m1a, z200a, z50a,  &z2e250m1b, …,  50 )`
   have hslot₁₁ := slots_after slots wrote200 hslot₁₀
-  obtain ⟨u₁₂, v250a, v250b, hrunv250, hvalv250a, hvalv250b, wrote250⟩ :=
-    repsqr_mul2_step (slotPtr s Slot.z2e250m1a) (slotPtr s Slot.z2e250m1b)
+  refine repsqr_mul2_step' (slotPtr s Slot.z2e250m1a) (slotPtr s Slot.z2e250m1b)
       v200a v50a v200b v50b 50#64 wrote200.wf
       (hslot₁₁ _ (by decide)) (hslot₁₁ _ (by decide)) (slots.ne (by decide)) (by decide)
       (u47_of_u44 wrote200.u44A) wrote200.z6A wrote200.z7A (u47_of_u44 wrote50.u44A) wrote50.z6A wrote50.z7A
       (u47_of_u44 wrote200.u44B) wrote200.z6B wrote200.z7B (u47_of_u44 wrote50.u44B) wrote50.z6B wrote50.z7B
-  peel_call hrunv250 with True.intro
+    fun u₁₂ v250a v250b hrunv250 hvalv250a hvalv250b wrote250 => ?_
+  peel_call hrunv250
   -- no `lifetime.start` here: all twenty slots are already live
   peel_load_vec v250a, (slotPtr s Slot.z2e250m1a), wrote250.ptrA, wrote250.valA, u₁₂
   peel_load_vec v250b, (slotPtr s Slot.z2e250m1b), wrote250.ptrB, wrote250.valB, u₁₂
@@ -638,11 +636,11 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
   have fb₁₂ := wrote250.frameBelow (slots.le_id _) (slots.le_id _) fb₁₁
   have hzaF : IsVecPtr u₁₂.mem za := ⟨fits_of_live?_eq (fb₁₂ za.id slots.ida) hza.1, hza.2⟩
   have hzbF : IsVecPtr u₁₂.mem zb := ⟨fits_of_live?_eq (fb₁₂ zb.id slots.idb) hzb.1, hzb.2⟩
-  obtain ⟨u₁₃, oa, ob, hrunF, hvalFa, hvalFb, wroteF⟩ :=
-    repsqr_mul2_step za zb v250a xa v250b xb 2#64 wrote250.wf hzaF hzbF hne (by decide)
+  refine repsqr_mul2_step' za zb v250a xa v250b xb 2#64 wrote250.wf hzaF hzbF hne (by decide)
       (u47_of_u44 wrote250.u44A) wrote250.z6A wrote250.z7A hxa hxa6 hxa7
       (u47_of_u44 wrote250.u44B) wrote250.z6B wrote250.z7B hxb hxb6 hxb7
-  peel_call hrunF with True.intro
+    fun u₁₃ oa ob hrunF hvalFa hvalFb wroteF => ?_
+  peel_call hrunF
   iterate 20 peel_lifetime
   simp_return
   refine ⟨oa, ob, ?mem, ?va, ?vb, wroteF.u44A, wroteF.u44B⟩

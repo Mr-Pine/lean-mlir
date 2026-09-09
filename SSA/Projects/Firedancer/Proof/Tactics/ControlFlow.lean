@@ -9,26 +9,26 @@ open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
 
 open Lean Meta Elab Tactic in
-/-- Does `h` still have holes in it? A step lemma that leaves its operands as
-metavariables -- `cmovznz_step`'s inputs, say -- hands `peel_call` an `h` whose
-argument vector unification can *absorb* the goal's operands into. One whose
-operands are all concrete cannot, and the goal's own operand expression has to
-be computed instead.
+/-- Is `h`'s valuation written `Ctxt.Valuation.ofHVector`?
 
-That is the whole cfg-versus-general choice, and it is written in `h`:
+That is exactly the condition for the by-reference step lemmas. They take
+`argVals` as a variable of their own and pick it up from `h` by first-order
+matching against `Ctxt.Valuation.ofHVector argVals`; the operands are then tied
+back to the goal by `hargs`, a side goal the caller can aim tactics at. A spec
+that phrases its valuation some other way -- `Ctxt.Valuation.singleton` for a
+one-argument callee, or a named valuation like `quadDualValuation` -- is defeq
+but not syntactically that, so the match fails and there is nothing to assign.
 
-* open  -- the general lemma, whose `argVals` *is* `(args.map V).reverse`, so
-  the holes are filled by unification and nothing is computed;
-* closed -- the `_cfg_` lemma, whose `argVals` is its own variable, so `h`
-  fixes it by first-order assignment and `hargs` carries the connection,
-  discharged by `simp only`/`rfl` rather than inside an `exact`.
-
-Get it backwards either way and the cost is a whole-program defeq: the tactic
-does not fail, it spends the heartbeat budget. -/
-def callOperandsOpen (h : Term) : TacticM Bool :=
+Those `h` have to go through the general lemma, whose `argVals` *is* the goal's
+own operand expression and which therefore needs no matching at all. Getting it
+backwards is not a failure but a whole-program defeq: the tactic spends the
+heartbeat budget rather than falling over. Hence the dispatch, rather than a
+`first` over both. -/
+def callArgsAreOfHVector (h : Term) : TacticM Bool :=
   withMainContext do
     withoutModifyingState do
-      return (← instantiateMVars (← inferType (← Term.elabTerm h none))).hasExprMVar
+      let ty ← instantiateMVars (← inferType (← Term.elabTerm h none))
+      return (ty.find? (·.isAppOf ``Ctxt.Valuation.ofHVector)).isSome
 
 open Lean Meta Elab Tactic in
 /-- The body of `peel_call`. `extra` are extra lemmas for
@@ -91,7 +91,8 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
   -- check it cannot discharge rather than failing over. With a *concrete*
   -- valuation the plain path already works, and taking this one instead
   -- changes which `argVals` gets picked -- hence the gate.
-  unless extra.isEmpty || !isBind do
+  let byRef ← callArgsAreOfHVector h
+  unless !byRef || !isBind do
     if ← (do evalTactic (← `(tactic| rw [$bindCfgLem:ident (argTys := $tys)
         (by first | (simp only [$[$simpArgs],*]; done) | rfl) $h])); pure true) <|> pure false then
       return
@@ -101,7 +102,7 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
   -- `fd_r43x6` loop body that runs for 27s and then fails on the step limit,
   -- all before the alternative that does work is tried. The `simp only` here
   -- discharges the same goal instantly.
-  unless extra.isEmpty || isBind do
+  unless !byRef || isBind do
     if ← (do evalTactic (← `(tactic| rw [$cfgLem:ident (argTys := $tys)
         (by first | (simp only [$[$simpArgs],*]; done) | rfl) $h])); pure true) <|> pure false then
       return
