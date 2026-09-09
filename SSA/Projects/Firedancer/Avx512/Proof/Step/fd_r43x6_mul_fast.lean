@@ -38,15 +38,19 @@ theorem mul_step (x y : Vector (BitVec 64) 8)
     simp only [EffectM.run_pure])
 
 /-- `mul_step`'s contract from the `.take limbCount` form the `fd_r43x6` specs
-state, with the zero lanes each operand needs. -/
+state, with the zero lanes each operand needs -- and, as in
+`sqr_step_of_take`, the state it lands in taken as an *argument* rather than
+written out, so a block that chains calls carries `fvar`s and no later
+`isDefEq` walks a tower of `popFrame`s. -/
 theorem mul_step_of_take {x y : Vector (BitVec 64) 8}
     (hx : R43x6.U47 (x.take R43x6.limbCount)) (hx6 : x[6] = 0) (hx7 : x[7] = 0)
     (hy : R43x6.U47 (y.take R43x6.limbCount)) (hy6 : y[6] = 0) (hy7 : y[7] = 0)
-    (u : GlobalState) :
+    (u u' : GlobalState) (hu' : u' = u.popFrame u.mem) :
     StateT.run (runFunction (fd_r43x6_mul_fast_cfg.denote
         (Ctxt.Valuation.ofHVector [y.map PoisonOr.value, x.map PoisonOr.value]ₕ))) u
-      = .value ([(mulVec x y).map PoisonOr.value]ₕ, u.popFrame u.mem) :=
-  mul_step x y (UNN_of_take hx hx6 hx7) (UNN_of_take hy hy6 hy7) hy6 hy7 u
+      = .value ([(mulVec x y).map PoisonOr.value]ₕ, u') := by
+  rw [hu']
+  exact mul_step x y (UNN_of_take hx hx6 hx7) (UNN_of_take hy hy6 hy7) hy6 hy7 u
 
 /-- The bound `Fold.lean`'s `denote_foldVec` takes: the product's own limbs
 are below `2 ^ 63`, so the fold applies to them. -/

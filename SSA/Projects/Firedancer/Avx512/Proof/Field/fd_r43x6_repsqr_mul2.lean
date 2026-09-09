@@ -350,14 +350,14 @@ private lemma bb2_run {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
   -- `%24 = call @fd_r43x6_mul_fast(%23, %arg2)`: the `a` chain by `ya`
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, env.vya])
-    (mul_step_of_take ha ha6 ha7 hya hya6 hya7 s)]
+    (mul_step_of_take ha ha6 ha7 hya hya6 hya7 s _ rfl)]
   denote_step_reduce v 6 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
   fold_unsigned hv6, (mulVec a ya), (limbNat_mul_lt ha hya)
   denote_clear v 3 5
   -- `%29 = call @fd_r43x6_mul_fast(%22, %arg5)`, then `%30`-`%33`: the fold
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, env.vyb])
-    (mul_step_of_take hb hb6 hb7 hyb hyb6 hyb7 _)]
+    (mul_step_of_take hb hb6 hb7 hyb hyb6 hyb7 _ _ rfl)]
   denote_step_reduce v 11 only [simp_spine, env.cmask, env.cshift, env.cfold, env.cpoison] fold
   fold_unsigned hv11, (mulVec b yb), (limbNat_mul_lt hb hyb)
   denote_clear v 8 10
