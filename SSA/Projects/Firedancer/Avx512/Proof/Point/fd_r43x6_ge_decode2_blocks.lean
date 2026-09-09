@@ -14,6 +14,7 @@ import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Proof.Overflow
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.MLIR.DenoteStep
+import SSA.Projects.Firedancer.MLIR.Seal
 
 /-!
 # `fd_r43x6_ge_decode2`'s tail blocks
@@ -979,6 +980,26 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
     (diagnose_step (s62_of_u44 hmulB.u44) u₃ u₄ hu₄)]
 
 
+  -- **The first cut.** `%203`-`%222` are spent: the two multiplied roots, the
+  -- two `fd_r43x6_diagnose` answers and the encodings' sign bits are what the
+  -- sign fixup reads, and the rest is the constants the later stages take.
+  -- `%221`/`%222` are call results the walk substituted rather than named, so
+  -- they are given as values rather than as equations.
+  denote_seal W₀ with
+    x215 := hv215, x220 := hv220,
+    d221 := (PoisonOr.value (diagnose (R43x6.extractLimbs (foldVec (mulVec xa t3a))))
+      : LLVM.IntW 32),
+    d222 := (PoisonOr.value (diagnose (R43x6.extractLimbs (foldVec (mulVec xb t3b))))
+      : LLVM.IntW 32),
+    s58 := inp.s58, s60 := inp.s60, y64 := inp.y64, y66 := inp.y66,
+    c6 := env.c6, c7 := env.c7, c8 := env.c8, c9 := env.c9, c11 := env.c11,
+    czero := env.czero, c13 := env.c13, c14 := env.c14, c15 := env.c15,
+    c18 := env.c18, c17 := env.c17, c19 := env.c0, c24 := env.c24, c25 := env.c25,
+    c26 := env.c26, c27 := env.c27, c46 := env.c46, c47 := env.c47, c48 := env.c48,
+    wa03 := env.va03, wa14 := env.va14, wa25 := env.va25,
+    wb03 := env.vb03, wb14 := env.vb14, wb25 := env.vb25
+  denote_number_from 223
+
   -- `%223`/`%224`: `x_0a != x_mod_2a`, widened to the all-lanes mask `%234`
   -- turns into eight `i1`s, and `%225`: the subtract that starts
   -- `fd_r43x6_neg( xa )`
@@ -987,7 +1008,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       (R43x6.extractLimbs (foldVec (mulVec xa t3a))) = sgnA then 1 else 0) := by
     simp only [hv223, Expr.denoteOp1, Expr.denoteOpPure]
     simp_peephole
-    simp only [HVector.head, simp_spine, inp.s58]
+    simp only [HVector.head, simp_spine, d221, s58]
     simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     split <;> rename_i hc
     · simp [hc]
@@ -1003,13 +1024,13 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   -- fold, as `Proof/Sub.lean` states the ten of them
   denote_step_all v 233
   denote_eval v 225 233
-  simp only [simp_spine, env.c18, hv215] at hv225
-  simp only [simp_spine, env.c6] at hv226
-  simp only [simp_spine, env.c7] at hv227
-  simp only [simp_spine, env.c11, env.czero, zeroVec_eq] at hv228
-  simp only [simp_spine, env.c13] at hv229
-  simp only [simp_spine, env.c14] at hv230
-  simp only [simp_spine, env.c15] at hv231
+  simp only [simp_spine, c18, x215] at hv225
+  simp only [simp_spine, c6] at hv226
+  simp only [simp_spine, c7] at hv227
+  simp only [simp_spine, c11, czero, zeroVec_eq] at hv228
+  simp only [simp_spine, c13] at hv229
+  simp only [simp_spine, c14] at hv230
+  simp only [simp_spine, c15] at hv231
   refine name_of (negVec (foldVec (mulVec xa t3a))) fun nxa hnxa => ?_
   replace hv233 : v233 = nxa.map PoisonOr.value := by
     rw [hnxa]; exact denote_negVec hv225 hv226 hv227 hv228 hv229 hv230 hv231 hv232 hv233
@@ -1023,9 +1044,9 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       then foldVec (mulVec xa t3a) else nxa) fun xa' hxa' => ?_
   replace hv235 : v235 = xa'.map PoisonOr.value := by
     rw [hxa']
-    simp only [hv235, hv234, hv233, hv215, Expr.denoteOp1, Expr.denoteOpPure]
+    simp only [hv235, hv234, hv233, Expr.denoteOp1, Expr.denoteOpPure]
     simp_peephole
-    simp only [HVector.head, simp_spine, hv224]
+    simp only [HVector.head, simp_spine, hv224, x215]
     -- `exact`, not `simp`: the `Decidable` instance the block carries is not
     -- the one `simp` would synthesise, and `exact` unifies through it
     exact vselect_mask8 _ _ _
@@ -1038,7 +1059,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       (R43x6.extractLimbs (foldVec (mulVec xb t3b))) = sgnB then 1 else 0) := by
     simp only [hv236, Expr.denoteOp1, Expr.denoteOpPure]
     simp_peephole
-    simp only [HVector.head, simp_spine, inp.s60]
+    simp only [HVector.head, simp_spine, d222, s60]
     simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     split <;> rename_i hc
     · simp [hc]
@@ -1051,13 +1072,13 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
     split <;> rfl
   denote_step_all v 246
   denote_eval v 238 246
-  simp only [simp_spine, env.c18, hv220] at hv238
-  simp only [simp_spine, env.c6] at hv239
-  simp only [simp_spine, env.c7] at hv240
-  simp only [simp_spine, env.c11, env.czero, zeroVec_eq] at hv241
-  simp only [simp_spine, env.c13] at hv242
-  simp only [simp_spine, env.c14] at hv243
-  simp only [simp_spine, env.c15] at hv244
+  simp only [simp_spine, c18, x220] at hv238
+  simp only [simp_spine, c6] at hv239
+  simp only [simp_spine, c7] at hv240
+  simp only [simp_spine, c11, czero, zeroVec_eq] at hv241
+  simp only [simp_spine, c13] at hv242
+  simp only [simp_spine, c14] at hv243
+  simp only [simp_spine, c15] at hv244
   refine name_of (negVec (foldVec (mulVec xb t3b))) fun nxb hnxb => ?_
   replace hv246 : v246 = nxb.map PoisonOr.value := by
     rw [hnxb]; exact denote_negVec hv238 hv239 hv240 hv241 hv242 hv243 hv244 hv245 hv246
@@ -1067,9 +1088,9 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       then foldVec (mulVec xb t3b) else nxb) fun xb' hxb' => ?_
   replace hv248 : v248 = xb'.map PoisonOr.value := by
     rw [hxb']
-    simp only [hv248, hv247, hv246, hv220, Expr.denoteOp1, Expr.denoteOpPure]
+    simp only [hv248, hv247, hv246, Expr.denoteOp1, Expr.denoteOpPure]
     simp_peephole
-    simp only [HVector.head, simp_spine, hv237]
+    simp only [HVector.head, simp_spine, hv237, x220]
     exact vselect_mask8 _ _ _
   denote_clear v 247 247
 
@@ -1119,9 +1140,9 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   -- coordinate, `%211`-`%220`'s shape one more time
   refine name_of (u₄.popFrame u₄.mem) fun u₅ hu₅ => ?_
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
-    (by simp only [simp_spine, hv235, inp.y64])
+    (by simp only [simp_spine, hv235, y64])
     (mul_step_of_take hxa'U hxa'6 hxa'7 hyaU47 hya6 hya7 u₄ u₅ hu₅)]
-  denote_step_reduce v 253 only [simp_spine, env.c6, env.c7, env.c9, env.c8] fold
+  denote_step_reduce v 253 only [simp_spine, c6, c7, c9, c8] fold
   fold_unsigned hv253, (mulVec xa' ya), (limbNat_mul_lt hxa'U hyaU47)
   -- `xya`, as the C names it: the transpose reads four of its lanes and the
   -- term is large, so it goes in as an `fvar`
@@ -1131,22 +1152,36 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   have hxyA : MulInl xa' ya (foldVec (mulVec xa' ya)) := mul_inl hxa'U hyaU47
   refine name_of (u₅.popFrame u₅.mem) fun u₆ hu₆ => ?_
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
-    (by simp only [simp_spine, hv248, inp.y66])
+    (by simp only [simp_spine, hv248, y66])
     (mul_step_of_take hxb'U hxb'6 hxb'7 hybU47 hyb6 hyb7 u₅ u₆ hu₆)]
-  denote_step_reduce v 258 only [simp_spine, env.c6, env.c7, env.c9, env.c8] fold
+  denote_step_reduce v 258 only [simp_spine, c6, c7, c9, c8] fold
   fold_unsigned hv258, (mulVec xb' yb), (limbNat_mul_lt hxb'U hybU47)
   refine name_of (foldVec (mulVec xb' yb)) fun xyb hxyb => ?_
   rw [← hxyb] at hv258
   denote_clear v 255 257
   have hxyB : MulInl xb' yb (foldVec (mulVec xb' yb)) := mul_inl hxb'U hybU47
 
+  -- **The cut.** The first four stages built a fifty-six deep spine, and every
+  -- tactic in the walk traverses it; naming what the transpose still reads
+  -- replaces it with an opaque `W`, so the second half starts from a valuation
+  -- of size one. `denote_number_from` re-anchors the stepper, which reads its
+  -- index off the valuation's depth.
+  denote_seal W with
+    x235 := hv235, x248 := hv248, x253 := hv253, x258 := hv258,
+    y64 := y64, y66 := y66,
+    c17 := c17, c19 := c19, c24 := c24, c25 := c25,
+    c26 := c26, c27 := c27, c46 := c46, c47 := c47, c48 := c48,
+    wa03 := wa03, wa14 := wa14, wa25 := wa25,
+    wb03 := wb03, wb14 := wb14, wb25 := wb25
+  denote_number_from 259
+
   -- `%259`-`%267`: `FD_R43X6_QUAD_PACK( *_Pa, xa,ya,one,xya )`
   denote_step_all v 267
   denote_eval v 259 267
-  simp only [simp_spine, hv235, env.c17, env.c24] at hv259
-  simp only [simp_spine, inp.y64, hv253, env.c24] at hv260
-  simp only [simp_spine, hv235, env.c17, env.c25] at hv261
-  simp only [simp_spine, inp.y64, hv253, env.c25] at hv262
+  simp only [simp_spine, x235, c17, c24] at hv259
+  simp only [simp_spine, y64, x253, c24] at hv260
+  simp only [simp_spine, x235, c17, c25] at hv261
+  simp only [simp_spine, y64, x253, c25] at hv262
   refine name_of (packQuad xa' ya oneVec xya) fun qa hqa => ?_
   replace hv267 : v267 = qa.v03.map PoisonOr.value := by
     rw [hqa]; exact denote_quadPack_v03 hv259 hv260 hv261 hv262 hv263 hv266 hv267
@@ -1172,30 +1207,30 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   -- the three `a` stores, `%268`/`%269` between them
   refine name_of ({ u₆ with mem := u₆.mem.splice a03 (vecBV qa.v03) }) fun m₁ hm₁ => ?_
   peel_store_amb qa.v03, a03, fa03, u₆ as m₁ := hm₁ with
-    simp_spine, hv267, env.va03
+    simp_spine, hv267, wa03
   denote_step_all v 268
   replace hv268 : v268 = qa.v14.map PoisonOr.value := by
     rw [hqa]; exact denote_quadPack_v14 hv259 hv260 hv263 hv264 hv268
   have fa14' : Fits m₁.mem a14 512 := hm₁ ▸ fits_splice fa14
   refine name_of ({ m₁ with mem := m₁.mem.splice a14 (vecBV qa.v14) }) fun m₂ hm₂ => ?_
   peel_store_amb qa.v14, a14, fa14', m₁ as m₂ := hm₂ with
-    simp_spine, hv268, env.va14
+    simp_spine, hv268, wa14
   denote_step_all v 269
   replace hv269 : v269 = qa.v25.map PoisonOr.value := by
     rw [hqa]; exact denote_quadPack_v25 hv259 hv260 hv261 hv262 hv264 hv265 hv269
   have fa25' : Fits m₂.mem a25 512 := hm₂ ▸ fits_splice (hm₁ ▸ fits_splice fa25)
   refine name_of ({ m₂ with mem := m₂.mem.splice a25 (vecBV qa.v25) }) fun m₃ hm₃ => ?_
   peel_store_amb qa.v25, a25, fa25', m₂ as m₃ := hm₃ with
-    simp_spine, hv269, env.va25
+    simp_spine, hv269, wa25
 
   -- `%270`-`%280`: the `b` twin, `xb'`/`yb`/`xyb` for `xa'`/`ya`/`xya` and
   -- `%arg4`/`%arg5`/`%arg6` for `%arg0`/`%arg1`/`%arg2`
   denote_step_all v 278
   denote_eval v 270 278
-  simp only [simp_spine, hv248, env.c17, env.c24] at hv270
-  simp only [simp_spine, inp.y66, hv258, env.c24] at hv271
-  simp only [simp_spine, hv248, env.c17, env.c25] at hv272
-  simp only [simp_spine, inp.y66, hv258, env.c25] at hv273
+  simp only [simp_spine, x248, c17, c24] at hv270
+  simp only [simp_spine, y66, x258, c24] at hv271
+  simp only [simp_spine, x248, c17, c25] at hv272
+  simp only [simp_spine, y66, x258, c25] at hv273
   refine name_of (packQuad xb' yb oneVec xyb) fun qb hqb => ?_
   replace hv278 : v278 = qb.v03.map PoisonOr.value := by
     rw [hqb]; exact denote_quadPack_v03 hv270 hv271 hv272 hv273 hv274 hv277 hv278
@@ -1210,21 +1245,29 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       (fits_of_live?_eq (e.live b25.id).symm pb25.1)))
   refine name_of ({ m₃ with mem := m₃.mem.splice b03 (vecBV qb.v03) }) fun m₄ hm₄ => ?_
   peel_store_amb qb.v03, b03, fb03, m₃ as m₄ := hm₄ with
-    simp_spine, hv278, env.vb03
+    simp_spine, hv278, wb03
   denote_step_all v 279
   replace hv279 : v279 = qb.v14.map PoisonOr.value := by
     rw [hqb]; exact denote_quadPack_v14 hv270 hv271 hv274 hv275 hv279
   have fb14' : Fits m₄.mem b14 512 := hm₄ ▸ fits_splice fb14
   refine name_of ({ m₄ with mem := m₄.mem.splice b14 (vecBV qb.v14) }) fun m₅ hm₅ => ?_
   peel_store_amb qb.v14, b14, fb14', m₄ as m₅ := hm₅ with
-    simp_spine, hv279, env.vb14
+    simp_spine, hv279, wb14
   denote_step_all v 280
   replace hv280 : v280 = qb.v25.map PoisonOr.value := by
     rw [hqb]; exact denote_quadPack_v25 hv270 hv271 hv272 hv273 hv275 hv276 hv280
   have fb25' : Fits m₅.mem b25 512 := hm₅ ▸ fits_splice (hm₄ ▸ fits_splice fb25)
   refine name_of ({ m₅ with mem := m₅.mem.splice b25 (vecBV qb.v25) }) fun m₆ hm₆ => ?_
   peel_store_amb qb.v25, b25, fb25', m₅ as m₆ := hm₆ with
-    simp_spine, hv280, env.vb25
+    simp_spine, hv280, wb25
+
+  -- **The second cut.** The transpose is stored; what the reduce still reads
+  -- is the six pointers, its five constants and the return code.
+  denote_seal W' with
+    c26 := c26, c27 := c27, c46 := c46, c47 := c47, c48 := c48, c19 := c19,
+    wa03 := wa03, wa14 := wa14, wa25 := wa25,
+    wb03 := wb03, wb14 := wb14, wb25 := wb25
+  denote_number_from 281
 
   -- What the six reloads at `%281`-`%310` will read. Each looks past the
   -- splices that came after its own, which is what `SixDistinct` is for; the
@@ -1265,22 +1308,22 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
 
   -- `%281`-`%290`: `FD_R43X6_QUAD_FOLD_UNSIGNED( *_Pa, *_Pa )`, first third
   peel_load_vec_amb qa.v03, a03, P03a, (readVec_eq_of rv03a), m₆ with
-    simp_spine, env.va03
+    simp_spine, wa03
   denote_step_all v 282
   denote_eval v 282 282
-  simp only [simp_spine, env.c26] at hv282
+  simp only [simp_spine, c26] at hv282
   peel_load_vec_amb qa.v14, a14, P14a, (readVec_eq_of rv14a), m₆ with
-    simp_spine, env.va14
+    simp_spine, wa14
   denote_step_all v 284
   denote_eval v 284 284
-  simp only [simp_spine, env.c26] at hv284
+  simp only [simp_spine, c26] at hv284
   peel_load_vec_amb qa.v25, a25, P25a, (readVec_eq_of rv25a), m₆ with
-    simp_spine, env.va25
+    simp_spine, wa25
   denote_step_all v 290
   denote_eval v 286 290
-  simp only [simp_spine, env.c27] at hv286
-  simp only [simp_spine, env.c46] at hv287
-  simp only [simp_spine, env.c47] at hv288
+  simp only [simp_spine, c27] at hv286
+  simp only [simp_spine, c46] at hv287
+  simp only [simp_spine, c47] at hv288
   replace hv290 : v290 = (foldQuad qa).v03.map PoisonOr.value :=
     denote_quadFold_v03 hv286 hv287 hv288 hv289 hv290
 
@@ -1289,22 +1332,22 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   refine name_of ({ m₆ with mem := m₆.mem.splice a03 (vecBV (foldQuad qa).v03) })
     fun m₇ hm₇ => ?_
   peel_store_amb (foldQuad qa).v03, a03, F03a, m₆ as m₇ := hm₇ with
-    simp_spine, hv290, env.va03
+    simp_spine, hv290, wa03
   have F14a₇ : Fits m₇.mem a14 512 := hm₇ ▸ fits_splice F14a
   have P14a' : IsVecPtr m₇.mem a14 := ⟨F14a₇, pa14.2⟩
   have rv14a' : readVec? a14 m₇.mem = some qa.v14 := by
     rw [hm₇, readVec?_splice_ne hne.a14_a03.symm]; exact rv14a
   peel_load_vec_amb qa.v14, a14, P14a', (readVec_eq_of rv14a'), m₇ with
-    simp_spine, env.va14
+    simp_spine, wa14
   denote_step_all v 293
   denote_eval v 292 293
-  simp only [simp_spine, env.c47] at hv292
+  simp only [simp_spine, c47] at hv292
   replace hv293 : v293 = (foldQuad qa).v14.map PoisonOr.value :=
     denote_quadFold_v14 hv282 hv292 hv293
   refine name_of ({ m₇ with mem := m₇.mem.splice a14 (vecBV (foldQuad qa).v14) })
     fun m₈ hm₈ => ?_
   peel_store_amb (foldQuad qa).v14, a14, F14a₇, m₇ as m₈ := hm₈ with
-    simp_spine, hv293, env.va14
+    simp_spine, hv293, wa14
   have F25a₈ : Fits m₈.mem a25 512 := hm₈ ▸ fits_splice (hm₇ ▸ fits_splice F25a)
   have P25a' : IsVecPtr m₈.mem a25 := ⟨F25a₈, pa25.2⟩
   have rv25a' : readVec? a25 m₈.mem = some qa.v25 := by
@@ -1312,16 +1355,16 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       readVec?_splice_ne hne.a25_a03.symm]
     exact rv25a
   peel_load_vec_amb qa.v25, a25, P25a', (readVec_eq_of rv25a'), m₈ with
-    simp_spine, env.va25
+    simp_spine, wa25
   denote_step_all v 296
   denote_eval v 295 296
-  simp only [simp_spine, env.c48] at hv295
+  simp only [simp_spine, c48] at hv295
   replace hv296 : v296 = (foldQuad qa).v25.map PoisonOr.value :=
     denote_quadFold_v25 hv284 hv295 hv296
   refine name_of ({ m₈ with mem := m₈.mem.splice a25 (vecBV (foldQuad qa).v25) })
     fun m₉ hm₉ => ?_
   peel_store_amb (foldQuad qa).v25, a25, F25a₈, m₈ as m₉ := hm₉ with
-    simp_spine, hv296, env.va25
+    simp_spine, hv296, wa25
 
   -- `%297`-`%312`: the `b` twin. Its three reloads have to look past the
   -- three `a` stores as well, which is the second place `SixDistinct` pays.
@@ -1348,52 +1391,52 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       readVec?_splice_ne hne.b25_a14.symm, hm₇, readVec?_splice_ne hne.b25_a03.symm]
     exact rv25b
   peel_load_vec_amb qb.v03, b03, (⟨F03b₉, pb03.2⟩ : IsVecPtr m₉.mem b03),
-    (readVec_eq_of rv03b'), m₉ with simp_spine, env.vb03
+    (readVec_eq_of rv03b'), m₉ with simp_spine, wb03
   denote_step_all v 298
   denote_eval v 298 298
-  simp only [simp_spine, env.c26] at hv298
+  simp only [simp_spine, c26] at hv298
   peel_load_vec_amb qb.v14, b14, (⟨F14b₉, pb14.2⟩ : IsVecPtr m₉.mem b14),
-    (readVec_eq_of rv14b'), m₉ with simp_spine, env.vb14
+    (readVec_eq_of rv14b'), m₉ with simp_spine, wb14
   denote_step_all v 300
   denote_eval v 300 300
-  simp only [simp_spine, env.c26] at hv300
+  simp only [simp_spine, c26] at hv300
   peel_load_vec_amb qb.v25, b25, (⟨F25b₉, pb25.2⟩ : IsVecPtr m₉.mem b25),
-    (readVec_eq_of rv25b'), m₉ with simp_spine, env.vb25
+    (readVec_eq_of rv25b'), m₉ with simp_spine, wb25
   denote_step_all v 306
   denote_eval v 302 306
-  simp only [simp_spine, env.c27] at hv302
-  simp only [simp_spine, env.c46] at hv303
-  simp only [simp_spine, env.c47] at hv304
+  simp only [simp_spine, c27] at hv302
+  simp only [simp_spine, c46] at hv303
+  simp only [simp_spine, c47] at hv304
   replace hv306 : v306 = (foldQuad qb).v03.map PoisonOr.value :=
     denote_quadFold_v03 hv302 hv303 hv304 hv305 hv306
   refine name_of ({ m₉ with mem := m₉.mem.splice b03 (vecBV (foldQuad qb).v03) })
     fun m₁₀ hm₁₀ => ?_
   peel_store_amb (foldQuad qb).v03, b03, F03b₉, m₉ as m₁₀ := hm₁₀ with
-    simp_spine, hv306, env.vb03
+    simp_spine, hv306, wb03
   have F14b₁₀ : Fits m₁₀.mem b14 512 := hm₁₀ ▸ fits_splice F14b₉
   have rv14b'' : readVec? b14 m₁₀.mem = some qb.v14 := by
     rw [hm₁₀, readVec?_splice_ne hne.b14_b03.symm]; exact rv14b'
   peel_load_vec_amb qb.v14, b14, (⟨F14b₁₀, pb14.2⟩ : IsVecPtr m₁₀.mem b14),
-    (readVec_eq_of rv14b''), m₁₀ with simp_spine, env.vb14
+    (readVec_eq_of rv14b''), m₁₀ with simp_spine, wb14
   denote_step_all v 309
   denote_eval v 308 309
-  simp only [simp_spine, env.c47] at hv308
+  simp only [simp_spine, c47] at hv308
   replace hv309 : v309 = (foldQuad qb).v14.map PoisonOr.value :=
     denote_quadFold_v14 hv298 hv308 hv309
   refine name_of ({ m₁₀ with mem := m₁₀.mem.splice b14 (vecBV (foldQuad qb).v14) })
     fun m₁₁ hm₁₁ => ?_
   peel_store_amb (foldQuad qb).v14, b14, F14b₁₀, m₁₀ as m₁₁ := hm₁₁ with
-    simp_spine, hv309, env.vb14
+    simp_spine, hv309, wb14
   have F25b₁₁ : Fits m₁₁.mem b25 512 := hm₁₁ ▸ fits_splice (hm₁₀ ▸ fits_splice F25b₉)
   have rv25b'' : readVec? b25 m₁₁.mem = some qb.v25 := by
     rw [hm₁₁, readVec?_splice_ne hne.b25_b14.symm, hm₁₀,
       readVec?_splice_ne hne.b25_b03.symm]
     exact rv25b'
   peel_load_vec_amb qb.v25, b25, (⟨F25b₁₁, pb25.2⟩ : IsVecPtr m₁₁.mem b25),
-    (readVec_eq_of rv25b''), m₁₁ with simp_spine, env.vb25
+    (readVec_eq_of rv25b''), m₁₁ with simp_spine, wb25
   denote_step_all v 312
   denote_eval v 311 312
-  simp only [simp_spine, env.c48] at hv311
+  simp only [simp_spine, c48] at hv311
   replace hv312 : v312 = (foldQuad qb).v25.map PoisonOr.value :=
     denote_quadFold_v25 hv300 hv311 hv312
 
@@ -1406,7 +1449,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   · -- a *narrow* set: `simp_denote`/`simp_sllvm` on a goal carrying `m₁₁`'s
     -- eleven nested splices runs out of steps
     simp only [BlockCom.denote_term, Terminator.denote_br, Target.denote_mk,
-      HVector.map, simp_spine, hv312, env.c0]
+      HVector.map, simp_spine, hv312, c19]
     rfl
   · -- the memory: `m₁₁`'s eleven splices, as the six the statement names
     -- the chain starts at `u₆` and the statement at `s`; `e` is what says the
