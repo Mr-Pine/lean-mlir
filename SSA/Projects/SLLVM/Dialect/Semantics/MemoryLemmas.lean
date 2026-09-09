@@ -303,6 +303,23 @@ theorem run_memset {m : MemoryState} {p : Pointer} {b : BitVec 8} {len : BitVec 
   simp [memset, getLiveBlockOrUB, hblk, throwUBIf, Nat.not_lt.mpr hlen,
     MemoryState.splice, PoisonOr.getOrUB]
 
+/-! ## `memcpy` -/
+
+/-- A memcpy of `len` bytes between two pointers with room for them splices the
+source's bytes in at the destination. Read before write, as `memcpy` is: `sblk`
+is the source's block in the *pre-copy* state, so this says nothing about
+overlapping ranges beyond what the definition already does. -/
+theorem run_memcpy {m : MemoryState} {dst src : Pointer} {len : BitVec 64}
+    {sblk : LiveBlock} (hsblk : m[src.id]? = some (.live sblk))
+    (hslen : src.offsetInBits + 8 * len.toNat ≤ sblk.lengthInBits)
+    (hdst : Fits m dst (8 * len.toNat)) :
+    (memcpy (.value dst) (.value src) (.value len)).run m
+      = .value ((), m.splice dst
+          (sblk.bytes.extractLsb' src.offsetInBits (8 * len.toNat))) := by
+  obtain ⟨dblk, hdblk, hdlen⟩ := hdst
+  simp [memcpy, getLiveBlockOrUB, hsblk, hdblk, throwUBIf,
+    Nat.not_lt.mpr hslen, Nat.not_lt.mpr hdlen, MemoryState.splice, PoisonOr.getOrUB]
+
 /-! ## `load` -/
 
 theorem run_load {t : LLVM.Ty} {m : MemoryState} {p : Pointer} {block : LiveBlock}

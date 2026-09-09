@@ -142,6 +142,31 @@ macro "peel_memset " b:term ", " len:term ", " p:term ", " hp:term ", " st:term 
           rfl)
     ]))
 
+/-- `peel_memcpy len, dst, src, hsrc, hdst, s` runs the next `llvm.intr.memcpy`
+of `len` *bytes* from `src` to `dst`.
+
+`hsrc : Fits s.mem src (8 * len)` and `hdst : Fits s.mem dst (8 * len)`; the
+source's block comes out of `hsrc` by `choose` rather than being passed, since
+destructing the `∃` in `Fits` at a call site reverts the walk goal.
+
+`memcpy` reads before it writes, so what lands at `dst` is the source block's
+bytes in the *pre-copy* state. -/
+macro "peel_memcpy " len:term ", " dst:term ", " src:term ", "
+    hsrc:term ", " hdst:term ", " st:term : tactic =>
+  `(tactic|
+   (try simp only [bind_assoc]
+    rw [BlockCom.run_bind_denote_var_of_nil
+      (s' := { $st with mem := ($st).mem.splice $dst (BitVec.extractLsb' (($src).offsetInBits) (8 * $len) ($hsrc).choose.bytes) })
+      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+          rw [run_liftM (run_memcpy (len := BitVec.ofNat 64 $len)
+            (($hsrc).choose_spec.1)
+            (by have := ($hsrc).choose_spec.2
+                rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+                omega)
+            (by rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]; exact $hdst))]
+          rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+          rfl)]))
+
 /-- `peel_addressof hg` runs the next `llvm.mlir.addressof`, binding the
 global's address. Simpler than every other peel: the operation only reads the
 symbol table, so the state does not move.

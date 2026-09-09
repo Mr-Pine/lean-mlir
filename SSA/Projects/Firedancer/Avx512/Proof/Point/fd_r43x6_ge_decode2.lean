@@ -121,10 +121,23 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 sa b03 b14 b25 sb : Pointer)
   -- %0-%48: the constants, and the `undef`/`insertelement` chain that builds
   -- the all-poison vector the shuffles take as their dead operand
   denote_step_reduce v 48 [LLVM.const?, LLVM.Ty.poison]
+  -- the scalars this stretch reads: `%1 = 32` (the `memcpy` length), `%2`/`%3`
+  -- the `getelementptr` indices, `%4 = 63` and `%5 = 2^63-1` the sign split
+  subst hv1 hv2 hv3 hv4 hv5
   -- %49-%52: `_sa`, `_sb`, `t0a`, `t0b`
   peel_alloca_chain s, cw, 4
   simp only [slotPtr_sa, slotPtr_sb, slotPtr_t0a, slotPtr_t0b]
   rw [← hsAlloc]
+  -- the staging buffers' lifetimes, then `memcpy( _sa, _vsa, 32 )` and its `b`
+  -- twin: 32 bytes off the caller's encoding into the frame
+  iterate 2 peel_lifetime
+  have hsaF : Fits sAlloc.mem (slotPtr s Slot.sa) (8 * 32) := frame.fits 0 (by decide)
+  have hsbF : Fits sAlloc.mem (slotPtr s Slot.sb) (8 * 32) := frame.fits 1 (by decide)
+  have hvsa : Fits sAlloc.mem sa (8 * 32) :=
+    fits_of_live?_eq (frame.fb sa.id (lt_nextFreeBlock_of_fits hs hsa.1)) hsa.1
+  have hvsb : Fits sAlloc.mem sb (8 * 32) :=
+    fits_of_live?_eq (frame.fb sb.id (lt_nextFreeBlock_of_fits hs hsb.1)) hsb.1
+  peel_memcpy 32, (slotPtr s Slot.sa), sa, hvsa, hsaF, sAlloc
   sorry
 
 end Firedancer.Avx512
