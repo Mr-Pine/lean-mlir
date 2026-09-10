@@ -806,16 +806,29 @@ private def foldConstantHyps : TacticM (Array Ident) := withMainContext do
   let mut found : Array Ident := #[]
   let mut missing : Array String := #[]
   for k in [0 : wanted.size] do
-    let mut hit : Option Ident := none
+    let mut hit : Option (Ident × Expr) := none
     for decl in ← getLCtx do
       if decl.isImplementationDetail then continue
       let some (_, lhs, rhs) := (← instantiateMVars decl.type).eq? | continue
-      unless lhs.isFVar && rhs.isAppOf ``toBitVecValue do continue
+      -- the left-hand side is a stepped value, or -- after `denote_seal` -- a
+      -- read of the sealed valuation; only the constant on the right matters
+      unless rhs.isAppOf ``toBitVecValue do continue
       if ← withoutModifyingState (isDefEq rhs wanted[k]!) then
-        hit := some (mkIdent decl.userName)
+        hit := some (mkIdent decl.userName, lhs)
         break
     match hit with
-    | some i => found := found.push i
+    | some (i, lhs) =>
+      -- after `denote_seal` the constant sits behind a read of the sealed
+      -- valuation: `W ⟨192, _⟩ = v6` alongside `v6 = toBitVecValue …`. Both
+      -- are needed, the read first.
+      if lhs.isFVar then
+        for decl in ← getLCtx do
+          if decl.isImplementationDetail then continue
+          let some (_, _, rhs) := (← instantiateMVars decl.type).eq? | continue
+          if rhs == lhs then
+            found := found.push (mkIdent decl.userName)
+            break
+      found := found.push i
     | none => missing := missing.push names[k]!
   unless missing.isEmpty do
     throwError "fold_unsigned: nothing in scope holds the fold's {missing}. Each of the \

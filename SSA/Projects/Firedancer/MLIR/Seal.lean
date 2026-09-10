@@ -27,7 +27,9 @@ whose left-hand side is a value the walk pushed is located in the spine, and
 one that reads the ambient valuation (`env`'s fields, `V ⟨181⟩ = …`) is
 shifted by the spine's height. An item that is not an equation is a value the
 walk substituted rather than named -- a call's return, say -- and stands for
-itself.
+itself. A hypothesis a fact came from is cleared: it is superseded, and a
+tactic that finds a value by searching the context would otherwise pick the
+pre-seal one.
 -/
 
 namespace Firedancer
@@ -54,6 +56,11 @@ private def keptIndex (Γ S : Expr) (elems : Array (Expr × Expr)) (lhs : Expr) 
     MetaM (Nat × Expr) := do
   if let some j := elems.findIdx? (fun (_, v) => v == lhs) then
     return (j, elems[j]!.1)
+  -- the same, up to instances: a value written out at the call site need not
+  -- be syntactically the term the walk pushed
+  for j in [0:elems.size] do
+    if ← withoutModifyingState (isDefEq elems[j]!.2 lhs) then
+      return (j, elems[j]!.1)
   if lhs.getAppNumArgs == 2 then
     let ty := lhs.getAppArgs[0]!
     let v := lhs.getAppArgs[1]!
@@ -94,6 +101,7 @@ elab "denote_seal " w:ident " with " items:sealItem,* : tactic => do
     let S := dapp.appArg!
     let (elems, _) := spineElems S
     let mut facts : Array (Name × Expr × Expr) := #[]
+    let mut supersede : Array FVarId := #[]
     for it in items.getElems do
       let nm := it.raw[0].getId
       let hE ← elabTerm (⟨it.raw[2]⟩ : Term) none
@@ -114,12 +122,16 @@ elab "denote_seal " w:ident " with " items:sealItem,* : tactic => do
         (← `((⟨$(Syntax.mkNumLit (toString i)), by rfl⟩ : Ctxt.Var $Γstx $tystx))) none
       Term.synthesizeSyntheticMVarsNoPostponing
       facts := facts.push (nm, ← mkEq (mkApp2 S ty v) rhs, prf)
+      if hE.isFVar then supersede := supersede.push hE.fvarId!
     let mut g := goal
     for (nm, ty, prf) in facts do
       g ← g.assert nm ty prf
     let (_, g₁) ← g.generalize #[{ expr := S, xName? := w.getId }]
     let (_, g₂) ← g₁.introNP facts.size
-    return g₂
+    -- the hypotheses the kept facts came from are superseded: leaving them
+    -- would let a tactic that finds a value by *searching the context* --
+    -- `fold_unsigned`'s three constants -- pick the pre-seal one
+    g₂.tryClearMany supersede
   replaceMainGoal [goal']
 
 end Firedancer
