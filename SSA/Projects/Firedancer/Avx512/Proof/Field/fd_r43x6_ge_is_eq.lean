@@ -158,8 +158,12 @@ private theorem killFrom_readback {q₀ q₁ q₂ : Pointer} {u v w : Vector (Bi
 /-! ### The difference vector -/
 
 /-- The vector `fd_r43x6_sub_fast` leaves for `fd_r43x6_is_nonzero`: the six
-difference limbs of `subFast`, lanes 6 and 7 zero. -/
-def subFastVec (x y : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
+difference limbs of `subFast`, lanes 6 and 7 zero.
+
+Unlike `Avx512.subFastVec` of `Proof/Sub.lean` this adds plain `pLimbs`: the
+operands come straight from `quadMulLimb`, never through the signed fold, so
+there is no bias to compensate. -/
+private def subFastVecOfLimbs (x y : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
   #v[BitVec.ofInt 64 (subFast x y 0), BitVec.ofInt 64 (subFast x y 1),
      BitVec.ofInt 64 (subFast x y 2), BitVec.ofInt 64 (subFast x y 3),
      BitVec.ofInt 64 (subFast x y 4), BitVec.ofInt 64 (subFast x y 5), 0, 0]
@@ -174,28 +178,28 @@ private theorem sub_add_lane (x y : ℕ) (c : ℤ) :
   omega
 
 /-- The lanes read back as the `ℤ` limbs, given the `s62` range. -/
-private theorem extractLimbs_subFastVec {x y : Fin 6 → ℕ}
+private theorem extractLimbs_subFastVecOfLimbs {x y : Fin 6 → ℕ}
     (hx : ∀ k, x k < 7000 * 2 ^ 49) (hy : ∀ k, y k < 7000 * 2 ^ 49) :
-    R43x6.extractLimbs (subFastVec x y) = subFast x y := by
+    R43x6.extractLimbs (subFastVecOfLimbs x y) = subFast x y := by
   have hs := subFast_s62 hx hy
   funext i
   have hi := hs i
   have : R43x6.FitsLong (subFast x y i) := by
     simp only [R43x6.FitsLong]; omega
   fin_cases i <;>
-    simpa [R43x6.extractLimbs, LimbRepresentations.toInts, subFastVec] using
+    simpa [R43x6.extractLimbs, LimbRepresentations.toInts, subFastVecOfLimbs] using
       toInt_ofInt this
 
 /-- The difference vector is `s62`, as the C comments claim. -/
-private theorem s62_subFastVec {x y : Fin 6 → ℕ}
+private theorem s62_subFastVecOfLimbs {x y : Fin 6 → ℕ}
     (hx : ∀ k, x k < 7000 * 2 ^ 49) (hy : ∀ k, y k < 7000 * 2 ^ 49) :
-    R43x6.S62 ((subFastVec x y).take R43x6.limbCount) := by
+    R43x6.S62 ((subFastVecOfLimbs x y).take R43x6.limbCount) := by
   have hs := subFast_s62 hx hy
   have key : ∀ i : Fin R43x6.limbCount,
-      LimbRepresentations.toInts ((subFastVec x y).take R43x6.limbCount) i
+      LimbRepresentations.toInts ((subFastVecOfLimbs x y).take R43x6.limbCount) i
         = subFast x y i := by
     intro i
-    rw [R43x6.toInts_take, ← extractLimbs_subFastVec hx hy]
+    rw [R43x6.toInts_take, ← extractLimbs_subFastVecOfLimbs hx hy]
   constructor <;> intro i <;> rw [key i] <;> exact (by have := hs i; omega)
 
 /-- `quadLimb` of an encoded QUAD is the lane function of the element encoded. -/
@@ -497,16 +501,16 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   have hM : ∀ (j : Fin 4) (k : Fin 6), quadMulLimb XShuff YShuff j k < 7000 * 2 ^ 49 :=
     fun j k => quadMulLimb_lt_u46_tight XShuff YShuff
       hXShuff03 hXShuff14 hXShuff25 hYShuff03 hYShuff14 hYShuff25 j k
-  have hxd : xDiff = subFastVec (quadMulLimb XShuff YShuff 1) (quadMulLimb XShuff YShuff 0) := by
+  have hxd : xDiff = subFastVecOfLimbs (quadMulLimb XShuff YShuff 1) (quadMulLimb XShuff YShuff 0) := by
     apply Vector.ext
     intro i hi
-    interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
-  have hyd : yDiff = subFastVec (quadMulLimb XShuff YShuff 3) (quadMulLimb XShuff YShuff 2) := by
+    interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+  have hyd : yDiff = subFastVecOfLimbs (quadMulLimb XShuff YShuff 3) (quadMulLimb XShuff YShuff 2) := by
     apply Vector.ext
     intro i hi
-    interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVec, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
-  have hxs62 : R43x6.S62 (xDiff.take R43x6.limbCount) := hxd ▸ s62_subFastVec (hM 1) (hM 0)
-  have hys62 : R43x6.S62 (yDiff.take R43x6.limbCount) := hyd ▸ s62_subFastVec (hM 3) (hM 2)
+    interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+  have hxs62 : R43x6.S62 (xDiff.take R43x6.limbCount) := hxd ▸ s62_subFastVecOfLimbs (hM 1) (hM 0)
+  have hys62 : R43x6.S62 (yDiff.take R43x6.limbCount) := hyd ▸ s62_subFastVecOfLimbs (hM 3) (hM 2)
 
   let P := X.toPoint
   let Q := Y.toPoint
@@ -538,7 +542,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
 
     have xDiffSub : ((R43x6.decode' xDiff : ℤ) : ZMod p) = xn1Val - xn2Val + pVal := by
       rw [show xn1Val = _ from hres 1, show xn2Val = _ from hres 0, pValIsP, add_zero, hxd,
-        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 1) (hM 0),
+        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVecOfLimbs (hM 1) (hM 0),
         intCast_decodeLimbs_subFast]
 
     -- the permuted multiply's elements 1 and 0 are `xn1 = X₁·Z₂` and `xn2 = Z₁·X₂`
@@ -576,7 +580,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
 
     have yDiffSub : ((R43x6.decode' yDiff : ℤ) : ZMod p) = yn1Val - yn2Val + pVal := by
       rw [show yn1Val = _ from hres 3, show yn2Val = _ from hres 2, pValIsP, add_zero, hyd,
-        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVec (hM 3) (hM 2),
+        ← R43x6.decodeLimbs_extractLimbs, extractLimbs_subFastVecOfLimbs (hM 3) (hM 2),
         intCast_decodeLimbs_subFast]
 
     -- the permuted multiply's elements 3 and 2 are `yn1 = Y₁·Z₂` and `yn2 = Z₁·Y₂`
