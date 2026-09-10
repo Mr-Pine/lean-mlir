@@ -612,7 +612,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
       · exact hqr
       all_goals exact Ne.symm (fieldLocal_ne_below hbq)
   have hm₀ : sLocals.RefWF [r, px, py, pt, pu, pv] :=
-    ⟨hwf, widen hm.gd, widen hm.gone, widen hm.gm1⟩
+    ⟨hwf, widen hm.gd, widen hm.gone, widen hm.gm1, widen hm.gy0, widen hm.gy1⟩
 
 
   -- the frame is sealed in `F₀` now; the raw chain facts are spent
