@@ -473,52 +473,28 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   simp [hv36]
   clear hv36
 
-  -- `c² · v = u · (u v⁷) ^ ((p-1)/4)`: the classification's left-hand side
-  have hcheckVal := calc
-    (readFieldElem hu * readFieldElem hv ^ 7) ^
-                  7237005577332262213973186563042994240829374041602535252466099000494570602493 *
-                (readFieldElem hu * readFieldElem hv ^ 3) *
-              ((readFieldElem hu * readFieldElem hv ^ 7) ^
-                  7237005577332262213973186563042994240829374041602535252466099000494570602493 *
-                (readFieldElem hu * readFieldElem hv ^ 3)) *
-            readFieldElem hv =
-      (readFieldElem hu * readFieldElem hv ^ 7) ^ ((p-5)/8) *
-                (readFieldElem hu * readFieldElem hv ^ 3) *
-              ((readFieldElem hu * readFieldElem hv ^ 7) ^ ((p-5)/8) *
-                (readFieldElem hu * readFieldElem hv ^ 3)) *
-            readFieldElem hv := by simp only [p]; ring
-    _ = readFieldElem hu ^ ((p-5)/8) * (readFieldElem hv ^ 7) ^ ((p-5)/8) * readFieldElem hu * readFieldElem hv ^ 3 *
-              readFieldElem hu ^ ((p-5)/8) * (readFieldElem hv ^ 7) ^ ((p-5)/8) *
-                readFieldElem hu * readFieldElem hv ^ 3 *
-            readFieldElem hv := by ring
-    _ = readFieldElem hu ^ ((p-5)/8) * readFieldElem hu ^ ((p-5)/8) * readFieldElem hu * readFieldElem hu *
-        (readFieldElem hv ^ 7) ^ ((p-5)/8) * (readFieldElem hv ^ 7) ^ ((p-5)/8) * readFieldElem hv ^ 3 * readFieldElem hv ^ 3 *
-        readFieldElem hv := by ring
-    _ = readFieldElem hu ^ ((p-5)/8 * 2 + 2) *
-        (readFieldElem hv ^ 7) ^ ((p-5)/8 * 2) * readFieldElem hv ^ 3 * readFieldElem hv ^ 3 *
-        readFieldElem hv := by ring
-    _ = readFieldElem hu ^ ((2^255 - 24)/4 + 2) *
-        (readFieldElem hv) ^ ((2^255 - 24)/4 * 7 + 6) *
-        readFieldElem hv := by simp only [p]; ring
-    _ = readFieldElem hu ^ ((2^255 - 24)/4 + 2) *
-        (readFieldElem hv) ^ (2^253 * 7 - 36) *
-        readFieldElem hv := by simp only [p]; ring
-    _ = readFieldElem hu ^ ((p - 1) / 4 + 1) * readFieldElem hv ^ (7 * ((p - 1) / 4)) := by simp only [p]; ring
-    _ = readFieldElem hu * (readFieldElem hu * readFieldElem hv ^ 7) ^ ((p - 1) / 4) := by ring
+  -- `c² · v = u · (u v⁷) ^ ((p-1)/4)`: the classification's left-hand side.
+  -- The candidate is the one both backends form, so the algebra behind it is
+  -- shared -- `Curve.lean`'s `sqrtCandidate_sq`.
+  have hcheckVal :
+      (readFieldElem hu * readFieldElem hv ^ 7) ^ 7237005577332262213973186563042994240829374041602535252466099000494570602493 *
+              (readFieldElem hu * readFieldElem hv ^ 3) *
+            ((readFieldElem hu * readFieldElem hv ^ 7) ^ 7237005577332262213973186563042994240829374041602535252466099000494570602493 *
+              (readFieldElem hu * readFieldElem hv ^ 3)) *
+          readFieldElem hv
+        = readFieldElem hu * (readFieldElem hu * readFieldElem hv ^ 7) ^ ((p - 1) / 4) := by
+    rw [← Ed25519.sqrtCandidate_sq (readFieldElem hu) (readFieldElem hv),
+      Ed25519.p_sub_five_div_eight]
+    ring
 
   set w := readFieldElem hu * readFieldElem hv ^ 7
 
   -- `X = w ^ ((p-1)/4)` is *a* square root of `w ^ (p/2)`, so the two
   -- comparisons together say exactly that the latter is `1`
-  have hOr : (w ^ ((p - 1) / 4) = -1 ∨ w ^ ((p - 1) / 4) = 1) ↔ w ^ (p / 2) = 1 := by
-    constructor
-    · rintro (h | h) <;>
-        rw [show p / 2 = (p - 1) / 4 * 2 from by norm_num [p], pow_mul, h] <;> ring
-    · intro h
-      have h2 : w ^ ((p - 1) / 4) * w ^ ((p - 1) / 4) = 1 := by
-        rw [← pow_add, show (p - 1) / 4 + (p - 1) / 4 = p / 2 from by norm_num [p]]
-        exact h
-      exact (mul_self_eq_one_iff.mp h2).symm
+  -- `X = w ^ ((p-1)/4)` is *a* square root of `w ^ (p/2)`, so the two
+  -- comparisons together say exactly that the latter is `1`
+  have hOr : (w ^ ((p - 1) / 4) = -1 ∨ w ^ ((p - 1) / 4) = 1) ↔ w ^ (p / 2) = 1 :=
+    Ed25519.pow_quarter_eq_pm_one_iff w
 
   constructor
 
@@ -533,12 +509,8 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     rw [of_not_not huNZ]
     norm_num
 
-  have squareEq : (∃ x, x ^ 2 * readFieldElem hv = readFieldElem hu) ↔ IsSquare (readFieldElem hu / readFieldElem hv) := by
-    constructor
-    · rintro ⟨x, hx⟩
-      exact ⟨x, (div_eq_iff hvNZ).mpr (by rw [← hx]; ring)⟩
-    · rintro ⟨r, hr⟩
-      exact ⟨r, by rw [sq, ← hr, div_mul_cancel₀ _ hvNZ]⟩
+  have squareEq : (∃ x, x ^ 2 * readFieldElem hv = readFieldElem hu)
+      ↔ IsSquare (readFieldElem hu / readFieldElem hv) := (Ed25519.isSquare_div_iff hvNZ).symm
 
   rw [hcheckVal]
 
@@ -573,18 +545,9 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
 
   simp only [squareEq, ← ZMod.euler_criterion p hwNZ]
 
-  have isSqEq : IsSquare w ↔ IsSquare (readFieldElem hu / readFieldElem hv) := by
-    have v8Sq : IsSquare (readFieldElem hv ^ 8) := by
-      apply Even.isSquare_pow
-      exact Even.two_nsmul 4
-
-    -- `u v⁷ = (u/v) · v⁸`, so the two differ by the square `v⁸`
-    replace hw : w = (readFieldElem hu / readFieldElem hv) * (readFieldElem hv ^ 8) := by
-      simp only [w]; field_simp
-    rw [hw]
-    refine ⟨fun h => ?_, fun h => IsSquare.mul h v8Sq⟩
-    have sq := IsSquare.div h v8Sq
-    rwa [mul_div_cancel_right₀ _ (pow_ne_zero 8 hvNZ)] at sq
+  -- `u v⁷ = (u/v) · v⁸`, so the two differ by the square `v⁸`
+  have isSqEq : IsSquare w ↔ IsSquare (readFieldElem hu / readFieldElem hv) :=
+    Ed25519.isSquare_mul_pow_seven_iff hvNZ
 
   simp [isSqEq]
 

@@ -253,38 +253,57 @@ is what makes it the decision the specifications are stated with. -/
 /-- The exponent both `fd_f25519_pow22523` and `fd_r43x6_pow22523_2` raise to. -/
 theorem p_sub_five_div_eight : (p - 5) / 8 = 2 ^ 252 - 3 := by norm_num [p]
 
+/-- **What the candidate root squares to.** `x = u·v³·(u v⁷)^((p-5)/8)` has
+`x²·v = u·(u v⁷)^((p-1)/4)`, which is what turns the region's comparison into
+Euler's criterion. Both backends form the same candidate, so both need this. -/
+theorem sqrtCandidate_sq (u v : ZMod p) :
+    (u * v ^ 3 * (u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 * v
+      = u * (u * v ^ 7) ^ ((p - 1) / 4) := by
+  have e1 : (p - 5) / 8 * 2 = (p - 5) / 4 := by norm_num [p]
+  have e2 : (p - 5) / 4 + 1 = (p - 1) / 4 := by norm_num [p]
+  have h8 : ((u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 = (u * v ^ 7) ^ ((p - 5) / 4) := by
+    rw [← pow_mul, e1]
+  rw [← e2, pow_add, pow_one, mul_pow, h8]
+  ring
+
+/-- **The fourth-power root is `±1` exactly when Euler's criterion holds**:
+`w^((p-1)/4)` squares to `w^(p/2)`, so the region's two comparisons together
+say that `w` is a square. -/
+theorem pow_quarter_eq_pm_one_iff (w : ZMod p) :
+    (w ^ ((p - 1) / 4) = -1 ∨ w ^ ((p - 1) / 4) = 1) ↔ w ^ (p / 2) = 1 := by
+  have e3 : (p - 1) / 4 * 2 = p / 2 := by norm_num [p]
+  rw [← e3, pow_mul, sq, mul_self_eq_one_iff]
+  exact or_comm
+
+/-- **`u v⁷` and `u/v` are squares together**: they differ by `v⁸`. What lets
+Euler's criterion, which the region runs on `u v⁷`, decide the ratio the
+specification is stated with. -/
+theorem isSquare_mul_pow_seven_iff {u v : ZMod p} (hv : v ≠ 0) :
+    IsSquare (u * v ^ 7) ↔ IsSquare (u / v) := by
+  have v8 : IsSquare ((v : ZMod p) ^ 8) := Even.isSquare_pow (Even.two_nsmul 4) _
+  have hrw : u * v ^ 7 = (u / v) * v ^ 8 := by field_simp
+  rw [hrw]
+  refine ⟨fun h => ?_, fun h => IsSquare.mul h v8⟩
+  have := IsSquare.div h v8
+  rwa [mul_div_cancel_right₀ _ (pow_ne_zero 8 hv)] at this
+
 /-- **The candidate root's test.** `x²·v = ±u` exactly when `u/v` is a
-square: `x²·v = u·(u v⁷)^((p-1)/4)`, whose square is Euler's criterion for
-`u v⁷`, and `u v⁷` differs from `u/v` by the square `v⁸`. -/
+square: the three lemmas above, composed. -/
 theorem sqrtCandidate_iff {u v x : ZMod p} (hv : v ≠ 0)
     (hx : x = u * v ^ 3 * (u * v ^ 7) ^ ((p - 5) / 8)) :
     (x ^ 2 * v = u ∨ x ^ 2 * v = -u) ↔ IsSquare (u / v) := by
   by_cases hu : u = 0
   · subst hu
     simp [hx]
-  · have ht0 : u * v ^ 7 ≠ 0 := mul_ne_zero hu (pow_ne_zero _ hv)
-    have e1 : (p - 5) / 8 * 2 = (p - 5) / 4 := by norm_num [p]
-    have e2 : (p - 5) / 4 + 1 = (p - 1) / 4 := by norm_num [p]
-    have e3 : (p - 1) / 4 * 2 = p / 2 := by norm_num [p]
-    have h8 : ((u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 = (u * v ^ 7) ^ ((p - 5) / 4) := by
-      rw [← pow_mul, e1]
-    have key : x ^ 2 * v = u * (u * v ^ 7) ^ ((p - 1) / 4) := by
-      rw [hx, ← e2, pow_add, pow_one, mul_pow, h8]
-      ring
-    have hsq : IsSquare (u * v ^ 7) ↔ IsSquare (u / v) := by
-      have v8 : IsSquare ((v : ZMod p) ^ 8) := Even.isSquare_pow (Even.two_nsmul 4) _
-      have hrw : u * v ^ 7 = (u / v) * v ^ 8 := by field_simp
-      rw [hrw]
-      refine ⟨fun h => ?_, fun h => IsSquare.mul h v8⟩
-      have := IsSquare.div h v8
-      rwa [mul_div_cancel_right₀ _ (pow_ne_zero 8 hv)] at this
-    rw [key, ← hsq, ZMod.euler_criterion p ht0, ← e3, pow_mul, sq, mul_self_eq_one_iff]
+  · rw [hx, sqrtCandidate_sq, ← isSquare_mul_pow_seven_iff (u := u) hv,
+      ZMod.euler_criterion p (mul_ne_zero hu (pow_ne_zero _ hv)),
+      ← pow_quarter_eq_pm_one_iff]
     constructor
     · rintro (h | h)
-      · exact Or.inl (mul_left_cancel₀ hu (by rw [h]; ring))
       · exact Or.inr (mul_left_cancel₀ hu (by rw [h]; ring))
+      · exact Or.inl (mul_left_cancel₀ hu (by rw [h]; ring))
     · rintro (h | h)
-      · exact Or.inl (by rw [h]; ring)
       · exact Or.inr (by rw [h]; ring)
+      · exact Or.inl (by rw [h]; ring)
 
 end Ed25519

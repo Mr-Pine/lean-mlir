@@ -413,7 +413,9 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
 
   set y := decodeBytes (readBuf hbuf)
 
-  let point : Point := ⟨xv, y, 1, (xv * y)⟩
+  -- the point a root and a `y` name: `Curve.lean`'s `decodedPoint`, the same
+  -- one the avx512 backend's QUAD holds
+  let point : Point := Ed25519.decodedPoint xv y
 
   -- `r`'s block reads the same in `w₁` as on entry: `%37` is the only write to
   -- it, and it is the same four splices on either memory.
@@ -453,16 +455,14 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
   have hZv := (readFieldElem_eq_of_readLimb hlZ).trans state₁.valone
   have hpoint : readPoint hpt = point := hcongr.trans (readPoint_eq_of hptw hXv hYv hTv hZv)
   rw [hpoint]
-  refine ⟨?_, (by simp [point]), by simp [point, y], by simp [point, Point.x, Point.y], ?xsign⟩
+  refine ⟨Ed25519.onCurve_decodedPoint hsq, by simp [point], by simp [point, y],
+    by simp [point], ?xsign⟩
 
   case xsign =>
     simp [point]
     intro h
     simp [h] at hsgn
     exact hsgn
-
-  simp [point, Point.x, Point.y, OnCurve]
-  linear_combination -hsq
 
 end PointFromBytes
 
