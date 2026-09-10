@@ -156,13 +156,6 @@ theorem isVecPtr_thru {m m' : MemoryState} {q p : Pointer} {wd : Nat} {x : BitVe
     (hm : m' = m.splice q x) (h : IsVecPtr m p) : IsVecPtr m' p := by
   subst hm; exact ⟨fits_splice h.1, h.2⟩
 
-/-- A slot fits in a memory a *previous* slot's store has already extended:
-the base of slot `k`'s own splice is `sAlloc.mem` with splices `0 … k-1` on
-top, which is why `hslot k` alone does not read slot `k` back. -/
-theorem isVecPtr_splice {m : MemoryState} {p q : Pointer} {wd : Nat} {x : BitVec wd}
-    (h : IsVecPtr m p) : IsVecPtr (m.splice q x) p :=
-  ⟨fits_splice h.1, h.2⟩
-
 /-- A `vector<4xi64>` slot reads the same in two states that agree on its
 block: `readWv`'s counterpart of `readVec?_of_live?_eq`, with the witness
 carried rather than existentially quantified. -/

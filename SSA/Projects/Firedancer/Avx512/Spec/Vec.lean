@@ -26,6 +26,27 @@ def readVec? (p : Pointer) (m : MemoryState) : Option (Vector (BitVec 64) 8) := 
   let block ← m.live? p.id
   return Vector.ofFn fun j => block.bytes.extractLsb' (p.offsetInBits + 64 * j.val) 64
 
+/-- A store leaves live blocks and their sizes alone, so a vector that fitted
+at `p` before still fits after a splice anywhere -- the `fd_r43x6_t`
+counterpart of `Ref.isFieldElemPtr_splice`. -/
+theorem isVecPtr_splice {m : MemoryState} {p q : Pointer} {wd : Nat} {x : BitVec wd}
+    (h : IsVecPtr m p) : IsVecPtr (m.splice q x) p :=
+  ⟨fits_splice h.1, h.2⟩
+
+/-- `IsVecPtr` speaks only of a live block and its size, and `≈` equates
+those, so it transports along an equivalence -- the form in which a spec's
+`s' ≈ ...` hands the readback its proof. -/
+theorem isVecPtr_of_equiv {s s' : GlobalState} {p : Pointer}
+    (h : s ≈ s') (hp : IsVecPtr s.mem p) : IsVecPtr s'.mem p := by
+  obtain ⟨⟨block, hblk, hlen⟩, hoff⟩ := hp
+  have hlive := h.live p.id
+  simp only [MemoryState.live?, hblk] at hlive
+  -- `live?` is a `match`, so `hlive` is one too; splitting names the branch
+  -- and hands over the scrutinee's equation, which is the lookup wanted.
+  replace hlive : s'.mem[p.id]? = some (Block.live block) := by
+    split at hlive <;> simp_all
+  exact ⟨⟨block, hlive, hlen⟩, hoff⟩
+
 theorem readVec?_isSome {m : MemoryState} {p : Pointer} (h : IsVecPtr m p) :
     (readVec? p m).isSome := by
   obtain ⟨⟨block, hblk, -⟩, -⟩ := h
