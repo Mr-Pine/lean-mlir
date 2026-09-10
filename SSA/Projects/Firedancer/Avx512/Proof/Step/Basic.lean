@@ -40,6 +40,20 @@ theorem readVec?_splice_ne {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitV
     (hq : q.id ≠ p.id) : readVec? p (m.splice q x) = readVec? p m :=
   readVec?_of_live?_eq (live?_splice_ne hq)
 
+/-- The readback itself transports, not just the pointer fact. -/
+theorem readVec_of_equiv {s s' : GlobalState} {q : Pointer}
+    (h : s ≈ s') (hq : IsVecPtr s.mem q) :
+    readVec (isVecPtr_of_equiv h hq) = readVec hq := by
+  simp only [readVec, readVec?_of_live?_eq (h.live q.id).symm]
+
+/-- A QUAD read looks only at the block it addresses, so two memories that
+agree on that block read the same QUAD -- `Ref.readPoint_of_live?_eq`'s twin. -/
+theorem readQuad_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (hl : m'.live? p.id = m.live? p.id)
+    (h : IsQuadPtr m p) (h' : IsQuadPtr m' p) :
+    readQuad h' = readQuad h := by
+  simp only [readQuad, readQuad?, hl]
+
 /-- ... and one it did reads back what was written, provided the slot fits. -/
 theorem readVec?_splice_self {m : MemoryState} {p : Pointer} (v : Vector (BitVec 64) 8)
     (hp : IsVecPtr m p) : readVec? p (m.splice p (vecBV v)) = some v := by

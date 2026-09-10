@@ -59,4 +59,16 @@ def readVec {p : Pointer} {m : MemoryState} (h : IsVecPtr m p) : Vector (BitVec 
 /-- The field element eight lanes stand for, as `decodeVec` reads it. -/
 abbrev vecValue (v : Vector (BitVec 64) 8) : ZMod p := decodeVec (by omega) v
 
+/-- `fd_r43x6_zero()`: the all-zero pattern, and the vector both of
+`fd_r43x6_ge_decode2`'s failure paths store. -/
+def zeroVec : Vector (BitVec 64) 8 := Vector.replicate 8 0#64
+
+/-- `fd_r43x6_p()`: `p`'s limbs in lanes 0-5, lanes 6 and 7 clear -- the second
+representation of zero, and the region's own `dense<[8796093022189, …]>`
+constant. The lanes are `2^43-19, 2^43-1, 2^43-1, 2^43-1, 2^43-1, 2^40-1`,
+written as the literals the artifact carries so `denote_dense` matches. -/
+def pVec : Vector (BitVec 64) 8 :=
+  #v[8796093022189, 8796093022207, 8796093022207, 8796093022207, 8796093022207,
+     1099511627775, 0, 0]
+
 end Firedancer.Avx512

@@ -1,4 +1,5 @@
 import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_frombytes_2x
+import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_frombytes_2x
 
@@ -118,14 +119,6 @@ theorem Avx512.live?_writeQuad_ne {m : MemoryState} {p : Pointer} {q : Avx512.Qu
     {b : BlockId} (h : p.id ≠ b) : (m.writeQuad p q).live? b = m.live? b := by
   simp only [MemoryState.writeQuad, live?_splice_ne (p := p.withOffset 128) h,
     live?_splice_ne (p := p.withOffset 64) h, live?_splice_ne h]
-
-/-- A QUAD read looks only at the block it addresses, so two memories that
-agree on that block read the same QUAD -- `Ref.readPoint_of_live?_eq`'s twin. -/
-theorem Avx512.readQuad_of_live?_eq {m m' : MemoryState} {p : Pointer}
-    (hl : m'.live? p.id = m.live? p.id)
-    (h : Avx512.IsQuadPtr m p) (h' : Avx512.IsQuadPtr m' p) :
-    Avx512.readQuad h' = Avx512.readQuad h := by
-  simp only [Avx512.readQuad, Avx512.readQuad?, hl]
 
 /-- **Noninterference.** A store of a QUAD at `r` leaves a QUAD at another
 block alone. -/

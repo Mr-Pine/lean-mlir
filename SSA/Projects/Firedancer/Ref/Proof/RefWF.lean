@@ -5,12 +5,13 @@ import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
 import SSA.Projects.Firedancer.Ref.Proof.Globals
 import SSA.Projects.Firedancer.Curve
 import SSA.Projects.Firedancer.Ed25519
+import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_affine_is_small_order
 
 /-!
 # A state the `ref` module can run in
 
 `GlobalState.WF` says the state is well-formed; `RefWF` says it also carries
-the three constants `ref.mlir` declares, so that a region -- or a callee doing
+the five constants `ref.mlir` declares, so that a region -- or a callee doing
 its own `llvm.mlir.addressof` -- finds them where it expects. The carry
 lemmas take it past a step, which is where the `apart` list is spent.
 -/
@@ -67,9 +68,9 @@ abbrev Loaded (s : GlobalState) (name : String) (val : ZMod _root_.p)
   ∃ q : Pointer, FieldGlobal s name q val ∧ Apart q apart
 
 /-- `s` is a state the `ref` module can run in: well-formed in
-`GlobalState.WF`'s sense, and carrying the three `ref.mlir` constants the call
+`GlobalState.WF`'s sense, and carrying the five `ref.mlir` constants the call
 graph below it reads, each apart from every pointer the region writes through
--- here just `r`, so the theorem passes `[r]`.
+-- for `fd_ed25519_point_frombytes` just `r`, so that theorem passes `[r]`.
 
 `@fd_f25519_d` and `@fd_f25519_one` the region addresses itself, at `%7` and
 `%13`, so only their *values* are wanted after entry. `@fd_f25519_sqrtm1` the
@@ -77,12 +78,21 @@ region never mentions: `fd_f25519_sqrt_ratio` reaches it at its own `%6`, so
 its `addr` half has to survive the walk as far as `%29` -- which is what makes
 the symbol table, not just memory, part of what a step must carry.
 
-`wf` is what puts the three blocks below the frame, via `FieldGlobal.below`. -/
+The last two are the low-order table:
+`fd_ed25519_affine_is_small_order` addresses both at `%6` and `%12` and hands
+them to `fd_f25519_eq`. They live here rather than in that region's
+specification for the same reason as the other three -- their addresses are the
+loader's to choose, so a spec that named them would be quantifying over
+something the module already fixed.
+
+`wf` is what puts the five blocks below the frame, via `FieldGlobal.below`. -/
 structure _root_.LeanMLIR.GlobalState.RefWF (s : GlobalState) (apart : List Pointer) : Prop where
   wf : s.WF
   gd : Loaded s "fd_f25519_d" Ed25519.d apart
   gone : Loaded s "fd_f25519_one" 1 apart
   gm1 : Loaded s "fd_f25519_sqrtm1" _root_.sqrtm1 apart
+  gy0 : Loaded s "fd_ed25519_order8_point_y0" Ed25519.order8_y0 apart
+  gy1 : Loaded s "fd_ed25519_order8_point_y1" Ed25519.order8_y1 apart
 
 section RefWFCarry
 
@@ -112,6 +122,8 @@ theorem _root_.LeanMLIR.GlobalState.RefWF.wrote {dst : Pointer} (hw : w.RefWF ap
   gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
   gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
   gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
+  gy0 := let ⟨q, hg, hq⟩ := hw.gy0; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
+  gy1 := let ⟨q, hg, hq⟩ := hw.gy1; ⟨q, carryGlobal st (hq dst hdst) hg, hq⟩
 
 /-- A shorter `apart` list is a weaker claim: the constants stay apart from
 whatever the caller still lists. -/
@@ -121,6 +133,8 @@ theorem _root_.LeanMLIR.GlobalState.RefWF.mono {apart' : List Pointer}
   gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, hg, fun p hp => hq p (h hp)⟩
   gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, hg, fun p hp => hq p (h hp)⟩
   gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, hg, fun p hp => hq p (h hp)⟩
+  gy0 := let ⟨q, hg, hq⟩ := hw.gy0; ⟨q, hg, fun p hp => hq p (h hp)⟩
+  gy1 := let ⟨q, hg, hq⟩ := hw.gy1; ⟨q, hg, fun p hp => hq p (h hp)⟩
 
 /-- `RefWF` across a whole call, given only what it left of memory: a step
 that touched no block the state is `Apart` from keeps the constants. `wrote`
@@ -140,7 +154,9 @@ theorem _root_.LeanMLIR.GlobalState.RefWF.untouched (hw : w.RefWF apart) (hwf : 
   { wf := hwf
     gd := let ⟨q, hg', hq⟩ := hw.gd; ⟨q, carry hq hg', hq⟩
     gone := let ⟨q, hg', hq⟩ := hw.gone; ⟨q, carry hq hg', hq⟩
-    gm1 := let ⟨q, hg', hq⟩ := hw.gm1; ⟨q, carry hq hg', hq⟩ }
+    gm1 := let ⟨q, hg', hq⟩ := hw.gm1; ⟨q, carry hq hg', hq⟩
+    gy0 := let ⟨q, hg', hq⟩ := hw.gy0; ⟨q, carry hq hg', hq⟩
+    gy1 := let ⟨q, hg', hq⟩ := hw.gy1; ⟨q, carry hq hg', hq⟩ }
 
 /-- A call that moved nothing -- `fd_f25519_sgn` -- leaves them alone too, and
 needs no `Apart`. -/
@@ -150,6 +166,8 @@ theorem _root_.LeanMLIR.GlobalState.RefWF.of_equiv (hw : w.RefWF apart) (he : w 
   gd := let ⟨q, hg, hq⟩ := hw.gd; ⟨q, hg.of_equiv he, hq⟩
   gone := let ⟨q, hg, hq⟩ := hw.gone; ⟨q, hg.of_equiv he, hq⟩
   gm1 := let ⟨q, hg, hq⟩ := hw.gm1; ⟨q, hg.of_equiv he, hq⟩
+  gy0 := let ⟨q, hg, hq⟩ := hw.gy0; ⟨q, hg.of_equiv he, hq⟩
+  gy1 := let ⟨q, hg, hq⟩ := hw.gy1; ⟨q, hg.of_equiv he, hq⟩
 
 end RefWFCarry
 

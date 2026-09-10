@@ -15,14 +15,6 @@ open Ed25519
 
 /-! ## The two patterns `fd_f25519_is_zero` tests, and the difference it reads -/
 
-/-- `fd_r43x6_zero()`. -/
-def zeroVec : Vector (BitVec 64) 8 := #v[0, 0, 0, 0, 0, 0, 0, 0]
-
-/-- `fd_r43x6_p()`: `p`'s limbs, the second representation of zero. -/
-def pVec : Vector (BitVec 64) 8 :=
-  #v[8796093022189, 8796093022207, 8796093022207, 8796093022207, 8796093022207,
-     1099511627775, 0, 0]
-
 /-- What `fd_f25519_sub` leaves at its destination:
 `fd_r43x6_fold_signed( fd_r43x6_sub_fast( x, y ) )`. -/
 def subFoldVec (x y : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
@@ -147,7 +139,7 @@ theorem subFastVec_reduced_bounds {x y : Vector (BitVec 64) 8}
 
 /-- The limbs the fold hands back are `u44`, which is what reads the result as
 a `ℕ`-limbed vector again. -/
-theorem subFoldVec_bounds {x y : Vector (BitVec 64) 8}
+theorem subFoldVec_bounds_reduced {x y : Vector (BitVec 64) 8}
     (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
     0 ≤ R43x6.extractLimbs (subFoldVec x y) k
       ∧ R43x6.extractLimbs (subFoldVec x y) k < 2 ^ 44 :=
@@ -155,7 +147,7 @@ theorem subFoldVec_bounds {x y : Vector (BitVec 64) 8}
 
 /-- **The element the difference holds**: `a - b`, the bias and the `p` of
 `sub_fast` both having cancelled. -/
-theorem vecValue_subFoldVec {x y : Vector (BitVec 64) 8}
+theorem vecValue_subFoldVec_reduced {x y : Vector (BitVec 64) 8}
     (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) :
     vecValue (subFoldVec x y) = vecValue x - vecValue y := by
   -- the limbs the fold saw, decoded: `a - b + p`
@@ -172,7 +164,7 @@ theorem vecValue_subFoldVec {x y : Vector (BitVec 64) 8}
       + (p : ℤ) = _
     rw [R43x6.decodeLimbs_extractLimbs, R43x6.decodeLimbs_extractLimbs]
   have hcast : ((R43x6.decode' (subFoldVec x y) : ℤ) : ZMod p) = vecValue (subFoldVec x y) :=
-    decode'_cast_eq_vecValue _ fun k => by have := subFoldVec_bounds hx hy k; omega
+    decode'_cast_eq_vecValue _ fun k => by have := subFoldVec_bounds_reduced hx hy k; omega
   rw [← hcast]
   show ((R43x6.decode' (acpBiasVec (subFastVec x y)) : ℤ) : ZMod p) = _
   rw [decode'_acpBiasVec (subFastVec_reduced_bounds hx hy), hz,
@@ -221,7 +213,7 @@ def neMask (x c : Vector (BitVec 64) 8) : BitVec 8 :=
 
 /-- **What the compare and the bitcast leave.** Both operands are defined, so
 no lane of the mask is poison and the `bitcast` is the flat round trip. -/
-theorem bitcast_vicmp_ne (x c : Vector (BitVec 64) 8) :
+theorem bitcast_vicmp_ne_neMask (x c : Vector (BitVec 64) 8) :
     SLLVM.bitcast (.vector 8 (.bitvec (.concrete 1))) (.bitvec (.concrete 8))
         (SLLVM.vicmp LLVM.IntPred.ne (x.map PoisonOr.value) (c.map PoisonOr.value))
       = PoisonOr.value (neMask x c) := by
@@ -292,8 +284,8 @@ theorem isZero_pattern (q : Pointer) (s : GlobalState) (hs : s.WF) (hq : IsVecPt
     interval_cases i <;> simp [LLVM.Ty.dense, pVec]
   rw [hzero] at hv6
   rw [hpv] at hv9
-  rw [hv6, bitcast_vicmp_ne] at hv7
-  rw [hv9, bitcast_vicmp_ne] at hv10
+  rw [hv6, bitcast_vicmp_ne_neMask] at hv7
+  rw [hv9, bitcast_vicmp_ne_neMask] at hv10
   eval_llvm 8
   eval_llvm 11
   eval_llvm 12
@@ -460,10 +452,10 @@ theorem subFoldVec_pattern_iff {x y : Vector (BitVec 64) 8}
     (subFoldVec x y = zeroVec ∨ subFoldVec x y = pVec) ↔ vecValue x = vecValue y := by
   constructor
   · rintro (h | h)
-    · have hv := vecValue_subFoldVec hx hy
+    · have hv := vecValue_subFoldVec_reduced hx hy
       rw [h, vecValue_zeroVec] at hv
       exact sub_eq_zero.mp hv.symm
-    · have hv := vecValue_subFoldVec hx hy
+    · have hv := vecValue_subFoldVec_reduced hx hy
       rw [h, vecValue_pVec] at hv
       exact sub_eq_zero.mp hv.symm
   · intro h

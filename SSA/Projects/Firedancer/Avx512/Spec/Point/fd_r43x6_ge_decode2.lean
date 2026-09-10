@@ -47,9 +47,6 @@ abbrev Decodes (u : Vector (BitVec 64) 4) (q : Quad) : Prop :=
     ∧ point.T / point.Z = point.x * point.y
     ∧ (point.X ≠ 0 → (point.X.val % 2 = 0 ↔ wvSign u = false))
 
-/-- The zero vector both failure paths store. -/
-abbrev zeroVec : Vector (BitVec 64) 8 := Vector.replicate 8 0#64
-
 abbrev fd_r43x6_ge_decode2_spec (a03 a14 a25 sa b03 b14 b25 sb : Pointer) (s : GlobalState)
     (ha03 : IsVecPtr s.mem a03) (ha14 : IsVecPtr s.mem a14) (ha25 : IsVecPtr s.mem a25)
     (hb03 : IsVecPtr s.mem b03) (hb14 : IsVecPtr s.mem b14) (hb25 : IsVecPtr s.mem b25)

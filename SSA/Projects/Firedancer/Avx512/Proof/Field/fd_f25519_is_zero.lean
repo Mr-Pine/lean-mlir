@@ -3,6 +3,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Avx512.Proof.Quad
+import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 import SSA.Projects.Firedancer.Avx512.Proof.Sub
 import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Proof.Tactics
@@ -12,26 +13,22 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-/-- A `vector<8xi64>` load at `p` decodes to the eight lanes `readVec` reads. -/
-theorem unflatten_readVec {m : MemoryState} {p : Pointer} (h : IsVecPtr m p)
+/-- `Step.Basic.unflatten_readVec` with the width as the literal `512` the
+region's load carries, so `rw` matches. Shares the proof; only the statement is
+specialised -- the same delegation `fd_f25519_eq` and `fd_f25519_sub` use. -/
+private theorem unflatten_readVec_512 {m : MemoryState} {p : Pointer} (h : IsVecPtr m p)
     {blk : LiveBlock} (hblk : m.live? p.id = some blk) :
     LLVM.Ty.unflatten (.vector 8 (.bitvec (.concrete 64)))
         (blk.bytes.extractLsb' p.offsetInBits 512)
-      = (readVec h).map PoisonOr.value := by
-  apply Vector.ext
-  intro i hi
-  simp [readVec, readVec?, hblk, LLVM.Ty.unflatten]
-  show (blk.bytes.extractLsb' p.offsetInBits 512).extractLsb' (i * 64) 64
-      = blk.bytes.extractLsb' (p.offsetInBits + 64 * i) 64
-  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega),
-    Nat.mul_comm i 64]
+      = (readVec h).map PoisonOr.value :=
+  unflatten_readVec h hblk
 
 
 /-- One `wwl_eq`, as the region computes it: the `<8 x i1>` mask of a lane-wise
 `ne` compare of two defined vectors, bitcast to `i8`. The mask is a value, and
 it is zero exactly when the two vectors agree in every lane -- which is what
 the `icmp eq … , 0` that follows it reads. -/
-theorem bitcast_vicmp_ne (x c : Vector (BitVec 64) 8) :
+theorem bitcast_vicmp_ne_zero_iff (x c : Vector (BitVec 64) 8) :
     ∃ b : BitVec 8,
       SLLVM.bitcast (.vector 8 (.bitvec (.concrete 1))) (.bitvec (.concrete 8))
           (SLLVM.vicmp LLVM.IntPred.ne (x.map PoisonOr.value) (c.map PoisonOr.value))
@@ -75,15 +72,6 @@ theorem bitcast_vicmp_ne (x c : Vector (BitVec 64) 8) :
     show LLVM.Ty.flattenBV (.bitvec (.concrete 1)) m[i] = 0
     rw [hlane i hi]
     simp [LLVM.Ty.flattenBV, LLVM.Ty.width]
-
-/-- `fd_r43x6_zero()`: the all-zero pattern, the first of the two the region
-accepts. -/
-def zeroVec : Vector (BitVec 64) 8 := Vector.replicate 8 0
-
-/-- `fd_r43x6_p()` as the region's `dense<[8796093022189, …]>` constant: the
-limbs of `p` in lanes 0-5, lanes 6 and 7 clear. -/
-def pVec : Vector (BitVec 64) 8 :=
-  #v[2^43 - 19, 2^43 - 1, 2^43 - 1, 2^43 - 1, 2^43 - 1, 2^40 - 1, 0, 0]
 
 /-- **The two patterns are exactly the zeros.** On a nearly reduced element
 with lanes 6 and 7 clear, the bit-pattern test the region runs decides
@@ -183,7 +171,7 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
   denote_step_all v 4
   eval_consts v 0 4
   peel_load (.vector 8 (.bitvec (.concrete 64))), blk, q, hblk, s
-  rw [unflatten_readVec hq hlive]
+  rw [unflatten_readVec_512 hq hlive]
   have hd0 : LLVM.Ty.dense (.vector 8 (.bitvec (.concrete 64))) [0]
       = zeroVec.map PoisonOr.value := by
     apply Vector.ext
@@ -197,8 +185,8 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
     intro i hi
     simp only [LLVM.Ty.dense, Vector.getElem_ofFn, Vector.getElem_map]
     interval_cases i <;> rfl
-  obtain ⟨c0, hc0, hc0z⟩ := bitcast_vicmp_ne (readVec hq) zeroVec
-  obtain ⟨c1, hc1, hc1z⟩ := bitcast_vicmp_ne (readVec hq) pVec
+  obtain ⟨c0, hc0, hc0z⟩ := bitcast_vicmp_ne_zero_iff (readVec hq) zeroVec
+  obtain ⟨c1, hc1, hc1z⟩ := bitcast_vicmp_ne_zero_iff (readVec hq) pVec
   denote_step_reduce v 13 [hd0, hdp, hc0, hc1, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.zext, LLVM.zext?] fold
   denote_clear v 6 12
   rw [hv13]
