@@ -64,6 +64,28 @@ def ptrselect (c : LLVM.IntW 1) (x y : SLLVM.Ptr) : SLLVM.Ptr :=
 theorem ptrselect_value (b : BitVec 1) (x y : SLLVM.Ptr) :
     ptrselect (.value b) x y = if b = 1#1 then x else y := rfl
 
+/-! ### funnel shift -/
+
+/-- `llvm.intr.fshl` on bare bitvectors: concatenate `a` (high) with `b` (low),
+shift the `2w`-bit result left by `n mod w`, keep the high `w` bits.
+
+`n` is taken modulo `w`, which is what LLVM specifies for `fshl` -- unlike
+`shl`, an over-long shift amount is defined rather than poison. -/
+def fshlBV {w : Nat} (a b : BitVec w) (n : BitVec w) : BitVec w :=
+  ((a ++ b) <<< (n.toNat % w)).extractLsb' w w
+
+/-- `llvm.intr.fshl`, poison-propagating: poison in any operand is poison out.
+-/
+@[simp_sllvm]
+def fshl {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
+  match a, b, n with
+  | .value a, .value b, .value n => .value (fshlBV a b n)
+  | _, _, _ => .poison
+
+@[simp_sllvm]
+theorem fshl_value {w : Nat} (a b n : BitVec w) :
+    fshl (.value a) (.value b) (.value n) = .value (fshlBV a b n) := rfl
+
 /-! ### div / rem -/
 
 @[simp_sllvm]

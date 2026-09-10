@@ -456,6 +456,10 @@ instance : DialectParse SLLVM 0 where
             result types are supported"
     -- Stack-coloring metadata: no semantics here, but part of the artifact, so
     -- they parse (and denote to nothing) rather than having to be stripped.
+    -- `llvm.intr.fshl(hi, lo, amount)`, all three at the same integer type.
+    | "llvm.intr.fshl" => do
+        let args ← args.assumeArity 3
+        mkExprOf <| SLLVMOp.fshl (← getIntWidth args[0])
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true
     | "llvm.intr.lifetime.end"   => mkExprOf <| SLLVMOp.lifetime false
     -- Ternary Operations
