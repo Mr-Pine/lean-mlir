@@ -282,4 +282,79 @@ def unknownPredicate : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 1]
       "llvm.return"(%r) : (i1) -> ()
   }]
 
+/-! ## At vector types
+
+`llvm.icmp` on vectors compares lane for lane and returns an `l`-lane mask.
+The lanes are independent, so the two things worth pinning are that poison in
+one lane stays in that lane, and that the predicate numbering is read the same
+way it is for scalars.
+-/
+
+def vne : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32))),
+    SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32)))])
+    .pure [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 1)))] :=
+  [sllvm| {
+    ^entry(%a : vector<4xi32>, %b : vector<4xi32>):
+      %r = "llvm.icmp"(%a, %b) <{predicate = 1 : i64}> : (vector<4xi32>, vector<4xi32>) -> vector<4xi1>
+      "llvm.return"(%r) : (vector<4xi1>) -> ()
+  }]
+
+def veq : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32))),
+    SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32)))])
+    .pure [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 1)))] :=
+  [sllvm| {
+    ^entry(%a : vector<4xi32>, %b : vector<4xi32>):
+      %r = "llvm.icmp"(%a, %b) <{predicate = 0 : i64}> : (vector<4xi32>, vector<4xi32>) -> vector<4xi1>
+      "llvm.return"(%r) : (vector<4xi1>) -> ()
+  }]
+
+private def lhs : Vector (LLVM.IntW 32) 4 :=
+  #v[.value 1#32, .value 0#32, .value 7#32, .value 9#32]
+private def rhs : Vector (LLVM.IntW 32) 4 :=
+  #v[.value 1#32, .value 2#32, .value 7#32, .value 0#32]
+
+example : (vne.denote (Ctxt.Valuation.ofPair rhs lhs)).head
+    = #v[.value 0#1, .value 1#1, .value 0#1, .value 1#1] := rfl
+
+example : (veq.denote (Ctxt.Valuation.ofPair rhs lhs)).head
+    = #v[.value 1#1, .value 0#1, .value 1#1, .value 0#1] := rfl
+
+/-- A poison operand lane poisons its own result lane and no other. -/
+example :
+    (veq.denote (Ctxt.Valuation.ofPair
+      (#v[.poison, .value 2#32, .value 7#32, .value 0#32]) lhs)).head
+      = #v[.poison, .value 0#1, .value 1#1, .value 0#1] := rfl
+
+/-! The scalar tests above separate the signed and unsigned readings on `-1`
+against `1`; these do the same lane-wise, so a numbering that is right for
+scalars and wrong for vectors cannot hide. -/
+
+def vslt : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 8))),
+    SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 8)))])
+    .pure [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 1)))] :=
+  [sllvm| {
+    ^entry(%a : vector<2xi8>, %b : vector<2xi8>):
+      %r = "llvm.icmp"(%a, %b) <{predicate = 2 : i64}> : (vector<2xi8>, vector<2xi8>) -> vector<2xi1>
+      "llvm.return"(%r) : (vector<2xi1>) -> ()
+  }]
+
+def vult : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 8))),
+    SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 8)))])
+    .pure [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 1)))] :=
+  [sllvm| {
+    ^entry(%a : vector<2xi8>, %b : vector<2xi8>):
+      %r = "llvm.icmp"(%a, %b) <{predicate = 6 : i64}> : (vector<2xi8>, vector<2xi8>) -> vector<2xi1>
+      "llvm.return"(%r) : (vector<2xi1>) -> ()
+  }]
+
+example :
+    (vslt.denote (Ctxt.Valuation.ofPair
+      (#v[.value 1#8, .value 1#8]) (#v[.value 0xff#8, .value 0xff#8]))).head
+      = #v[.value 1#1, .value 1#1] := rfl
+
+example :
+    (vult.denote (Ctxt.Valuation.ofPair
+      (#v[.value 1#8, .value 1#8]) (#v[.value 0xff#8, .value 0xff#8]))).head
+      = #v[.value 0#1, .value 0#1] := rfl
+
 end LeanMLIR.SLLVM.Tests

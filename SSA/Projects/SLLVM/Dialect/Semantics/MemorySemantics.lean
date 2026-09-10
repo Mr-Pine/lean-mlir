@@ -248,6 +248,11 @@ def vselect {l w : Nat} (c : Vector (LLVM.IntW 1) l) (x y : Vector (LLVM.IntW w)
     Vector (LLVM.IntW w) l :=
   Vector.ofFn fun i => LLVM.select c[i] x[i] y[i]
 
+/-- `llvm.icmp` at vector types: lane for lane, the scalar compare. -/
+def vicmp {l w : Nat} (c : LLVM.IntPred) (x y : Vector (LLVM.IntW w) l) :
+    Vector (LLVM.IntW 1) l :=
+  Vector.ofFn fun i => LLVM.icmp c x[i] y[i]
+
 /-- `llvm.intr.memcpy`: copy `len` bytes from `src` to `dst`. Read before
 write, so a call whose ranges overlap -- which LLVM leaves undefined -- copies
 what was there rather than being UB. -/

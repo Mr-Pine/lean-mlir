@@ -65,6 +65,9 @@ inductive SLLVMOp where
   /-- `llvm.select` at vector types: `l` lanes of `w` bits, chosen lane for
   lane by an `l`-lane mask. The scalar form is `Op.select`. -/
   | vselect (l w : Nat)
+  /-- `llvm.icmp` at vector types: `l` lanes of `w` bits compared lane for
+  lane under `c`, giving an `l`-lane mask. The scalar form is `Op.icmp`. -/
+  | vicmp (l w : Nat) (c : LLVM.IntPred)
   /-- `llvm.intr.lifetime.start` / `.end` (`start` selects which). Stack
   coloring metadata: the model gives them no semantics at all -- they denote
   to nothing -- but the compiler brackets every `alloca` with them, so they
@@ -211,6 +214,8 @@ def_signature for SLLVM
   | .bitcast src dst => (Ty.arith src) -> Ty.arith dst
   | .vselect l w     => (Ty.arith (.vector l (.bitvec 1)), Ty.arith (.vector l (.bitvec w)),
                           Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w))
+  | .vicmp l w _     => (Ty.arith (.vector l (.bitvec w)), Ty.arith (.vector l (.bitvec w)))
+                          -> Ty.arith (.vector l (.bitvec 1))
   | .lifetime _      => (ptr) -[.impure]-> []
   -- LLVM operations with modified effect signature
   | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
@@ -282,6 +287,7 @@ def_denote for SLLVM
   | .memcpy => fun d s len => (fun _ => []ₕ) <$> SLLVM.memcpy d s len
   | .bitcast src dst => fun x => [SLLVM.bitcast src dst x]ₕ
   | .vselect _l _w => fun c x y => [SLLVM.vselect c x y]ₕ
+  | .vicmp _l _w c => fun x y => [SLLVM.vicmp c x y]ₕ
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
   | SLLVMOp.insertvalue _aggW off _fieldW =>
       fun agg v => [SLLVM.insertvalue off agg v]ₕ
@@ -359,6 +365,7 @@ instance : DialectPrint SLLVM where
     | .memcpy     => "llvm.intr.memcpy"
     | .bitcast .. => "llvm.bitcast"
     | .vselect .. => "llvm.select"
+    | .vicmp ..   => "llvm.icmp"
     | .ptricmp _  => "llvm.icmp"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp

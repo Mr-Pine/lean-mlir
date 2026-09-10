@@ -502,6 +502,8 @@ instance : DialectParse SLLVM 0 where
         | .ne => mkExprOf <| SLLVMOp.ptricmp false
         | _ => throw <| .generic "llvm.icmp at `!llvm.ptr`: only `eq` and `ne` \
             are supported"
+      | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+          mkExprOf <| SLLVMOp.vicmp l w c
       | _ => mkExprOf <| Op.icmp c (← binW)
     -- Unary Operations
     | "llvm.not"    => mkExprOf <| Op.not (← unW)
