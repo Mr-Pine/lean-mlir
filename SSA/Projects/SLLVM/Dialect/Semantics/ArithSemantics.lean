@@ -51,6 +51,19 @@ it away would leave both spellings in play. `ptricmp`'s reduction wants it, so
 it is named. -/
 theorem null_eq_value : Ptr.null = .value ⟨nullBlock, 0#64⟩ := rfl
 
+/-- `llvm.select` at `!llvm.ptr`: `LLVM.select`'s rule at pointer type. A
+poison condition is poison out; otherwise the chosen operand, poison or not,
+passes through unchanged. -/
+@[simp_sllvm]
+def ptrselect (c : LLVM.IntW 1) (x y : SLLVM.Ptr) : SLLVM.Ptr :=
+  match c with
+  | .value b => if b = 1#1 then x else y
+  | .poison => .poison
+
+@[simp_sllvm]
+theorem ptrselect_value (b : BitVec 1) (x y : SLLVM.Ptr) :
+    ptrselect (.value b) x y = if b = 1#1 then x else y := rfl
+
 /-! ### div / rem -/
 
 @[simp_sllvm]

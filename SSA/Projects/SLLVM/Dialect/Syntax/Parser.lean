@@ -463,6 +463,7 @@ instance : DialectParse SLLVM 0 where
         let args ← args.assumeArity 3
         match args[1] with
         | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ => mkExprOf <| SLLVMOp.vselect l w
+        | ⟨Ty.ptr, _⟩ => mkExprOf <| SLLVMOp.ptrselect
         | _ => mkExprOf <| Op.select (← getIntWidth args[1])
     -- Binary Operations
     | "llvm.and"      => mkBinary .and
