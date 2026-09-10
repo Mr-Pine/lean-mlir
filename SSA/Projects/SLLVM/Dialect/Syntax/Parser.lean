@@ -549,7 +549,13 @@ instance : DialectParse SLLVM 0 where
     | "llvm.insertvalue" => do
         let args ← args.assumeArity 2
         let aggW ← getIntWidth args[0]
-        let fieldW ← getIntWidth args[1]
+        -- The field may be any arithmetic type, not just a `bitvec`: an
+        -- AVX-512 `struct.fd_f25519` holds a `vector<8xi64>`.
+        -- `fieldArithTy` is the *operand's* type; `fieldTy` below is the field
+        -- the position walk selects out of the aggregate. They must agree in
+        -- width, which is what the check further down enforces.
+        let fieldArithTy ← argArithTy "llvm.insertvalue" args[1]
+        let fieldW := InstCombine.LLVM.Ty.width fieldArithTy
         let some (_, aggStx) := opStx.args[0]?
           | throw <| .generic "llvm.insertvalue: expected at least 1 operand"
         let .undefined s := aggStx
@@ -571,7 +577,7 @@ instance : DialectParse SLLVM 0 where
         unless fieldTyW == fieldW && 8 * offset + fieldW ≤ aggW do
           throw <| .generic s!"llvm.insertvalue: a {fieldW}-bit operand does not fit \
             the {fieldTyW}-bit field at byte offset {offset} of a {aggW}-bit aggregate"
-        mkExprOf <| SLLVMOp.insertvalue aggW (8 * offset) fieldW
+        mkExprOf <| SLLVMOp.insertvalue aggW (8 * offset) fieldArithTy
     -- Vector operations
     | "llvm.insertelement" =>
       let .vector l elem ← getOutputArithTy opStx

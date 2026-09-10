@@ -96,9 +96,16 @@ inductive SLLVMOp where
   | ptricmp (eq : Bool)
   /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
   modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
-  size; see the parser's `mkArithTy`), so inserting a field is splicing
-  `fieldW` bits in at bit offset `offBits`. -/
-  | insertvalue (aggW offBits fieldW : Nat)
+  size; see the parser's `mkArithTy`), so inserting a field is splicing the
+  field's `LLVM.Ty.width fieldTy` bits in at bit offset `offBits`.
+
+  The field is carried as a full `LLVM.Ty`, not a width, because it need not be
+  a `bitvec`: the AVX-512 `struct.fd_f25519` holds a `vector<8xi64>`, and a
+  global's initialiser inserts one. `LLVM.Ty.flatten` is what puts an arbitrary
+  arithmetic value into the aggregate's flat layout, poison-propagating per
+  lane; at `.bitvec w` it is the identity (`flatten_bitvec`), so a bitvec field
+  behaves exactly as it did when this carried a width. -/
+  | insertvalue (aggW offBits : Nat) (fieldTy : LLVM.Ty)
   /-- `llvm.call`. `Com` has no symbol table, so the callee's body travels with
   the call as its region argument; `callee` is carried for printing and
   round-tripping only and has no semantic role. The effect is the callee's:
@@ -107,6 +114,16 @@ inductive SLLVMOp where
   (`retTys = []`) is expressible. -/
   | call (callee : String) (argTys : List SLLVMTy) (retTys : List SLLVMTy) (eff : EffectKind)
   deriving DecidableEq, Lean.ToExpr
+
+/-- `LLVM.Ty.flatten` at a `bitvec` is the identity: the flat layout of a
+scalar is the scalar. This is what makes `insertvalue`'s move from a field
+*width* to a field *type* behaviour-preserving for every field that already
+was a `bitvec`. -/
+@[simp] theorem _root_.InstCombine.LLVM.Ty.flatten_bitvec {w : Nat} (x : LLVM.IntW w) :
+    LLVM.Ty.flatten (.bitvec w) x = x := by
+  obtain ⟨_ | b⟩ := x <;>
+    simp [LLVM.Ty.flatten, LLVM.Ty.flattenBV, LLVM.Ty.Defined, LLVM.Ty.ofBitvec,
+      PoisonOr.value_ne_poison]
 
 def SLLVM : Dialect where
   Op := SLLVMOp
@@ -244,8 +261,8 @@ def_signature for SLLVM
   | Op.const w _val  => () -> bitvec w
   | Op.poison t      => () -> Ty.arith t
   | Op.constDense t _vals => () -> Ty.arith t
-  | SLLVMOp.insertvalue aggW _off fieldW =>
-      (bitvec aggW, bitvec fieldW) -> bitvec aggW
+  | SLLVMOp.insertvalue aggW _off fieldTy =>
+      (bitvec aggW, Ty.arith fieldTy) -> bitvec aggW
   | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
   | SLLVMOp.nullptr  => () -> Ty.ptr
   | SLLVMOp.ptricmp _ => (Ty.ptr, Ty.ptr) -> bitvec 1
@@ -289,8 +306,8 @@ def_denote for SLLVM
   | .vselect _l _w => fun c x y => [SLLVM.vselect c x y]ₕ
   | .vicmp _l _w c => fun x y => [SLLVM.vicmp c x y]ₕ
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
-  | SLLVMOp.insertvalue _aggW off _fieldW =>
-      fun agg v => [SLLVM.insertvalue off agg v]ₕ
+  | SLLVMOp.insertvalue _aggW off fieldTy =>
+      fun agg v => [SLLVM.insertvalue off agg (InstCombine.LLVM.Ty.flatten fieldTy v)]ₕ
   | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
   | SLLVMOp.nullptr => [SLLVM.Ptr.null]ₕ
   | SLLVMOp.ptricmp eq => fun x y => [SLLVM.ptricmp eq x y]ₕ
