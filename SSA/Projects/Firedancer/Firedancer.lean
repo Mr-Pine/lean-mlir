@@ -7,3 +7,4 @@ import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_is_zero
 
 import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_eq_z1
+import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_set
