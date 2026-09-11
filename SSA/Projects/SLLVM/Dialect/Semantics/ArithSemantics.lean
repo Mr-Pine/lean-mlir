@@ -86,6 +86,39 @@ def fshl {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
 theorem fshl_value {w : Nat} (a b n : BitVec w) :
     fshl (.value a) (.value b) (.value n) = .value (fshlBV a b n) := rfl
 
+/-- `llvm.intr.fshr` on bare bitvectors: the low `w` bits of `a ++ b` shifted
+right by `n mod w`. -/
+def fshrBV {w : Nat} (a b : BitVec w) (n : BitVec w) : BitVec w :=
+  ((a ++ b) >>> (n.toNat % w)).extractLsb' 0 w
+
+/-- `llvm.intr.fshr`, poison-propagating. -/
+@[simp_sllvm]
+def fshr {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
+  match a, b, n with
+  | .value a, .value b, .value n => .value (fshrBV a b n)
+  | _, _, _ => .poison
+
+@[simp_sllvm]
+theorem fshr_value {w : Nat} (a b n : BitVec w) :
+    fshr (.value a) (.value b) (.value n) = .value (fshrBV a b n) := rfl
+
+/-- Byte-reverse a `w`-bit value: byte `i` of the result is byte `k-1-i` of the
+input, where `k = w / 8`. A `w` that is not a multiple of 8 keeps only the whole
+bytes, which no producer emits and LLVM does not define either. -/
+def bswapBV {w : Nat} (x : BitVec w) : BitVec w :=
+  (List.range (w / 8)).foldl
+    (fun acc i => acc ||| (((x >>> (8 * i)) &&& 0xFF#w) <<< (w - 8 - 8 * i))) 0#w
+
+/-- `llvm.intr.bswap`, poison-propagating. -/
+@[simp_sllvm]
+def bswap {w : Nat} (x : LLVM.IntW w) : LLVM.IntW w :=
+  match x with
+  | .value x => .value (bswapBV x)
+  | .poison => .poison
+
+@[simp_sllvm]
+theorem bswap_value {w : Nat} (x : BitVec w) : bswap (.value x) = .value (bswapBV x) := rfl
+
 /-! ### min / max -/
 
 /-- `llvm.intr.smin`, poison-propagating. No flags: the minimum of two values

@@ -460,6 +460,12 @@ instance : DialectParse SLLVM 0 where
     | "llvm.intr.fshl" => do
         let args ← args.assumeArity 3
         mkExprOf <| SLLVMOp.fshl (← getIntWidth args[0])
+    | "llvm.intr.fshr" => do
+        let args ← args.assumeArity 3
+        mkExprOf <| SLLVMOp.fshr (← getIntWidth args[0])
+    | "llvm.intr.bswap" => do
+        let args ← args.assumeArity 1
+        mkExprOf <| SLLVMOp.bswap (← getIntWidth args[0])
     | "llvm.intr.smin" => do
         let args ← args.assumeArity 2
         mkExprOf <| SLLVMOp.smin (← getIntWidth args[0])
