@@ -197,6 +197,14 @@ makes poison stays a plain pointer here -- more defined than LLVM. -/
 def gep (p : SLLVM.Ptr) (strideBytes offsetBytes : Nat) (i : LLVM.IntW 64) : SLLVM.Ptr :=
   ptradd p (LLVM.add (LLVM.mul i (LLVM.const? 64 strideBytes)) (LLVM.const? 64 offsetBytes))
 
+/-- `getelementptr` with two dynamic indices: the first steps over whole
+`elem_type`s and the constants after it walk to an array, which the second
+indexes. That is exactly a `gep` into the array's address, so it is defined as
+one -- lemmas about `gep` apply to each stage. -/
+def gep2 (p : SLLVM.Ptr) (stride₀ offset₀ stride₁ offset₁ : Nat) (i j : LLVM.IntW 64) :
+    SLLVM.Ptr :=
+  gep (gep p stride₀ offset₀ i) stride₁ offset₁ j
+
 /-!
 **SIMPLIFICATION**
 We deliberately don't support int-to-ptr nor ptr-to-int casts

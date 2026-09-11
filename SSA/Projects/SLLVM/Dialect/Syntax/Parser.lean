@@ -360,8 +360,12 @@ instance : DialectParse SLLVM 0 where
     -- stride is the element type's padded size; the offset accumulates
     -- struct-field and array steps. `inbounds` is accepted and ignored (see
     -- `SLLVM.gep`).
+    --
+    -- A second sentinel -- `sha->state[i]` -- must land on an array or vector,
+    -- which the second dynamic index then steps through: `SLLVMOp.gep2`.
+    -- `foldGepZeroIndex` has already removed a leading zero index where it can,
+    -- so what reaches here with two sentinels is genuinely two-dimensional.
     | "llvm.getelementptr" => do
-        let _ ← args.assumeArity 2
         let sentinel :: constIdxs ← arrayInts opStx "rawConstantIndices"
           | throw <| .generic "llvm.getelementptr: empty `rawConstantIndices`"
         unless sentinel == -2147483648 do
@@ -378,12 +382,35 @@ instance : DialectParse SLLVM 0 where
           | t => throw <| .generic s!"llvm.getelementptr: unsupported `elem_type` {repr t}"
         let (elemSize, elemAlign) ← aggTy.sizeAlign
         let stride := alignTo elemSize elemAlign
-        let (offset, _) ← constIdxs.foldlM (init := ((0 : Nat), aggTy)) fun (off, ty) k => do
-          unless k ≥ 0 do
-            throw <| .generic s!"llvm.getelementptr: negative constant index {k}"
-          let (step, ty) ← ty.constIndexOffset k.toNat
-          return (off + step, ty)
-        mkExprOf <| SLLVMOp.gep stride offset
+        -- the constants up to the next sentinel (or the end), and what follows it
+        let (before, after) := constIdxs.span (· != -2147483648)
+        let walk (off : Nat) (ty : AggTy) (ks : List Int) : ExceptM SLLVM (Nat × AggTy) :=
+          ks.foldlM (init := (off, ty)) fun (acc : Nat × AggTy) (k : Int) => do
+            let (off, ty) := acc
+            unless k ≥ 0 do
+              throw <| .generic s!"llvm.getelementptr: negative constant index {k}"
+            let (step, ty) ← ty.constIndexOffset k.toNat
+            return (off + step, ty)
+        let (offset, midTy) ← walk 0 aggTy before
+        match after with
+        | [] =>
+            let _ ← args.assumeArity 2
+            mkExprOf <| SLLVMOp.gep stride offset
+        | _ :: rest => do
+            if rest.contains (-2147483648) then
+              throw <| .generic "llvm.getelementptr: more than two dynamic indices"
+            let _ ← args.assumeArity 3
+            let (stride₁, innerTy) ← match midTy with
+              | .array _ e => do
+                  let (s, a) ← e.sizeAlign
+                  pure (alignTo s a, e)
+              | .vector _ e => do
+                  let (s, _) ← e.sizeAlign
+                  pure (s, e)
+              | t => throw <| .generic s!"llvm.getelementptr: the second dynamic index \
+                  must index an array or vector, not {repr t}"
+            let (offset₁, _) ← walk 0 innerTy rest
+            mkExprOf <| SLLVMOp.gep2 stride offset stride₁ offset₁
     | "ptr.load" => mkExprOf <| .load (← getOutputArithTy opStx)
     | "ptr.store" => do
         let args ← args.assumeArity 2

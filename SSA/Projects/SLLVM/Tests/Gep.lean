@@ -126,17 +126,55 @@ def zeroLeadGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] :
 
 #guard runScalar zeroLeadGep == some (.value 33#64)
 
--- A two-operand gep whose leading index is *not* a visible zero must stay
--- rejected, not folded.
-/--
-error: Expected exactly 2 argument(s), but found 3
--/
-#guard_msgs in
+/-- Two dynamic indices whose leading one is *not* a visible zero: no fold
+applies, so this is `SLLVMOp.gep2`. LLVM's reading of
+`gep [5 x i64], p, 1, 1` is `p + 40 + 8`, so the store lands on byte offset 48,
+`i64` element 6. -/
 def twoDynGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
   ^entry():
-    %p   = "ptr.alloca"() <{elem_type = i320}> : () -> (!ptr)
+    %p   = "ptr.alloca"() <{elem_type = i640}> : () -> (!ptr)
     %one = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %six = "llvm.mlir.constant"() <{value = 6 : i64}> : () -> (i64)
+    %v   = "llvm.mlir.constant"() <{value = 55 : i64}> : () -> (i64)
     %q = "llvm.getelementptr"(%p, %one, %one) <{elem_type = !llvm.array<5 x i64>, inbounds, rawConstantIndices = array<i32: -2147483648, -2147483648>}> : (!llvm.ptr, i64, i64) -> !llvm.ptr
+    "llvm.store"(%v, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %r = "llvm.getelementptr"(%p, %six) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %w = "llvm.load"(%r) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%w) : (i64) -> ()
+}]
+
+#guard runScalar twoDynGep == some (.value 55#64)
+
+/-- The `fd_sha512_init` shape, verbatim: `sha->state[3]`, a dynamic `0` into
+the SHA-512 state struct, constant field 1, and a dynamic index into that
+field's `array<8 x i64>`. Field 1 sits after the 128-byte buffer, so element 3
+lands at byte offset `128 + 24 = 152`, `i64` element 19. -/
+def structArrayGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p     = "ptr.alloca"() <{elem_type = i1728}> : () -> (!ptr)
+    %zero  = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> (i64)
+    %three = "llvm.mlir.constant"() <{value = 3 : i64}> : () -> (i64)
+    %nt    = "llvm.mlir.constant"() <{value = 19 : i64}> : () -> (i64)
+    %v     = "llvm.mlir.constant"() <{value = 88 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p, %zero, %three) <{elem_type = !llvm.struct<"struct.fd_sha512_private", (array<128 x i8>, array<8 x i64>, i64, i64, i64, i64, array<32 x i8>)>, inbounds, rawConstantIndices = array<i32: -2147483648, 1, -2147483648>}> : (!llvm.ptr, i64, i64) -> !llvm.ptr
+    "llvm.store"(%v, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %r = "llvm.getelementptr"(%p, %nt) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %w = "llvm.load"(%r) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%w) : (i64) -> ()
+}]
+
+#guard runScalar structArrayGep == some (.value 88#64)
+
+-- The second dynamic index must step through an array or vector.
+/--
+error: llvm.getelementptr: the second dynamic index must index an array or vector, not LeanMLIR.SLLVM.AggTy.int 64
+-/
+#guard_msgs in
+def gepSecondIntoScalar : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p   = "ptr.alloca"() <{elem_type = i1728}> : () -> (!ptr)
+    %one = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p, %one, %one) <{elem_type = !llvm.struct<"s", (array<128 x i8>, i64)>, inbounds, rawConstantIndices = array<i32: -2147483648, 1, -2147483648>}> : (!llvm.ptr, i64, i64) -> !llvm.ptr
     %v = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
     "llvm.return"(%v) : (i64) -> ()
 }]
