@@ -23,6 +23,7 @@ open InstCombine (LLVM)
 open Ed25519
 
 namespace PointDbln
+open Ge
 
 theorem u44_iterate {q : Quad} (hq : QuadU44 q) : ∀ k, QuadU44 (geDbl^[k] q)
   | 0 => hq
@@ -39,20 +40,10 @@ theorem isQuadPtr_writeQuad {m : MemoryState} {r : Pointer} (hr : IsQuadPtr m r)
     IsQuadPtr (m.writeQuad r q) r :=
   ⟨fits_splice (fits_splice (fits_splice hr.1)), hr.2⟩
 
-/-- The frame pop leaves the caller's memory with one `writeQuad` into `r`. -/
-theorem popFrame_equiv {s u : GlobalState} (hs : s.WF) {r : Pointer}
-    (hrlt : r.id.id < s.alloc.nextFreeBlock) {m₁ : MemoryState} {q : Quad} (hF : Frame s m₁ u)
-    (hm : ∀ b, b ≠ r.id → m₁.live? b = s.mem.live? b)
-    (hmr : m₁.live? r.id = (s.mem.writeQuad r q).live? r.id) :
-    ({ s with mem := s.mem.writeQuad r q } : GlobalState) ≈ s.popFrame u.mem :=
-  GlobalState.Equiv.symm (popFrame_equiv_block hs hrlt
-    (fun b hb hne => (hF.below b hb).trans (hm b hne))
-    (fun _ hne => live?_writeQuad_ne (Ne.symm hne))
-    ((hF.below r.id hrlt).trans hmr))
 
 end PointDbln
 
-open PointDbln in
+open PointDbln Ge in
 theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : GlobalState)
     (hs : s.WF) (hr : IsQuadPtr s.mem r) (ha : IsQuadPtr s.mem a)
     (hu : R43x6.U44 (readQuad ha).v03 ∧ R43x6.U44 (readQuad ha).v14 ∧ R43x6.U44 (readQuad ha).v25)

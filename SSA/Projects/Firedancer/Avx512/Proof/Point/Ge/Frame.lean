@@ -1,25 +1,26 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
+import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_sqr_fast
 import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
+import SSA.Projects.Firedancer.MLIR.DenoteStep
+import SSA.Projects.Firedancer.Proof.Tactics
 
 /-!
-# `fd_ed25519_point_dbln`'s frame
+# A point region's frame
 
-Twelve 64-byte slots, the out-parameters of the four kernel calls; `r` the only
-caller block written. `Frame s m₁ u`: the slots are live in `u`, and below the
-entry counter `u` reads as `m₁` -- `s.mem` before `^bb0`'s stores, `s.mem`
-with the first doubling written after.
+`n` 64-byte slots, the out-parameters of the kernel calls; `r` the only caller
+block written. `Frame n s m₁ u`: the slots are live in `u`, and below the entry
+counter `u` reads as `m₁`.
 -/
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-namespace PointDbln
+namespace Ge
 
 /-- The slot widths: all `vector<8xi64>`. -/
 def cw : Nat → Nat := fun _ => 512
@@ -33,23 +34,25 @@ def slot (s : GlobalState) (k : Nat) : Pointer := s.chainPtr cw k
 theorem slot_ne {s : GlobalState} {i j : Nat} (h : i ≠ j) : (slot s i).id ≠ (slot s j).id :=
   fun e => h (by have := congrArg BlockId.id e; simp only [slot_id] at this; omega)
 
-structure Frame (s : GlobalState) (m₁ : MemoryState) (u : GlobalState) : Prop where
+structure Frame (n : Nat) (s : GlobalState) (m₁ : MemoryState) (u : GlobalState) : Prop where
   wf : u.WF
-  counter : u.alloc.nextFreeBlock = s.alloc.nextFreeBlock + 12
-  slots : ∀ k, k < 12 → Fits u.mem (slot s k) 512
+  counter : u.alloc.nextFreeBlock = s.alloc.nextFreeBlock + n
+  slots : ∀ k, k < n → Fits u.mem (slot s k) 512
   below : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → u.mem.live? b = m₁.live? b
 
-/-- The twelve `alloca`s set the frame up. -/
-theorem frame_allocaChain {s : GlobalState} (hs : s.WF) : Frame s s.mem (s.allocaChain cw 12) where
-  wf := GlobalState.WF.allocaChain hs 12
-  counter := GlobalState.nextFreeBlock_allocaChain 12
+/-- `n` `alloca`s set the frame up. -/
+theorem frame_allocaChain {s : GlobalState} (hs : s.WF) (n : Nat) :
+    Frame n s s.mem (s.allocaChain cw n) where
+  wf := GlobalState.WF.allocaChain hs n
+  counter := GlobalState.nextFreeBlock_allocaChain n
   slots := fun _ hk => GlobalState.fits_chainPtr hk
-  below := FrameBelow.allocaChain (le_refl _) (FrameBelow.refl _ _) 12
+  below := FrameBelow.allocaChain (le_refl _) (FrameBelow.refl _ _) n
 
 /-- A store below the counter to `p`, mirrored in `m₁`. -/
-theorem Frame.splice {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
+theorem Frame.splice {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
     (p : Pointer) {w : Nat} (x : BitVec w) :
-    Frame s (m₁.splice p x) { u with mem := u.mem.splice p x } where
+    Frame n s (m₁.splice p x) { u with mem := u.mem.splice p x } where
   wf := hF.wf.splice
   counter := hF.counter
   slots := fun k hk => fits_splice (hF.slots k hk)
@@ -59,9 +62,10 @@ theorem Frame.splice {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (h
     · rw [live?_splice_ne hpb, live?_splice_ne hpb]; exact hF.below b hb
 
 /-- The popped frame of a callee that wrote three slots. -/
-theorem Frame.call {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
+theorem Frame.call {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
     (i j k : Nat) (a b c : Vector (BitVec 64) 8) :
-    Frame s m₁ (u.popFrame (((u.mem.writeVec (slot s i) a).writeVec (slot s j) b).writeVec
+    Frame n s m₁ (u.popFrame (((u.mem.writeVec (slot s i) a).writeVec (slot s j) b).writeVec
       (slot s k) c)) where
   wf := fun q hq => live?_killFrom_of_le hq
   counter := hF.counter
@@ -80,13 +84,15 @@ theorem Frame.call {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF 
     rw [live?_splice_ne (ne k), live?_splice_ne (ne j), live?_splice_ne (ne i)]
     exact hF.below q hq
 
-theorem isVecPtr_slot {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
-    {k : Nat} (hk : k < 12) : IsVecPtr u.mem (slot s k) :=
+theorem isVecPtr_slot {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
+    {k : Nat} (hk : k < n) : IsVecPtr u.mem (slot s k) :=
   ⟨hF.slots k hk, by simp [slot, GlobalState.chainPtr]⟩
 
 /-- A slot a callee wrote last reads back what it wrote, across the frame pop. -/
-theorem readVec_call {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
-    {i j k : Nat} (hi : i < 12) (hj : j < 12) (hk : k < 12) (hij : i ≠ j) (hik : i ≠ k)
+theorem readVec_call {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
+    {i j k : Nat} (hi : i < n) (hj : j < n) (hk : k < n) (hij : i ≠ j) (hik : i ≠ k)
     (hjk : j ≠ k) (a b c : Vector (BitVec 64) 8) :
     let u' := u.popFrame (((u.mem.writeVec (slot s i) a).writeVec (slot s j) b).writeVec
       (slot s k) c)
@@ -94,9 +100,9 @@ theorem readVec_call {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (h
       (hpk : IsVecPtr u'.mem (slot s k)),
       readVec hpi = a ∧ readVec hpj = b ∧ readVec hpk = c := by
   intro u' hpi hpj hpk
-  have lt : ∀ l, l < 12 → (slot s l).id.id < u.alloc.nextFreeBlock := fun l hl => by
+  have lt : ∀ l, l < n → (slot s l).id.id < u.alloc.nextFreeBlock := fun l hl => by
     rw [slot_id, hF.counter]; omega
-  have kill : ∀ l, l < 12 → u'.mem.live? (slot s l).id
+  have kill : ∀ l, l < n → u'.mem.live? (slot s l).id
       = (((u.mem.writeVec (slot s i) a).writeVec (slot s j) b).writeVec (slot s k) c).live?
           (slot s l).id := fun l hl => live?_killFrom_of_lt (lt l hl)
   simp only [MemoryState.writeVec] at kill
@@ -111,16 +117,17 @@ theorem readVec_call {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (h
       (isVecPtr_slot hF hk).2⟩
 
 /-- **One `fd_r43x6_quad_sqr_fast` call into slots `i, j, k`**, with its readback. -/
-theorem sqr_step {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
+theorem sqr_step {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
     (x : Quad) (hx : R43x6.U47 x.v03 ∧ R43x6.U47 x.v14 ∧ R43x6.U47 x.v25)
-    {i j k : Nat} (hi : i < 12) (hj : j < 12) (hk : k < 12) (hij : i ≠ j) (hik : i ≠ k)
+    {i j k : Nat} (hi : i < n) (hj : j < n) (hk : k < n) (hij : i ≠ j) (hik : i ≠ k)
     (hjk : j ≠ k) {P : Prop}
     (kont : ∀ u' : GlobalState,
       StateT.run (runFunction ((Cfg.ofCom fd_r43x6_quad_sqr_fast).denote
           (Ctxt.Valuation.ofHVector [x.v25.map PoisonOr.value, x.v14.map PoisonOr.value,
             x.v03.map PoisonOr.value, PoisonOr.value (slot s k), PoisonOr.value (slot s j),
             PoisonOr.value (slot s i)]ₕ))) u = .value (.nil, u') →
-      Frame s m₁ u' →
+      Frame n s m₁ u' →
       ∀ (hpi : IsVecPtr u'.mem (slot s i)) (hpj : IsVecPtr u'.mem (slot s j))
         (hpk : IsVecPtr u'.mem (slot s k)),
         readVec hpi = (quadSqrResult x).v03 → readVec hpj = (quadSqrResult x).v14 →
@@ -138,10 +145,11 @@ theorem sqr_step {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : 
     (fits_splice (hF.slots j hj)) (fits_splice (fits_splice (hF.slots k hk)))
 
 /-- **One `fd_r43x6_quad_mul_fast` call into slots `i, j, k`**, with its readback. -/
-theorem mul_step {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u)
+theorem mul_step {n : Nat} {s : GlobalState} {m₁ : MemoryState} {u : GlobalState}
+    (hF : Frame n s m₁ u)
     (x y : Quad) (hx : R43x6.U47 x.v03 ∧ R43x6.U47 x.v14 ∧ R43x6.U47 x.v25)
     (hy : R43x6.U47 y.v03 ∧ R43x6.U47 y.v14 ∧ R43x6.U47 y.v25)
-    {i j k : Nat} (hi : i < 12) (hj : j < 12) (hk : k < 12) (hij : i ≠ j) (hik : i ≠ k)
+    {i j k : Nat} (hi : i < n) (hj : j < n) (hk : k < n) (hij : i ≠ j) (hik : i ≠ k)
     (hjk : j ≠ k) {P : Prop}
     (kont : ∀ u' : GlobalState,
       StateT.run (runFunction ((Cfg.ofCom fd_r43x6_quad_mul_fast).denote
@@ -149,7 +157,7 @@ theorem mul_step {s : GlobalState} {m₁ : MemoryState} {u : GlobalState} (hF : 
             y.v03.map PoisonOr.value, x.v25.map PoisonOr.value, x.v14.map PoisonOr.value,
             x.v03.map PoisonOr.value, PoisonOr.value (slot s k), PoisonOr.value (slot s j),
             PoisonOr.value (slot s i)]ₕ))) u = .value (.nil, u') →
-      Frame s m₁ u' →
+      Frame n s m₁ u' →
       ∀ (hpi : IsVecPtr u'.mem (slot s i)) (hpj : IsVecPtr u'.mem (slot s j))
         (hpk : IsVecPtr u'.mem (slot s k)),
         readVec hpi = (quadMulResult x y).v03 → readVec hpj = (quadMulResult x y).v14 →
@@ -202,7 +210,8 @@ theorem live?_writeQuad_writeQuad {m : MemoryState} {p : Pointer} (q₁ q₂ : Q
   have hw : ∀ (m : MemoryState) (q : Quad),
       (m.writeQuad p q).live? p.id = (m.live? p.id).map fun blk =>
         ({ length := blk.length,
-           bytes := spliceBits blk.bytes p.offsetInBits (vecBV q.v25 ++ vecBV q.v14 ++ vecBV q.v03) }
+           bytes := spliceBits blk.bytes p.offsetInBits
+             (vecBV q.v25 ++ vecBV q.v14 ++ vecBV q.v03) }
           : LiveBlock) := by
     intro m q
     cases hb : m.live? p.id with
@@ -228,6 +237,63 @@ theorem offsetInBits_withOffset {p : Pointer} (hp : p.offset.toNat + 3 * 8 * 8 �
   simp only [Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add, BitVec.toNat_ofNat]
   omega
 
+/-- The QUAD `writeQuad` stored reads back. -/
+theorem readQuad_writeQuad {m : MemoryState} {p : Pointer} {q : Quad}
+    (hp : IsQuadPtr m p) (h : IsQuadPtr (m.writeQuad p q) p) : readQuad h = q := by
+  obtain ⟨⟨blk, hblk, hlen⟩, hnw⟩ := hp
+  simp only [LiveBlock.lengthInBits] at hlen
+  have hl : m.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
+  have off64 := offsetInBits_withOffset (p := p) hnw (o := 64) (by omega)
+  have off128 := offsetInBits_withOffset (p := p) hnw (o := 128) (by omega)
+  have h1 := splicedLive m p blk hl (vecBV q.v03)
+  have h2 : ((m.splice p (vecBV q.v03)).splice (p.withOffset 64) (vecBV q.v14)).live? p.id
+      = some { length := blk.length,
+               bytes := spliceBits (spliceBits blk.bytes p.offsetInBits (vecBV q.v03))
+                 (p.offsetInBits + 512) (vecBV q.v14) } := by
+    have e := splicedLive _ (p.withOffset 64) _ h1 (vecBV q.v14)
+    rwa [show (64 : BitVec 64) = BitVec.ofNat 64 64 from rfl, off64] at e
+  have h3 : (m.writeQuad p q).live? p.id
+      = some { length := blk.length,
+               bytes := spliceBits (spliceBits (spliceBits blk.bytes p.offsetInBits
+                 (vecBV q.v03)) (p.offsetInBits + 512) (vecBV q.v14))
+                 (p.offsetInBits + 1024) (vecBV q.v25) } := by
+    have e := splicedLive _ (p.withOffset 128) _ h2 (vecBV q.v25)
+    rwa [show (128 : BitVec 64) = BitVec.ofNat 64 128 from rfl, off128] at e
+  have w25 : (spliceBits (spliceBits (spliceBits blk.bytes p.offsetInBits (vecBV q.v03))
+        (p.offsetInBits + 512) (vecBV q.v14))
+        (p.offsetInBits + 1024) (vecBV q.v25)).extractLsb' (p.offsetInBits + 1024) 512
+      = vecBV q.v25 :=
+    extractLsb'_spliceBits _ _ _ (by omega)
+  have w14 : (spliceBits (spliceBits (spliceBits blk.bytes p.offsetInBits (vecBV q.v03))
+        (p.offsetInBits + 512) (vecBV q.v14))
+        (p.offsetInBits + 1024) (vecBV q.v25)).extractLsb' (p.offsetInBits + 512) 512
+      = vecBV q.v14 := by
+    rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (Or.inl (by omega)),
+      extractLsb'_spliceBits _ _ _ (by omega)]
+  have w03 : (spliceBits (spliceBits (spliceBits blk.bytes p.offsetInBits (vecBV q.v03))
+        (p.offsetInBits + 512) (vecBV q.v14))
+        (p.offsetInBits + 1024) (vecBV q.v25)).extractLsb' p.offsetInBits 512
+      = vecBV q.v03 := by
+    rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (Or.inl (by omega)),
+      extractLsb'_spliceBits_of_disjoint _ _ _ _ (Or.inl (by omega)),
+      extractLsb'_spliceBits _ _ _ (by omega)]
+  have mapInj : ∀ {u v : Vector (BitVec 64) 8},
+      u.map PoisonOr.value = v.map PoisonOr.value → u = v := by
+    intro u v huv
+    refine Vector.ext fun i hi => ?_
+    have e : (u.map PoisonOr.value)[i] = (v.map PoisonOr.value)[i] := by rw [huv]
+    simpa using e
+  refine Quad.ext ?_ ?_ ?_
+  · have hu := unflatten_readQuad_v03 h h3
+    rw [w03, unflatten_vecBV] at hu
+    exact (mapInj hu).symm
+  · have hu := unflatten_readQuad_v14 h h3
+    rw [w14, unflatten_vecBV] at hu
+    exact (mapInj hu).symm
+  · have hu := unflatten_readQuad_v25 h h3
+    rw [w25, unflatten_vecBV] at hu
+    exact (mapInj hu).symm
+
 /-- A slot-sized read at `a`, `a + 64`, `a + 128` of a memory agreeing with `m` on `a`'s
 block reads `readQuad`'s three vectors. -/
 theorem readVec_quad {m m' : MemoryState} {a : Pointer} (ha : IsQuadPtr m a)
@@ -239,7 +305,8 @@ theorem readVec_quad {m m' : MemoryState} {a : Pointer} (ha : IsQuadPtr m a)
   have hlive : m.live? a.id = some blk := by simp only [MemoryState.live?, hblk]
   have h64 := offsetInBits_withOffset (p := a) ha.2 (o := 64) (by omega)
   have h128 := offsetInBits_withOffset (p := a) ha.2 (o := 128) (by omega)
-  have hq : readQuad ha = ⟨Vector.ofFn fun j => blk.bytes.extractLsb' (a.offsetInBits + 64 * j.val) 64,
+  have hq : readQuad ha =
+      ⟨Vector.ofFn fun j => blk.bytes.extractLsb' (a.offsetInBits + 64 * j.val) 64,
       Vector.ofFn fun j => blk.bytes.extractLsb' (a.offsetInBits + 512 + 64 * j.val) 64,
       Vector.ofFn fun j => blk.bytes.extractLsb' (a.offsetInBits + 1024 + 64 * j.val) 64⟩ := by
     simp [readQuad, readQuad?, hlive]
@@ -250,6 +317,61 @@ theorem readVec_quad {m m' : MemoryState} {a : Pointer} (ha : IsQuadPtr m a)
   · have hl' : m'.live? (a.withOffset (BitVec.ofNat 64 128)).id = some blk := hl.trans hlive
     simp [readVec?, hl', hq, show (128 : BitVec 64) = BitVec.ofNat 64 128 from rfl, h128]
 
-end PointDbln
+/-- Fold a pointer the `alloca` prologue leaves expanded back to `slot s k`. -/
+theorem slot_eq (s : GlobalState) (k : Nat) :
+    (⟨⟨(s.allocaChain cw k).alloc.nextFreeBlock⟩, 0⟩ : Pointer) = slot s k := rfl
+
+/-! ## Stores and loads through ambient pointers
+
+`GeDecode2.peel_store_amb`/`peel_load_vec_amb`, restated: a tail block's
+operands resolve in two passes, the block's spine and then the ambient facts. -/
+
+macro "ge_store_amb " x:term ", " p:term ", " hp:term ", " st:term
+    " as " st':term " := " hst':term " with " l:term,+ : tactic =>
+  `(tactic|
+   (try simp only [bind_assoc]
+    rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
+      (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+          try simp only [$[$l:term],*]
+          rw [run_liftM (run_store (t := .vector 8 (.bitvec (.concrete 64)))
+            (x := ($x).map PoisonOr.value) (flatten_vecBV $x)
+            (show Fits (($st).mem) $p 512 from Fits.mono $hp (by omega)))]
+          rw [$hst':term]
+          rfl)]))
+
+macro "ge_load_amb " v:term ", " p:term ", " hp:term ", " hval:term ", " st:term
+    " with " l:term,+ : tactic =>
+  `(tactic|
+   (try simp only [bind_assoc]
+    rw [BlockCom.run_bind_denote_var_of_value (x := ($v).map PoisonOr.value) (s' := $st)
+      (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+          try simp only [$[$l:term],*]
+          rw [run_liftM (run_load (t := .vector 8 (.bitvec (.concrete 64)))
+            (($hp).1.choose_spec.1)
+            (by have := ($hp).1.choose_spec.2
+                show ($p).offsetInBits + 512 ≤ _
+                simp only [LiveBlock.lengthInBits] at *
+                omega))]
+          rw [unflatten_readVec $hp (live?_of_getElem? ($hp).1.choose_spec.1), $hval:term]
+          rfl)]))
+
+theorem fits_field {m : MemoryState} {r : Pointer} (hr : IsQuadPtr m r) :
+    Fits m r 512 ∧ Fits m (r.withOffset 64) 512 ∧ Fits m (r.withOffset 128) 512 :=
+  ⟨Fits.mono hr.1 (by omega), Fits.mono (remainingFits m r hr.1 64 (by simp)) (by simp),
+    Fits.mono (remainingFits m r hr.1 128 (by simp)) (by simp)⟩
+
+/-- The frame pop leaves the caller's memory with one `writeQuad` into `r`. -/
+theorem popFrame_equiv {s u : GlobalState} (hs : s.WF) {r : Pointer}
+    (hrlt : r.id.id < s.alloc.nextFreeBlock) {n : Nat} {m₁ : MemoryState} {q : Quad}
+    (hF : Frame n s m₁ u)
+    (hm : ∀ b, b ≠ r.id → m₁.live? b = s.mem.live? b)
+    (hmr : m₁.live? r.id = (s.mem.writeQuad r q).live? r.id) :
+    ({ s with mem := s.mem.writeQuad r q } : GlobalState) ≈ s.popFrame u.mem :=
+  GlobalState.Equiv.symm (popFrame_equiv_block hs hrlt
+    (fun b hb hne => (hF.below b hb).trans (hm b hne))
+    (fun _ hne => live?_writeQuad_ne (Ne.symm hne))
+    ((hF.below r.id hrlt).trans hmr))
+
+end Ge
 
 end Firedancer.Avx512

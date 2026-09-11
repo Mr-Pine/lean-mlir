@@ -2,7 +2,8 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Lanes
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Mem
+import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
+import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 
@@ -20,6 +21,7 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 namespace PointDbln
+open Ge
 
 /-! ### Branch targets -/
 
@@ -87,54 +89,15 @@ theorem bb2_run {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r
   simp only [BlockCom.denote_term, Terminator.denote_ret, simp_spine]
   rw [env.vr]; rfl
 
-/-! ### Stores and loads through ambient pointers
-
-`GeDecode2.peel_store_amb`/`peel_load_vec_amb`, restated: a tail block's
-operands resolve in two passes, the block's spine and then the ambient facts. -/
-
-macro "dbln_store_amb " x:term ", " p:term ", " hp:term ", " st:term
-    " as " st':term " := " hst':term " with " l:term,+ : tactic =>
-  `(tactic|
-   (try simp only [bind_assoc]
-    rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
-      (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          try simp only [$[$l:term],*]
-          rw [run_liftM (run_store (t := .vector 8 (.bitvec (.concrete 64)))
-            (x := ($x).map PoisonOr.value) (flatten_vecBV $x)
-            (show Fits (($st).mem) $p 512 from Fits.mono $hp (by omega)))]
-          rw [$hst':term]
-          rfl)]))
-
-macro "dbln_load_amb " v:term ", " p:term ", " hp:term ", " hval:term ", " st:term
-    " with " l:term,+ : tactic =>
-  `(tactic|
-   (try simp only [bind_assoc]
-    rw [BlockCom.run_bind_denote_var_of_value (x := ($v).map PoisonOr.value) (s' := $st)
-      (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          try simp only [$[$l:term],*]
-          rw [run_liftM (run_load (t := .vector 8 (.bitvec (.concrete 64)))
-            (($hp).1.choose_spec.1)
-            (by have := ($hp).1.choose_spec.2
-                show ($p).offsetInBits + 512 ≤ _
-                simp only [LiveBlock.lengthInBits] at *
-                omega))]
-          rw [unflatten_readVec $hp (live?_of_getElem? ($hp).1.choose_spec.1), $hval:term]
-          rfl)]))
-
 /-! ### `^bb1` -/
-
-theorem fits_field {m : MemoryState} {r : Pointer} (hr : IsQuadPtr m r) :
-    Fits m r 512 ∧ Fits m (r.withOffset 64) 512 ∧ Fits m (r.withOffset 128) 512 :=
-  ⟨Fits.mono hr.1 (by omega), Fits.mono (remainingFits m r hr.1 64 (by simp)) (by simp),
-    Fits.mono (remainingFits m r hr.1 128 (by simp)) (by simp)⟩
 
 set_option maxHeartbeats 1000000 in
 /-- **`^bb1`**: the last doubling's three stores into `r`, then `^bb2`. -/
 theorem bb1_run {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r : Pointer}
     {n : BitVec 32} (env : EntryEnv V s r n) (q : Quad) {m₁ : MemoryState} {u : GlobalState}
-    (hF : Frame s m₁ u) (hr : IsQuadPtr m₁ r) (hlt : r.id.id < s.alloc.nextFreeBlock) :
+    (hF : Frame 12 s m₁ u) (hr : IsQuadPtr m₁ r) (hlt : r.id.id < s.alloc.nextFreeBlock) :
     ∃ u', StateT.run (fd_ed25519_point_dbln.blocks.run V (hdr1 q)) u = .value ([.value r]ₕ, u')
-      ∧ Frame s (m₁.writeQuad r q) u' := by
+      ∧ Frame 12 s (m₁.writeQuad r q) u' := by
   have hlive := hF.below r.id hlt
   obtain ⟨f0, f64, f128⟩ := fits_field hr
   have g0 : Fits u.mem r 512 := fits_of_live?_eq hlive f0
@@ -146,16 +109,16 @@ theorem bb1_run {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r
   have hF3 := hF2.splice (r.withOffset 128) (vecBV q.v25)
   denote_enter_block
   refine name_of ({ u with mem := u.mem.splice r (vecBV q.v03) }) fun u1 hu1 => ?_
-  dbln_store_amb q.v03, r, g0, u as u1 := hu1 with simp_spine, env.vr
+  ge_store_amb q.v03, r, g0, u as u1 := hu1 with simp_spine, env.vr
   refine name_of ({ u1 with mem := u1.mem.splice (r.withOffset 64) (vecBV q.v14) }) fun u2 hu2 => ?_
   have g64' : Fits u1.mem (r.withOffset 64) 512 := by rw [hu1]; exact fits_splice g64
-  dbln_store_amb q.v14, (r.withOffset 64), g64', u1 as u2 := hu2
+  ge_store_amb q.v14, (r.withOffset 64), g64', u1 as u2 := hu2
     with simp_spine, env.r64
   refine name_of ({ u2 with mem := u2.mem.splice (r.withOffset 128) (vecBV q.v25) })
     fun u3 hu3 => ?_
   have g128' : Fits u2.mem (r.withOffset 128) 512 := by
     rw [hu2, hu1]; exact fits_splice (fits_splice g128)
-  dbln_store_amb q.v25, (r.withOffset 128), g128', u2
+  ge_store_amb q.v25, (r.withOffset 128), g128', u2
     as u3 := hu3 with simp_spine, env.r128
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_spine]
   refine ⟨u3, ?_, by rw [hu3, hu2, hu1]; exact hF3⟩
@@ -171,12 +134,12 @@ slots 6-11, the counter incremented, and the branch: back to `^bb3` while
 `zext(c + 1) <u n`, out to `^bb1` otherwise. -/
 theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r : Pointer}
     {n : BitVec 32} (env : EntryEnv V s r n) {x : Quad} (hx : QuadU44 x) (c : BitVec 8)
-    {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u) :
+    {m₁ : MemoryState} {u : GlobalState} (hF : Frame 12 s m₁ u) :
     ∃ Vout u', StateT.run ((fd_ed25519_point_dbln.blocks.get (hdr3 x c).idx (hdr3 x c).hidx).2.denote
         (Ctxt.Valuation.ofHVector (hdr3 x c).args.reverse ++ V) >>= pure) u
       = .value ((Vout, .inr (if BitVec.ult (BitVec.setWidth 32 (c + 1#8)) n
           then hdr3 (geDbl x) (c + 1#8) else hdr1 (geDbl x))), u')
-      ∧ Frame s m₁ u' := by
+      ∧ Frame 12 s m₁ u' := by
   denote_reduce_get
   denote_number_from 250
   denote_step_reduce v 258 only [simp_spine]
@@ -195,9 +158,9 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
       (dblTa x).v03.map PoisonOr.value, PoisonOr.value (slot s 8), PoisonOr.value (slot s 7),
       PoisonOr.value (slot s 6)]ₕ)
     (by simp only [simp_spine, env.s6, env.s7, env.s8]; rfl) hrun1]
-  dbln_load_amb (quadSqrResult (dblTa x)).v03, (slot s 6), hp6, hr6, u1 with simp_spine, env.s6
-  dbln_load_amb (quadSqrResult (dblTa x)).v14, (slot s 7), hp7, hr7, u1 with simp_spine, env.s7
-  dbln_load_amb (quadSqrResult (dblTa x)).v25, (slot s 8), hp8, hr8, u1 with simp_spine, env.s8
+  ge_load_amb (quadSqrResult (dblTa x)).v03, (slot s 6), hp6, hr6, u1 with simp_spine, env.s6
+  ge_load_amb (quadSqrResult (dblTa x)).v14, (slot s 7), hp7, hr7, u1 with simp_spine, env.s7
+  ge_load_amb (quadSqrResult (dblTa x)).v25, (slot s 8), hp8, hr8, u1 with simp_spine, env.s8
   iterate 3 peel_lifetime
   denote_step_reduce v 323 only [simp_spine]
   have p03 := denote_egfh env.c4 env.c24 env.c76 hv262 hv265 hv268 hv271 hv272 hv277 hv278 hv279
@@ -241,11 +204,11 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
       (geQuad (dblR x)).v14.map PoisonOr.value, (geQuad (dblR x)).v03.map PoisonOr.value,
       PoisonOr.value (slot s 11), PoisonOr.value (slot s 10), PoisonOr.value (slot s 9)]ₕ)
     (by simp only [simp_spine, env.s9, env.s10, env.s11]; rfl) hrun2]
-  dbln_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v03, (slot s 9), hp9, hr9, u2
+  ge_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v03, (slot s 9), hp9, hr9, u2
     with simp_spine, env.s9
-  dbln_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v14, (slot s 10), hp10, hr10,
+  ge_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v14, (slot s 10), hp10, hr10,
     u2 with simp_spine, env.s10
-  dbln_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v25, (slot s 11), hp11, hr11,
+  ge_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v25, (slot s 11), hp11, hr11,
     u2 with simp_spine, env.s11
   iterate 3 peel_lifetime
   denote_step_reduce v 340 only [simp_spine]
@@ -287,13 +250,13 @@ private theorem cond_iff {n : BitVec 32} {k : ℕ} (hk : k + 2 ≤ n.toNat) (hn 
 reaches `^bb1` holding `n - 1` more. -/
 theorem loop_run {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r : Pointer}
     {n : BitVec 32} (env : EntryEnv V s r n) (h2 : 2 ≤ n.toNat) (hn : n.toNat < 256)
-    {x : Quad} (hx : QuadU44 x) {m₁ : MemoryState} {u : GlobalState} (hF : Frame s m₁ u) :
+    {x : Quad} (hx : QuadU44 x) {m₁ : MemoryState} {u : GlobalState} (hF : Frame 12 s m₁ u) :
     ∃ u', StateT.run (fd_ed25519_point_dbln.blocks.run V (hdr3 x 1#8)) u
         = StateT.run (fd_ed25519_point_dbln.blocks.run V (hdr1 (geDbl^[n.toNat - 1] x))) u'
-      ∧ Frame s m₁ u' := by
+      ∧ Frame 12 s m₁ u' := by
   obtain ⟨t, u', hrun, hInv⟩ :=
     Blocks.run_loop_args (bs := fd_ed25519_point_dbln.blocks) (Vamb := V)
-      (Inv := fun k t w => ∃ y, y = geDbl^[k] x ∧ QuadU44 y ∧ Frame s m₁ w ∧
+      (Inv := fun k t w => ∃ y, y = geDbl^[k] x ∧ QuadU44 y ∧ Frame 12 s m₁ w ∧
         t = if k + 1 < n.toNat then hdr3 y (BitVec.ofNat 8 (k + 1)) else hdr1 y)
       (n := n.toNat - 1) (t₀ := hdr3 x 1#8) (s₀ := u)
       (by

@@ -15,17 +15,14 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 namespace PointDbln
-
-/-- Fold a pointer the `alloca` prologue leaves expanded back to `slot s k`. -/
-theorem slot_eq (s : GlobalState) (k : Nat) :
-    (⟨⟨(s.allocaChain cw k).alloc.nextFreeBlock⟩, 0⟩ : Pointer) = slot s k := rfl
+open Ge
 
 set_option maxHeartbeats 8000000 in
 set_option maxRecDepth 100000 in
 theorem bb0_run (r a : Pointer) (n : BitVec 32) (s : GlobalState) (hs : s.WF)
     (hr : IsQuadPtr s.mem r) (ha : IsQuadPtr s.mem a) (hu : QuadU44 (readQuad ha)) :
     ∃ (W : fd_ed25519_point_dbln.Γout.Valuation) (u : GlobalState),
-      EntryEnv W s r n ∧ Frame s (s.mem.writeQuad r (geDbl (readQuad ha))) u
+      EntryEnv W s r n ∧ Frame 12 s (s.mem.writeQuad r (geDbl (readQuad ha))) u
       ∧ StateT.run (fd_ed25519_point_dbln.denote
           (Ctxt.Valuation.ofHVector [.value n, .value a, .value r]ₕ)) s
         = StateT.run (fd_ed25519_point_dbln.blocks.run W
@@ -80,7 +77,7 @@ theorem bb0_run (r a : Pointer) (n : BitVec 32) (s : GlobalState) (hs : s.WF)
     hv135 hv136 hv137
   denote_clear v 1 136
   obtain ⟨sA, hsA⟩ : ∃ t, t = s.allocaChain cw 12 := ⟨_, rfl⟩
-  have hF0 : Frame s s.mem sA := hsA ▸ frame_allocaChain hs
+  have hF0 : Frame 12 s s.mem sA := hsA ▸ frame_allocaChain hs 12
   peel_alloca_chain s, cw, 12
   simp only [slot_eq]
   rw [← hsA]
@@ -210,7 +207,7 @@ theorem bb0_run (r a : Pointer) (n : BitVec 32) (s : GlobalState) (hs : s.WF)
   refine name_of ({ u4 with mem := u4.mem.splice rField25 (vecBV (foldQuad (quadMulResult (geQuad (dblR (readQuad ha))) (fhQuad (dblR (readQuad ha))))).v25) })
     fun u5 hu5 => ?_
   peel_store (foldQuad (quadMulResult (geQuad (dblR (readQuad ha))) (fhQuad (dblR (readQuad ha))))).v25, rField25, g128, u4 as u5 := hu5
-  have hF5' : Frame s (s.mem.writeQuad r (geDbl (readQuad ha))) u5 := by
+  have hF5' : Frame 12 s (s.mem.writeQuad r (geDbl (readQuad ha))) u5 := by
     rw [hu5, hu4, hu3]; exact hF5
   denote_step_all v 245
   replace hv245 : v245 = .value (BitVec.ofBool (n >ₛ 1#32)) := by
