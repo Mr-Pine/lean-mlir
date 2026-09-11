@@ -132,7 +132,7 @@ theorem run_runFunction₂ {α β : Type} {b : EffectM α} {b' : EffectM β}
     ∃ t t' : GlobalState,
       StateT.run (runFunction b) s = .value (r, t)
         ∧ StateT.run (runFunction b') s' = .value (r', t') ∧ P t t' :=
-  let ⟨t, t', hb, hb', hP⟩ := h
+  let ⟨_, _, hb, hb', hP⟩ := h
   ⟨_, _, run_runFunction hb, run_runFunction hb', hP⟩
 
 namespace Corr
@@ -228,21 +228,32 @@ def focusConj (left : Bool) (tac : TSyntax ``Lean.Parser.Tactic.tacticSeq) :
     let lctx' := (← g'.getDecl).lctx
     let newDecls : Array LocalDecl :=
       lctx'.foldl (fun acc d => if lctx₀.contains d.fvarId then acc else acc.push d) #[]
-    -- 2. Lift every `(v, hv : v = e)` into the combined goal, as an `∃` destructured.
+    -- 2. Pair every new `v` with its defining `hv : v = e`. Not by adjacency:
+    --    a `subst` inside the block re-introduces the `hv`s that depended on
+    --    the substituted variable after all the `v`s.
+    let isDef (d : LocalDecl) : MetaM Bool := do
+      match (← instantiateMVars d.type).eq? with
+      | some (_, .fvar x, _) => pure (newDecls.any (·.fvarId == x))
+      | _ => pure false
+    let mut pairs : Array (LocalDecl × LocalDecl) := #[]
+    for d in newDecls do
+      if ← isDef d then continue
+      let mut found : Option LocalDecl := none
+      for hd in newDecls do
+        if let some (_, .fvar x, _) := (← instantiateMVars hd.type).eq? then
+          if x == d.fvarId then found := some hd
+      let some hd := found
+        | throwError "{who}: `{d.userName}` has no defining equation; \
+            end the block with `subst_vars` or `clear {d.userName}`"
+      pairs := pairs.push (d, hd)
+    -- Lift each pair into the combined goal, as an `∃` destructured.
     let mut gCur := g
     let mut fromVars : Array Expr := #[]
     let mut toVars : Array Expr := #[]
     let mut outerHvs : Array Name := #[]
-    let mut i := 0
-    while i < newDecls.size do
-      let d := newDecls[i]!
-      let some hd := newDecls[i + 1]?
-        | throwError "{who}: `{d.userName}` has no defining equation; \
-            end the block with `subst_vars` or `clear {d.userName}`"
-      let some (_, lhs, e) := (← instantiateMVars hd.type).eq?
-        | throwError "{who}: `{hd.userName}` is not an equation `{d.userName} = …`"
-      unless lhs == .fvar d.fvarId do
-        throwError "{who}: `{hd.userName}` does not define `{d.userName}`"
+    for (d, hd) in pairs do
+      let some (_, _, e) := (← instantiateMVars hd.type).eq?
+        | throwError "{who}: internal: `{hd.userName}` is not an equation"
       let ty' := (← instantiateMVars d.type).replaceFVars fromVars toVars
       let e' := (← instantiateMVars e).replaceFVars fromVars toVars
       let pred ← withLocalDeclD `x ty' fun x => do mkLambdaFVars #[x] (← mkEq x e')
@@ -257,7 +268,6 @@ def focusConj (left : Bool) (tac : TSyntax ``Lean.Parser.Tactic.tacticSeq) :
       fromVars := (fromVars.push (.fvar d.fvarId)).push (.fvar hd.fvarId)
       toVars := (toVars.push sg.fields[0]!).push sg.fields[1]!
       outerHvs := outerHvs.push hd.userName
-      i := i + 2
     -- 3. The stepped conjunct, spelled with the outer names.
     let side' := (← instantiateMVars (← g'.getType)).replaceFVars fromVars toVars
     -- 4. `f : side' → side`. The block's own proof binds its `v`s internally
