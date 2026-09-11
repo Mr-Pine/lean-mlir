@@ -146,12 +146,13 @@ simproc [simp_denote] elimValuation (∀ (_ : Ctxt.Valuation _), _) := fun e => 
 
 section SimpValuationApply
 
-/-- Return all statically known elements at the *end* of the valuation.
-That is, in `V ::ₕ x ::ₕ y` with `V` a free variable, return `#[y, x]`. -/
-private partial def valuationElements (e : Expr) (elems : Array Expr := #[]) : Array Expr :=
+/-- Split a valuation into the statically known elements at its *end* and the rest.
+That is, `V ::ₕ x ::ₕ y` with `V` a free variable gives `(#[y, x], V)`. -/
+private partial def valuationElements (e : Expr) (elems : Array Expr := #[]) :
+    Array Expr × Expr :=
   match_expr e with
   | Valuation.cons _Ty _instTyDenote _Γ _t x V => valuationElements V (elems.push x)
-  | _ => elems
+  | _ => (elems, e)
 
 private partial def varToIndex (e : Expr) : Option Nat :=
   match_expr e with
@@ -162,28 +163,35 @@ private partial def varToIndex (e : Expr) : Option Nat :=
   | _                           => none
 
 /--
-`simpValuationApply` rewrites applications of *fully-concrete* valuations to
-*fully-concrete* variables.
+`simpValuationApply` rewrites a valuation applied to a *fully-concrete* variable
+to the element, or, past the statically known elements, to the rest of the
+valuation at the shifted variable. It runs before rewrite lemmas (`↓`):
+`Valuation.cons_eval` matches the same terms and walks one `cons` per rewrite.
 -/
-dsimproc [simp_denote] simpValuationApply ((Valuation.cons _ _) _) := fun e => do
-  let mkApp2 V _t v := e
+dsimproc ↓ [simp_denote] simpValuationApply ((Valuation.cons _ _) _) := fun e => do
+  let mkApp2 V t v := e
     | return .continue
   withTraceNode `LeanMLIR.Elab (fun _ => pure m!"Simplifying access of variable: …") <| do
     trace[LeanMLIR.Elab] "Valuation: {V}"
     trace[LeanMLIR.ELab] "Variable: {v}"
-    let Velems := valuationElements V
+    let (Velems, Vrest) := valuationElements V
     let some i := varToIndex v
       | trace[LeanMLIR.Elab] "{Lean.crossEmoji} Expected a fully concrete variable, but found: {v}"
         return .continue
 
     if let some x := Velems[i]? then
       return .visit x
-    else
-      trace[LeanMLIR.Elab] "{Lean.crossEmoji} Variable with index #{i} is out-of-range \
-        for static elements array:\n\t{Velems}\nderived from valuation expression:\
-          \n\t{V}"
-      Meta.check e
-      return .continue
+    -- `⟨i - Velems.size, h⟩` into `Vrest`; `h` has that type up to defeq
+    let_expr Subtype.mk _α _p _i h := v
+      | return .continue
+    let .forallE _ _ body _ ← whnfD (← inferType Vrest)
+      | return .continue
+    let varTy ← whnfD (body.instantiate1 t).bindingDomain!
+    let_expr Subtype α p := varTy
+      | return .continue
+    let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p
+      (mkNatLit (i - Velems.size)) h
+    return .visit (mkApp2 Vrest t v')
 
 end SimpValuationApply
 
