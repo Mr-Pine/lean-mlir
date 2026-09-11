@@ -86,6 +86,20 @@ def fshl {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
 theorem fshl_value {w : Nat} (a b n : BitVec w) :
     fshl (.value a) (.value b) (.value n) = .value (fshlBV a b n) := rfl
 
+/-! ### min / max -/
+
+/-- `llvm.intr.smin`, poison-propagating. No flags: the minimum of two values
+is always one of them, so it cannot overflow. -/
+@[simp_sllvm]
+def smin {w : Nat} (a b : LLVM.IntW w) : LLVM.IntW w :=
+  match a, b with
+  | .value a, .value b => .value (if a.slt b then a else b)
+  | _, _ => .poison
+
+@[simp_sllvm]
+theorem smin_value {w : Nat} (a b : BitVec w) :
+    smin (.value a) (.value b) = .value (if a.slt b then a else b) := rfl
+
 /-! ### div / rem -/
 
 @[simp_sllvm]

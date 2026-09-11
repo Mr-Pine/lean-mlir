@@ -104,6 +104,9 @@ inductive SLLVMOp where
   `(b >> (w-n)) | (a << n)` idiom, here from `fd_curve25519_scalar_reduce`'s
   21-bit unpacking. -/
   | fshl (w : Nat)
+  /-- `llvm.intr.smin`: the signed minimum of two `w`-bit integers.
+  `fd_int_min` is this at `i32`. -/
+  | smin (w : Nat)
   /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
   modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
   size; see the parser's `mkArithTy`), so inserting a field is splicing the
@@ -278,6 +281,7 @@ def_signature for SLLVM
   | SLLVMOp.ptricmp _ => (Ty.ptr, Ty.ptr) -> bitvec 1
   | SLLVMOp.ptrselect => (bitvec 1, Ty.ptr, Ty.ptr) -> Ty.ptr
   | SLLVMOp.fshl w => (bitvec w, bitvec w, bitvec w) -> bitvec w
+  | SLLVMOp.smin w => (bitvec w, bitvec w) -> bitvec w
   | Op.insertelement e l w =>
       (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
   | Op.extractelement e l w =>
@@ -325,6 +329,7 @@ def_denote for SLLVM
   | SLLVMOp.ptricmp eq => fun x y => [SLLVM.ptricmp eq x y]ₕ
   | SLLVMOp.ptrselect => fun c x y => [SLLVM.ptrselect c x y]ₕ
   | SLLVMOp.fshl _w => fun a b c => [SLLVM.fshl a b c]ₕ
+  | SLLVMOp.smin _w => fun a b => [SLLVM.smin a b]ₕ
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -400,6 +405,7 @@ instance : DialectPrint SLLVM where
     | .ptricmp _  => "llvm.icmp"
     | .ptrselect  => "llvm.select"
     | .fshl _     => "llvm.intr.fshl"
+    | .smin _     => "llvm.intr.smin"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"

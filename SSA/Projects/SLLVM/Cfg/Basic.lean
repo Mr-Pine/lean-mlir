@@ -29,9 +29,10 @@ forward-progress guarantee), so LLVM is already licensed to assume they
 terminate. `#guard`-style testing goes through `Cfg.eval`, the fueled
 top-level interpreter; the agreement theorem lives in `Cfg/Eval.lean`.
 
-One remaining restriction, matching the artifacts: **depth-1 dominance**. A
-non-entry block sees the entry block's definitions (`Γamb`) and its own
-arguments -- not other blocks' definitions.
+One remaining restriction: **depth-1 dominance**. A non-entry block sees the
+entry block's definitions (`Γamb`) and its own arguments -- not other blocks'
+definitions. The lifter (`threadLive` in `Cfg/Transform.lean`) brings a general
+SSA region into this shape by passing such values as extra block arguments.
 
 Block arguments enter contexts in reverse declaration order
 (`Ctxt.ofList argTys.reverse`), the same load-bearing convention as `call`

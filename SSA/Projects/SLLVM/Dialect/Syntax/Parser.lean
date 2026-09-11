@@ -460,6 +460,9 @@ instance : DialectParse SLLVM 0 where
     | "llvm.intr.fshl" => do
         let args ← args.assumeArity 3
         mkExprOf <| SLLVMOp.fshl (← getIntWidth args[0])
+    | "llvm.intr.smin" => do
+        let args ← args.assumeArity 2
+        mkExprOf <| SLLVMOp.smin (← getIntWidth args[0])
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true
     | "llvm.intr.lifetime.end"   => mkExprOf <| SLLVMOp.lifetime false
     -- Ternary Operations

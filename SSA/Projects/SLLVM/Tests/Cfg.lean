@@ -9,7 +9,8 @@ import SSA.Projects.SLLVM.Cfg
 Hand-built CFGs pinning the fueled interpreter (`Cfg.eval`): a `cond_br`
 diamond joining at a φ-carrying block (the `bb4`/`bb8` → `bb10` shape of
 `fd_f25519_is_zero`), a `switch`, UB on a poison condition, a counted loop,
-an out-of-order forward edge, and fuel exhaustion on an infinite loop.
+an out-of-order forward edge, fuel exhaustion on an infinite loop, and values
+read across tail blocks.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Cfg
@@ -241,6 +242,51 @@ def outOfOrder : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := 
 
 #guard run outOfOrder (Ctxt.Valuation.singleton (PoisonOr.value 9#32)) == some (.value 9#32)
 
+/-! ## Values used across tail blocks
+
+`threadLive` passes a tail block's definition to the blocks it dominates as an
+extra block argument. -/
+
+/-- `%1`, defined in `^bb1`, is read two blocks later in `^bb3`. -/
+def crossBlockDom : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
+  ^bb0(%arg0: i32):
+    "llvm.br"()[^bb1] : () -> ()
+  ^bb1:
+    %0 = "llvm.mlir.constant"() <{value = 3 : i32}> : () -> i32
+    %1 = "llvm.add"(%arg0, %0) : (i32, i32) -> i32
+    "llvm.br"()[^bb2] : () -> ()
+  ^bb2:
+    "llvm.br"()[^bb3] : () -> ()
+  ^bb3:
+    "llvm.return"(%1) : (i32) -> ()
+}]
+
+#guard run crossBlockDom (Ctxt.Valuation.singleton (PoisonOr.value 4#32)) == some (.value 7#32)
+
+/-- A loop whose body reads the preheader's `%1` and the header's `%3`, and
+exits through a `cond_br` whose segments grow on both sides. Counts `%arg0` up
+by `%1 = 2` until it passes 9, returning the header's last value plus `%1`. -/
+def loopDom : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {
+  ^bb0(%arg0: i32):
+    "llvm.br"(%arg0)[^bb1] : (i32) -> ()
+  ^bb1(%0: i32):
+    %1 = "llvm.mlir.constant"() <{value = 2 : i32}> : () -> i32
+    %2 = "llvm.mlir.constant"() <{value = 9 : i32}> : () -> i32
+    "llvm.br"(%0)[^bb2] : (i32) -> ()
+  ^bb2(%3: i32):
+    %4 = "llvm.icmp"(%3, %2) <{predicate = 4 : i64}> : (i32, i32) -> i1
+    "llvm.cond_br"(%4)[^bb4, ^bb3] <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (i1) -> ()
+  ^bb3:
+    %5 = "llvm.add"(%3, %1) : (i32, i32) -> i32
+    "llvm.br"(%5)[^bb2] : (i32) -> ()
+  ^bb4:
+    %6 = "llvm.add"(%3, %1) : (i32, i32) -> i32
+    "llvm.return"(%6) : (i32) -> ()
+}]
+
+#guard run loopDom (Ctxt.Valuation.singleton (PoisonOr.value 0#32)) == some (.value 12#32)
+#guard run loopDom (Ctxt.Valuation.singleton (PoisonOr.value 11#32)) == some (.value 13#32)
+
 /-! ## Rejected shapes -/
 
 /--
@@ -258,7 +304,7 @@ def noTerminator : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] :=
 }]
 
 /--
-error: %0 is not in scope in ^bb2: a CFG block may only use entry-block definitions and its own arguments (depth-1 dominance)
+error: %0 does not dominate its uses: a path from the entry block reaches them without defining it
 -/
 #guard_msgs in
 def crossBlockRef : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] := [sllvm_cfg| {

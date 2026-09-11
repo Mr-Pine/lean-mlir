@@ -19,6 +19,10 @@ own arguments, and nothing else. The mapping and the context stay in sync
 because both grow cons-first: a block's context is
 `Ctxt.ofList argTys.reverse ++ Γamb` *by construction*, no casts.
 
+A region in general SSA form -- a tail block reading another tail block's
+definitions -- is first brought into that shape by `threadLive`, which passes
+such values along as extra block arguments.
+
 Terminators are decoded from each block's last operation. Successor operands
 live in the op's main operand list, split by `operandSegmentSizes` (and, for
 `llvm.switch`, `case_operand_segments` / `case_values`).
@@ -218,9 +222,7 @@ def mkBlocks (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
           mkBlockCom mkCallee valTable rets sigsAll all
             (Ctxt.ofList argTys.reverse ++ Γamb) b.ops
         catch
-          | .undeclaredName n => throw <| .generic s!"%{n} is not in scope in ^{b.name}: \
-              a CFG block may only use entry-block definitions and its own arguments \
-              (depth-1 dominance)"
+          | .undeclaredName n => throw <| .generic s!"%{n} is not in scope in ^{b.name}"
           | e => throw e
       let rest ← mkBlocks mkCallee valTable all rets Γamb snapshot sigsAll bs sigs
       return .cons body rest
@@ -234,9 +236,109 @@ private def findRets (reg : Region 0) : ExceptM SLLVM (List SLLVM.Ty) := do
     | throw <| .generic "region has no llvm.return"
   retStx.args.mapM (TypedSSAVal.mkTy ·)
 
+/-! ### Threading live values
+
+A `Cfg` tail block sees the entry block's definitions and its own arguments.
+SSA allows more -- any definition dominating the use -- and looped regions rely
+on it: `fd_curve25519_scalar_wnaf`'s absorb loop reads `^bb6`'s values from
+`^bb10`. `threadLive` closes the gap on the AST: every value live into a tail
+block and not defined in the entry block becomes a trailing argument of that
+block, and every branch to the block passes it. The lifted text is untouched,
+and a region already in depth-1 form has nothing live and comes back as it was.
+-/
+
+/-- The name an SSA value binds or reads. -/
+private def valName (v : TypedSSAVal 0) : String := SSAValToString v.1
+
+/-- Replace the integers of array attribute `key` by `ns`, keeping each entry's
+integer type. -/
+private def setSegments (attrs : AttrDict 0) (key : String) (ns : List Nat) : AttrDict 0 :=
+  let .mk entries := attrs
+  .mk <| entries.map fun e =>
+    match e with
+    | .mk k (.array ty els) =>
+        if k == key then
+          .mk k (.array ty ((els.zip ns).map fun
+            | (.int _ t, n) => .int n t
+            | (el, _) => el))
+        else e
+    | _ => e
+
+/-- `op` with `extra s` appended to the operands it passes to each successor
+`s`. A terminator whose segment attributes do not parse is left alone, for
+`mkTerminator` to reject. -/
+private def threadTerminator (extra : String → List (TypedSSAVal 0)) (op : Op 0) : Op 0 :=
+  match op.name, op.successors with
+  | "llvm.br", [s] => { op with args := op.args ++ extra s }
+  | "llvm.cond_br", [sT, sF] =>
+      match arrayInts op "operandSegmentSizes", op.args with
+      | .ok [nC, nT, nF], c :: rest =>
+          let eT := extra sT
+          let eF := extra sF
+          { op with
+            args := c :: (rest.take nT.toNat ++ eT ++ rest.drop nT.toNat ++ eF)
+            attrs := setSegments op.attrs "operandSegmentSizes"
+              [nC.toNat, nT.toNat + eT.length, nF.toNat + eF.length] }
+      | _, _ => op
+  | "llvm.switch", dflt :: cases =>
+      let segs := if cases.isEmpty then .ok [] else arrayInts op "case_operand_segments"
+      match arrayInts op "operandSegmentSizes", segs, op.args with
+      | .ok [nS, nDef, _], .ok segs, scrut :: rest =>
+          if segs.length != cases.length then op else
+          let dfltArgs := rest.take nDef.toNat ++ extra dflt
+          let (caseArgs, caseSegs, _) := (cases.zip segs).foldl
+            (fun (acc, ns, pending) (c, n) =>
+              let e := extra c
+              (acc ++ pending.take n.toNat ++ e, ns ++ [n.toNat + e.length], pending.drop n.toNat))
+            (([] : List (TypedSSAVal 0)), ([] : List Nat), rest.drop nDef.toNat)
+          let attrs := setSegments op.attrs "operandSegmentSizes"
+            [nS.toNat, dfltArgs.length, caseArgs.length]
+          { op with
+            args := scrut :: (dfltArgs ++ caseArgs)
+            attrs := if cases.isEmpty then attrs
+              else setSegments attrs "case_operand_segments" caseSegs }
+      | _, _, _ => op
+  | _, _ => op
+
+/-- Thread every value live into a tail block, and defined outside the entry
+block, through that block's arguments. Live sets are the least fixpoint of
+`live b = upward b ∪ ⋃ succ, (live succ \ defs b)`, with entry definitions
+excluded throughout; the added arguments are ordered by definition site. -/
+def threadLive (reg : Region 0) : Region 0 := Id.run do
+  let entry := reg.args.map valName ++ reg.ops.flatMap (·.res.map valName)
+  let types : List (String × MLIRType 0) :=
+    (reg.args ++ reg.ops.flatMap (·.res) ++
+      reg.blocks.flatMap fun b => b.args ++ b.ops.flatMap (·.res)).map fun v => (valName v, v.2)
+  let names := reg.blocks.map (·.name)
+  let defs (b : MLIR.AST.Block 0) := b.args.map valName ++ b.ops.flatMap (·.res.map valName)
+  let succs (b : MLIR.AST.Block 0) := (b.ops.getLast?.map (·.successors)).getD []
+  let outside (b : MLIR.AST.Block 0) (n : String) := !(defs b).contains n && !entry.contains n
+  let mut live : List (List String) := reg.blocks.map fun b =>
+    ((b.ops.flatMap (·.args.map valName)).filter (outside b)).eraseDups
+  -- sets only grow, and each is bounded by the definitions
+  for _ in [0 : reg.blocks.length * types.length + 1] do
+    let next := (reg.blocks.zip live).map fun (b, l) =>
+      let inherited := (succs b).flatMap fun s =>
+        ((names.idxOf? s).bind (live[·]?)).getD [] |>.filter (outside b)
+      inherited.foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) l
+    if next == live then break
+    live := next
+  let order (n : String) := types.findIdx (·.1 == n)
+  let extra (s : String) : List (TypedSSAVal 0) :=
+    (((names.idxOf? s).bind (live[·]?)).getD []).mergeSort (order · ≤ order ·)
+      |>.filterMap fun n => (types.lookup n).map (SSAVal.name n, ·)
+  let thread (ops : List (Op 0)) : List (Op 0) :=
+    match ops.getLast? with
+    | some t => ops.dropLast ++ [threadTerminator extra t]
+    | none => ops
+  return { reg with
+    ops := thread reg.ops
+    blocks := reg.blocks.map fun b => { b with args := b.args ++ extra b.name, ops := thread b.ops } }
+
 /-- The `mkCfg` body, with callee-building supplied as data. -/
 def mkCfgCore (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
     (reg : Region 0) : BuilderM SLLVM ParsedCfg := do
+  let reg := threadLive reg
   let sigTable ← reg.blocks.mapM fun b => do
     let tys ← (b.args.mapM (TypedSSAVal.mkTy ·) : ExceptM SLLVM _)
     return (b.name, tys)
@@ -247,7 +349,15 @@ def mkCfgCore (mkCallee : MkCallee) (valTable : List (String × ParsedCfg))
   let entryArgTys ← (reg.args.mapM (TypedSSAVal.mkTy ·) : ExceptM SLLVM _)
   declareBlockArgNames reg.args
   let Γin := Ctxt.ofList entryArgTys.reverse
-  let ⟨Γout, entry⟩ ← mkBlockCom mkCallee valTable rets (sigTable.map (·.2)) names Γin reg.ops
+  let ⟨Γout, entry⟩ ←
+    try
+      mkBlockCom mkCallee valTable rets (sigTable.map (·.2)) names Γin reg.ops
+    catch
+      -- after `threadLive`, the entry block only ever passes a tail block's value
+      -- when some path from the entry reaches its use without defining it
+      | .undeclaredName n => throw <| .generic s!"%{n} does not dominate its uses: \
+          a path from the entry block reaches them without defining it"
+      | e => throw e
   let snapshot ← get
   let blocks ← mkBlocks mkCallee valTable names rets Γout snapshot
     (sigTable.map (·.2)) reg.blocks (sigTable.map (·.2))
