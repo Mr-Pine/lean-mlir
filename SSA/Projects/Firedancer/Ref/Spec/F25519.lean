@@ -157,6 +157,17 @@ theorem limbBounds_of_equiv {s s' : GlobalState} (h : s ≈ s') {q : Pointer}
   simp only [readLimb, ← readLimb?_of_equiv h q i]
   exact hb i
 
+/-- `IsFieldElemPtr` speaks only of a live block and its size, which `≈`
+equates -- the `fd_f25519_t` counterpart of `Avx512.isVecPtr_of_equiv`. -/
+theorem isFieldElemPtr_of_equiv {s s' : GlobalState} {q : Pointer}
+    (h : s ≈ s') (hq : IsFieldElemPtr s.mem q) : IsFieldElemPtr s'.mem q := by
+  obtain ⟨⟨block, hblk, hlen⟩, hoff⟩ := hq
+  have hlive := h.live q.id
+  simp only [MemoryState.live?, hblk] at hlive
+  replace hlive : s'.mem[q.id]? = some (Block.live block) := by
+    split at hlive <;> simp_all
+  exact ⟨⟨block, hlive, hlen⟩, hoff⟩
+
 theorem readFieldElem?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) :
     readFieldElem? p s.mem = readFieldElem? p s'.mem := by
   simp only [readFieldElem?, readLimb?_of_equiv h]
