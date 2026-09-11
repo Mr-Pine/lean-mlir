@@ -4,13 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.SLLVM.Dialect
 
-/-!
-# `fd_ed25519_point_set` (avx512)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/avx512/region/fd_ed25519_point_set.mlir`. Three whole-vector load/store pairs, `P03, P14, P25`.
--/
-
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 

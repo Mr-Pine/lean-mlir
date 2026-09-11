@@ -4,13 +4,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
 
-/-!
-# `fd_ed25519_point_set` (ref)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fd_ed25519_point_set.mlir`. Four `fd_f25519_set`s in the source order `X, Y, Z, T`; `Z` is struct field 3, `T` field 2.
--/
-
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
 
