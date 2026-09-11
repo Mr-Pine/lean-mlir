@@ -2,7 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Common.Mlir.fd_curve25519_scalar_validate
+import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_validate
 
 /-!
 # `fd_curve25519_scalar_validate` (common)

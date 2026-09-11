@@ -1,7 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_scalar_validate
+import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Proof.fd_ulong_load_8
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
