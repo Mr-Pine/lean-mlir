@@ -1,0 +1,2 @@
+These specs state which part of the state the ref-versions of the SHA functions touch.
+Since the AVX512 implementation of SHA512 is written in assembly, our system cannot prove these. We assume that they behave identically to the ref version.
