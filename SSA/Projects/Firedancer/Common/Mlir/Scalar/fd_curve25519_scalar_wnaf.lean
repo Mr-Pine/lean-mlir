@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_curve25519_scalar_wnaf.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_int_min
 
@@ -32,7 +33,7 @@ def fd_curve25519_scalar_wnaf_region : MLIR.AST.Region 0 := [mlir_region|
     "llvm.br"(%1)[^bb2] : (i64) -> ()
   ^bb1:  // pred: ^bb2
     %19 = "llvm.xor"(%18, %0) : (i32, i32) -> i32
-    %20 = "llvm.getelementptr"(%arg0, %7) <{elem_type = i16, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %20 = "llvm.getelementptr"(%arg0) <{elem_type = i16, inbounds, rawConstantIndices = array<i32: 255>}> : (!llvm.ptr) -> !llvm.ptr
     "llvm.store"(%8, %20) <{alignment = 2 : i64, ordering = 0 : i64, tbaa = [#tbaa_tag2]}> : (i16, !llvm.ptr) -> ()
     "llvm.br"(%1)[^bb3] : (i64) -> ()
   ^bb2(%21: i64):  // 2 preds: ^bb0, ^bb2

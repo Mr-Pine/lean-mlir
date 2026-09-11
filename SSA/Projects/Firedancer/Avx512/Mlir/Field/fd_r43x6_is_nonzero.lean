@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_is_nonzero.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
@@ -8,11 +9,6 @@ import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 
-/-- The region as an AST value, so it can be written once and used both as the
-`Com` below and as the callee binding in `Mlir/fd_r43x6_ge_is_eq.lean`. The
-`fd_long_if` call inside is *not* bound here -- the artifact carries no
-region, and `bindCallees` recurses, so whoever binds this region binds its
-callee too. -/
 def fd_r43x6_is_nonzero_region : MLIR.AST.Region 0 := [mlir_region|
   {
     ^bb0(%arg0: vector<8xi64>):
@@ -99,16 +95,9 @@ def fd_r43x6_is_nonzero_region : MLIR.AST.Region 0 := [mlir_region|
       "llvm.return"(%79) : (i32) -> ()
   }]
 
-/-- `fd_r43x6_is_nonzero`, as the compiler emits it: the six limb extracts, both
-carry chains, and the call at `%60` still a call. -/
 def fd_r43x6_is_nonzero :=
   [sllvm_of| fd_r43x6_is_nonzero_region with @fd_long_if := fd_long_if_region]
 
-/-- The kernel as a `Cfg`, for callers that embed it *by reference*: the call
-node then holds `fd_r43x6_is_nonzero_cfg.entry`/`.blocks` rather than the
-whole body inlined, and `Cfg.denote_mk_self` lets its denotation theorem apply
-syntactically. This is what `peel_call` keys on; a caller binding the region
-instead gets a call node the tactic cannot match. -/
 def fd_r43x6_is_nonzero_cfg := Cfg.ofCom (fd_r43x6_is_nonzero.castPureToEff .impure)
 
 end Firedancer.Avx512

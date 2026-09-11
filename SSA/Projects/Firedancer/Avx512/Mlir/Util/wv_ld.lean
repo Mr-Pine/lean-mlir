@@ -1,14 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/avx512/region/wv_ld.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `wv_ld` (avx512)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/avx512/region/wv_ld.mlir`: a 32-byte aligned vector load.
--/
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

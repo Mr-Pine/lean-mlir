@@ -1,18 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_ulong_rotate_right.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `fd_ulong_rotate_right` (common)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/{ref,avx512}/region/fd_ulong_rotate_right.mlir`. The two
-backends emit the same file, so the function is lifted once, here.
-
-`fd_bits.h`: rotate a `ulong` right by `n`, compiled to `fshr x x n`.
-The shift amount arrives as an `i32` and is zero-extended.
--/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM

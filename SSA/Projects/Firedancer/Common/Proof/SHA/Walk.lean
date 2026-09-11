@@ -327,6 +327,15 @@ theorem gep_eq_value {p : SLLVM.Ptr} {sz off : Nat} {i : LLVM.IntW 64} {q : Poin
     · simp [SLLVM.gep, SLLVM.ptradd, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?] at h
       rw [← h]
 
+/-- A constant-only `gep` that produced a pointer was applied to one, in the same block. -/
+theorem gepConst_eq_value {p : SLLVM.Ptr} {off : Nat} {q : Pointer}
+    (h : SLLVM.gepConst p off = .value q) : ∃ p' : Pointer, p = .value p' ∧ q.id = p'.id := by
+  rcases p with ⟨_ | p'⟩
+  · exact absurd h (by simp [SLLVM.gepConst, SLLVM.ptradd]; exact fun e => PoisonOr.value_ne_poison _ e.symm)
+  · refine ⟨p', rfl, ?_⟩
+    simp [SLLVM.gepConst, SLLVM.ptradd, LLVM.const?] at h
+    rw [← h]
+
 /-- A two-index `gep` that produced a pointer was applied to one, in the same block. -/
 theorem gep2_eq_value {p : SLLVM.Ptr} {s₀ o₀ s₁ o₁ : Nat} {i j : LLVM.IntW 64} {q : Pointer}
     (h : SLLVM.gep2 p s₀ o₀ s₁ o₁ i j = .value q) : ∃ p' : Pointer, p = .value p' ∧ q.id = p'.id := by
@@ -339,6 +348,13 @@ theorem id_of_gep_eq {v base : SLLVM.Ptr} {sz off : Nat} {i : LLVM.IntW 64} {q :
     {X : BlockId} (hv : v = SLLVM.gep base sz off i) (hq : v = .value q)
     (hb : ∀ p', base = .value p' → p'.id = X) : q.id = X := by
   obtain ⟨p', hp', hid⟩ := gep_eq_value (hv ▸ hq)
+  exact hid.trans (hb p' hp')
+
+/-- ... and likewise for a constant-only `gep`. -/
+theorem id_of_gepConst_eq {v base : SLLVM.Ptr} {off : Nat} {q : Pointer}
+    {X : BlockId} (hv : v = SLLVM.gepConst base off) (hq : v = .value q)
+    (hb : ∀ p', base = .value p' → p'.id = X) : q.id = X := by
+  obtain ⟨p', hp', hid⟩ := gepConst_eq_value (hv ▸ hq)
   exact hid.trans (hb p' hp')
 
 /-- ... and likewise for a two-index `gep`. -/
@@ -354,6 +370,11 @@ theorem gep_value_value (p : Pointer) (sz off : Nat) (i : BitVec 64) :
   ⟨p.withOffset (i * BitVec.ofNat 64 sz + BitVec.ofNat 64 off),
     by simp [SLLVM.gep, SLLVM.ptradd, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?,
       Pointer.withOffset], rfl⟩
+
+/-- A constant-only `gep` of a pointer is a pointer in the same block. -/
+theorem gepConst_value (p : Pointer) (off : Nat) :
+    SLLVM.gepConst (.value p) off = .value (p.withOffset (BitVec.ofNat 64 off)) := by
+  simp [SLLVM.gepConst, SLLVM.ptradd, LLVM.const?, Pointer.withOffset]
 
 /-- A lookup past the prefix of an appended valuation reads the suffix. Tail
 blocks read ambient values through `ofHVector args.reverse ++ Vamb`, with

@@ -172,10 +172,10 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
 
   refine run_runFunction (s' := eqy1state) ?_
 
-  denote_step_all v 2
-  denote_eval v 0 2
-  simp only [LLVM.const?] at hv0 hv1 hv2
-  subst hv0 hv1 hv2
+  denote_step_all v 0
+  denote_eval v 0 0
+  simp only [LLVM.const?] at hv0
+  subst hv0
 
   peel_alloca from s as s₁ with hs₁def
   peel_alloca from s₁ as s₂ with hs₂def
@@ -200,9 +200,9 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   peel_gep 40 with a, haFitsE, eqx1state as aY
   peel_call heqy1state
 
-  -- `%12 = and %11, %9`, the two lifetime ends, and the return
-  denote_step_all v 12
-  eval_llvm 12
+  -- `%10 = and %9, %7`, the two lifetime ends, and the return
+  denote_step_all v 10
+  eval_llvm 10
   peel_lifetime
   peel_lifetime
   simp_return
@@ -236,7 +236,7 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
     exact ⟨fun h => ⟨h.2.symm, h.1.symm⟩, fun h => ⟨h.2.symm, h.1.symm⟩⟩
 
   -- the comparisons are stated over the elements themselves, so read each back
-  rw [hv12, readFieldElem_eq_of hx1read, readFieldElem_eq_of hy1read,
+  rw [hv10, readFieldElem_eq_of hx1read, readFieldElem_eq_of hy1read,
     readFieldElem_eq_of haXread, readFieldElem_eq_of haYread]
   by_cases hA : (readPoint hb).Y * (readPoint ha).Z = (readPoint ha).Y <;>
     by_cases hB : (readPoint hb).X * (readPoint ha).Z = (readPoint ha).X

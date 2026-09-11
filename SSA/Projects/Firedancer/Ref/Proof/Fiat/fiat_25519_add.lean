@@ -101,48 +101,35 @@ theorem fiat_25519_add_conforms (o p q: Pointer) (s: GlobalState)
       exact GlobalState.Equiv.symm
         (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) ho)
 
-    denote_step_all v 3
-    denote_eval v 0 3
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3
-    subst hv0 hv1 hv2 hv3
+    denote_expose
 
     peel_limb 0, p, hp.left, pblk, hpblk, plimb
     peel_limb 0, q, hq.left, qblk, hqblk, qlimb
-    denote_step_all v 6
-    denote_eval v 6 6
-    eval_llvm 6 as x1
+    denote_step_reduce v 2 [LLVM.add, LLVM.add?]
 
     peel_gep_limb 1, p, hp.left, s, p
     peel_limb 1, p₁, hp₁, pblk, hpblk, plimb
     peel_gep_limb 1, q, hq.left, s, q
     peel_limb 1, q₁, hq₁, qblk, hqblk, qlimb
-    denote_step_all v 11
-    denote_eval v 11 11
-    eval_llvm 11 as x2
+    denote_step_reduce v 7 [LLVM.add, LLVM.add?]
 
     peel_gep_limb 2, p, hp.left, s, p
     peel_limb 2, p₂, hp₂, pblk, hpblk, plimb
     peel_gep_limb 2, q, hq.left, s, q
     peel_limb 2, q₂, hq₂, qblk, hqblk, qlimb
-    denote_step_all v 16
-    denote_eval v 16 16
-    eval_llvm 16 as x3
+    denote_step_reduce v 12 [LLVM.add, LLVM.add?]
 
     peel_gep_limb 3, p, hp.left, s, p
     peel_limb 3, p₃, hp₃, pblk, hpblk, plimb
     peel_gep_limb 3, q, hq.left, s, q
     peel_limb 3, q₃, hq₃, qblk, hqblk, qlimb
-    denote_step_all v 21
-    denote_eval v 21 21
-    eval_llvm 21 as x4
+    denote_step_reduce v 17 [LLVM.add, LLVM.add?]
 
     peel_gep_limb 4, p, hp.left, s, p
     peel_limb 4, p₄, hp₄, pblk, hpblk, plimb
     peel_gep_limb 4, q, hq.left, s, q
     peel_limb 4, q₄, hq₄, qblk, hqblk, qlimb
-    denote_step_all v 26
-    denote_eval v 26 26
-    eval_llvm 26 as x5
+    denote_step_reduce v 22 [LLVM.add, LLVM.add?]
 
     -- a loaded limb is the spec's: `readLimb?` reads the same range of the same
     -- block, once the `getelementptr` offset is normalised
@@ -159,39 +146,34 @@ theorem fiat_25519_add_conforms (o p q: Pointer) (s: GlobalState)
       rw [limbOffsetInBits hq.right (k := i.toNat) (by omega) hd]
       simpa [readLimb?, MemoryState.live?, hqblk] using hqinput i
 
-    have m1 : x1.toNat = pinput 0 + qinput 0 := by
-      rw [← hx1]
-      exact add_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
+    have m1 : (qlimb₀ + plimb₀).toNat = pinput 0 + qinput 0 :=
+      add_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
         (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0) (pb 0) (qb 0)
-    have m2 : x2.toNat = pinput 1 + qinput 1 := by
-      rw [← hx2]
-      exact add_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
+    have m2 : (qlimb₁ + plimb₁).toNat = pinput 1 + qinput 1 :=
+      add_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
         (by rw [hqlimb₁]; exact hql 1 8#64 (by simp)) (pb 1) (qb 1)
-    have m3 : x3.toNat = pinput 2 + qinput 2 := by
-      rw [← hx3]
-      exact add_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
+    have m3 : (qlimb₂ + plimb₂).toNat = pinput 2 + qinput 2 :=
+      add_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
         (by rw [hqlimb₂]; exact hql 2 16#64 (by simp)) (pb 2) (qb 2)
-    have m4 : x4.toNat = pinput 3 + qinput 3 := by
-      rw [← hx4]
-      exact add_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
+    have m4 : (qlimb₃ + plimb₃).toNat = pinput 3 + qinput 3 :=
+      add_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
         (by rw [hqlimb₃]; exact hql 3 24#64 (by simp)) (pb 3) (qb 3)
-    have m5 : x5.toNat = pinput 4 + qinput 4 := by
-      rw [← hx5]
-      exact add_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
+    have m5 : (qlimb₄ + plimb₄).toNat = pinput 4 + qinput 4 :=
+      add_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
         (by rw [hqlimb₄]; exact hql 4 32#64 (by simp)) (pb 4) (qb 4)
 
     have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
       fun _ _ h => eq_ofNat_of_toNat h
-    rw [hout _ 0 m1] at hv6
-    rw [hout _ 1 m2] at hv11
-    rw [hout _ 2 m3] at hv16
-    rw [hout _ 3 m4] at hv21
-    rw [hout _ 4 m5] at hv26
-    rw [hv6, hv11, hv16, hv21, hv26]
+    rw [hout _ 0 m1] at hv2
+    rw [hout _ 1 m2] at hv7
+    rw [hout _ 2 m3] at hv12
+    rw [hout _ 3 m4] at hv17
+    rw [hout _ 4 m5] at hv22
+    rw [hv2, hv7, hv12, hv17, hv22]
 
     store_limbs outputBV, o, ho.left, s
 
-    simp only [BlockCom.denote_term, Terminator.denote_ret, houtMem,
-      hs₁, hs₂, hs₃, hs₄, o₁, o₂, o₃, o₄, simp_denote, simp_sllvm]
+    simp_return
+    simp [houtMem, hs₁, hs₂, hs₃, hs₄, o₁, o₂, o₃, o₄]
 
 end Firedancer.Ref

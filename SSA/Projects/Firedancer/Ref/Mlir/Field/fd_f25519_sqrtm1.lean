@@ -1,20 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_sqrtm1.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `@fd_f25519_sqrtm1`
-
-The initialiser of the module global, verbatim from
-`build/native/gcc/mlir/ref/region/fd_f25519_sqrtm1.mlir`. `ref.mlir` declares it
-`constant, internal, alignment = 16, unnamed_addr = 0` -- the address is
-significant, so no constant merging.
-
-The lifted region is not referenced by any lifted *program*: `llvm.mlir.addressof`
-reads the address out of `GlobalState.globals`, and this is what says what lives
-there -- it is the loader's input and the spec's constant.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -30,7 +18,6 @@ def fd_f25519_sqrtm1_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-/-- The global's contents, read off the artifact rather than retyped. -/
 def fd_f25519_sqrtm1_init : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 320] :=
   [sllvm_of| fd_f25519_sqrtm1_region]
 

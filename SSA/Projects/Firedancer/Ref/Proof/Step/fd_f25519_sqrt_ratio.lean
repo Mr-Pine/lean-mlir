@@ -14,7 +14,7 @@ than a pointer, and what it leaves at `dst` is an existential root with three
 properties rather than one value.
 
 `@fd_f25519_sqrtm1` comes in as a hypothesis because the *callee* addresses
-it, at its own `%6` -- this region never mentions the symbol. That is what
+it, at its own `%1` -- this region never mentions the symbol. That is what
 `Wrote.globals` buys: the `addr` half has to survive every step of the walk to
 get here. -/
 theorem sqrtRatio_step {dst su sv pm1 : Pointer} {w : GlobalState} (hw : w.WF)

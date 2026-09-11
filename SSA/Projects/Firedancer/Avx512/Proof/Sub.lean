@@ -354,7 +354,7 @@ goes on first rather than last, and its `add` carries `nsw nuw`. Everything
 downstream -- the value, the `u44` bound, the zero lanes -- is
 `decode'_acpBiasVec` and friends, shared with `sub`.
 
-The flags are what makes this more than a reassociation. `%226` is a masked
+The flags are what makes this more than a reassociation. `%222` is a masked
 lane, so below `2 ^ 43`, and the bias is below `2 ^ 28`: the sum is below
 `2 ^ 44` and neither wrap can fire. `masked_add_no_wrap` is that argument. -/
 
@@ -582,7 +582,7 @@ that reads it back writes it often enough to be worth a name. -/
 def subOneAcp (x : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   acpVec (Vector.ofFn fun i : Fin 8 => x[i.val] + BitVec.ofNat 64 subOneConst[i.val])
 
-/-- The `%84` of a `fd_r43x6_sub( x, one )`: the same eight instructions
+/-- The `%80` of a `fd_r43x6_sub( x, one )`: the same eight instructions
 stopped before the bias goes back on, which is the vector a later
 `fd_r43x6_sub_fast` against the result actually reads. -/
 theorem denote_subOneVec' {x : Vector (BitVec 64) 8}

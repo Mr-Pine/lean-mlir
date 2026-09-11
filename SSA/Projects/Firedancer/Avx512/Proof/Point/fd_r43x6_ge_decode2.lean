@@ -53,13 +53,13 @@ def slotPtr (s : GlobalState) (k : Nat) : Pointer := s.chainPtr cw k
 
 namespace Slot
 
-/-- `%49` -- `ulong _sa[4]`, the buffer `memcpy( _sa, _vsa, 32 )` fills. -/
+/-- `%45` -- `ulong _sa[4]`, the buffer `memcpy( _sa, _vsa, 32 )` fills. -/
 def sa : Nat := 0
-/-- `%50` -- `ulong _sb[4]`. -/
+/-- `%46` -- `ulong _sb[4]`. -/
 def sb : Nat := 1
-/-- `%51` -- `t0a`, the first out-parameter of `FD_R43X6_POW22523_2_INL`. -/
+/-- `%47` -- `t0a`, the first out-parameter of `FD_R43X6_POW22523_2_INL`. -/
 def t0a : Nat := 2
-/-- `%52` -- `t0b`. -/
+/-- `%48` -- `t0b`. -/
 def t0b : Nat := 3
 
 end Slot
@@ -107,7 +107,7 @@ theorem exists_slots_frame (s : GlobalState) (hs : s.WF) :
      fits := fun _ hk => GlobalState.fits_chainPtr hk
      fb := FrameBelow.allocaChain (le_refl _) (FrameBelow.refl _ _) 4 }⟩
 
-/-- `%16` -- the curve constant `d`, in r43x6 limbs. -/
+/-- `%20` -- the curve constant `d`, in r43x6 limbs. -/
 def dVec : Vector (BitVec 64) 8 :=
   #v[6365466163363, 253762649449, 7518893317, 260847760460, 7696165686388, 704489577558, 0, 0]
 
@@ -150,13 +150,13 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       (if Decodable (readWv hvsb) then (.value 0#32 : LLVM.IntW 32) else .value (-2#32))
      else .value (-1#32))
   refine Firedancer.run_runFunction' _ ?_
-  -- %0-%48: the constants, and the `undef`/`insertelement` chain that builds
+  -- %0-%44: the constants, and the `undef`/`insertelement` chain that builds
   -- the all-poison vector the shuffles take as their dead operand
-  denote_step_reduce v 48 [LLVM.const?, LLVM.Ty.poison]
-  -- the scalars this stretch reads: `%1 = 32` (the `memcpy` length), `%2`/`%3`
-  -- the `getelementptr` indices, `%4 = 63` and `%5 = 2^63-1` the sign split
-  subst hv1 hv2 hv3 hv4 hv5
-  -- %49-%52: `_sa`, `_sb`, `t0a`, `t0b`
+  denote_step_reduce v 44 [LLVM.const?, LLVM.Ty.poison]
+  -- the scalars this stretch reads: `%29 = 32` (the `memcpy` length), `%30 = 63`
+  -- and `%31 = 2^63-1` the sign split
+  subst hv29 hv30 hv31
+  -- %45-%48: `_sa`, `_sb`, `t0a`, `t0b`
   peel_alloca_chain s, cw, 4
   simp only [slotPtr_sa, slotPtr_sb, slotPtr_t0a, slotPtr_t0b]
   rw [← hsAlloc]
@@ -198,7 +198,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     simpa [pb_high] using hb_high_len
   peel_load (.bitvec (.concrete 64)), b_high_blk, pb_high, hb_high_blk, m₂
 
-  denote_step_reduce v 62 [LLVM.and, LLVM.and?, LLVM.lshr, LLVM.lshr?, LLVM.trunc, LLVM.trunc?] fold
+  denote_step_reduce v 58 [LLVM.and, LLVM.and?, LLVM.lshr, LLVM.lshr?, LLVM.trunc, LLVM.trunc?] fold
 
   -- what `_sa`'s block holds in `m₂`: the `sb` copy missed it, the `sa` copy
   -- spliced the caller's 32 bytes in at offset `0`
@@ -282,12 +282,12 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hlaneB : b_high_blk.bytes.extractLsb' pb_high.offsetInBits 64 = (readWv hvsb)[3] := by
     rw [hoffPb]; exact hlanesB 3 (by omega)
 
-  rw [hlaneA] at hv61 hv58
-  rw [hlaneB] at hv62 hv60
-  denote_clear v 57 57
-  denote_clear v 59 59
-  subst hv61
-  subst hv62
+  rw [hlaneA] at hv57 hv54
+  rw [hlaneB] at hv58 hv56
+  denote_clear v 53 53
+  denote_clear v 55 55
+  subst hv57
+  subst hv58
   refine name_of ({ m₂ with mem := m₂.mem.splice pa_high ((readWv hvsa)[3] &&& 0x7fffffffffffffff#64) }) fun m₃ hm₃ => ?_
   peel_store ((readWv hvsa)[3] &&& 0x7fffffffffffffff#64), pa_high,
     (⟨a_high_blk, ha_high_blk, hfitA⟩ : Fits m₂.mem pa_high 64), m₂ as m₃ := hm₃
@@ -296,7 +296,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   refine name_of ({ m₃ with mem := m₃.mem.splice pb_high ((readWv hvsb)[3] &&& 0x7fffffffffffffff#64) }) fun m₄ hm₄ => ?_
   peel_store ((readWv hvsb)[3] &&& 0x7fffffffffffffff#64), pb_high, hpb_high, m₃ as m₄ := hm₄
 
-  -- %63: `wv_ld( _sa )`, the staging buffer with its sign bit now cleared. The
+  -- %59: `wv_ld( _sa )`, the staging buffer with its sign bit now cleared. The
   -- quad comes back as an opaque `wa`; `hwa` is what it holds.
   have hwf₄ : m₄.WF := hm₄ ▸ (hm₃ ▸ (hm₂ ▸ (hm₁ ▸ frame.wf.splice).splice).splice).splice
   have hslot₃ : Fits m₃.mem (slotPtr s Slot.sa) (8 * 32) := hm₃ ▸ fits_splice hsaF
@@ -361,7 +361,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     simp [← hyaPacked, hdecA]
   clear hyaPacked
 
-  -- %65: `wv_ld( _sb )`, the `a` load's argument at the state the unpack left
+  -- %61: `wv_ld( _sb )`, the `a` load's argument at the state the unpack left
   have hwf₅ : u₅.WF := hwf₄.of_equiv hequ₅
   have hequ₆ : u₅ ≈ u₆ := hu₆ ▸ hwf₅.popFrame_equiv
   have hwf₆ : u₆.WF := hwf₅.of_equiv hequ₆
@@ -413,7 +413,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       omega
     rw [wvY, hnat]
 
-  -- %66: `fd_r43x6_unpack( ybVec )`
+  -- %62: `fd_r43x6_unpack( ybVec )`
   refine name_of (u₇.popFrame u₇.mem) fun u₈ hu₈ => ?_
   refine unpack_step ybPacked u₇ u₈ hu₈ fun ybVec hrun₈ hunpB hdecB h6B h7B hnrB hredB => ?_
   peel_call hrun₈
@@ -424,12 +424,12 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
 
 
   -- The fold's three constants, in the shape `denote_foldVec` states them.
-  replace hv6 : v6 = toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207,
-      8796093022207, 8796093022207, 1099511627775, 0, 0] := by denote_dense hv6
-  replace hv7 : v7 = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] := by denote_dense hv7
-  replace hv9 : v9 = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] := by denote_dense hv9
+  replace hv32 : v32 = toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207,
+      8796093022207, 8796093022207, 1099511627775, 0, 0] := by denote_dense hv32
+  replace hv33 : v33 = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] := by denote_dense hv33
+  replace hv27 : v27 = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] := by denote_dense hv27
 
-  -- %67-%71: `FD_R43X6_SQR_INL( ua, yaVec )` sqr 1
+  -- %63-%67: `FD_R43X6_SQR_INL( ua, yaVec )` sqr 1
   have hyaU47 : R43x6.U47 (yaVec.take R43x6.limbCount) := u47_take_of_unpacked hunpA
   refine name_of (u₈.popFrame u₈.mem) fun u₉ hu₉ => ?_
   peel_call (sqr_step_of_take hyaU47 h6A h7A u₈ u₉ hu₉)
@@ -438,10 +438,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hsqrA : SqrInl yaVec ysqa := by
     rw [hysqa]
     exact sqr_inl hyaU47
-  rw [← hysqa] at hv71
+  rw [← hysqa] at hv67
 
 
-  -- %72-%76: the `b` twin
+  -- %68-%72: the `b` twin
   have hybU47 : R43x6.U47 (ybVec.take R43x6.limbCount) := u47_take_of_unpacked hunpB
   refine name_of (u₉.popFrame u₉.mem) fun u₁₀ hu₁₀ => ?_
   peel_call (sqr_step_of_take hybU47 h6B h7B u₉ u₁₀ hu₁₀)
@@ -450,34 +450,26 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hsqrB : SqrInl ybVec ysqb := by
     rw [hysqb]
     exact sqr_inl hybU47
-  rw [← hysqb] at hv76
+  rw [← hysqb] at hv72
 
-  -- %77-%85: `fd_r43x6_sub( ysqa, one )` -- the constant carries both the
+  -- %73-%81: `fd_r43x6_sub( ysqa, one )` -- the constant carries both the
   -- `- 1` and the signed fold's bias
-  replace hv10 : v10 = toBitVecValue 64 subOneConst := by
-    simp only [subOneConst]; denote_dense hv10
-  replace hv11 : v11 = toBitVecValue 64 #v[5, 0, 1, 2, 3, 4, 8, 8] := by denote_dense hv11
-  replace hv12 : v12 = toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, 0, 0] := by denote_dense hv12
-  replace hv13 : v13 = toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18] := by denote_dense hv13
-  replace hv14 : v14 = toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0] := by
-    denote_dense hv14
-  replace hv15 : v15 = toBitVecValue 64
-      #v[159383552, 1048576, 1048576, 1048576, 1048576, 1048576, 0, 0] := by denote_dense hv15
-  denote_step_all v 85
-  denote_eval v 77 85
-  simp only [hv71, hv10] at hv77
-  simp only [hv6] at hv78
-  simp only [hv7] at hv79
-  simp only [hv11, hv12] at hv80
-  simp only [hv13] at hv81
-  simp only [hv14] at hv82
-  simp only [hv15] at hv85
+  replace hv26 : v26 = toBitVecValue 64 subOneConst := by
+    simp only [subOneConst]; denote_dense hv26
+  replace hv25 : v25 = toBitVecValue 64 #v[5, 0, 1, 2, 3, 4, 8, 8] := by denote_dense hv25
+  replace hv24 : v24 = toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, 0, 0] := by denote_dense hv24
+  replace hv23 : v23 = toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18] := by denote_dense hv23
+  replace hv22 : v22 = toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0] := by
+    denote_dense hv22
+  replace hv21 : v21 = toBitVecValue 64
+      #v[159383552, 1048576, 1048576, 1048576, 1048576, 1048576, 0, 0] := by denote_dense hv21
+  denote_step_reduce v 81 only [hv67, hv26, hv32, hv33, hv25, hv24, hv23, hv22, hv21]
   refine name_of (subOneVec ysqa) fun ua huadef => ?_
-  replace hv85 : v85 = ua.map PoisonOr.value := by
-    rw [huadef]; exact denote_subOneVec hv77 hv78 hv79 hv80 hv81 hv82 hv83 hv84 hv85
-  -- `%84`, the fold's pre-bias output: what the `sub_fast` at `%189` reads
-  have hv84acp := denote_subOneVec' hv77 hv78 hv79 hv80 hv81 hv82 hv83 hv84
-  denote_clear v 77 84
+  replace hv81 : v81 = ua.map PoisonOr.value := by
+    rw [huadef]; exact denote_subOneVec hv73 hv74 hv75 hv76 hv77 hv78 hv79 hv80 hv81
+  -- `%80`, the fold's pre-bias output: what the `sub_fast` at `%185` reads
+  have hv80acp := denote_subOneVec' hv73 hv74 hv75 hv76 hv77 hv78 hv79 hv80
+  denote_clear v 73 80
   -- what `ua` holds, and the bound the next kernel takes
   have hysqaB : ∀ k, 0 ≤ R43x6.extractLimbs ysqa k ∧ R43x6.extractLimbs ysqa k < 2 ^ 44 := by
     intro k
@@ -506,23 +498,15 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hua6 : ua[6] = 0 := by rw [huadef]; exact subOneVec_six ysqa
   have hua7 : ua[7] = 0 := by rw [huadef]; exact subOneVec_seven ysqa
 
-  -- %86-%94: the `b` twin. Its two carry adds come in the other operand
+  -- %82-%90: the `b` twin. Its two carry adds come in the other operand
   -- order, which is what `denote_vec_add_comm` puts back.
-  denote_step_all v 94
-  denote_eval v 86 94
-  simp only [hv76, hv10] at hv86
-  simp only [hv6] at hv87
-  simp only [hv7] at hv88
-  simp only [hv11, hv12] at hv89
-  simp only [hv13] at hv90
-  simp only [hv14] at hv91
-  replace hv92 := hv92.trans (denote_vec_add_comm v87 v89)
-  simp only [hv15] at hv94
+  denote_step_reduce v 90 only [hv72, hv26, hv32, hv33, hv25, hv24, hv23, hv22, hv21]
+  replace hv88 := hv88.trans (denote_vec_add_comm v83 v85)
   refine name_of (subOneVec ysqb) fun ub hubdef => ?_
-  replace hv94 : v94 = ub.map PoisonOr.value := by
-    rw [hubdef]; exact denote_subOneVec hv86 hv87 hv88 hv89 hv90 hv91 hv92 hv93 hv94
-  have hv93acp := denote_subOneVec' hv86 hv87 hv88 hv89 hv90 hv91 hv92 hv93
-  denote_clear v 86 93
+  replace hv90 : v90 = ub.map PoisonOr.value := by
+    rw [hubdef]; exact denote_subOneVec hv82 hv83 hv84 hv85 hv86 hv87 hv88 hv89 hv90
+  have hv89acp := denote_subOneVec' hv82 hv83 hv84 hv85 hv86 hv87 hv88 hv89
+  denote_clear v 82 89
   have hysqbB : ∀ k, 0 ≤ R43x6.extractLimbs ysqb k ∧ R43x6.extractLimbs ysqb k < 2 ^ 44 := by
     intro k
     have h1 := hsqrB.u44.1 k
@@ -557,21 +541,21 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   rw [← hya] at huaValue
   rw [← hyb] at hubValue
 
-  -- %95-%100: `FD_R43X6_MUL_INL( va, d, ysqa )` and the `fd_r43x6_add_fast( ·, one )`
-  -- after it, and the same for `b` at %101-%106
-  replace hv16 : v16 = dVec.map PoisonOr.value := by
-    have h : v16 = toBitVecValue 64 #v[6365466163363, 253762649449, 7518893317, 260847760460,
-        7696165686388, 704489577558, 0, 0] := by denote_dense hv16
+  -- %91-%96: `FD_R43X6_MUL_INL( va, d, ysqa )` and the `fd_r43x6_add_fast( ·, one )`
+  -- after it, and the same for `b` at %97-%102
+  replace hv20 : v20 = dVec.map PoisonOr.value := by
+    have h : v20 = toBitVecValue 64 #v[6365466163363, 253762649449, 7518893317, 260847760460,
+        7696165686388, 704489577558, 0, 0] := by denote_dense hv20
     rw [h]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [toBitVecValue, dVec]
-  replace hv17 : v17 = toBitVecValue 64 addOneConst := by
-    simp only [addOneConst]; denote_dense hv17
+  replace hv19 : v19 = toBitVecValue 64 addOneConst := by
+    simp only [addOneConst]; denote_dense hv19
   refine name_of (u₁₀.popFrame u₁₀.mem) fun u₁₁ hu₁₁ => ?_
   have hmulRunA := mul_step_of_take dVec_u47 dVec_six dVec_seven hsqrA.u47 hsqrA.z6 hsqrA.z7
     u₁₀ u₁₁ hu₁₁
-  rw [← hv16, ← hv71] at hmulRunA
+  rw [← hv20, ← hv67] at hmulRunA
   peel_call hmulRunA
   fold_unsigned (mulVec dVec ysqa), (limbNat_mul_lt dVec_u47 hsqrA.u47)
   have hmulA : MulInl dVec ysqa (foldVec (mulVec dVec ysqa)) := mul_inl dVec_u47 hsqrA.u47
@@ -582,12 +566,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     have h2 := hmulA.u44.2 k
     simp only [R43x6.toInts_take] at h1 h2
     omega
-  denote_step_all v 100
-  denote_eval v 100 100
-  simp only [hv99, hv17] at hv100
+  denote_step_reduce v 96 only [hv95, hv19]
   refine name_of (addOneVec (foldVec (mulVec dVec ysqa))) fun va hvadef => ?_
-  replace hv100 : v100 = va.map PoisonOr.value := by
-    rw [hvadef]; exact denote_addOneVec hv100
+  replace hv96 : v96 = va.map PoisonOr.value := by
+    rw [hvadef]; exact denote_addOneVec hv96
   have hvaValue : ((R43x6.decode' va : ℤ) : ZMod p)
       = Ed25519.d * ya ^ 2 + 1 := by
     rw [hvadef, decode'_addOneVec hmulAB]
@@ -600,7 +582,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   refine name_of (u₁₁.popFrame u₁₁.mem) fun u₁₂ hu₁₂ => ?_
   have hmulRunB := mul_step_of_take dVec_u47 dVec_six dVec_seven hsqrB.u47 hsqrB.z6 hsqrB.z7
     u₁₁ u₁₂ hu₁₂
-  rw [← hv16, ← hv76] at hmulRunB
+  rw [← hv20, ← hv72] at hmulRunB
   peel_call hmulRunB
   fold_unsigned (mulVec dVec ysqb), (limbNat_mul_lt dVec_u47 hsqrB.u47)
   have hmulB : MulInl dVec ysqb (foldVec (mulVec dVec ysqb)) := mul_inl dVec_u47 hsqrB.u47
@@ -611,12 +593,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     have h2 := hmulB.u44.2 k
     simp only [R43x6.toInts_take] at h1 h2
     omega
-  denote_step_all v 106
-  denote_eval v 106 106
-  simp only [hv105, hv17] at hv106
+  denote_step_reduce v 102 only [hv101, hv19]
   refine name_of (addOneVec (foldVec (mulVec dVec ysqb))) fun vb hvbdef => ?_
-  replace hv106 : v106 = vb.map PoisonOr.value := by
-    rw [hvbdef]; exact denote_addOneVec hv106
+  replace hv102 : v102 = vb.map PoisonOr.value := by
+    rw [hvbdef]; exact denote_addOneVec hv102
   have hvbValue : ((R43x6.decode' vb : ℤ) : ZMod p)
       = Ed25519.d * yb ^ 2 + 1 := by
     rw [hvbdef, decode'_addOneVec hmulBB]
@@ -636,10 +616,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   clear hslot₃ hslot₄ hslot₃B hslot₄B hliveB₆ hfitA hfitB
   clear hyaB hybB hysqaB hysqbB
 
-  denote_clear v 95 99
-  denote_clear v 101 105
+  denote_clear v 91 95
+  denote_clear v 97 101
 
-  -- %107-%111: `FD_R43X6_SQR_INL( ·, va )`, the head of the `u`/`v` chain the
+  -- %103-%107: `FD_R43X6_SQR_INL( ·, va )`, the head of the `u`/`v` chain the
   -- square root runs on
   have hvaU47 : R43x6.U47 (va.take R43x6.limbCount) := by
     constructor <;> intro i <;> rw [R43x6.toInts_take] <;> have := hvaB i <;> omega
@@ -647,12 +627,12 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hva7 : va[7] = 0 := by rw [hvadef]; exact addOneVec_seven (foldVec_getElem_seven _)
   refine name_of (u₁₂.popFrame u₁₂.mem) fun u₁₃ hu₁₃ => ?_
   have hsqrRunA := sqr_step_of_take hvaU47 hva6 hva7 u₁₂ u₁₃ hu₁₃
-  rw [← hv100] at hsqrRunA
+  rw [← hv96] at hsqrRunA
   peel_call hsqrRunA
   fold_unsigned (sqrVec va), (limbNat_sqr_lt hvaU47)
   refine name_of (foldVec (sqrVec va)) fun v2a hv2a => ?_
   have hsqr2a : SqrInl va v2a := by rw [hv2a]; exact sqr_inl hvaU47
-  rw [← hv2a] at hv111
+  rw [← hv2a] at hv107
 
   -- the rest of the `u`/`v` chain, in the C's names: `v2`, `v4`, `v3 = v·v2`,
   -- `uv3 = u·v3`, `uv7 = uv3·v4`, which is what `fd_r43x6_pow22523_2` takes
@@ -665,101 +645,101 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   have hubU47 : R43x6.U47 (ub.take R43x6.limbCount) := by
     constructor <;> intro i <;> rw [R43x6.toInts_take] <;> have := hubB i <;> omega
 
-  -- %112-%116: `FD_R43X6_SQR_INL( v2b, vb )`
+  -- %108-%112: `FD_R43X6_SQR_INL( v2b, vb )`
   refine name_of (u₁₃.popFrame u₁₃.mem) fun u₁₄ hu₁₄ => ?_
   have hrunv2b := sqr_step_of_take hvbU47 hvb6 hvb7 u₁₃ u₁₄ hu₁₄
-  rw [← hv106] at hrunv2b
+  rw [← hv102] at hrunv2b
   peel_call hrunv2b
   fold_unsigned (sqrVec vb), (limbNat_sqr_lt hvbU47)
   refine name_of (foldVec (sqrVec vb)) fun v2b hv2b => ?_
   have hsqrv2b : SqrInl vb v2b := by rw [hv2b]; exact sqr_inl hvbU47
-  rw [← hv2b] at hv116
+  rw [← hv2b] at hv112
 
-  -- %117-%121: `FD_R43X6_SQR_INL( v4a, v2a )`
+  -- %113-%117: `FD_R43X6_SQR_INL( v4a, v2a )`
   refine name_of (u₁₄.popFrame u₁₄.mem) fun u₁₅ hu₁₅ => ?_
   have hrunv4a := sqr_step_of_take hsqr2a.u47 hsqr2a.z6 hsqr2a.z7 u₁₄ u₁₅ hu₁₅
-  rw [← hv111] at hrunv4a
+  rw [← hv107] at hrunv4a
   peel_call hrunv4a
   fold_unsigned (sqrVec v2a), (limbNat_sqr_lt hsqr2a.u47)
   refine name_of (foldVec (sqrVec v2a)) fun v4a hv4a => ?_
   have hsqrv4a : SqrInl v2a v4a := by rw [hv4a]; exact sqr_inl hsqr2a.u47
-  rw [← hv4a] at hv121
+  rw [← hv4a] at hv117
 
-  -- %122-%126: `FD_R43X6_SQR_INL( v4b, v2b )`
+  -- %118-%122: `FD_R43X6_SQR_INL( v4b, v2b )`
   refine name_of (u₁₅.popFrame u₁₅.mem) fun u₁₆ hu₁₆ => ?_
   have hrunv4b := sqr_step_of_take hsqrv2b.u47 hsqrv2b.z6 hsqrv2b.z7 u₁₅ u₁₆ hu₁₆
-  rw [← hv116] at hrunv4b
+  rw [← hv112] at hrunv4b
   peel_call hrunv4b
   fold_unsigned (sqrVec v2b), (limbNat_sqr_lt hsqrv2b.u47)
   refine name_of (foldVec (sqrVec v2b)) fun v4b hv4b => ?_
   have hsqrv4b : SqrInl v2b v4b := by rw [hv4b]; exact sqr_inl hsqrv2b.u47
-  rw [← hv4b] at hv126
+  rw [← hv4b] at hv122
 
-  -- %127-%131: `FD_R43X6_MUL_INL( v3a, va, v2a )`
+  -- %123-%127: `FD_R43X6_MUL_INL( v3a, va, v2a )`
   refine name_of (u₁₆.popFrame u₁₆.mem) fun u₁₇ hu₁₇ => ?_
   have hrunv3a := mul_step_of_take hvaU47 hva6 hva7 hsqr2a.u47 hsqr2a.z6 hsqr2a.z7
     u₁₆ u₁₇ hu₁₇
-  rw [← hv100, ← hv111] at hrunv3a
+  rw [← hv96, ← hv107] at hrunv3a
   peel_call hrunv3a
   fold_unsigned (mulVec va v2a), (limbNat_mul_lt hvaU47 hsqr2a.u47)
   refine name_of (foldVec (mulVec va v2a)) fun v3a hv3a => ?_
   have hmulv3a : MulInl va v2a v3a := by rw [hv3a]; exact mul_inl hvaU47 hsqr2a.u47
-  rw [← hv3a] at hv131
+  rw [← hv3a] at hv127
 
-  -- %132-%136: `FD_R43X6_MUL_INL( v3b, vb, v2b )`
+  -- %128-%132: `FD_R43X6_MUL_INL( v3b, vb, v2b )`
   refine name_of (u₁₇.popFrame u₁₇.mem) fun u₁₈ hu₁₈ => ?_
   have hrunv3b := mul_step_of_take hvbU47 hvb6 hvb7 hsqrv2b.u47 hsqrv2b.z6 hsqrv2b.z7
     u₁₇ u₁₈ hu₁₈
-  rw [← hv106, ← hv116] at hrunv3b
+  rw [← hv102, ← hv112] at hrunv3b
   peel_call hrunv3b
   fold_unsigned (mulVec vb v2b), (limbNat_mul_lt hvbU47 hsqrv2b.u47)
   refine name_of (foldVec (mulVec vb v2b)) fun v3b hv3b => ?_
   have hmulv3b : MulInl vb v2b v3b := by rw [hv3b]; exact mul_inl hvbU47 hsqrv2b.u47
-  rw [← hv3b] at hv136
+  rw [← hv3b] at hv132
 
-  -- %137-%141: `FD_R43X6_MUL_INL( uv3a, ua, v3a )`
+  -- %133-%137: `FD_R43X6_MUL_INL( uv3a, ua, v3a )`
   refine name_of (u₁₈.popFrame u₁₈.mem) fun u₁₉ hu₁₉ => ?_
   have hrunuv3a := mul_step_of_take huaU47 hua6 hua7 hmulv3a.u47 hmulv3a.z6 hmulv3a.z7
     u₁₈ u₁₉ hu₁₉
-  rw [← hv85, ← hv131] at hrunuv3a
+  rw [← hv81, ← hv127] at hrunuv3a
   peel_call hrunuv3a
   fold_unsigned (mulVec ua v3a), (limbNat_mul_lt huaU47 hmulv3a.u47)
   refine name_of (foldVec (mulVec ua v3a)) fun uv3a huv3a => ?_
   have hmuluv3a : MulInl ua v3a uv3a := by rw [huv3a]; exact mul_inl huaU47 hmulv3a.u47
-  rw [← huv3a] at hv141
+  rw [← huv3a] at hv137
 
-  -- %142-%146: `FD_R43X6_MUL_INL( uv3b, ub, v3b )`
+  -- %138-%142: `FD_R43X6_MUL_INL( uv3b, ub, v3b )`
   refine name_of (u₁₉.popFrame u₁₉.mem) fun u₂₀ hu₂₀ => ?_
   have hrunuv3b := mul_step_of_take hubU47 hub6 hub7 hmulv3b.u47 hmulv3b.z6 hmulv3b.z7
     u₁₉ u₂₀ hu₂₀
-  rw [← hv94, ← hv136] at hrunuv3b
+  rw [← hv90, ← hv132] at hrunuv3b
   peel_call hrunuv3b
   fold_unsigned (mulVec ub v3b), (limbNat_mul_lt hubU47 hmulv3b.u47)
   refine name_of (foldVec (mulVec ub v3b)) fun uv3b huv3b => ?_
   have hmuluv3b : MulInl ub v3b uv3b := by rw [huv3b]; exact mul_inl hubU47 hmulv3b.u47
-  rw [← huv3b] at hv146
+  rw [← huv3b] at hv142
 
-  -- %147-%151: `FD_R43X6_MUL_INL( uv7a, uv3a, v4a )`
+  -- %143-%147: `FD_R43X6_MUL_INL( uv7a, uv3a, v4a )`
   refine name_of (u₂₀.popFrame u₂₀.mem) fun u₂₁ hu₂₁ => ?_
   have hrunuv7a := mul_step_of_take hmuluv3a.u47 hmuluv3a.z6 hmuluv3a.z7 hsqrv4a.u47 hsqrv4a.z6 hsqrv4a.z7
     u₂₀ u₂₁ hu₂₁
-  rw [← hv141, ← hv121] at hrunuv7a
+  rw [← hv137, ← hv117] at hrunuv7a
   peel_call hrunuv7a
   fold_unsigned (mulVec uv3a v4a), (limbNat_mul_lt hmuluv3a.u47 hsqrv4a.u47)
   refine name_of (foldVec (mulVec uv3a v4a)) fun uv7a huv7a => ?_
   have hmuluv7a : MulInl uv3a v4a uv7a := by rw [huv7a]; exact mul_inl hmuluv3a.u47 hsqrv4a.u47
-  rw [← huv7a] at hv151
+  rw [← huv7a] at hv147
 
-  -- %152-%156: `FD_R43X6_MUL_INL( uv7b, uv3b, v4b )`
+  -- %148-%152: `FD_R43X6_MUL_INL( uv7b, uv3b, v4b )`
   refine name_of (u₂₁.popFrame u₂₁.mem) fun u₂₂ hu₂₂ => ?_
   have hrunuv7b := mul_step_of_take hmuluv3b.u47 hmuluv3b.z6 hmuluv3b.z7 hsqrv4b.u47 hsqrv4b.z6 hsqrv4b.z7
     u₂₁ u₂₂ hu₂₂
-  rw [← hv146, ← hv126] at hrunuv7b
+  rw [← hv142, ← hv122] at hrunuv7b
   peel_call hrunuv7b
   fold_unsigned (mulVec uv3b v4b), (limbNat_mul_lt hmuluv3b.u47 hsqrv4b.u47)
   refine name_of (foldVec (mulVec uv3b v4b)) fun uv7b huv7b => ?_
   have hmuluv7b : MulInl uv3b v4b uv7b := by rw [huv7b]; exact mul_inl hmuluv3b.u47 hsqrv4b.u47
-  rw [← huv7b] at hv156
+  rw [← huv7b] at hv152
 
   -- the states the calls left, as one chain back to `m₄`
   have hwf₇ : u₇.WF := hwf₆.of_equiv hequ₇
@@ -818,7 +798,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   clear heq₇ heq₈ heq₉ heq₁₀ heq₁₁ heq₁₂ heq₁₃ heq₁₄ heq₁₅ heq₁₆ heq₁₇ heq₁₈ heq₁₉ heq₂₀ heq₂₁
   clear hu₆ hu₈ hu₉ hu₁₀ hu₁₁ hu₁₂ hu₁₃ hu₁₄ hu₁₅ hu₁₆ hu₁₇ hu₁₈ hu₁₉ hu₂₀ hu₂₁ hequ₂₂ hequ₅
 
-  -- %157-%158: `FD_R43X6_POW22523_2_INL( t0a, uv7a, t0b, uv7b )`, whose two
+  -- %153-%154: `FD_R43X6_POW22523_2_INL( t0a, uv7a, t0b, uv7b )`, whose two
   -- `wwl_t` out-parameters are the `t0a`/`t0b` slots, and the loads that read
   -- them back
   iterate 2 peel_lifetime
@@ -840,99 +820,99 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     hslotT0a hslotT0b (slots.ne (show Slot.t0a ≠ Slot.t0b by decide))
     hmuluv7a.u47 hmuluv7a.z6 hmuluv7a.z7 hmuluv7b.u47 hmuluv7b.z6 hmuluv7b.z7
     fun u₂₃ t0a t0b hrunPow hvalT0a hvalT0b wroteT0 => ?_
-  rw [← hv151, ← hv156] at hrunPow
+  rw [← hv147, ← hv152] at hrunPow
   peel_call hrunPow
   peel_load_vec t0a, (slotPtr s Slot.t0a), wroteT0.ptrA, wroteT0.valA, u₂₃
   peel_load_vec t0b, (slotPtr s Slot.t0b), wroteT0.ptrB, wroteT0.valB, u₂₃
   iterate 2 peel_lifetime
 
-  -- %159-%163: `FD_R43X6_MUL_INL( xa, uv3a, t0a )`
+  -- %155-%159: `FD_R43X6_MUL_INL( xa, uv3a, t0a )`
   refine name_of (u₂₃.popFrame u₂₃.mem) fun u₂₄ hu₂₄ => ?_
   have hrunxa := mul_step_of_take hmuluv3a.u47 hmuluv3a.z6 hmuluv3a.z7 (u47_of_u44 wroteT0.u44A) wroteT0.z6A wroteT0.z7A
     u₂₃ u₂₄ hu₂₄
-  rw [← hv141] at hrunxa
+  rw [← hv137] at hrunxa
   peel_call hrunxa
   fold_unsigned (mulVec uv3a t0a), (limbNat_mul_lt hmuluv3a.u47 (u47_of_u44 wroteT0.u44A))
   refine name_of (foldVec (mulVec uv3a t0a)) fun xa hxa => ?_
   have hmulxa : MulInl uv3a t0a xa := by rw [hxa]; exact mul_inl hmuluv3a.u47 (u47_of_u44 wroteT0.u44A)
-  rw [← hxa] at hv163
+  rw [← hxa] at hv159
 
-  -- %164-%168: `FD_R43X6_MUL_INL( xb, uv3b, t0b )`
+  -- %160-%164: `FD_R43X6_MUL_INL( xb, uv3b, t0b )`
   refine name_of (u₂₄.popFrame u₂₄.mem) fun u₂₅ hu₂₅ => ?_
   have hrunxb := mul_step_of_take hmuluv3b.u47 hmuluv3b.z6 hmuluv3b.z7 (u47_of_u44 wroteT0.u44B) wroteT0.z6B wroteT0.z7B
     u₂₄ u₂₅ hu₂₅
-  rw [← hv146] at hrunxb
+  rw [← hv142] at hrunxb
   peel_call hrunxb
   fold_unsigned (mulVec uv3b t0b), (limbNat_mul_lt hmuluv3b.u47 (u47_of_u44 wroteT0.u44B))
   refine name_of (foldVec (mulVec uv3b t0b)) fun xb hxb => ?_
   have hmulxb : MulInl uv3b t0b xb := by rw [hxb]; exact mul_inl hmuluv3b.u47 (u47_of_u44 wroteT0.u44B)
-  rw [← hxb] at hv168
+  rw [← hxb] at hv164
 
-  -- %169-%173: `FD_R43X6_SQR_INL( x2a, xa )`
+  -- %165-%169: `FD_R43X6_SQR_INL( x2a, xa )`
   refine name_of (u₂₅.popFrame u₂₅.mem) fun u₂₆ hu₂₆ => ?_
   have hrunx2a := sqr_step_of_take hmulxa.u47 hmulxa.z6 hmulxa.z7 u₂₅ u₂₆ hu₂₆
-  rw [← hv163] at hrunx2a
+  rw [← hv159] at hrunx2a
   peel_call hrunx2a
   fold_unsigned (sqrVec xa), (limbNat_sqr_lt hmulxa.u47)
   refine name_of (foldVec (sqrVec xa)) fun x2a hx2a => ?_
   have hsqrx2a : SqrInl xa x2a := by rw [hx2a]; exact sqr_inl hmulxa.u47
-  rw [← hx2a] at hv173
+  rw [← hx2a] at hv169
 
-  -- %174-%178: `FD_R43X6_SQR_INL( x2b, xb )`
+  -- %170-%174: `FD_R43X6_SQR_INL( x2b, xb )`
   refine name_of (u₂₆.popFrame u₂₆.mem) fun u₂₇ hu₂₇ => ?_
   have hrunx2b := sqr_step_of_take hmulxb.u47 hmulxb.z6 hmulxb.z7 u₂₆ u₂₇ hu₂₇
-  rw [← hv168] at hrunx2b
+  rw [← hv164] at hrunx2b
   peel_call hrunx2b
   fold_unsigned (sqrVec xb), (limbNat_sqr_lt hmulxb.u47)
   refine name_of (foldVec (sqrVec xb)) fun x2b hx2b => ?_
   have hsqrx2b : SqrInl xb x2b := by rw [hx2b]; exact sqr_inl hmulxb.u47
-  rw [← hx2b] at hv178
+  rw [← hx2b] at hv174
 
-  -- %179-%183: `FD_R43X6_MUL_INL( vx2a, va, x2a )`
+  -- %175-%179: `FD_R43X6_MUL_INL( vx2a, va, x2a )`
   refine name_of (u₂₇.popFrame u₂₇.mem) fun u₂₈ hu₂₈ => ?_
   have hrunvx2a := mul_step_of_take hvaU47 hva6 hva7 hsqrx2a.u47 hsqrx2a.z6 hsqrx2a.z7
     u₂₇ u₂₈ hu₂₈
-  rw [← hv100, ← hv173] at hrunvx2a
+  rw [← hv96, ← hv169] at hrunvx2a
   peel_call hrunvx2a
   fold_unsigned (mulVec va x2a), (limbNat_mul_lt hvaU47 hsqrx2a.u47)
   refine name_of (foldVec (mulVec va x2a)) fun vx2a hvx2a => ?_
   have hmulvx2a : MulInl va x2a vx2a := by rw [hvx2a]; exact mul_inl hvaU47 hsqrx2a.u47
-  rw [← hvx2a] at hv183
+  rw [← hvx2a] at hv179
 
-  -- %184-%188: `FD_R43X6_MUL_INL( vx2b, vb, x2b )`
+  -- %180-%184: `FD_R43X6_MUL_INL( vx2b, vb, x2b )`
   refine name_of (u₂₈.popFrame u₂₈.mem) fun u₂₉ hu₂₉ => ?_
   have hrunvx2b := mul_step_of_take hvbU47 hvb6 hvb7 hsqrx2b.u47 hsqrx2b.z6 hsqrx2b.z7
     u₂₈ u₂₉ hu₂₉
-  rw [← hv106, ← hv178] at hrunvx2b
+  rw [← hv102, ← hv174] at hrunvx2b
   peel_call hrunvx2b
   fold_unsigned (mulVec vb x2b), (limbNat_mul_lt hvbU47 hsqrx2b.u47)
   refine name_of (foldVec (mulVec vb x2b)) fun vx2b hvx2b => ?_
   have hmulvx2b : MulInl vb x2b vx2b := by rw [hvx2b]; exact mul_inl hvbU47 hsqrx2b.u47
-  rw [← hvx2b] at hv188
+  rw [← hvx2b] at hv184
 
 
-  -- %189-%196: `t1 = fd_r43x6_sub_fast( vx2, u )` and
+  -- %185-%192: `t1 = fd_r43x6_sub_fast( vx2, u )` and
   -- `t2 = fd_r43x6_add_fast( vx2, u )`, then the three `fd_r43x6_is_nonzero`
   -- calls `bb0` holds. The `sub` reads the fold's pre-bias vector, so the
   -- constant it adds back is `p` less the bias.
   replace hv18 : v18 = toBitVecValue 64 subFastConst := by
     simp only [subFastConst]; denote_dense hv18
-  denote_step_all v 193
-  denote_eval v 189 193
-  simp only [hv183, hv84acp] at hv189
-  replace hv189 := hv189.trans (denote_vec_sub vx2a (subOneAcp ysqa))
-  simp only [hv189, hv18] at hv190
-  replace hv190 := hv190.trans (denote_vec_add_const _ subFastConst)
-  rw [subFastVec_eq] at hv190
-  simp only [hv188, hv93acp] at hv191
-  replace hv191 := hv191.trans (denote_vec_sub vx2b (subOneAcp ysqb))
-  simp only [hv191, hv18] at hv192
-  replace hv192 := hv192.trans (denote_vec_add_const _ subFastConst)
-  rw [subFastVec_eq] at hv192
-  simp only [hv183, hv85] at hv193
-  replace hv193 := hv193.trans (denote_vec_add vx2a ua)
-  denote_clear v 189 189
-  denote_clear v 191 191
+  denote_step_all v 189
+  denote_eval v 185 189
+  simp only [hv179, hv80acp] at hv185
+  replace hv185 := hv185.trans (denote_vec_sub vx2a (subOneAcp ysqa))
+  simp only [hv185, hv18] at hv186
+  replace hv186 := hv186.trans (denote_vec_add_const _ subFastConst)
+  rw [subFastVec_eq] at hv186
+  simp only [hv184, hv89acp] at hv187
+  replace hv187 := hv187.trans (denote_vec_sub vx2b (subOneAcp ysqb))
+  simp only [hv187, hv18] at hv188
+  replace hv188 := hv188.trans (denote_vec_add_const _ subFastConst)
+  rw [subFastVec_eq] at hv188
+  simp only [hv179, hv81] at hv189
+  replace hv189 := hv189.trans (denote_vec_add vx2a ua)
+  denote_clear v 185 185
+  denote_clear v 187 187
 
   -- the limbs of the three, for `is_nonzero`'s `s62`
   have hysqaB : ∀ k, 0 ≤ R43x6.extractLimbs ysqa k ∧ R43x6.extractLimbs ysqa k < 2 ^ 44 := by
@@ -999,31 +979,31 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       rw [R43x6.toInts_take, extractLimbs_add vx2a ua hb i] <;>
       · have := hvx2aB i; have := huaB i; omega
 
-  -- %194-%196: `t1nza`, `t1nzb`, `t2nza`
+  -- %190-%192: `t1nza`, `t1nzb`, `t2nza`
   refine name_of (u₂₉.popFrame u₂₉.mem) fun u₃₀ hu₃₀ => ?_
   have hrunT1a := is_nonzero_step ht1aS62 u₂₉ u₃₀ hu₃₀
-  rw [← hv190] at hrunT1a
+  rw [← hv186] at hrunT1a
   peel_call hrunT1a
   refine name_of (u₃₀.popFrame u₃₀.mem) fun u₃₁ hu₃₁ => ?_
   have hrunT1b := is_nonzero_step ht1bS62 u₃₀ u₃₁ hu₃₁
-  rw [← hv192] at hrunT1b
+  rw [← hv188] at hrunT1b
   peel_call hrunT1b
   refine name_of (u₃₁.popFrame u₃₁.mem) fun u₃₂ hu₃₂ => ?_
   have hrunT2a := is_nonzero_step ht2aS62 u₃₁ u₃₂ hu₃₂
-  rw [← hv193] at hrunT2a
+  rw [← hv189] at hrunT2a
   peel_call hrunT2a
 
 
-  -- %197-%198: `t1nza & t2nza`, and the test the branch reads. The `and` of
+  -- %193-%194: `t1nza & t2nza`, and the test the branch reads. The `and` of
   -- two `is_nonzero`s is zero exactly when one of them is, so the `icmp` is
   -- the disjunction the C's `if( t1nza & t2nza ) goto faila` negates.
-  denote_step_all v 198
-  denote_eval v 197 198
-  replace hv198 : v198 = PoisonOr.value
+  denote_step_all v 194
+  denote_eval v 193 194
+  replace hv194 : v194 = PoisonOr.value
       (if ((R43x6.decode' (Vector.ofFn fun i : Fin 8 => vx2a[i.val] + ua[i.val]) : ℤ) : ZMod p) = 0
           ∨ ((R43x6.decode' (subFastVec vx2a (subOneAcp ysqa)) : ℤ) : ZMod p) = 0
         then 1 else 0) := by
-    rw [hv198, hv197, hv19]
+    rw [hv194, hv193, hv17]
     by_cases h1 : ((R43x6.decode' (Vector.ofFn fun i : Fin 8 =>
         vx2a[i.val] + ua[i.val]) : ℤ) : ZMod p) = 0
     · rw [if_pos h1, if_pos (Or.inl h1)]
@@ -1033,44 +1013,44 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
         simp [LLVM.and, LLVM.and?, LLVM.icmp, LLVM.icmp?, LLVM.icmp']
       · rw [if_neg h1, if_neg h2, if_neg (fun h => h.elim h1 h2)]
         simp [LLVM.and, LLVM.and?, LLVM.icmp, LLVM.icmp?, LLVM.icmp']
-  denote_clear v 197 197
+  denote_clear v 193 193
 
   -- The constants the tail blocks read, in the shapes `EntryEnv` states them.
   -- `^bb0` folded some of these into its own form; the rest are still the
   -- `denote_dense` literals the prologue left.
   have hsubNeg : subFastConst = negConst := rfl
   replace hv18 : v18 = toBitVecValue 64 negConst := by rw [hv18, hsubNeg]
-  replace hv12 : v12 = zeroVec.map PoisonOr.value := by rw [hv12, zeroVec_eq]
-  replace hv17 : v17 = oneVec.map PoisonOr.value := by
-    rw [hv17]
+  replace hv24 : v24 = zeroVec.map PoisonOr.value := by rw [hv24, zeroVec_eq]
+  replace hv19 : v19 = oneVec.map PoisonOr.value := by
+    rw [hv19]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [toBitVecValue, addOneConst, oneVec]
-  replace hv20 : v20 = PoisonOr.value (-1#32) := by rw [hv20]; rfl
-  replace hv21 : v21 = PoisonOr.value (-2#32) := by rw [hv21]; rfl
-  replace hv23 : v23 = sqrtM1Vec.map PoisonOr.value := by
-    have h : v23 = toBitVecValue 64 #v[3467281080496, 6582290652611, 5210002954932,
-        329084955603, 4526638806224, 373767602335, 0, 0] := by denote_dense hv23
+  replace hv16 : v16 = PoisonOr.value (-1#32) := by rw [hv16]; rfl
+  replace hv15 : v15 = PoisonOr.value (-2#32) := by rw [hv15]; rfl
+  replace hv13 : v13 = sqrtM1Vec.map PoisonOr.value := by
+    have h : v13 = toBitVecValue 64 #v[3467281080496, 6582290652611, 5210002954932,
+        329084955603, 4526638806224, 373767602335, 0, 0] := by denote_dense hv13
     rw [h]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [toBitVecValue, sqrtM1Vec]
-  replace hv24 : v24 = toBitVecValue 64 #v[0, 1, 8, 9, 4, 5, 12, 13] := by denote_dense hv24
-  replace hv25 : v25 = toBitVecValue 64 #v[2, 3, 10, 11, 6, 7, 12, 13] := by denote_dense hv25
-  replace hv26 : v26 = toBitVecValue 64 quadShift43 := by
-    simp only [quadShift43]; denote_dense hv26
-  replace hv27 : v27 = toBitVecValue 64 quadShift48 := by
-    simp only [quadShift48]; denote_dense hv27
-  replace hv47 : v47 = toBitVecValue 64 quadMask43 := by
-    simp only [quadMask43]; denote_dense hv47
-  replace hv48 : v48 = toBitVecValue 64 quadMask48 := by
-    simp only [quadMask48]; denote_dense hv48
+  replace hv12 : v12 = toBitVecValue 64 #v[0, 1, 8, 9, 4, 5, 12, 13] := by denote_dense hv12
+  replace hv11 : v11 = toBitVecValue 64 #v[2, 3, 10, 11, 6, 7, 12, 13] := by denote_dense hv11
+  replace hv10 : v10 = toBitVecValue 64 quadShift43 := by
+    simp only [quadShift43]; denote_dense hv10
+  replace hv9 : v9 = toBitVecValue 64 quadShift48 := by
+    simp only [quadShift48]; denote_dense hv9
+  replace hv1 : v1 = toBitVecValue 64 quadMask43 := by
+    simp only [quadMask43]; denote_dense hv1
+  replace hv0 : v0 = toBitVecValue 64 quadMask48 := by
+    simp only [quadMask48]; denote_dense hv0
 
-  -- `%46` is the `undef`/`insertelement` chain rather than a dense constant:
+  -- `%44` is the `undef`/`insertelement` chain rather than a dense constant:
   -- `19` in the top four lanes, poison in the bottom four.
-  replace hv46 : v46 = quadMul19 := by
-    simp only [hv46, hv44, hv42, hv40, hv38, hv36, hv34, hv32, hv30, hv28, hv29,
-      hv31, hv33, hv35, hv37, hv39, hv41, hv43, hv45]
+  replace hv44 : v44 = quadMul19 := by
+    simp only [hv44, hv43, hv42, hv41, hv40, hv39, hv38, hv37, hv36, hv8, hv35,
+      hv17, hv28, hv7, hv6, hv5, hv4, hv3, hv2]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, quadMul19]
@@ -1223,9 +1203,9 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       hidLt b03 hb03, hidLt b14 hb14, hidLt b25 hb25]
 
   -- the branch: `^bb1` when one of `a`'s two roots works, `^bb3` -- `faila` --
-  -- when neither does. `%198` is `1` exactly on the disjunction, and
+  -- when neither does. `%194` is `1` exactly on the disjunction, and
   -- `sqrtCandidate_iff` is what makes that disjunction `Decodable`.
-  simp only [BlockCom.denote_term, Terminator.denote_condBr, Ctxt.Valuation.cons_zero, hv198]
+  simp only [BlockCom.denote_term, Terminator.denote_condBr, Ctxt.Valuation.cons_zero, hv194]
   by_cases hcondA :
       ((R43x6.decode' (Vector.ofFn fun i : Fin 8 => vx2a[i.val] + ua[i.val]) : ℤ) : ZMod p) = 0
         ∨ ((R43x6.decode' (subFastVec vx2a (subOneAcp ysqa)) : ℤ) : ZMod p) = 0
@@ -1234,10 +1214,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       hsqA.mp (hcondA.imp (fun h => by rw [← ht2a]; exact h) (fun h => by rw [← ht1a]; exact h))
     rw [if_pos hcondA, if_pos rfl]
     simp only [pure_bind, Target.denote_mk, HVector.map]
-    rw [bb1_run (env := ?envA) (h188 := hv188) (h94 := hv94) (h195 := rfl)
+    rw [bb1_run (env := ?envA) (h184 := hv184) (h90 := hv90) (h191 := rfl)
       (hs62 := ht2bS62) (s := u₃₂)]
-    case envA => exact ⟨hv6, hv7, hv8, hv9, hv11, hv12, hv13, hv14, hv15, hv17, hv18, hv19,
-      hv20, hv21, hv22, hv23, hv24, hv25, hv26, hv27, hv46, hv47, hv48,
+    case envA => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,
+      hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9, hv44, hv1, hv0,
       rfl, rfl, rfl, rfl, rfl, rfl⟩
     -- the state `^bb1` hands on, and the caller's six out-vectors in it
     have e₃₃ : u₃₂ ≈ u₃₂.popFrame u₃₂.mem := w₃₂.popFrame_equiv
@@ -1280,7 +1260,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
         (ua := readWv hvsa) (ub := readWv hvsb) (s := u₃₂.popFrame u₃₂.mem)
         (env := ?env2) (inp := ?inp2)
         (hya := hdecA) (hyb := hdecB) (hsgnA := hbit _) (hsgnB := hbit _)
-        (h194 := ?h194) (h195 := ?h195) (hrootA := ?hrootA) (hrootB := ?hrootB)
+        (h190 := ?h190) (h191 := ?h191) (hrootA := ?hrootA) (hrootB := ?hrootB)
         (ht1nza := by split <;> simp) (ht1nzb := by split <;> simp)
         (hxaU := hmulxa.u44) (hxa6 := hmulxa.z6) (hxa7 := hmulxa.z7)
         (hxbU := hmulxb.u44) (hxb6 := hmulxb.z6) (hxb7 := hmulxb.z7)
@@ -1296,11 +1276,11 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
         · exact fun _ _ => ⟨by rw [if_pos hda, if_pos hdb], hDa, hDb⟩
         · exact fun h => absurd hda h
         · exact fun _ h => absurd hdb h
-      case env2 => exact ⟨hv6, hv7, hv8, hv9, hv11, hv12, hv13, hv14, hv15, hv17, hv18, hv19,
-        hv20, hv21, hv22, hv23, hv24, hv25, hv26, hv27, hv46, hv47, hv48,
+      case env2 => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,
+        hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9, hv44, hv1, hv0,
         rfl, rfl, rfl, rfl, rfl, rfl⟩
-      case inp2 => exact ⟨hv163, hv168, rfl, rfl, hv58, hv60, rfl, rfl⟩
-      case h194 =>
+      case inp2 => exact ⟨hv159, hv164, rfl, rfl, hv54, hv56, rfl, rfl⟩
+      case h190 =>
         rw [← hya]
         constructor
         · intro h
@@ -1314,7 +1294,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
           refine if_pos ?_
           rw [ht1a]
           linear_combination h
-      case h195 =>
+      case h191 =>
         rw [← hyb]
         constructor
         · intro h
@@ -1354,8 +1334,8 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
           simp [GeDecode2.nonzeroBit, hcondB.1, hcondB.2]),
         bb4_run (env := ?env4) (ha03 := qa03.1) (ha14 := qa14.1) (ha25 := qa25.1)
           (hb03 := qb03.1) (hb14 := qb14.1) (hb25 := qb25.1)]
-      case env4 => exact ⟨hv6, hv7, hv8, hv9, hv11, hv12, hv13, hv14, hv15, hv17, hv18, hv19,
-        hv20, hv21, hv22, hv23, hv24, hv25, hv26, hv27, hv46, hv47, hv48,
+      case env4 => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,
+        hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9, hv44, hv1, hv0,
         rfl, rfl, rfl, rfl, rfl, rfl⟩
       refine ⟨({ (u₃₂.popFrame u₃₂.mem) with mem := GeDecode2.zeroOutMem (u₃₂.popFrame u₃₂.mem).mem a03 a14 a25 b03 b14 b25 } : GlobalState), ?_,
         zeroVec, zeroVec, zeroVec, zeroVec, zeroVec, zeroVec, ?_, ?_, ?_, ?_⟩
@@ -1386,8 +1366,8 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       ⟨fits_of_live?_eq (hcaller b25.id (hidLt b25 hb25)) hb25.1, hb25.2⟩
     rw [bb3_run (env := ?env3) (ha03 := ra03.1) (ha14 := ra14.1) (ha25 := ra25.1)
       (hb03 := rb03.1) (hb14 := rb14.1) (hb25 := rb25.1)]
-    case env3 => exact ⟨hv6, hv7, hv8, hv9, hv11, hv12, hv13, hv14, hv15, hv17, hv18, hv19,
-      hv20, hv21, hv22, hv23, hv24, hv25, hv26, hv27, hv46, hv47, hv48,
+    case env3 => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,
+      hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9, hv44, hv1, hv0,
       rfl, rfl, rfl, rfl, rfl, rfl⟩
     refine ⟨({ u₃₂ with mem := GeDecode2.zeroOutMem u₃₂.mem a03 a14 a25 b03 b14 b25 } : GlobalState), ?_,
       zeroVec, zeroVec, zeroVec, zeroVec, zeroVec, zeroVec, ?_, ?_, ?_, ?_⟩

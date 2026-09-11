@@ -52,7 +52,7 @@ theorem live?_pointOutMem_congr {m m' : MemoryState} {r : Pointer}
 /- Scaffolding for the `fd_ed25519_point_frombytes` derivation. -/
 namespace PointFromBytes
 
-/-- The five `fd_f25519_t` locals `%17 … %21` allocate. In allocation order
+/-- The five `fd_f25519_t` locals `%6 … %10` allocate. In allocation order
 they are the locals `fd_curve25519.c` declares --
 
     0 x   1 y   2 t   3 u   4 v
@@ -65,17 +65,17 @@ abbrev frombytesLocal (s : GlobalState) : Fin 5 → Pointer := fieldLocal s
 `vx … vv`, the two globals `@fd_f25519_d` and `@fd_f25519_one` still hold `d`
 and `1`, the out-parameter `r` is still a point, and every other block the
 caller holds -- `buf` -- reads as it did on entry. `r` is the one caller block
-the region writes (`fd_ed25519_point_from`, `%37`), so it is carried
+the region writes (`fd_ed25519_point_from`, `%26`), so it is carried
 separately from the frame clause.
 
 The globals are carried rather than recovered from `live` at each use: the
-region reads `d` at `%26` and `1` at `%27`/`%28`/`%37`, and they are constant
+region reads `d` at `%15` and `1` at `%16`/`%17`/`%26`, and they are constant
 throughout, so `pdBelow`/`poneBelow` -- their blocks predate the frame -- is
 all a step needs to keep them.
 
-`limbSum ptrx < 2 · p` is deliberately *not* a field: `%35` negates `x`, and
+`limbSum ptrx < 2 · p` is deliberately *not* a field: `%24` negates `x`, and
 `fiat_25519_opp` of an all-zero limb vector is exactly `2 · p`.  It is only
-wanted at `%32`, so it travels beside the state rather than inside it.
+wanted at `%21`, so it travels beside the state rather than inside it.
 
 `x` is the one local whose bound is not tight: `fd_f25519_frombytes`,
 `fd_f25519_sqr`, `fd_f25519_mul`, `fd_f25519_add` and `fd_f25519_sub` all
@@ -83,7 +83,7 @@ carry, so `y`, `t`, `u`, `v` are tight from the moment they are written (and
 before that they are a fresh, zeroed local). `x` is whatever
 `fd_f25519_sqrt_ratio` and `fd_f25519_neg` leave -- the per-limb bias bounds
 and `limbSum < 2 · p`, which is exactly `fd_f25519_sgn`'s precondition at
-`%32`. -/
+`%21`. -/
 structure State (s₀ : GlobalState) (r pd pone : Pointer)
     (vx vy vt vu vv : ZMod _root_.p) (w : GlobalState) : Prop where
   wf : w.WF
@@ -114,9 +114,9 @@ structure State (s₀ : GlobalState) (r pd pone : Pointer)
   bndone : LimbBounds ptrone
   ptr : IsPointPtr w.mem r
   /-- Every caller block reads as it did on entry -- `r` included. The region
-  writes `r` only at `%37` (`fd_ed25519_point_from`), the last operation before
+  writes `r` only at `%26` (`fd_ed25519_point_from`), the last operation before
   the return, so nothing is lost by keeping the invariant intact up to there
-  and handing `%37` to `popFrame_equiv_splice` instead of a `State` step. -/
+  and handing `%26` to `popFrame_equiv_splice` instead of a `State` step. -/
   live : ∀ b : BlockId, b.id < s₀.alloc.nextFreeBlock →
     w.mem.live? b = s₀.mem.live? b
 
@@ -353,10 +353,10 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
       = .value (frombytesLocal s 1))
     (hvt : V (⟨11, by rfl⟩ : fd_ed25519_point_frombytes.Γout.Var SLLVM.Ty.ptr)
       = .value (frombytesLocal s 2))
-    (hvone : V (⟨17, by rfl⟩ : fd_ed25519_point_frombytes.Γout.Var SLLVM.Ty.ptr)
+    (hvone : V (⟨15, by rfl⟩ : fd_ed25519_point_frombytes.Γout.Var SLLVM.Ty.ptr)
       = .value pone)
-    (hvr : V (⟨32, by rfl⟩ : fd_ed25519_point_frombytes.Γout.Var SLLVM.Ty.ptr) = .value r)
-    -- `%37` writes `r`; `@fd_f25519_one` is the one *global* it reads, so it
+    (hvr : V (⟨21, by rfl⟩ : fd_ed25519_point_frombytes.Γout.Var SLLVM.Ty.ptr) = .value r)
+    -- `%26` writes `r`; `@fd_f25519_one` is the one *global* it reads, so it
     -- has to be known apart from `r`
     (hponer : pone.id ≠ r.id)
     (state : State s r pd pone xv (decodeBytes (readBuf hbuf)) 0
@@ -417,7 +417,7 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
   -- one the avx512 backend's QUAD holds
   let point : Point := Ed25519.decodedPoint xv y
 
-  -- `r`'s block reads the same in `w₁` as on entry: `%37` is the only write to
+  -- `r`'s block reads the same in `w₁` as on entry: `%26` is the only write to
   -- it, and it is the same four splices on either memory.
   have hrlive :=
     live?_splice_congr (p := r.withOffset 80) (x := oT)
@@ -440,7 +440,7 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
   show IsDecoding (readPoint hpt) (readBuf hbuf)
   -- `hpt` reads the point out of `s.mem`; the four writes `hlX`--`hlZ`
   -- describe land on `w₁.mem`. Both memories agree on `r`'s block -- the
-  -- region touches it only through `%37` -- so they read the same point.
+  -- region touches it only through `%26` -- so they read the same point.
   have hptw : IsPointPtr ((((w₁.mem.splice r oX).splice (r.withOffset 40) oY).splice
       (r.withOffset 120) oZ).splice (r.withOffset 80) oT) r :=
     isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice state₁.ptr)))
@@ -448,7 +448,7 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
     refine readPoint_of_live?_eq ?_ hptw hpt
     simp only [pointOutMem, packLimbs_extractLsb']
     exact hrlive.symm
-  -- the four coordinates are the field elements `%36`/`%37` copied in
+  -- the four coordinates are the field elements `%25`/`%26` copied in
   have hXv := (readFieldElem_eq_of_readLimb hlX).trans state₁.valx
   have hYv := (readFieldElem_eq_of_readLimb hlY).trans state₁.valy
   have hTv := (readFieldElem_eq_of_readLimb hlT).trans state₁.valt
@@ -474,7 +474,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
     (hm : s.RefWF [r])
     (hr : IsPointPtr s.mem r)
     (hbuf : IsByteBufPtr s.mem buf)
-    -- `%37` writes `r` and `%22`/`%24` read `buf`; the spec is stated over
+    -- `%26` writes `r` and `%11`/`%13` read `buf`; the spec is stated over
     -- `readBuf hbuf` at the entry state, so the two are kept apart
     (hbufr : buf.id ≠ r.id) :
     fd_ed25519_point_frombytes_spec r buf s hr hbuf := by
@@ -497,11 +497,12 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hglobne₁ : pd.id ≠ r.id := hapartd r (by simp)
   have hglobne₂ : pone.id ≠ r.id := hapartone r (by simp)
 
-  denote_step_reduce v 6 [LLVM.const?, insertvalue] fold
+  denote_step_reduce v 2 [LLVM.const?] fold
   peel_addressof hgd.addr
-  denote_step_reduce v 12 [LLVM.const?, insertvalue] fold
   peel_addressof hgone.addr
-  denote_step_reduce v 16 [LLVM.const?, insertvalue] fold
+  -- `%5` is `NULL`; `denote_eval` alone reduces it
+  denote_step_all v 5
+  denote_eval v 5 5
 
   -- Everything the caller can address predates the frame, so no `alloca` of
   -- the chain touches it.
@@ -532,18 +533,14 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   set sLocals : GlobalState := s.allocaChain fieldW 5 with hsLocals
   clear_value sLocals
 
-  -- %17 … %21, folded to `frombytesLocal s k` and sealed as `sLocals`
+  -- %6 … %10, folded to `frombytesLocal s k` and sealed as `sLocals`
   peel_alloca_chain s, fieldW, 5
   fold_cells s, fieldW, frombytesLocal, 5
   rw [← hsLocals]
 
-  -- the stepper's `v0`, `v2 … v6`, `v8 … v12`: the alloca count, and the
-  -- `@fd_f25519_d` / `@fd_f25519_one` initialisers the region materialises and
-  -- never reads. `v14`, `v15`, `v16` -- `0#32`, `NULL`, `7#8` -- are read, at
-  -- `%30`, the `cond_br` and `%31`.
-  denote_clear v 0 0
-  denote_clear v 2 6
-  denote_clear v 8 12
+  -- `v2` is the alloca count; `v0`, `v1`, `v5` -- `7#8`, `0#32`, `NULL` -- are
+  -- read at `%20`, `%19` and the `cond_br`.
+  denote_clear v 2 2
 
   -- `fd_curve25519.c`'s names for the five locals; `p`-prefixed, since the
   -- field values `y`, `u`, `v` are already in scope.
@@ -553,7 +550,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   set pu := frombytesLocal s 3 with hpuptr
   set pv := frombytesLocal s 4 with hpvptr
 
-  -- `%17`, `%18`, `%19`, up to the `fd_f25519_frombytes` call
+  -- `%6`, `%7`, `%8`, up to the `fd_f25519_frombytes` call
   peel_lifetime
   peel_lifetime
   peel_lifetime
@@ -624,7 +621,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
       ∃ h : IsByteBufPtr w.mem buf, readBuf h = readBuf hbuf :=
     fun F => F.callerBuf hbuf hnbuf
 
-  -- %22 `fd_f25519_frombytes( y, buf )`
+  -- %11 `fd_f25519_frombytes( y, buf )`
   obtain ⟨hbuf₀, hbufval₀⟩ := bufAt F₀
   obtain ⟨s₁, f₁, hrun₁, hval₁, hbnd₁⟩ := frombytes_step F₀.wf F₀.ptry hbuf₀
   peel_call hrun₁
@@ -635,13 +632,11 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₁ := hm₀.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₁
   clear f₁ hval₁ hbnd₁ hbuf₀ hbufval₀ F₀
 
-  -- %23 `getelementptr( buf, 31 )` -- the byte the sign rides in
+  -- %12 `getelementptr( buf, 31 )` -- the byte the sign rides in
   obtain ⟨hbuf₁, hbufval₁⟩ := bufAt S₁
-  -- the index operand is `%1`, from the entry's constant fold
-  subst hv1
   peel_gep 31 with buf, hbuf₁.left, s₁ as bufTop
 
-  -- %24 `load i8`
+  -- %13 `load i8`
   obtain ⟨blk, hblkTop, hblklenTop⟩ := hbufTop
   -- `peel_gep` states the remaining `Fits` with `bufTop` unfolded; `omega`
   -- needs it as the atom the load's obligation is about
@@ -652,7 +647,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   -- is what will tie it back to `readBuf hbuf`
   clear hblklenTop hfit8
 
-  -- %25 `fd_f25519_sqr( u, y )` -- `u = y²`, after the `%20`/`%21` lifetimes
+  -- %14 `fd_f25519_sqr( u, y )` -- `u = y²`, after the `%9`/`%10` lifetimes
   peel_lifetime
   peel_lifetime
   obtain ⟨s₂, hrun₂, f₂⟩ := sqr_step S₁.wf S₁.ptru S₁.ptry S₁.valy S₁.bndy.loose
@@ -663,7 +658,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₂ := hm₁.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₂.wrote
   clear f₂ S₁
 
-  -- %26 `fd_f25519_mul( v, u, d )` -- `v = d·y²`
+  -- %15 `fd_f25519_mul( v, u, d )` -- `v = d·y²`
   obtain ⟨s₃, hrun₃, f₃⟩ :=
     mul_step S₂.wf S₂.ptrv S₂.ptru S₂.ptrd S₂.valu S₂.vald
       S₂.bndu.loose S₂.bndd.loose
@@ -674,7 +669,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₃ := hm₂.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₃.wrote
   clear f₃ S₂ hm₂
 
-  -- %27 `fd_f25519_sub( u, u, 1 )` -- `u = y² - 1`
+  -- %16 `fd_f25519_sub( u, u, 1 )` -- `u = y² - 1`
   obtain ⟨s₄, hrun₄, f₄⟩ :=
     sub_step S₃.wf S₃.ptru S₃.ptru S₃.ptrone S₃.valu S₃.valone
       S₃.bndu S₃.bndone.bias
@@ -685,7 +680,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₄ := hm₃.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₄.wrote
   clear f₄ S₃ hm₃
 
-  -- %28 `fd_f25519_add( v, v, 1 )` -- `v = d·y² + 1`
+  -- %17 `fd_f25519_add( v, v, 1 )` -- `v = d·y² + 1`
   obtain ⟨s₅, hrun₅, f₅⟩ :=
     add_step S₄.wf S₄.ptrv S₄.ptrv S₄.ptrone S₄.valv S₄.valone
       S₄.bndv S₄.bndone
@@ -696,7 +691,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₅ := hm₄.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₅.wrote
   clear f₅ S₄ hm₄
 
-  -- %29 `fd_f25519_sqrt_ratio( x, u, v )` -- the root, and the flag `%30`
+  -- %18 `fd_f25519_sqrt_ratio( x, u, v )` -- the root, and the flag `%19`
   -- branches on. `@fd_f25519_sqrtm1` is the callee's own `addressof`; it
   -- reaches here because `Wrote.globals` carries the symbol table.
   obtain ⟨pm1, hgm1, hapartm1⟩ := hm₅.gm1
@@ -713,28 +708,28 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₆ := hm₅.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) w₆
   clear S₅ hm₅
 
-  denote_step_reduce v 30 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv14]
+  denote_step_reduce v 19 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv1]
 
-  -- `%29`'s flag is `1` exactly when the ratio is a square, so `%30` -- the
+  -- `%18`'s flag is `1` exactly when the ratio is a square, so `%19` -- the
   -- test against `0` -- holds in the *non*-square case, and that is the edge
   -- to `^bb4`, the `NULL` return. `^bb1` is the square case.
   by_cases squareness : ∃ x, x ^ 2 * v = u
   case neg =>
-    rw [if_neg squareness] at hreturnValue hv30
-    simp only [hv30, BlockCom.denote_term, Terminator.denote_condBr_value,
+    rw [if_neg squareness] at hreturnValue hv19
+    simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
       simp_denote, simp_sllvm]
     denote_enter_block
     iterate 5 peel_lifetime
     simp_return
-    simp [hv15, hreturnValue]
+    simp [hv5, hreturnValue]
     have isNotSquare : ¬ IsSquare (u / v) := fun hs =>
       squareness ((isSquare_div_iff (denom_ne_zero y)).mp hs)
     refine ⟨fun _ => ?_, 0, 0, 0, 0, fun hsq' => absurd hsq' isNotSquare⟩
     exact (FrameBelow.popFrame_equiv hs (fun b hb => S₆.live b hb)).symm
 
-  rw [if_pos squareness] at hreturnValue hv30 ⊢
+  rw [if_pos squareness] at hreturnValue hv19 ⊢
   simp [squareness] at hsq₆
-  simp only [hv30, BlockCom.denote_term, Terminator.denote_condBr_value,
+  simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
 
@@ -747,16 +742,16 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have isSquare' : IsSquare ((decodeBytes (readBuf hbuf) ^ 2 - 1)
       / (d * decodeBytes (readBuf hbuf) ^ 2 + 1)) := isSquare
   simp only [isSquare', not_true, false_implies, true_implies, true_and]
-  simp at hv30
+  simp at hv19
   clear isSquare isSquare' squareness
 
   -- The stepper reads its index off the valuation *depth*, and treats a base
   -- built by `ofHVector`/`singleton` as contributing `0` -- matching MLIR,
   -- where `%arg0`/`%arg1` are not numbered. Entering `^bb1` normalised that
   -- base into a plain `cons` spine, so the two block arguments started
-  -- counting and every index gained `2`. Re-anchor: the value at depth `33`
-  -- is `%31`.
-  have := denoteNumbering 31 33
+  -- counting and every index gained `2`. Re-anchor: the value at depth `22`
+  -- is `%20`.
+  have := denoteNumbering 20 22
 
   -- A tail block's valuation is `blockArgs ++ ambient`, and `^bb1` takes no
   -- arguments -- so the left factor is `(HVector.map V .nil).reverse`.
@@ -773,9 +768,9 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hmapnil : ∀ {α : Type} {A B : α → Type} (f : (a : α) → A a → B a),
       HVector.map f (.nil : HVector A []) = .nil := fun _ => rfl
 
-  denote_step_reduce v 31 [LLVM.lshr, LLVM.lshr?, hmapnil, hv16]
+  denote_step_reduce v 20 [LLVM.lshr, LLVM.lshr?, hmapnil, hv0]
 
-  -- %32 `fd_f25519_sgn( x )`
+  -- %21 `fd_f25519_sgn( x )`
   --
   obtain ⟨s₇, hrun₇, heq₇⟩ := sgn_step S₆.wf S₆.ptrx S₆.valx S₆.bndx hsum₆
   peel_call hrun₇
@@ -784,14 +779,14 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   have hm₇ := hm₆.of_equiv heq₇
   clear S₆ hm₆
 
-  -- %33 `zext( %31 )`, %34 `icmp eq( sgn x, expected )`
-  denote_step_reduce v 34 [hmapnil, hv31, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.zext, LLVM.zext?] fold
+  -- %22 `zext( %20 )`, %23 `icmp eq( sgn x, expected )`
+  denote_step_reduce v 23 [hmapnil, hv20, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.zext, LLVM.zext?] fold
 
-  simp [hv34, BlockCom.denote_term, Terminator.denote_condBr_value,
+  simp [hv23, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
 
-  -- `%23`/`%24` loaded `buf`'s last byte, so `%32` compared `sgn x` against
-  -- bit 255 of the buffer the spec reads. Both edges of `%34` need this.
+  -- `%12`/`%13` loaded `buf`'s last byte, so `%23` compared `sgn x` against
+  -- bit 255 of the buffer the spec reads. Both of its edges need this.
   have hbit : (readBuf hbuf)[255]
       = (BitVec.extractLsb' bufTop.offsetInBits 8 blk.bytes).getLsbD 7 := by
     have hoff : bufTop.offsetInBits + 7 = buf.offsetInBits + 255 := by
@@ -813,7 +808,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
     simp [hsign, hmapnil]
     denote_enter_block
 
-    -- %35 `fd_f25519_neg( x, x )` -- the sign the encoding asked for.
+    -- %24 `fd_f25519_neg( x, x )` -- the sign the encoding asked for.
     -- `neg` takes the *bias* bounds, which is why `x` never needed to be
     -- tight; and it leaves them, which is all `^bb3`'s `mul` wants.
     obtain ⟨s₈, f₈, hrun₈, hnegval, hnegbnd⟩ :=

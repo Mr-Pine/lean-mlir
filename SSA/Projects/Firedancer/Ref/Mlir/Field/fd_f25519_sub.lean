@@ -1,17 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_sub.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
 import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
-
-/-!
-# `fd_f25519_sub` (ref)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fd_f25519_sub.mlir`. Calls `fiat_25519_sub` then `fiat_25519_carry`
-on the out-parameter.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

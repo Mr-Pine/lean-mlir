@@ -73,20 +73,20 @@ constants the call graph below it reads, each apart from every pointer the regio
 writes through
 -- for `fd_ed25519_point_frombytes` just `r`, so that theorem passes `[r]`.
 
-`@fd_f25519_d` and `@fd_f25519_one` the region addresses itself, at `%7` and
-`%13`, so only their *values* are wanted after entry. `@fd_f25519_sqrtm1` the
-region never mentions: `fd_f25519_sqrt_ratio` reaches it at its own `%6`, so
-its `addr` half has to survive the walk as far as `%29` -- which is what makes
+`@fd_f25519_d` and `@fd_f25519_one` the region addresses itself, at `%3` and
+`%4`, so only their *values* are wanted after entry. `@fd_f25519_sqrtm1` the
+region never mentions: `fd_f25519_sqrt_ratio` reaches it at its own `%1`, so
+its `addr` half has to survive the walk as far as `%18` -- which is what makes
 the symbol table, not just memory, part of what a step must carry.
 
 The last two are the low-order table:
-`fd_ed25519_affine_is_small_order` addresses both at `%6` and `%12` and hands
+`fd_ed25519_affine_is_small_order` addresses both at `%1` and `%2` and hands
 them to `fd_f25519_eq`. They live here rather than in that region's
 specification for the same reason as the other three -- their addresses are the
 loader's to choose, so a spec that named them would be quantifying over
 something the module already fixed.
 
-`fd_curve25519_into_precomputed` addresses `@fd_f25519_k`, `2·d`, at `%8` and
+`fd_curve25519_into_precomputed` addresses `@fd_f25519_k`, `2·d`, at `%1` and
 passes it to `fd_f25519_mul`.
 
 `wf` is what puts the six blocks below the frame, via `FieldGlobal.below`. -/

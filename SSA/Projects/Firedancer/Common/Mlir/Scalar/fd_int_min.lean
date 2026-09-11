@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_int_min.mlir
 import SSA.Projects.SLLVM.Cfg
 
 namespace Firedancer.Common

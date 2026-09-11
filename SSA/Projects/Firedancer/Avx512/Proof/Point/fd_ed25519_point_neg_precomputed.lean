@@ -38,22 +38,22 @@ def swapXY (y : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
 /-- The result: `negT` with `X` and `Y` exchanged. -/
 def negPre (q : Quad) : Quad := ⟨swapXY (negT q).v03, swapXY (negT q).v14, swapXY (negT q).v25⟩
 
-/-- `%22`: `2p`'s limbs 0 and 3 on the `T` lanes. -/
+/-- `%20`: `2p`'s limbs 0 and 3 on the `T` lanes. -/
 def negTC03 : Vector (LLVM.IntW 64) 8 :=
   #v[.poison, .poison, .poison, .value 17592186044378#64,
      .poison, .poison, .poison, .value 17592186044414#64]
 
-/-- `%39`: limbs 1 and 4. -/
+/-- `%29`: limbs 1 and 4. -/
 def negTC14 : Vector (LLVM.IntW 64) 8 :=
   #v[.poison, .poison, .poison, .value 17592186044414#64,
      .poison, .poison, .poison, .value 17592186044414#64]
 
-/-- `%57`: limbs 2 and 5. -/
+/-- `%38`: limbs 2 and 5. -/
 def negTC25 : Vector (LLVM.IntW 64) 8 :=
   #v[.poison, .poison, .poison, .value 17592186044414#64,
      .poison, .poison, .poison, .value 2199023255550#64]
 
-/-- **`%64`/`%65`, one vector's lane subtract**: `c - x` on the `T` lanes. -/
+/-- **`%45`/`%46`, one vector's lane subtract**: `c - x` on the `T` lanes. -/
 theorem denote_negTLanes {x : Vector (BitVec 64) 8} {c d : BitVec 64}
     {m t u : Vector (LLVM.IntW 64) 8}
     (hm : m = #v[.poison, .poison, .poison, .value c, .poison, .poison, .poison, .value d])
@@ -70,7 +70,7 @@ theorem denote_negTLanes {x : Vector (BitVec 64) 8} {c d : BitVec 64}
   interval_cases i <;>
     simp [LLVM.Ty.shufflevector, InstCombine.binaryDenote, LLVM.sub, LLVM.sub?]
 
-/-- **`%74 … %76`**: the swap, against a poison second operand it never reads. -/
+/-- **`%55 … %57`**: the swap, against a poison second operand it never reads. -/
 theorem denote_swapXY {y : Vector (BitVec 64) 8} {w u : Vector (LLVM.IntW 64) 8}
     (hu : u = LLVM.Ty.shufflevector (e := .bitvec (.concrete 64))
       [1, 0, 2, 3, 5, 4, 6, 7] (y.map PoisonOr.value) w) :
@@ -216,31 +216,29 @@ theorem fd_ed25519_point_neg_precomputed_conforms (r a : Pointer) (s : GlobalSta
   simp only [fd_ed25519_point_neg_precomputed_spec, Cfg.denote]
   intro hu03 hu14 hu25 hb3
   refine run_runFunction' _ ?_
-  denote_step_reduce v 58 [LLVM.const?, LLVM.Ty.poison] fold
+  denote_step_reduce v 39 [LLVM.const?, LLVM.Ty.poison] fold
 
-  -- `%0 … %58`: the three `2p` minuends
-  replace hv22 : v22 = negTC03 := by
-    simp only [hv22]
+  -- `%0 … %39`: the three `2p` minuends
+  replace hv20 : v20 = negTC03 := by
+    simp only [hv20]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negTC03]
-  replace hv39 : v39 = negTC14 := by
-    simp only [hv39]
+  replace hv29 : v29 = negTC14 := by
+    simp only [hv29]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negTC14]
-  replace hv57 : v57 = negTC25 := by
-    simp only [hv57]
+  replace hv38 : v38 = negTC25 := by
+    simp only [hv38]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negTC25]
-  clear hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15 hv16 hv17 hv18
-  clear hv19 hv20 hv21 hv23 hv24 hv25 hv26 hv27 hv28 hv29 hv30 hv31 hv32 hv33 hv34 hv35
-  clear hv36 hv37 hv38 hv40 hv41 hv42 hv43 hv44 hv45 hv46 hv47 hv48 hv49 hv50 hv51 hv52
-  clear hv53 hv54 hv55 hv56
-  subst hv0
+  clear hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15 hv16 hv17
+  clear hv18 hv19 hv21 hv22 hv23 hv24 hv25 hv26 hv27 hv28 hv30 hv31 hv32 hv33 hv34 hv35
+  clear hv36 hv37
 
-  -- `%59 … %63`: `a`'s three vectors, at 0, 64 and 128 bytes in
+  -- `%40 … %44`: `a`'s three vectors, at 0, 64 and 128 bytes in
   refine Exists.elim ha.1 fun ablk ⟨hablkE, _⟩ => ?_
   have halive : s.mem.live? a.id = some ablk := by simp [MemoryState.live?, hablkE]
   have h64 : (64 : BitVec 64).toNat = 64 := rfl
@@ -267,26 +265,26 @@ theorem fd_ed25519_point_neg_precomputed_conforms (r a : Pointer) (s : GlobalSta
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField25, haField25E, s
   rw [hoffA25, unflatten_readQuad_v25 ha halive]
 
-  -- `%64`, `%65`: the `03` lane subtract, stored to `r`
-  denote_step_reduce v 65 only [hv22] fold
-  have hN03 : v65 = (negT (readQuad ha)).v03.map PoisonOr.value :=
-    denote_negTLanes rfl rfl hv65
+  -- `%45`, `%46`: the `03` lane subtract, stored to `r`
+  denote_step_reduce v 46 only [hv20] fold
+  have hN03 : v46 = (negT (readQuad ha)).v03.map PoisonOr.value :=
+    denote_negTLanes rfl rfl hv46
   subst hN03
   refine name_of ({ s with mem := s.mem.splice r (vecBV (negT (readQuad ha)).v03) })
     fun s₁ hs₁ => ?_
   peel_store (negT (readQuad ha)).v03, r, hr.1, s as s₁ := hs₁
   have f₁ : Fits s₁.mem r (3 * 8 * 64) := hs₁ ▸ fits_splice hr.1
 
-  -- `%66 … %69`: `a`'s `14` again, which the store to `r` did not reach
+  -- `%47 … %50`: `a`'s `14` again, which the store to `r` did not reach
   have hE₁ : s₁.mem[aField.id]? = some (.live ablk) := by
     rw [hs₁]
     exact (getElem?_splice_ne (m := s.mem) (p := r) (x := vecBV (negT (readQuad ha)).v03)
       (q := aField.id) hne).trans hablkE
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField, hE₁, s₁
   rw [hoffA, unflatten_readQuad_v14 ha halive]
-  denote_step_reduce v 68 only [hv39] fold
-  have hN14 : v68 = (negT (readQuad ha)).v14.map PoisonOr.value :=
-    denote_negTLanes rfl rfl hv68
+  denote_step_reduce v 49 only [hv29] fold
+  have hN14 : v49 = (negT (readQuad ha)).v14.map PoisonOr.value :=
+    denote_negTLanes rfl rfl hv49
   subst hN14
   peel_gep 64 with r, f₁, s₁ as rField
   have fR : Fits s₁.mem rField 1024 := Fits.mono hrField (by simp)
@@ -296,31 +294,31 @@ theorem fd_ed25519_point_neg_precomputed_conforms (r a : Pointer) (s : GlobalSta
   peel_store (negT (readQuad ha)).v14, rField, fR, s₁ as s₂ := hs₂
   have f₂ : Fits s₂.mem r (3 * 8 * 64) := hs₂ ▸ fits_splice f₁
 
-  -- `%70 … %73`: the same for `25`, not stored yet
+  -- `%51 … %54`: the same for `25`, not stored yet
   have hE₂ : s₂.mem[aField25.id]? = some (.live ablk) := by
     rw [hs₂]
     exact (getElem?_splice_ne (m := s₁.mem) (p := rField)
       (x := vecBV (negT (readQuad ha)).v14) (q := aField25.id) hne).trans hE₁
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField25, hE₂, s₂
   rw [hoffA25, unflatten_readQuad_v25 ha halive]
-  denote_step_reduce v 72 only [hv57] fold
-  have hN25 : v72 = (negT (readQuad ha)).v25.map PoisonOr.value :=
-    denote_negTLanes rfl rfl hv72
+  denote_step_reduce v 53 only [hv38] fold
+  have hN25 : v53 = (negT (readQuad ha)).v25.map PoisonOr.value :=
+    denote_negTLanes rfl rfl hv53
   subst hN25
   peel_gep 128 with r, f₂, s₂ as rField25
   have fR25 : Fits s₂.mem rField25 512 := Fits.mono hrField25 (by simp)
 
-  -- `%74 … %76`: `X` and `Y` swapped, one store per vector
-  denote_step_reduce v 74 only [hv58] fold
-  have hS03 : v74 = (negPre (readQuad ha)).v03.map PoisonOr.value := denote_swapXY hv74
+  -- `%55 … %57`: `X` and `Y` swapped, one store per vector
+  denote_step_reduce v 55 only [hv39] fold
+  have hS03 : v55 = (negPre (readQuad ha)).v03.map PoisonOr.value := denote_swapXY hv55
   subst hS03
   refine name_of
     ({ s₂ with mem := s₂.mem.splice r (vecBV (negPre (readQuad ha)).v03) })
     fun s₃ hs₃ => ?_
   peel_store (negPre (readQuad ha)).v03, r, f₂, s₂ as s₃ := hs₃
 
-  denote_step_reduce v 75 only [hv58] fold
-  have hS14 : v75 = (negPre (readQuad ha)).v14.map PoisonOr.value := denote_swapXY hv75
+  denote_step_reduce v 56 only [hv39] fold
+  have hS14 : v56 = (negPre (readQuad ha)).v14.map PoisonOr.value := denote_swapXY hv56
   subst hS14
   have f₄ : Fits s₃.mem rField (8 * 64) := by
     rw [hs₃, hs₂]; exact fits_splice (fits_splice (Fits.mono fR (by omega)))
@@ -329,8 +327,8 @@ theorem fd_ed25519_point_neg_precomputed_conforms (r a : Pointer) (s : GlobalSta
     fun s₄ hs₄ => ?_
   peel_store (negPre (readQuad ha)).v14, rField, f₄, s₃ as s₄ := hs₄
 
-  denote_step_reduce v 76 only [hv58] fold
-  have hS25 : v76 = (negPre (readQuad ha)).v25.map PoisonOr.value := denote_swapXY hv76
+  denote_step_reduce v 57 only [hv39] fold
+  have hS25 : v57 = (negPre (readQuad ha)).v25.map PoisonOr.value := denote_swapXY hv57
   subst hS25
   have f₅ : Fits s₄.mem rField25 (8 * 64) := by
     rw [hs₄, hs₃]; exact fits_splice (fits_splice fR25)

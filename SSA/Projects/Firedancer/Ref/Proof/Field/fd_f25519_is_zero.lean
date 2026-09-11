@@ -177,11 +177,11 @@ theorem fd_f25519_is_zero_conforms (p: Pointer) (s: GlobalState)
     -- the counter was live to begin with.
     refine ⟨s.popFrame s.mem, run_runFunction (s' := s) ?_,
       GlobalState.Equiv.symm (GlobalState.killFrom_equiv s.mem hs fun _ _ => rfl)⟩
-    -- `^bb0`, up to the load at `%8`: the eight compare constants.
-    denote_step_all v 7
-    denote_eval v 0 7
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7
-    subst hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7
+    -- `^bb0`, up to the load at `%4`: the four compare and return constants.
+    denote_step_all v 3
+    denote_eval v 0 3
+    simp only [LLVM.const?] at hv0 hv1 hv2 hv3
+    subst hv0 hv1 hv2 hv3
 
     obtain ⟨blk, hblk, hlen⟩ := hp.left
 

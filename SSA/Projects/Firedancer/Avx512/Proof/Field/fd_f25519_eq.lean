@@ -264,12 +264,12 @@ theorem isZero_pattern (q : Pointer) (s : GlobalState) (hs : s.WF) (hq : IsVecPt
   refine ⟨s, ?_, hs.popFrame_equiv⟩
   obtain ⟨blk, hblk, hlen⟩ := hq.1
   have hlive : s.mem.live? q.id = some blk := by simp only [MemoryState.live?, hblk]
-  denote_step_all v 4
-  eval_consts v 0 4
+  denote_step_all v 3
+  eval_consts v 0 3
   peel_load (.vector 8 (.bitvec (.concrete 64))), blk, q, hblk, s
   rw [unflatten_readVec_512 hq hlive]
-  denote_step_all v 13
-  denote_eval v 6 13
+  denote_step_all v 12
+  denote_eval v 5 12
   -- the two constants the region compares against
   have hzero : LLVM.Ty.dense (InstCombine.MTy.vector 8 (InstCombine.MTy.bitvec (.concrete 64))) [0]
       = zeroVec.map PoisonOr.value := by
@@ -282,23 +282,23 @@ theorem isZero_pattern (q : Pointer) (s : GlobalState) (hs : s.WF) (hq : IsVecPt
     apply Vector.ext (n := 8)
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.dense, pVec]
-  rw [hzero] at hv6
-  rw [hpv] at hv9
-  rw [hv6, bitcast_vicmp_ne_neMask] at hv7
-  rw [hv9, bitcast_vicmp_ne_neMask] at hv10
-  eval_llvm 8
+  rw [hzero] at hv5
+  rw [hpv] at hv8
+  rw [hv5, bitcast_vicmp_ne_neMask] at hv6
+  rw [hv8, bitcast_vicmp_ne_neMask] at hv9
+  eval_llvm 7
+  eval_llvm 10
   eval_llvm 11
   eval_llvm 12
-  eval_llvm 13
   -- the `select` is the disjunction of the two pattern tests
-  have hval : v13 = PoisonOr.value
+  have hval : v12 = PoisonOr.value
       (if readVec hq = zeroVec ∨ readVec hq = pVec then 1#32 else 0#32) := by
     have hself : ∀ x : Vector (BitVec 64) 8, (neMask x x == 0#8) = true := fun x => by
       simp [(neMask_eq_zero_iff x x).mpr rfl]
     have hne : ∀ {x c : Vector (BitVec 64) 8}, x ≠ c → (neMask x c == 0#8) = false := by
       intro x c h
       simpa using fun hc => h ((neMask_eq_zero_iff x c).mp hc)
-    rw [hv13]
+    rw [hv12]
     by_cases h0 : readVec hq = zeroVec
     · rw [h0, hself]
       simp
@@ -338,29 +338,29 @@ private theorem ofNatBias : (1048576#64 : BitVec 64) = BitVec.ofInt 64 (2 ^ 20) 
 set_option maxHeartbeats 1000000 in
 /-- **`fd_r43x6_fold_signed`, as `fd_f25519_sub` emits it.** -/
 theorem denote_acpBiasVec_permBias {z : Vector (BitVec 64) 8}
-    {a13 a14 a15 a16 a17 a18 a19 a20 : Vector (LLVM.IntW 64) 8}
-    (h13 : a13 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .and
+    {a12 a13 a14 a15 a16 a17 a18 a19 : Vector (LLVM.IntW 64) 8}
+    (h12 : a12 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .and
       (z.map PoisonOr.value)[i.val]
       (toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
         8796093022207, 1099511627775, 0, 0])[i.val])
-    (h14 : a14 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .ashr
+    (h13 : a13 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .ashr
       (z.map PoisonOr.value)[i.val] (toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0])[i.val])
-    (h15 : a15 = LLVM.Ty.vpermi2var a14 (toBitVecValue 64 #v[5, 0, 1, 2, 3, 4, 8, 8])
+    (h14 : a14 = LLVM.Ty.vpermi2var a13 (toBitVecValue 64 #v[5, 0, 1, 2, 3, 4, 8, 8])
       (toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, 0, 0]))
-    (h16 : a16 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .mul
-      a15[i.val] (toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18])[i.val])
-    (h17 : a17 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .and
-      a16[i.val] (toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0])[i.val])
-    (h18 : a18 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a15[i.val]
+    (h15 : a15 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .mul
+      a14[i.val] (toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18])[i.val])
+    (h16 : a16 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .and
+      a15[i.val] (toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0])[i.val])
+    (h17 : a17 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a14[i.val]
       (toBitVecValue 64
         #v[159383552, 1048576, 1048576, 1048576, 1048576, 1048576, 0, 0])[i.val])
-    (h19 : a19 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a18[i.val] a13[i.val])
-    (h20 : a20 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a19[i.val] a17[i.val]) :
-    a20 = (acpBiasVec z).map PoisonOr.value := by
-  rw [denote_vec_and_const] at h13
-  rw [denote_vec_ashr_const _ _ (by decide)] at h14
-  rw [h14, denote_vec_rotate] at h15
-  subst h13 h15 h16 h17 h18 h19 h20
+    (h18 : a18 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a17[i.val] a12[i.val])
+    (h19 : a19 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .add a18[i.val] a16[i.val]) :
+    a19 = (acpBiasVec z).map PoisonOr.value := by
+  rw [denote_vec_and_const] at h12
+  rw [denote_vec_ashr_const _ _ (by decide)] at h13
+  rw [h13, denote_vec_rotate] at h14
+  subst h12 h14 h15 h16 h17 h18 h19
   apply Vector.ext
   intro i hi
   interval_cases i <;>
@@ -399,44 +399,44 @@ theorem sub_writes (o a b : Pointer) (s : GlobalState) (hs : s.WF)
   have hliveA : s.mem.live? a.id = some blkA := by simp only [MemoryState.live?, hblkA]
   obtain ⟨blkB, hblkB, hlenB⟩ := hb.1
   have hliveB : s.mem.live? b.id = some blkB := by simp only [MemoryState.live?, hblkB]
-  denote_step_all v 8
-  denote_eval v 0 8
-  -- the nine constants, in the `toBitVecValue` form the fold lemmas take
+  denote_step_all v 7
+  denote_eval v 0 7
+  -- the eight constants, in the `toBitVecValue` form the fold lemmas take
   replace hv0 : v0 = toBitVecValue 64 #v[8795933638637, 8796091973631, 8796091973631,
     8796091973631, 8796091973631, 1099510579199, 0, 0] := by denote_dense hv0
   replace hv1 : v1 = toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207,
     8796093022207, 8796093022207, 1099511627775, 0, 0] := by denote_dense hv1
   replace hv2 : v2 = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] := by denote_dense hv2
   replace hv3 : v3 = toBitVecValue 64 #v[5, 0, 1, 2, 3, 4, 8, 8] := by denote_dense hv3
-  replace hv5 : v5 = toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, 0, 0] := by denote_dense hv5
-  replace hv6 : v6 = toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18] := by denote_dense hv6
-  replace hv7 : v7 = toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0] := by
-    denote_dense hv7
-  replace hv8 : v8 = toBitVecValue 64 #v[159383552, 1048576, 1048576, 1048576, 1048576,
-    1048576, 0, 0] := by denote_dense hv8
-  subst hv0 hv1 hv2 hv3 hv5 hv6 hv7 hv8
+  replace hv4 : v4 = toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, 0, 0] := by denote_dense hv4
+  replace hv5 : v5 = toBitVecValue 64 #v[18, 18, 18, 18, 18, 18, 18, 18] := by denote_dense hv5
+  replace hv6 : v6 = toBitVecValue 64 #v[18446744073709551615, 0, 0, 0, 0, 0, 0, 0] := by
+    denote_dense hv6
+  replace hv7 : v7 = toBitVecValue 64 #v[159383552, 1048576, 1048576, 1048576, 1048576,
+    1048576, 0, 0] := by denote_dense hv7
+  subst hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7
   peel_load (.vector 8 (.bitvec (.concrete 64))), blkA, a, hblkA, s
   rw [unflatten_readVec_512 ha hliveA]
   peel_load (.vector 8 (.bitvec (.concrete 64))), blkB, b, hblkB, s
   rw [unflatten_readVec_512 hb hliveB]
-  denote_step_all v 20
-  denote_eval v 11 20
+  denote_step_all v 19
+  denote_eval v 10 19
   -- `fd_r43x6_sub_fast`: the difference, then the constant `p` with the bias
   -- already taken out of it
   rw [show (toBitVecValue 64 #v[8795933638637, 8796091973631, 8796091973631, 8796091973631,
-      8796091973631, 1099510579199, 0, 0]) = toBitVecValue 64 subFastConst from rfl] at hv12
-  have h11 : v11 = (Vector.ofFn fun i : Fin 8 =>
+      8796091973631, 1099510579199, 0, 0]) = toBitVecValue 64 subFastConst from rfl] at hv11
+  have h10 : v10 = (Vector.ofFn fun i : Fin 8 =>
       (readVec ha)[i.val] - (readVec hb)[i.val]).map PoisonOr.value := by
-    rw [hv11]
+    rw [hv10]
     exact denote_vec_sub _ _
-  have h12 : v12 = (subFastVec (readVec ha) (readVec hb)).map PoisonOr.value := by
-    rw [hv12, h11, ← subFastVec_eq]
+  have h11 : v11 = (subFastVec (readVec ha) (readVec hb)).map PoisonOr.value := by
+    rw [hv11, h10, ← subFastVec_eq]
     exact denote_vec_add_const _ _
-  rw [h12] at hv13 hv14
+  rw [h11] at hv12 hv13
   -- `fd_r43x6_fold_signed`, in this region's instruction order
-  have h20 : v20 = (subFoldVec (readVec ha) (readVec hb)).map PoisonOr.value :=
-    denote_acpBiasVec_permBias hv13 hv14 hv15 hv16 hv17 hv18 hv19 hv20
-  subst h20
+  have h19 : v19 = (subFoldVec (readVec ha) (readVec hb)).map PoisonOr.value :=
+    denote_acpBiasVec_permBias hv12 hv13 hv14 hv15 hv16 hv17 hv18 hv19
+  subst h19
   peel_store (subFoldVec (readVec ha) (readVec hb)), o, ho.left, s
   simp_return
 

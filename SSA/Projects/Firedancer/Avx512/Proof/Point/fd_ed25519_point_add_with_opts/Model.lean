@@ -26,7 +26,7 @@ open Ge
 
 /-! ## The stages -/
 
-/-- `%161`-`%179` on one vector of `a`: `(Y-X+c, X+Y, Z+Z, T)`, `c`/`d` `p`'s limbs in the
+/-- `%109`-`%127` on one vector of `a`: `(Y-X+c, X+Y, Z+Z, T)`, `c`/`d` `p`'s limbs in the
 low/high half. -/
 def tbVec (c d : BitVec 64) (x : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   #v[x[1] - x[0] + c, x[0] + x[1], x[2] + x[2], x[3],
@@ -36,7 +36,7 @@ def tbQuad (q : Quad) : Quad :=
   ⟨tbVec 8796093022189#64 8796093022207#64 q.v03, tbVec 8796093022207#64 8796093022207#64 q.v14,
    tbVec 8796093022207#64 1099511627775#64 q.v25⟩
 
-/-- `%215`-`%228` on one vector of `(A, B, D, C)`: `(B-A+c, A+B, C+D, D-C+c)`. -/
+/-- `%163`-`%176` on one vector of `(A, B, D, C)`: `(B-A+c, A+B, C+D, D-C+c)`. -/
 def ehgfVec (c d : BitVec 64) (v : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   #v[v[1] - v[0] + c, v[0] + v[1], v[3] + v[2], v[2] - v[3] + c,
      v[5] - v[4] + d, v[4] + v[5], v[7] + v[6], v[6] - v[7] + d]

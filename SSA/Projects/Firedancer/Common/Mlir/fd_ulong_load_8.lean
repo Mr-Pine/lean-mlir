@@ -1,16 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_ulong_load_8.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `fd_ulong_load_8` (common)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/{ref,avx512}/region/fd_ulong_load_8.mlir`, which are the
-same file: an unaligned little-endian `ulong` load, `fd_bits.h`. Neither backend
-specialises it, so it lives in `Common`.
--/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM

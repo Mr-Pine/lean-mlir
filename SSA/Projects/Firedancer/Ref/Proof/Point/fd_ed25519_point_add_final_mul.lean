@@ -78,30 +78,15 @@ theorem fd_ed25519_point_add_final_mul_conforms (r a : Pointer) (s : GlobalState
     · exact limbBounds_congr (coordPtr_two r).symm hbT
     · exact limbBounds_congr (coordPtr_three r).symm hbZ
   case run =>
-    denote_step_all v 9
-    denote_eval v 0 9
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3
-    subst hv0 hv1 hv2 hv3
-    have e4 : v4 = .value (a.withOffset 40) := by
-      simp [hv4, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    have e5 : v5 = .value (a.withOffset 120) := by
-      simp [hv5, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    have e6 : v6 = .value (a.withOffset 80) := by
-      simp [hv6, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    have e7 : v7 = .value (r.withOffset 40) := by
-      simp [hv7, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    have e8 : v8 = .value (r.withOffset 120) := by
-      simp [hv8, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    have e9 : v9 = .value (r.withOffset 80) := by
-      simp [hv9, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e4 e5 e6 e7 e8 e9
-    clear hv4 hv5 hv6 hv7 hv8 hv9
+    denote_step_reduce v 5 [gepConst, ptradd, LLVM.const?]
+    have e0 : v0 = .value (a.withOffset 40) := by simp [hv0, Pointer.withOffset, simp_sllvm]
+    have e1 : v1 = .value (a.withOffset 120) := by simp [hv1, Pointer.withOffset, simp_sllvm]
+    have e2 : v2 = .value (a.withOffset 80) := by simp [hv2, Pointer.withOffset, simp_sllvm]
+    have e3 : v3 = .value (r.withOffset 40) := by simp [hv3, Pointer.withOffset, simp_sllvm]
+    have e4 : v4 = .value (r.withOffset 120) := by simp [hv4, Pointer.withOffset, simp_sllvm]
+    have e5 : v5 = .value (r.withOffset 80) := by simp [hv5, Pointer.withOffset, simp_sllvm]
+    subst e0 e1 e2 e3 e4 e5
+    clear hv0 hv1 hv2 hv3 hv4 hv5
     refine (BlockCom.run_bind_denote_call_of_nil (s' := st) ?_).trans ?_
     · exact hrun
     rfl

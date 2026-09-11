@@ -23,19 +23,19 @@ ever selected out of it. -/
 def blendEven : Vector (LLVM.IntW 64) 8 :=
   #v[.value 0, .poison, .value 0, .poison, .value 0, .poison, .value 0, .poison]
 
-/-- `%37`: the same vector at the other parity. -/
+/-- `%29`: the same vector at the other parity. -/
 def blendOdd : Vector (LLVM.IntW 64) 8 :=
   #v[.poison, .value 0, .poison, .value 0, .poison, .value 0, .poison, .value 0]
 
 /-! ### The four gathers
 
-`e`/`o` are `%45`/`%46`, the even- and odd-lane halves of `v03` interleaved
-with `v14`; `ce`/`co` are `%47`/`%48`, the same halves of `v25` interleaved
-with the zero blends. `%38` gathers limbs `0, 1, 2` (coordinates `X`, `Y`),
-`%39` limbs `3, 4, 5` (coordinates `Z`, `T`). -/
+`e`/`o` are `%35`/`%36`, the even- and odd-lane halves of `v03` interleaved
+with `v14`; `ce`/`co` are `%37`/`%38`, the same halves of `v25` interleaved
+with the zero blends. `%1` gathers limbs `0, 1, 2` (coordinates `X`, `Y`),
+`%0` limbs `3, 4, 5` (coordinates `Z`, `T`). -/
 
 set_option maxHeartbeats 1000000 in
-/-- **`%49`, the `X` out-parameter**: lanes `0-5` are `a[0] b[0] c[0] a[4] b[4]
+/-- **`%39`, the `X` out-parameter**: lanes `0-5` are `a[0] b[0] c[0] a[4] b[4]
 c[4]`, which is `quadElemVec`'s lane `0`; lanes `6, 7` are the blend's
 zeros. -/
 theorem denote_pointTo_X {a b c : Vector (BitVec 64) 8}
@@ -55,7 +55,7 @@ theorem denote_pointTo_X {a b c : Vector (BitVec 64) 8}
       Vector.getElem_map]
 
 set_option maxHeartbeats 1000000 in
-/-- **`%50`, the `Y` out-parameter**: the same gather on the odd halves. -/
+/-- **`%40`, the `Y` out-parameter**: the same gather on the odd halves. -/
 theorem denote_pointTo_Y {a b c : Vector (BitVec 64) 8}
     {o co gY : Vector (LLVM.IntW 64) 8}
     (ho : o = LLVM.Ty.shufflevector (e := .bitvec (.concrete 64))
@@ -73,7 +73,7 @@ theorem denote_pointTo_Y {a b c : Vector (BitVec 64) 8}
       Vector.getElem_map]
 
 set_option maxHeartbeats 1000000 in
-/-- **`%51`, the `Z` out-parameter**: the even halves again, gathered through
+/-- **`%41`, the `Z` out-parameter**: the even halves again, gathered through
 the second mask. -/
 theorem denote_pointTo_Z {a b c : Vector (BitVec 64) 8}
     {e ce gZ : Vector (LLVM.IntW 64) 8}
@@ -92,7 +92,7 @@ theorem denote_pointTo_Z {a b c : Vector (BitVec 64) 8}
       Vector.getElem_map]
 
 set_option maxHeartbeats 1000000 in
-/-- **`%52`, the `T` out-parameter**. -/
+/-- **`%42`, the `T` out-parameter**. -/
 theorem denote_pointTo_T {a b c : Vector (BitVec 64) 8}
     {o co gT : Vector (LLVM.IntW 64) 8}
     (ho : o = LLVM.Ty.shufflevector (e := .bitvec (.concrete 64))
@@ -196,28 +196,25 @@ theorem fd_ed25519_point_to_conforms (x y z t a : Pointer) (s : GlobalState)
   case refine_5 =>
     rw [readVec_eq_of (readVec?_out₄ ht), vecValue_widenVec]; rfl
 
-  -- `%0 … %39`: the two gather masks, and the two zero blends the odd/even
+  -- `%0 … %29`: the two gather masks, and the two zero blends the odd/even
   -- halves of `v25` are shuffled against.
-  denote_step_all v 39
-  denote_eval v 0 39
+  denote_step_all v 29
+  denote_eval v 0 29
 
   have hb20 : v20 = blendEven := by
     simp only [hv20, hv19, hv18, hv17, hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9,
-      hv8, hv7, hv6, hv5, hv4, hv3, hv0]
+      hv8, hv7, hv6, hv5, hv4, hv3, hv2]
     rfl
-  have hb37 : v37 = blendOdd := by
-    simp only [hv37, hv36, hv35, hv34, hv33, hv32, hv31, hv30, hv29, hv28, hv27, hv26,
-      hv25, hv24, hv23, hv22, hv21, hv3, hv0]
+  have hb29 : v29 = blendOdd := by
+    simp only [hv29, hv28, hv27, hv26, hv25, hv24, hv23, hv22, hv21, hv11, hv10, hv9,
+      hv8, hv7, hv6, hv5, hv4, hv3, hv2]
     rfl
-  have hm38 : v38 = toBitVecValue 64 #v[0, 1, 8, 4, 5, 12, 9, 9] := by denote_dense hv38
-  have hm39 : v39 = toBitVecValue 64 #v[2, 3, 10, 6, 7, 14, 9, 9] := by denote_dense hv39
-  clear hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15 hv16
-  clear hv17 hv18 hv19 hv20 hv21 hv22 hv23 hv24 hv25 hv26 hv27 hv28 hv29 hv30 hv31
-  clear hv32 hv33 hv34 hv35 hv36 hv37 hv38 hv39
-  simp only [LLVM.const?] at hv0
-  subst hv0
+  have hm1 : v1 = toBitVecValue 64 #v[0, 1, 8, 4, 5, 12, 9, 9] := by denote_dense hv1
+  have hm0 : v0 = toBitVecValue 64 #v[2, 3, 10, 6, 7, 14, 9, 9] := by denote_dense hv0
+  clear hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15
+  clear hv16 hv17 hv18 hv19 hv20 hv21 hv22 hv23 hv24 hv25 hv26 hv27 hv28 hv29
 
-  -- `%40 … %44`: the QUAD's three vectors, at 0, 64 and 128 bytes in.
+  -- `%30 … %34`: the QUAD's three vectors, at 0, 64 and 128 bytes in.
   obtain ⟨ablk, hablkE, halen⟩ := ha.1
   have halive : s.mem.live? a.id = some ablk := by simp [MemoryState.live?, hablkE]
   have h64 : (64 : BitVec 64).toNat = 64 := rfl
@@ -244,28 +241,28 @@ theorem fd_ed25519_point_to_conforms (x y z t a : Pointer) (s : GlobalState)
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField25, haField25E, s
   rw [hoffA25, unflatten_readQuad_v25 ha halive]
 
-  -- `%45 … %49`: the four parity splits, and the first gather.
-  denote_step_all v 49
-  denote_eval v 45 49
-  rw [hb20] at hv47
-  rw [hb37] at hv48
+  -- `%35 … %39`: the four parity splits, and the first gather.
+  denote_step_all v 39
+  denote_eval v 35 39
+  rw [hb20] at hv37
+  rw [hb29] at hv38
 
-  -- `%49` gathers `X`; the store lands it in `%arg0`.
-  rw [hm38] at hv49
-  have hX : v49 = (widenVec (readQuad ha).PointVecs.X).map PoisonOr.value :=
-    denote_pointTo_X hv45 hv47 hv49
+  -- `%39` gathers `X`; the store lands it in `%arg0`.
+  rw [hm1] at hv39
+  have hX : v39 = (widenVec (readQuad ha).PointVecs.X).map PoisonOr.value :=
+    denote_pointTo_X hv35 hv37 hv39
   subst hX
   refine name_of ({ s with mem := s.mem.splice x (vecBV (widenVec (readQuad ha).PointVecs.X)) })
     fun s₁ hs₁ => ?_
   peel_store (widenVec (readQuad ha).PointVecs.X), x, hx.1, s as s₁ := hs₁
   have fy : Fits s₁.mem y (8 * 64) := by rw [hs₁]; exact fits_splice hy.1
 
-  -- `%50` gathers `Y`, off the odd halves.
-  denote_step_all v 50
-  denote_eval v 50 50
-  rw [hm38] at hv50
-  have hY : v50 = (widenVec (readQuad ha).PointVecs.Y).map PoisonOr.value :=
-    denote_pointTo_Y hv46 hv48 hv50
+  -- `%40` gathers `Y`, off the odd halves.
+  denote_step_all v 40
+  denote_eval v 40 40
+  rw [hm1] at hv40
+  have hY : v40 = (widenVec (readQuad ha).PointVecs.Y).map PoisonOr.value :=
+    denote_pointTo_Y hv36 hv38 hv40
   subst hY
   refine name_of ({ s₁ with mem := s₁.mem.splice y (vecBV (widenVec (readQuad ha).PointVecs.Y)) })
     fun s₂ hs₂ => ?_
@@ -273,12 +270,12 @@ theorem fd_ed25519_point_to_conforms (x y z t a : Pointer) (s : GlobalState)
   have fz : Fits s₂.mem z (8 * 64) := by
     rw [hs₂, hs₁]; exact fits_splice (fits_splice hz.1)
 
-  -- `%51` gathers `Z`: the even halves again, through the second mask.
-  denote_step_all v 51
-  denote_eval v 51 51
-  rw [hm39] at hv51
-  have hZ : v51 = (widenVec (readQuad ha).PointVecs.Z).map PoisonOr.value :=
-    denote_pointTo_Z hv45 hv47 hv51
+  -- `%41` gathers `Z`: the even halves again, through the second mask.
+  denote_step_all v 41
+  denote_eval v 41 41
+  rw [hm0] at hv41
+  have hZ : v41 = (widenVec (readQuad ha).PointVecs.Z).map PoisonOr.value :=
+    denote_pointTo_Z hv35 hv37 hv41
   subst hZ
   refine name_of ({ s₂ with mem := s₂.mem.splice z (vecBV (widenVec (readQuad ha).PointVecs.Z)) })
     fun s₃ hs₃ => ?_
@@ -286,12 +283,12 @@ theorem fd_ed25519_point_to_conforms (x y z t a : Pointer) (s : GlobalState)
   have ft : Fits s₃.mem t (8 * 64) := by
     rw [hs₃, hs₂, hs₁]; exact fits_splice (fits_splice (fits_splice ht.1))
 
-  -- `%52` gathers `T`, the last of the four.
-  denote_step_all v 52
-  denote_eval v 52 52
-  rw [hm39] at hv52
-  have hT : v52 = (widenVec (readQuad ha).PointVecs.T).map PoisonOr.value :=
-    denote_pointTo_T hv46 hv48 hv52
+  -- `%42` gathers `T`, the last of the four.
+  denote_step_all v 42
+  denote_eval v 42 42
+  rw [hm0] at hv42
+  have hT : v42 = (widenVec (readQuad ha).PointVecs.T).map PoisonOr.value :=
+    denote_pointTo_T hv36 hv38 hv42
   subst hT
   peel_store (widenVec (readQuad ha).PointVecs.T), t, ft, s₃
 

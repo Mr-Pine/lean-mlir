@@ -42,6 +42,9 @@ inductive SLLVMOp where
   by `strideBytes · i + offsetBytes`. The parser computes both from the
   `elem_type` layout. `inbounds` is accepted and ignored; see `SLLVM.gep`. -/
   | gep (strideBytes offsetBytes : Nat)
+  /-- `llvm.getelementptr` with constant indices only
+  (`rawConstantIndices = array<i32: k, …>`): a `ptradd` by `offsetBytes`. -/
+  | gepConst (offsetBytes : Nat)
   /-- `llvm.getelementptr` with two dynamic indices, each followed by constant
   indices (`rawConstantIndices = array<i32: -2147483648, k, …, -2147483648, …>`),
   as `sha->state[i]` compiles to. It is two `gep`s in sequence -- see
@@ -247,6 +250,7 @@ def_signature for SLLVM
   -- New operations
   | .ptradd          => (ptr, bitvec 64) -> ptr
   | .gep _ _         => (ptr, bitvec 64) -> ptr
+  | .gepConst _      => (ptr) -> ptr
   | .gep2 _ _ _ _    => (ptr, bitvec 64, bitvec 64) -> ptr
   | .load t          => (ptr) -[.impure]-> Ty.arith t
   | .loadPure t      => (mem, ptr) -> [mem, Ty.arith t]
@@ -327,6 +331,7 @@ def_denote for SLLVM
   -- New operations
   | .ptradd   => fun p x => [SLLVM.ptradd p x]ₕ
   | .gep sz off => fun p i => [SLLVM.gep p sz off i]ₕ
+  | .gepConst off => fun p => [SLLVM.gepConst p off]ₕ
   | .gep2 s₀ o₀ s₁ o₁ => fun p i j => [SLLVM.gep2 p s₀ o₀ s₁ o₁ i j]ₕ
   | .load t   => fun p   => ([·]ₕ) <$> SLLVM.load p t
   | .loadPure t => fun m p => HVector.ofPair <| SLLVM.loadPure m p t
@@ -410,6 +415,7 @@ instance : DialectPrint SLLVM where
     | .load _t    => "ptr.load"
     | .ptradd     => "ptr.add"
     | .gep ..     => "llvm.getelementptr"
+    | .gepConst _ => "llvm.getelementptr"
     | .gep2 ..    => "llvm.getelementptr"
     | .alloca _w  => "ptr.alloca"
     | .memset     => "llvm.intr.memset"
@@ -432,6 +438,7 @@ instance : DialectPrint SLLVM where
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
     | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"
+    | .gepConst off => s!"\{offsetBytes = {off}}"
     | .gep2 s₀ o₀ s₁ o₁ =>
         s!"\{strideBytes = [{s₀}, {s₁}], offsetBytes = [{o₀}, {o₁}]}"
     | .insertvalue _ off _ => s!"\{offsetBits = {off}}"

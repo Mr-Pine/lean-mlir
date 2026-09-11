@@ -1,6 +1,7 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_sub_with_opts.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
 import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg_precomputed

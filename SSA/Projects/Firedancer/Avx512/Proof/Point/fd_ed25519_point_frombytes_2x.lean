@@ -63,7 +63,7 @@ per point and then packs them into the caller's QUADs. -/
 def cw : Nat → Nat := fun _ => 512
 
 /-- The locals as pointers: consecutive blocks from the entry counter. Slots
-`0`-`2` are `%3`-`%5`, the first point's three vectors; `3`-`5` are `%6`-`%8`,
+`0`-`2` are `%1`-`%3`, the first point's three vectors; `3`-`5` are `%4`-`%6`,
 the second's. -/
 def slotPtr (s : GlobalState) (k : Nat) : Pointer := s.chainPtr cw k
 
@@ -398,15 +398,15 @@ theorem fd_ed25519_point_frombytes_2x_conforms (r₁ buf₁ r₂ buf₂ : Pointe
   refine ⟨n₆, ?_, ?_⟩
 
   case _ =>
-    -- %0-%2: the `alloca` count, the `getelementptr` index and an unused `2`
-    denote_step_reduce v 2 [LLVM.const?]
-    subst hv0 hv1 hv2
-    -- %3-%8: the six `wwl_t` locals
+    -- %0: the `alloca` count
+    denote_step_reduce v 0 [LLVM.const?]
+    subst hv0
+    -- %1-%6: the six `wwl_t` locals
     peel_alloca_chain s, cw, 6
     simp only [slotPtr_0, slotPtr_1, slotPtr_2, slotPtr_3, slotPtr_4, slotPtr_5]
     rw [← hsAlloc]
     iterate 6 peel_lifetime
-    -- %9: `fd_r43x6_ge_decode2`
+    -- %7: `fd_r43x6_ge_decode2`
     peel_call hrun with simp_spine
 
     -- `r₁`: three loads and three stores, at fields 0, 64 and 128

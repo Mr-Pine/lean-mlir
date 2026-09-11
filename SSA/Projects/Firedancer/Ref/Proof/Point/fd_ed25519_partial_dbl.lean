@@ -444,10 +444,10 @@ theorem fd_ed25519_partial_dbl_conforms (r a : Pointer) (s : GlobalState) (hs : 
     refine ⟨by ring, by ring, by ring, by ring⟩
   case run =>
     simp only [Cfg.denote]
-    denote_step_all v 3
-    denote_eval v 0 3
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3
-    subst hv0 hv1 hv2 hv3
+    denote_step_all v 0
+    denote_eval v 0 0
+    simp only [LLVM.const?] at hv0
+    subst hv0
     peel_alloca from s as s₁ with hs₁def
     peel_alloca from s₁ as s₂ with hs₂def
     peel_alloca from s₂ as s₃ with hs₃def
@@ -459,51 +459,36 @@ theorem fd_ed25519_partial_dbl_conforms (r a : Pointer) (s : GlobalState) (hs : 
     peel_lifetime
     peel_lifetime
     peel_lifetime
-    denote_step_all v 9
-    denote_eval v 9 9
-    have e9 : v9 = .value (a.withOffset 40) := by
-      simp [hv9, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e9
-    clear hv9
+    denote_step_reduce v 6 [gepConst, ptradd, LLVM.const?]
+    have e6 : v6 = .value (a.withOffset 40) := by simp [hv6, Pointer.withOffset, simp_sllvm]
+    subst e6
+    clear hv6
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (l1)) (s' := u₁) ?_).trans ?_
     · exact hrun₁
-    denote_step_all v 11
-    denote_eval v 11 11
-    have e11 : v11 = .value (a.withOffset 120) := by
-      simp [hv11, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e11
-    clear hv11
+    denote_step_reduce v 8 [gepConst, ptradd, LLVM.const?]
+    have e8 : v8 = .value (a.withOffset 120) := by simp [hv8, Pointer.withOffset, simp_sllvm]
+    subst e8
+    clear hv8
     refine (BlockCom.run_bind_denote_call_of_nil (s' := u₂) ?_).trans ?_
     · exact hrun₂
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (l4)) (s' := u₃) ?_).trans ?_
     · exact hrun₃
-    denote_step_all v 13
-    denote_eval v 13 13
-    have e13 : v13 = .value (r.withOffset 80) := by
-      simp [hv13, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e13
-    clear hv13
+    denote_step_reduce v 10 [gepConst, ptradd, LLVM.const?]
+    have e10 : v10 = .value (r.withOffset 80) := by simp [hv10, Pointer.withOffset, simp_sllvm]
+    subst e10
+    clear hv10
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (r.withOffset 80)) (s' := u₄) ?_).trans ?_
     · exact hrun₄
-    denote_step_all v 15
-    denote_eval v 15 15
-    have e15 : v15 = .value (r.withOffset 120) := by
-      simp [hv15, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e15
-    clear hv15
+    denote_step_reduce v 12 [gepConst, ptradd, LLVM.const?]
+    have e12 : v12 = .value (r.withOffset 120) := by simp [hv12, Pointer.withOffset, simp_sllvm]
+    subst e12
+    clear hv12
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (r.withOffset 120)) (s' := u₅) ?_).trans ?_
     · exact hrun₅
-    denote_step_all v 17
-    denote_eval v 17 17
-    have e17 : v17 = .value (r.withOffset 40) := by
-      simp [hv17, gep, ptradd, Pointer.withOffset, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?,
-        LLVM.mul?, simp_sllvm]
-    subst e17
-    clear hv17
+    denote_step_reduce v 14 [gepConst, ptradd, LLVM.const?]
+    have e14 : v14 = .value (r.withOffset 40) := by simp [hv14, Pointer.withOffset, simp_sllvm]
+    subst e14
+    clear hv14
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (r.withOffset 40)) (s' := u₆) ?_).trans ?_
     · exact hrun₆
     refine (BlockCom.run_bind_denote_call_of_value (x := PoisonOr.value (r)) (s' := u₇) ?_).trans ?_

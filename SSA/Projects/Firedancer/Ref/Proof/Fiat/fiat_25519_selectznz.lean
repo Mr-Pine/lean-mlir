@@ -34,7 +34,7 @@ elab "peel_gep_at " i:num ", " p:term : tactic => do
   evalTactic (← `(tactic| denote_step_all $vBase $nLit))
   evalTactic (← `(tactic| denote_eval $vBase $nLit $nLit))
   evalTactic (← `(tactic| have vValue : $v = .value (($p).withOffset (($off) : BitVec 64)) := by
-    simp [$hv:ident, gep, ptradd, Pointer.withOffset, Ctxt.Valuation.singleton,
+    simp [$hv:ident, gep, gepConst, ptradd, Pointer.withOffset, Ctxt.Valuation.singleton,
       LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
   evalTactic (← `(tactic| subst vValue))
   evalTactic (← `(tactic| clear $hv))
@@ -297,16 +297,16 @@ theorem fiat_25519_selectznz_conforms (r : Pointer) (c : BitVec 8) (x y : Pointe
     simp only [cellPtr, GlobalState.chainPtr_id] at hid
     exact hjk (Fin.val_injective (by omega))
 
-  -- %0-%9: the constants, the five scratch cells folded to `cellPtr s k` and
+  -- %0-%5: the alloca count, the five scratch cells folded to `cellPtr s k` and
   -- sealed as `u`, and the `lifetime.start` markers, which move nothing.
-  denote_step_all v 4
-  eval_consts v 0 4
+  denote_step_all v 0
+  eval_consts v 0 0
   peel_alloca_chain s, cw, 5
   fold_cells s, cw, cellPtr, 5
   rw [← hu]
   iterate 5 peel_lifetime
 
-  -- %10-%39: the five limbwise selects, each step's facts beside its peel
+  -- %6-%23: the five limbwise selects, each step's facts beside its peel
   cmov_facts 0
   cmov_peel 0
   cmov_facts 1
@@ -318,7 +318,7 @@ theorem fiat_25519_selectznz_conforms (r : Pointer) (c : BitVec 8) (x y : Pointe
   cmov_facts 4
   cmov_peel 4
 
-  -- %40-%49: the five cells written back into the out-parameter
+  -- %24-%32: the five cells written back into the out-parameter
   have hrm : Fits u₄.mem r (5 * 64) := fits_of_live?_eq (fb₄ r.id hnr) hr.left
   store_facts 0
   store_peel 0

@@ -307,7 +307,7 @@ elab "peel_gep_limb " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident 
   evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr ($remainingBits) := by
         simpa using remainingFits ($st).mem $p $hp ($offBytes) (by simp)))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
+        simp [$hv:ident, gep, gepConst, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
           LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
   evalTactic (← `(tactic| subst vValue))
   evalTactic (← `(tactic| clear $hv))
@@ -440,7 +440,7 @@ elab "peel_gep_byte " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident 
   evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr (256 - $offBytes * 8) :=
     byteFits $hp (k := $offBytes) (off := (($offBytes) : BitVec 64)) (by omega) (by simp)))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp only [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset,
+        simp only [$hv:ident, gep, gepConst, ptradd, $ptr:ident, Pointer.withOffset,
           Ctxt.Valuation.singleton, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?,
           LLVM.mul?, simp_sllvm, BitVec.ofInt_ofNat, BitVec.ofNat_eq_ofNat,
           Nat.cast_one, Nat.cast_zero, Nat.cast_ofNat, one_mul, mul_one,

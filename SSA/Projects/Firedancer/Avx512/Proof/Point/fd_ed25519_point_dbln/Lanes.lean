@@ -21,7 +21,7 @@ open Ge
 
 /-! ## The runs -/
 
-/-- **`%151`/`%158`/`%159`**: `(X+Y, Y, Z, X)`. The `add` is `nsw` in `^bb3`; on
+/-- **`%100`/`%107`/`%108`**: `(X+Y, Y, Z, X)`. The `add` is `nsw` in `^bb3`; on
 `u44` lanes nothing overflows. -/
 theorem denote_addXY {x : Vector (BitVec 64) 8} {fs : LLVM.NoWrapFlags}
     {z a b c : Vector (LLVM.IntW 64) 8} (hx : R43x6.U44 x)
@@ -42,14 +42,14 @@ theorem denote_addXY {x : Vector (BitVec 64) 8} {fs : LLVM.NoWrapFlags}
   subst hb hc
   ge_lanes [addXY]
 
-/-- `%24`/`%41`/`%59`: `p`'s limbs on the lanes `G` takes. -/
+/-- `%32`/`%41`/`%50`: `p`'s limbs on the lanes `G` takes. -/
 def pmaskG (c d : BitVec 64) : Vector (LLVM.IntW 64) 8 :=
   #v[.poison, .value c, .value c, .poison, .poison, .value d, .value d, .poison]
 
-/-- `%4`: the shift doubling `Z²`. -/
+/-- `%19`: the shift doubling `Z²`. -/
 def dblShift : Vector Nat 8 := #v[0, 0, 1, 0, 0, 0, 1, 0]
 
-/-- The intermediate vectors of `%167`-`%199`, over the square `s`. -/
+/-- The intermediate vectors of `%116`-`%148`, over the square `s`. -/
 def egT (s : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   #v[s[0], s[1], s[2] + s[2], s[3], s[4], s[5], s[6] + s[6], s[7]]
 def egA (s : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
@@ -71,7 +71,7 @@ def egF' (cc dd : BitVec 64) (s : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :
   #v[s[3] + s[1], s[3] - s[1] + cc, s[3] - s[1] + cc + (s[2] + s[2]),
      s[3] + s[1], s[7] + s[5], s[7] - s[5] + dd, s[7] - s[5] + dd + (s[6] + s[6]), s[7] + s[5]]
 
-/-- **`%167`-`%199`** on one vector: the doubled `Z²`, the lane add/sub to
+/-- **`%116`-`%148`** on one vector: the doubled `Z²`, the lane add/sub to
 `(E, G, F, H)`. `m1`/`m2` are poison exactly on the lanes the following shuffle
 drops. -/
 theorem denote_egfh {s : Vector (BitVec 64) 8} {cc dd : BitVec 64}

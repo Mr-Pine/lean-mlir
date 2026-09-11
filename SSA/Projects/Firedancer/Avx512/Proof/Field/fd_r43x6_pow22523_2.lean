@@ -30,9 +30,9 @@ namespace Pow22523_2
 
 /-! ### The constants
 
-`%0 = 1` is only the `alloca` element count and `%3` is the poison second
-operand of the fold's shuffle; neither is worth a name. `%5 … %12` are the
-`n` of the ladder -- 2, 0, 1, 5, 10, 20, 50 and 100 -- and read better as the
+`%9 = 1` is only the `alloca` element count and `%12` is the poison second
+operand of the fold's shuffle; neither is worth a name. `%0 … %7` are the
+`n` of the ladder -- 100, 50, 20, 10, 5, 1, 0 and 2 -- and read better as the
 literals they are.
 
 What is left is `fd_r43x6_fold_unsigned` (`fd_r43x6.h`), the tail of every
@@ -43,21 +43,21 @@ What is left is `fd_r43x6_fold_unsigned` (`fd_r43x6.h`), the tail of every
                   wwl_permute( wwl( 5,0,1,2,3,4, 6,7 ),
                                wwl_shru_vector( _x, wwl( 43,…,43,40, 0,0 ) ) ) )
 
-Its three vectors are `%1`, `%4` and `%2`, hoisted to the top of the region
+Its three vectors are `%10`, `%8` and `%11`, hoisted to the top of the region
 and shared by both inlined squarings. -/
 
-/-- `%1`: the fold's low-limb mask, `wwl( _m43,_m43,_m43,_m43,_m43,_m40, 0,0 )`
+/-- `%10`: the fold's low-limb mask, `wwl( _m43,_m43,_m43,_m43,_m43,_m40, 0,0 )`
 for `_m43 = 2^43 - 1`, `_m40 = 2^40 - 1`. -/
 def foldMask : Vector (PoisonOr (BitVec 64)) 8 :=
   toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
     8796093022207, 1099511627775, 0, 0]
 
-/-- `%2`: the fold's limb widths, `wwl( 43,43,43,43,43,40, 0,0 )` -- the
+/-- `%11`: the fold's limb widths, `wwl( 43,43,43,43,43,40, 0,0 )` -- the
 `wwl_shru_vector` that lifts each limb's carry out. -/
 def foldShift : Vector (PoisonOr (BitVec 64)) 8 :=
   toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0]
 
-/-- `%4`: the fold's multipliers, `wwl( 19,1,1,1,1,1, 0,0 )`. Every carry
+/-- `%8`: the fold's multipliers, `wwl( 19,1,1,1,1,1, 0,0 )`. Every carry
 moves up one limb; the one off the top comes back at the bottom scaled by
 `19`, since `2^255 = 19` in `GF(p)`. -/
 def foldMul : Vector (PoisonOr (BitVec 64)) 8 :=
@@ -449,9 +449,9 @@ theorem fd_r43x6_pow22523_2_conforms (za zb : Pointer) (xa xb : Vector (BitVec 6
   refine Firedancer.run_runFunction' _ ?_
   -- %0-%12: the constants
   denote_step_reduce v 12 [LLVM.const?, LLVM.Ty.poison]
-  replace hv1 : v1 = foldMask := by simp only [foldMask]; denote_dense hv1
-  replace hv2 : v2 = foldShift := by simp only [foldShift]; denote_dense hv2
-  replace hv4 : v4 = foldMul := by simp only [foldMul]; denote_dense hv4
+  replace hv8 : v8 = foldMul := by simp only [foldMul]; denote_dense hv8
+  replace hv10 : v10 = foldMask := by simp only [foldMask]; denote_dense hv10
+  replace hv11 : v11 = foldShift := by simp only [foldShift]; denote_dense hv11
   subst hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12
   -- %13-%32: the twenty locals, folded back to `slotPtr s Slot.z9a`, …
   peel_alloca_chain s, cw, 20

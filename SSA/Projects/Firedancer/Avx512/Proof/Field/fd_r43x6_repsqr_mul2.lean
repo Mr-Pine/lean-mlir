@@ -67,32 +67,32 @@ constants and the four region arguments `^bb2` uses. The `Γout` indices are
 spelled here once, so no later segment has to reduce the `Cfg` to look a
 value up.
 
-`%3`, the `llvm.poison` the shuffles take as their dead second operand, is
+`%5`, the `llvm.poison` the shuffles take as their dead second operand, is
 listed too. No lane of it is ever read -- every mask index is below 8 -- but
-pinning it keeps an opaque `V ⟨3, _⟩` out of the shuffle's denotation, where
+pinning it keeps an opaque `V ⟨1, _⟩` out of the shuffle's denotation, where
 it would otherwise block a syntactic match. -/
 structure EntryEnv (V : fd_r43x6_repsqr_mul2.Γout.Valuation)
     (za zb : Pointer) (ya yb : Vector (BitVec 64) 8) : Prop where
-  /-- `%5 = -1`, the loop's decrement -/
-  cm1 : V (⟨1, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var (SLLVM.Ty.bitvec 64))
-    = .value 18446744073709551615#64
-  /-- `%4 = [19, 1, 1, 1, 1, 1, 0, 0]`, the fold's multipliers -/
-  cfold : V (⟨2, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
-    = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0]
-  /-- `%3`, the `llvm.poison` the shuffles take as their dead second operand -/
-  cpoison : V (⟨3, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
+  /-- `%5`, the `llvm.poison` the shuffles take as their dead second operand -/
+  cpoison : V (⟨1, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
     = Vector.replicate 8 PoisonOr.poison
-  /-- `%2 = [43, 43, 43, 43, 43, 40, 0, 0]`, the fold's shifts -/
-  cshift : V (⟨4, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
+  /-- `%4 = [43, 43, 43, 43, 43, 40, 0, 0]`, the fold's shifts -/
+  cshift : V (⟨2, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
     = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0]
-  /-- `%1 = [2^43-1, …, 2^40-1, 0, 0]`, the fold's masks -/
-  cmask : V (⟨5, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
+  /-- `%3 = [2^43-1, …, 2^40-1, 0, 0]`, the fold's masks -/
+  cmask : V (⟨3, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
     = toBitVecValue 64
       #v[8796093022207, 8796093022207, 8796093022207, 8796093022207, 8796093022207,
          1099511627775, 0, 0]
-  /-- `%0 = 0`, the counter's sentinel -/
-  c0 : V (⟨6, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var (SLLVM.Ty.bitvec 64))
+  /-- `%2 = 0`, the counter's sentinel -/
+  c0 : V (⟨4, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var (SLLVM.Ty.bitvec 64))
     = .value 0#64
+  /-- `%1 = [19, 1, 1, 1, 1, 1, 0, 0]`, the fold's multipliers -/
+  cfold : V (⟨5, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8)
+    = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0]
+  /-- `%0 = -1`, the loop's decrement -/
+  cm1 : V (⟨6, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var (SLLVM.Ty.bitvec 64))
+    = .value 18446744073709551615#64
   /-- `%arg5`, the `b` chain's multiplier -/
   vyb : V (⟨8, by rfl⟩ : fd_r43x6_repsqr_mul2.Γout.Var V8) = yb.map PoisonOr.value
   /-- `%arg3`, the `b` chain's out-parameter -/
@@ -123,8 +123,8 @@ private structure Chain (x : Vector (BitVec 64) 8) (k : Nat)
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 100000 in
 /-- **One iteration of `^bb1`**: `fd_r43x6_sqr_fast` and the fold on each
-chain, the counter decremented by `%5 = -1`, and the branch taken -- out to
-`^bb2` when the decremented counter reaches `%0 = 0`, back to `^bb1`
+chain, the counter decremented by `%0 = -1`, and the branch taken -- out to
+`^bb2` when the decremented counter reaches `%2 = 0`, back to `^bb1`
 otherwise.
 
 `m.toNat < 2 ^ 63` is what keeps the `nsw` decrement from poisoning: it is
@@ -285,26 +285,26 @@ private lemma bb0_run (za zb : Pointer) (xa ya xb yb : Vector (BitVec 64) 8)
         = StateT.run (fd_r43x6_repsqr_mul2.blocks.run V
             (if n = 0 then hdr2 xb xa else hdr1 xa xb n)) s := by
   refine ⟨PoisonOr.value (BitVec.ofBool (n == 0#64)) ::ᵥ
-    PoisonOr.value 18446744073709551615#64 ::ᵥ
-    toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] ::ᵥ
     Vector.replicate 8 PoisonOr.poison ::ᵥ
     toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] ::ᵥ
     toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
       8796093022207, 1099511627775, 0, 0] ::ᵥ
     PoisonOr.value 0#64 ::ᵥ
+    toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] ::ᵥ
+    PoisonOr.value 18446744073709551615#64 ::ᵥ
     Ctxt.Valuation.ofHVector
       [.value n, yb.map PoisonOr.value, xb.map PoisonOr.value, .value zb,
         ya.map PoisonOr.value, xa.map PoisonOr.value, .value za]ₕ,
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩, ?_⟩
   simp only [Cfg.denote]
   denote_step_reduce v 6 [LLVM.const?, LLVM.Ty.poison]
-  replace hv1 : v1 = toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207,
-      8796093022207, 8796093022207, 1099511627775, 0, 0] := by denote_dense hv1
-  replace hv2 : v2 = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] := by
-    denote_dense hv2
-  replace hv4 : v4 = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] := by
+  replace hv1 : v1 = toBitVecValue 64 #v[19, 1, 1, 1, 1, 1, 0, 0] := by
+    denote_dense hv1
+  replace hv3 : v3 = toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207,
+      8796093022207, 8796093022207, 1099511627775, 0, 0] := by denote_dense hv3
+  replace hv4 : v4 = toBitVecValue 64 #v[43, 43, 43, 43, 43, 40, 0, 0] := by
     denote_dense hv4
-  rw [hv0] at hv6
+  rw [hv2] at hv6
   simp only [LLVM.icmp, LLVM.icmp?, LLVM.icmp'] at hv6
   subst hv0 hv1 hv2 hv3 hv4 hv5 hv6
   simp only [BlockCom.denote_term, Terminator.denote_condBr, simp_denote, simp_sllvm]

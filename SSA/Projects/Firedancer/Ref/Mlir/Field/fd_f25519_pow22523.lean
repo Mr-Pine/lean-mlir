@@ -1,17 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_pow22523.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
-
-/-!
-The first lifted region with loops: `r = a^(2^252 - 3)` as the classic
-addition chain -- a straight-line prefix of 57 `sqr`/`mul` calls over three
-40-byte locals, then three counted loops (49, 99 and 49 iterations of
-`sqr(t, t)`) whose back-edges lift verbatim, counter φs and all. Byte-for-byte
-`build/native/gcc/mlir/ref/region/fd_f25519_pow22523.mlir`.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

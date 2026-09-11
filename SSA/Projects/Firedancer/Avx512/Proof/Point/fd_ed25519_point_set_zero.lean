@@ -66,11 +66,11 @@ theorem fd_ed25519_point_set_zero_conforms (p: Pointer) (s: GlobalState)
 
     refine run_runFunction (s' := output_state) ?_
 
-    denote_step_all v 4
-    denote_eval v 0 4
+    denote_step_all v 2
+    denote_eval v 0 2
 
-    simp [LLVM.const?] at hv1 hv2 hv3 hv4
-    subst hv1 hv2 hv3 hv4
+    simp [LLVM.const?] at hv1 hv2
+    subst hv1 hv2
     let z03 : Vector (BitVec 64) 8 := #v[0, 1, 1, 0, 0, 0, 0, 0]
     let z03' : Vector (LLVM.IntW 64) 8 := z03.map .value
     have hv0Value : v0 = z03' := by denote_dense hv0

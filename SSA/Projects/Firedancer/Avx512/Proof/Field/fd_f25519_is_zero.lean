@@ -168,8 +168,8 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
   refine ⟨s, ?_, hs.popFrame_equiv⟩
   obtain ⟨blk, hblk, hlen⟩ := hq.1
   have hlive : s.mem.live? q.id = some blk := by simp only [MemoryState.live?, hblk]
-  denote_step_all v 4
-  eval_consts v 0 4
+  denote_step_all v 3
+  eval_consts v 0 3
   peel_load (.vector 8 (.bitvec (.concrete 64))), blk, q, hblk, s
   rw [unflatten_readVec_512 hq hlive]
   have hd0 : LLVM.Ty.dense (.vector 8 (.bitvec (.concrete 64))) [0]
@@ -187,9 +187,9 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
     interval_cases i <;> rfl
   obtain ⟨c0, hc0, hc0z⟩ := bitcast_vicmp_ne_zero_iff (readVec hq) zeroVec
   obtain ⟨c1, hc1, hc1z⟩ := bitcast_vicmp_ne_zero_iff (readVec hq) pVec
-  denote_step_reduce v 13 [hd0, hdp, hc0, hc1, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.zext, LLVM.zext?] fold
-  denote_clear v 6 12
-  rw [hv13]
+  denote_step_reduce v 12 [hd0, hdp, hc0, hc1, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.zext, LLVM.zext?] fold
+  denote_clear v 5 11
+  rw [hv12]
   have hiff := eq_zeroVec_or_eq_pVec_iff hnr h6 h7
   by_cases hzero : vecValue (readVec hq) = 0
   · -- one of the two compares hits, so the `select` returns `true` either way

@@ -156,7 +156,7 @@ elab "peel_gep " off:term " with " p:term ", " hp:term ", " st:term " as " nm:id
   -- literal so the obligations downstream are `omega`-shaped.
   evalTactic (← `(tactic| norm_num [$ptr:ident] at $hptr:ident))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
+        simp [$hv:ident, gep, gepConst, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
           LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
   evalTactic (← `(tactic| subst vValue))
   evalTactic (← `(tactic| clear $hv))

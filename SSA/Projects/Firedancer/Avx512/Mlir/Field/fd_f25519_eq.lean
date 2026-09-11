@@ -1,18 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/avx512/region/fd_f25519_eq.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_f25519_sub
 import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_f25519_is_zero
-
-/-!
-# `fd_f25519_eq` (avx512)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/avx512/region/fd_f25519_eq.mlir`. The same three lines
-as the ref region -- a temporary, a `sub` into it, an `is_zero` on the result
--- over a 64-byte `fd_r43x6_t` rather than a 40-byte limb array.
--/
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

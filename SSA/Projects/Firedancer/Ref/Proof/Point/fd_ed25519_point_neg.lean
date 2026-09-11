@@ -38,11 +38,9 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   -- a gep by a field offset stays in the same block
   have hne' : ∀ o o' : BitVec 64, (r.withOffset o).id ≠ (a.withOffset o').id := fun _ _ => hne
 
-  -- `%0 … %3`: the gep constants
-  denote_step_reduce v 3 only [LLVM.const?]
-  subst hv0 hv1 hv2 hv3
+  denote_expose
 
-  -- `%4`: X ≔ -a->X, in `s`
+  -- `%0`: X ≔ -a->X, in `s`
   have hd0 : IsFieldElemPtr s.mem r := by
     simpa [Pointer.withOffset] using isCoordPtr hr 0
   have hc0 : IsFieldElemPtr s.mem a := by
@@ -52,14 +50,14 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   peel_call hrun₁
   have hu₁WF : u₁.WF := GlobalState.WF.of_equiv hs.splice heq₁
 
-  -- `%5 … %7`: Y ≔ a->Y, in `u₁`
-  denote_step_reduce v 6 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?]
-  have v5Value : v5 = .value (r.withOffset 40) := by
-    simp [hv5, Pointer.withOffset, simp_sllvm]
-  have v6Value : v6 = .value (a.withOffset 40) := by
-    simp [hv6, Pointer.withOffset, simp_sllvm]
-  subst v5Value v6Value
-  clear hv5 hv6
+  -- `%1 … %3`: Y ≔ a->Y, in `u₁`
+  denote_step_reduce v 2 [gepConst, ptradd, LLVM.const?]
+  have v1Value : v1 = .value (r.withOffset 40) := by
+    simp [hv1, Pointer.withOffset, simp_sllvm]
+  have v2Value : v2 = .value (a.withOffset 40) := by
+    simp [hv2, Pointer.withOffset, simp_sllvm]
+  subst v1Value v2Value
+  clear hv1 hv2
   have hd1 : IsFieldElemPtr s.mem (r.withOffset 40) := coordPtr_one r ▸ isCoordPtr hr 1
   have hc1 : IsFieldElemPtr s.mem (a.withOffset 40) := coordPtr_one a ▸ isCoordPtr ha 1
   have hd1u : IsFieldElemPtr u₁.mem (r.withOffset 40) :=
@@ -71,14 +69,14 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   peel_call hrun₂
   have hu₂WF : u₂.WF := GlobalState.WF.of_equiv hu₁WF.splice heq₂
 
-  -- `%8 … %10`: Z ≔ a->Z, in `u₂`
-  denote_step_reduce v 9 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?]
-  have v8Value : v8 = .value (r.withOffset 120) := by
-    simp [hv8, Pointer.withOffset, simp_sllvm]
-  have v9Value : v9 = .value (a.withOffset 120) := by
-    simp [hv9, Pointer.withOffset, simp_sllvm]
-  subst v8Value v9Value
-  clear hv8 hv9
+  -- `%4 … %6`: Z ≔ a->Z, in `u₂`
+  denote_step_reduce v 5 [gepConst, ptradd, LLVM.const?]
+  have v4Value : v4 = .value (r.withOffset 120) := by
+    simp [hv4, Pointer.withOffset, simp_sllvm]
+  have v5Value : v5 = .value (a.withOffset 120) := by
+    simp [hv5, Pointer.withOffset, simp_sllvm]
+  subst v4Value v5Value
+  clear hv4 hv5
   have hd3 : IsFieldElemPtr s.mem (r.withOffset 120) := coordPtr_three r ▸ isCoordPtr hr 3
   have hc3 : IsFieldElemPtr s.mem (a.withOffset 120) := coordPtr_three a ▸ isCoordPtr ha 3
   have hd3u : IsFieldElemPtr u₂.mem (r.withOffset 120) :=
@@ -92,14 +90,14 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   peel_call hrun₃
   have hu₃WF : u₃.WF := GlobalState.WF.of_equiv hu₂WF.splice heq₃
 
-  -- `%11 … %13`: T ≔ -a->T, in `u₃`
-  denote_step_reduce v 12 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?]
-  have v11Value : v11 = .value (r.withOffset 80) := by
-    simp [hv11, Pointer.withOffset, simp_sllvm]
-  have v12Value : v12 = .value (a.withOffset 80) := by
-    simp [hv12, Pointer.withOffset, simp_sllvm]
-  subst v11Value v12Value
-  clear hv11 hv12
+  -- `%7 … %9`: T ≔ -a->T, in `u₃`
+  denote_step_reduce v 8 [gepConst, ptradd, LLVM.const?]
+  have v7Value : v7 = .value (r.withOffset 80) := by
+    simp [hv7, Pointer.withOffset, simp_sllvm]
+  have v8Value : v8 = .value (a.withOffset 80) := by
+    simp [hv8, Pointer.withOffset, simp_sllvm]
+  subst v7Value v8Value
+  clear hv7 hv8
   have hd2 : IsFieldElemPtr s.mem (r.withOffset 80) := by
     simpa [Pointer.withOffset] using isCoordPtr hr 2
   have hc2 : IsFieldElemPtr s.mem (a.withOffset 80) := by

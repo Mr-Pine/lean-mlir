@@ -533,7 +533,7 @@ private theorem ofNatBias : (1048576#64 : BitVec 64) = BitVec.ofInt 64 (2 ^ 20) 
 
 /-! ### The eight instructions -/
 
-/-- The carry propagate *before* the bias goes back on: what `%84` holds, and
+/-- The carry propagate *before* the bias goes back on: what `%80` holds, and
 what a `fd_r43x6_sub_fast` against `u` reads rather than `u` itself -- the
 compiler folds `u`'s bias-add into the subtraction's constant. -/
 def acpVec (z : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=

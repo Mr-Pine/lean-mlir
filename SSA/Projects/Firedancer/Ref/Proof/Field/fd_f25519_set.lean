@@ -67,10 +67,7 @@ theorem fd_f25519_set_conforms (o q : Pointer) (s : GlobalState)
     exact GlobalState.Equiv.symm
       (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) ho)
 
-  denote_step_all v 4
-  denote_eval v 0 4
-  simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4
-  subst hv0 hv1 hv2 hv3 hv4
+  denote_expose
 
   -- what `q`'s block holds at limb `i`, in the gep'd-pointer shape the loads
   -- leave behind; `hq.right` rules out the offset wrapping

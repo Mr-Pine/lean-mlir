@@ -41,24 +41,24 @@ def negQuad (q : Quad) : Quad where
   v25 := #v[17592186044414#64 - q.v25[0], q.v25[1], q.v25[2], 17592186044414#64 - q.v25[3],
     2199023255550#64 - q.v25[4], q.v25[5], q.v25[6], 2199023255550#64 - q.v25[7]]
 
-/-- `%22`: `2p`'s limbs 0 and 3 on the `X`/`T` lanes, poison on the `Y`/`Z`
+/-- `%25`: `2p`'s limbs 0 and 3 on the `X`/`T` lanes, poison on the `Y`/`Z`
 lanes, which the shuffle after the `sub` never reads. -/
 def negC03 : Vector (LLVM.IntW 64) 8 :=
   #v[.value 17592186044378#64, .poison, .poison, .value 17592186044378#64,
      .value 17592186044414#64, .poison, .poison, .value 17592186044414#64]
 
-/-- `%39`: limbs 1 and 4. -/
+/-- `%34`: limbs 1 and 4. -/
 def negC14 : Vector (LLVM.IntW 64) 8 :=
   #v[.value 17592186044414#64, .poison, .poison, .value 17592186044414#64,
      .value 17592186044414#64, .poison, .poison, .value 17592186044414#64]
 
-/-- `%57`: limbs 2 and 5. -/
+/-- `%43`: limbs 2 and 5. -/
 def negC25 : Vector (LLVM.IntW 64) 8 :=
   #v[.value 17592186044414#64, .poison, .poison, .value 17592186044414#64,
      .value 2199023255550#64, .poison, .poison, .value 2199023255550#64]
 
 set_option maxHeartbeats 1000000 in
-/-- **`%85`/`%86`, one vector's lane subtract**: `c - x` on the `X`/`T` lanes,
+/-- **`%58`/`%59`, one vector's lane subtract**: `c - x` on the `X`/`T` lanes,
 `x` on the others. The minuend's poison lanes are exactly the ones the shuffle
 takes from `x`. -/
 theorem denote_negLanes {x : Vector (BitVec 64) 8} {c d : BitVec 64}
@@ -256,45 +256,42 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   intro hb0 hb3
   refine run_runFunction' _ ?_
 
-  denote_step_reduce v 79 [LLVM.const?, LLVM.Ty.poison] fold
+  denote_step_reduce v 52 [LLVM.const?, LLVM.Ty.poison] fold
 
-  -- `%0 … %79`: the three `2p` minuends and the fold's constants.
-  replace hv22 : v22 = negC03 := by
-    simp only [hv22]
+  -- `%0 … %52`: the three `2p` minuends and the fold's constants.
+  replace hv25 : v25 = negC03 := by
+    simp only [hv25]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negC03]
-  replace hv39 : v39 = negC14 := by
-    simp only [hv39]
+  replace hv34 : v34 = negC14 := by
+    simp only [hv34]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negC14]
-  replace hv57 : v57 = negC25 := by
-    simp only [hv57]
+  replace hv43 : v43 = negC25 := by
+    simp only [hv43]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, negC25]
-  replace hv77 : v77 = quadMul19 := by
-    simp only [hv77]
+  replace hv52 : v52 = quadMul19 := by
+    simp only [hv52]
     apply Vector.ext
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.insertelement, quadMul19]
-  replace hv58 : v58 = toBitVecValue 64 quadShift43 := by
-    simp only [quadShift43]; denote_dense hv58
-  replace hv59 : v59 = toBitVecValue 64 quadShift48 := by
-    simp only [quadShift48]; denote_dense hv59
-  replace hv78 : v78 = toBitVecValue 64 quadMask43 := by
-    simp only [quadMask43]; denote_dense hv78
-  replace hv79 : v79 = toBitVecValue 64 quadMask48 := by
-    simp only [quadMask48]; denote_dense hv79
-  clear hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15 hv16 hv17 hv18
-  clear hv19 hv20 hv21 hv23 hv24 hv25 hv26 hv27 hv28 hv29 hv30 hv31 hv32 hv33 hv34 hv35
-  clear hv36 hv37 hv38 hv40 hv41 hv42 hv43 hv44 hv45 hv46 hv47 hv48 hv49 hv50 hv51 hv52
-  clear hv53 hv54 hv55 hv56 hv60 hv61 hv62 hv63 hv64 hv65 hv66 hv67 hv68 hv69 hv70 hv71
-  clear hv72 hv73 hv74 hv75 hv76
-  subst hv0
+  replace hv4 : v4 = toBitVecValue 64 quadShift43 := by
+    simp only [quadShift43]; denote_dense hv4
+  replace hv3 : v3 = toBitVecValue 64 quadShift48 := by
+    simp only [quadShift48]; denote_dense hv3
+  replace hv1 : v1 = toBitVecValue 64 quadMask43 := by
+    simp only [quadMask43]; denote_dense hv1
+  replace hv0 : v0 = toBitVecValue 64 quadMask48 := by
+    simp only [quadMask48]; denote_dense hv0
+  clear hv2 hv5 hv6 hv7 hv8 hv9 hv10 hv11 hv12 hv13 hv14 hv15 hv16 hv17 hv18 hv19 hv20
+  clear hv21 hv22 hv23 hv24 hv26 hv27 hv28 hv29 hv30 hv31 hv32 hv33 hv35 hv36 hv37 hv38
+  clear hv39 hv40 hv41 hv42 hv44 hv45 hv46 hv47 hv48 hv49 hv50 hv51
 
-  -- `%80 … %84`: `a`'s three vectors, at 0, 64 and 128 bytes in.
+  -- `%53 … %57`: `a`'s three vectors, at 0, 64 and 128 bytes in.
   obtain ⟨ablk, hablkE, halen⟩ := ha.1
   have halive : s.mem.live? a.id = some ablk := by simp [MemoryState.live?, hablkE]
   have h64 : (64 : BitVec 64).toNat = 64 := rfl
@@ -321,26 +318,26 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField25, haField25E, s
   rw [hoffA25, unflatten_readQuad_v25 ha halive]
 
-  -- `%85`/`%86`: the `03` lane subtract, stored to `r`.
-  denote_step_reduce v 86 only [hv22] fold
-  have hN03 : v86 = (negQuad (readQuad ha)).v03.map PoisonOr.value :=
-    denote_negLanes rfl rfl hv86
+  -- `%58`/`%59`: the `03` lane subtract, stored to `r`.
+  denote_step_reduce v 59 only [hv25] fold
+  have hN03 : v59 = (negQuad (readQuad ha)).v03.map PoisonOr.value :=
+    denote_negLanes rfl rfl hv59
   subst hN03
   refine name_of ({ s with mem := s.mem.splice r (vecBV (negQuad (readQuad ha)).v03) })
     fun s₁ hs₁ => ?_
   peel_store (negQuad (readQuad ha)).v03, r, hr.1, s as s₁ := hs₁
   have f₁ : Fits s₁.mem r (3 * 8 * 64) := hs₁ ▸ fits_splice hr.1
 
-  -- `%87 … %90`: `a`'s `14` again, which the store to `r` did not reach.
+  -- `%60 … %63`: `a`'s `14` again, which the store to `r` did not reach.
   have hE₁ : s₁.mem[aField.id]? = some (.live ablk) := by
     rw [hs₁]
     exact (getElem?_splice_ne (m := s.mem) (p := r) (x := vecBV (negQuad (readQuad ha)).v03)
       (q := aField.id) hne).trans hablkE
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField, hE₁, s₁
   rw [hoffA, unflatten_readQuad_v14 ha halive]
-  denote_step_reduce v 89 only [hv39] fold
-  have hN14 : v89 = (negQuad (readQuad ha)).v14.map PoisonOr.value :=
-    denote_negLanes rfl rfl hv89
+  denote_step_reduce v 62 only [hv34] fold
+  have hN14 : v62 = (negQuad (readQuad ha)).v14.map PoisonOr.value :=
+    denote_negLanes rfl rfl hv62
   subst hN14
   peel_gep 64 with r, f₁, s₁ as rField
   have fR : Fits s₁.mem rField 1024 := Fits.mono hrField (by simp)
@@ -350,33 +347,33 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
   peel_store (negQuad (readQuad ha)).v14, rField, fR, s₁ as s₂ := hs₂
   have f₂ : Fits s₂.mem r (3 * 8 * 64) := hs₂ ▸ fits_splice f₁
 
-  -- `%91 … %94`: the same for `25`.
+  -- `%64 … %67`: the same for `25`.
   have hE₂ : s₂.mem[aField25.id]? = some (.live ablk) := by
     rw [hs₂]
     exact (getElem?_splice_ne (m := s₁.mem) (p := rField)
       (x := vecBV (negQuad (readQuad ha)).v14) (q := aField25.id) hne).trans hE₁
   peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, aField25, hE₂, s₂
   rw [hoffA25, unflatten_readQuad_v25 ha halive]
-  denote_step_reduce v 93 only [hv57] fold
-  have hN25 : v93 = (negQuad (readQuad ha)).v25.map PoisonOr.value :=
-    denote_negLanes rfl rfl hv93
+  denote_step_reduce v 66 only [hv43] fold
+  have hN25 : v66 = (negQuad (readQuad ha)).v25.map PoisonOr.value :=
+    denote_negLanes rfl rfl hv66
   subst hN25
   peel_gep 128 with r, f₂, s₂ as rField25
   have fR25 : Fits s₂.mem rField25 512 := Fits.mono hrField25 (by simp)
 
-  -- `%95 … %105`: `FD_R43X6_QUAD_FOLD_UNSIGNED`, one store per vector.
-  denote_step_reduce v 101 only [hv58, hv59, hv77, hv78] fold
-  have hF03 : v101 = (foldQuad (negQuad (readQuad ha))).v03.map PoisonOr.value :=
-    denote_quadFold_v03 (q := negQuad (readQuad ha)) rfl rfl rfl rfl hv101
+  -- `%68 … %78`: `FD_R43X6_QUAD_FOLD_UNSIGNED`, one store per vector.
+  denote_step_reduce v 74 only [hv4, hv3, hv52, hv1] fold
+  have hF03 : v74 = (foldQuad (negQuad (readQuad ha))).v03.map PoisonOr.value :=
+    denote_quadFold_v03 (q := negQuad (readQuad ha)) rfl rfl rfl rfl hv74
   subst hF03
   refine name_of
     ({ s₂ with mem := s₂.mem.splice r (vecBV (foldQuad (negQuad (readQuad ha))).v03) })
     fun s₃ hs₃ => ?_
   peel_store (foldQuad (negQuad (readQuad ha))).v03, r, f₂, s₂ as s₃ := hs₃
 
-  denote_step_reduce v 103 only [hv78] fold
-  have hF14 : v103 = (foldQuad (negQuad (readQuad ha))).v14.map PoisonOr.value :=
-    denote_quadFold_v14 (q := negQuad (readQuad ha)) hv95 rfl hv103
+  denote_step_reduce v 76 only [hv1] fold
+  have hF14 : v76 = (foldQuad (negQuad (readQuad ha))).v14.map PoisonOr.value :=
+    denote_quadFold_v14 (q := negQuad (readQuad ha)) hv68 rfl hv76
   subst hF14
   have f₄ : Fits s₃.mem rField (8 * 64) := by
     rw [hs₃, hs₂]; exact fits_splice (fits_splice (Fits.mono fR (by omega)))
@@ -385,9 +382,9 @@ theorem fd_ed25519_point_neg_conforms (r a : Pointer) (s : GlobalState)
     fun s₄ hs₄ => ?_
   peel_store (foldQuad (negQuad (readQuad ha))).v14, rField, f₄, s₃ as s₄ := hs₄
 
-  denote_step_reduce v 105 only [hv79] fold
-  have hF25 : v105 = (foldQuad (negQuad (readQuad ha))).v25.map PoisonOr.value :=
-    denote_quadFold_v25 (q := negQuad (readQuad ha)) hv96 rfl hv105
+  denote_step_reduce v 78 only [hv0] fold
+  have hF25 : v78 = (foldQuad (negQuad (readQuad ha))).v25.map PoisonOr.value :=
+    denote_quadFold_v25 (q := negQuad (readQuad ha)) hv69 rfl hv78
   subst hF25
   have f₅ : Fits s₄.mem rField25 (8 * 64) := by
     rw [hs₄, hs₃]; exact fits_splice (fits_splice fR25)

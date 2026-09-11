@@ -545,7 +545,7 @@ elab "limb_peel " k:num ", " u:term : tactic => do
   evalTactic (← `(tactic| denote_step_all $vBase $nLit))
   evalTactic (← `(tactic| denote_eval $vBase $nLit $nLit))
   evalTactic (← `(tactic| have vValue : $v = .value $qp := by
-    simp [$hv:ident, gep, ptradd, $qp:ident, Pointer.withOffset,
+    simp [$hv:ident, gep, gepConst, ptradd, $qp:ident, Pointer.withOffset,
       Ctxt.Valuation.singleton, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?,
       LLVM.mul?, simp_sllvm]))
   evalTactic (← `(tactic| subst vValue))
@@ -971,11 +971,11 @@ def storedByte (x12 x38 x51 x66 x79 : BitVec 64) (k : Nat) : BitVec 8 :=
 bytes 0-5 out of `x12`, 6-11 out of `x38`, 12-18 out of `x51`, 19-24 out of
 `x66` and 25-31 out of `x79`, two instructions per byte. -/
 def byteSrc (k : Nat) : Nat :=
-  if k < 6 then 98 + 2 * k
-  else if k < 12 then 112 + 2 * (k - 6)
-  else if k < 19 then 126 + 2 * (k - 12)
-  else if k < 25 then 141 + 2 * (k - 19)
-  else 155 + 2 * (k - 25)
+  if k < 6 then 74 + 2 * k
+  else if k < 12 then 88 + 2 * (k - 6)
+  else if k < 19 then 102 + 2 * (k - 12)
+  else if k < 25 then 117 + 2 * (k - 19)
+  else 131 + 2 * (k - 25)
 
 /-- `peel_store` into a state that is *already named*. `hnm : nm = …` bridges
 to the splice, and the store's own rewrite then installs the opaque `nm` in the
@@ -1051,7 +1051,7 @@ elab "peel_gep_byte' " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident
   evalTactic (← `(tactic| have $hptr:ident : Fits ($st).mem $ptr (256 - $offBytes * 8) :=
     byteFits $hp (k := $offBytes) (off := (($offBytes) : BitVec 64)) (by omega) (by simp)))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
-        simp only [$hv:ident, gep, ptradd, $ptr:ident, Pointer.withOffset,
+        simp only [$hv:ident, gep, gepConst, ptradd, $ptr:ident, Pointer.withOffset,
           Ctxt.Valuation.singleton, LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?,
           LLVM.mul?, simp_sllvm, BitVec.ofInt_ofNat, BitVec.ofNat_eq_ofNat,
           Nat.cast_one, Nat.cast_zero, Nat.cast_ofNat, one_mul, mul_one,
@@ -1156,15 +1156,15 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   refine ⟨BitVec.ofNat 256 (readFieldElem hq).val, readBuf_splice (m := s.mem) _ ho, ?_⟩
   refine run_runFunction' _ ?_
   simp only [Cfg.denote]
-  -- %0-%41: the constants, substituted away
-  denote_step_all v 41
-  eval_consts v 0 41
-  -- %42-%62: the 21 scratch cells
+  -- %0-%17: the constants, substituted away
+  denote_step_all v 17
+  eval_consts v 0 17
+  -- %18-%38: the 21 scratch cells
   peel_alloca_chain s, cw, 21
   fold_cells s, cw, cellPtr, 21
   -- The 21 `lifetime.start` markers move neither state nor valuation.
   iterate 21 peel_lifetime
-  -- %63: `arg1[0]`, the first borrow operand
+  -- %39: `arg1[0]`, the first borrow operand
   peel_load (.bitvec (.concrete 64)), qblk, q, hqblk, (s.allocaChain cw 21)
   -- Each step is one line: `borrow_peel` pins the operands, discharges the
   -- contract and runs the call. `cell_facts`/`limb_facts` after it name the
@@ -1242,16 +1242,16 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
     exact Option.some.inj <| hread.symm.trans (readWord?_eq_some w₆.fit w₆.val)
   simp only [hload₁₀]
   clear hload₁₀ hc₁₀blk hc₁₀len c₁₀blk hcell₁₀
-  -- `%79` and `%82`: `x11` against `p`'s low and upper limbs, named before the
+  -- `%55` and `%58`: `x11` against `p`'s low and upper limbs, named before the
   -- instructions that build them so the add-back operands can be pinned.
   refine name_of (if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 0)) fun mask₀ hmask₀ => ?_
   refine name_of (if x10 = 0#8 then 0#64 else BitVec.ofNat 64 (pLimb 1)) fun mask₁ hmask₁ => ?_
-  -- %79: the mask meets `p`'s low limb
-  denote_step_all v 79
-  denote_eval v 79 79
-  eval_llvm 79 [show x11 &&& 2251799813685229#64 = mask₀ from by
+  -- %55: the mask meets `p`'s low limb
+  denote_step_all v 55
+  denote_eval v 55 55
+  eval_llvm 55 [show x11 &&& 2251799813685229#64 = mask₀ from by
     rw [hmask₀, hx11]; split <;> decide]
-  subst hv79
+  subst hv55
   addback_facts 1 from f₆ giving f₇ with l₆ giving l₇
   cell_facts 8, 12, u₇, f₇
   cell_facts 64, 2, u₇, f₇
@@ -1264,12 +1264,12 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   simp only [hload₁₂]
   clear hload₁₂ hc₁₂blk hc₁₂len c₁₂blk hcell₁₂
   peel_cell 64, 2, u₇
-  -- %82: the mask meets `p`'s upper limbs, shared by the last four steps
-  denote_step_all v 82
-  denote_eval v 82 82
-  eval_llvm 82 [show x11 &&& 2251799813685247#64 = mask₁ from by
+  -- %58: the mask meets `p`'s upper limbs, shared by the last four steps
+  denote_step_all v 58
+  denote_eval v 58 58
+  eval_llvm 58 [show x11 &&& 2251799813685247#64 = mask₁ from by
     rw [hmask₁, hx11]; split <;> decide]
-  subst hv82
+  subst hv58
   addback_facts 2 from f₇ giving f₈ with l₇ giving l₈
   cell_facts 8, 14, u₈, f₈
   cell_facts 64, 4, u₈, f₈
@@ -1307,7 +1307,7 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   clear hload₁₈ hc₁₈blk hc₁₈len c₁₈blk hcell₁₈
   peel_cell 64, 8, u₁₀
   addback_facts 5 from f₁₀ giving f₁₁ with l₁₀ giving l₁₁
-  -- %89-%97: the five reduced limbs, each shifted into the position its bytes
+  -- %65-%73: the five reduced limbs, each shifted into the position its bytes
   -- occupy. fiat's `x22`-`x25`; `x20` needs none.
   cell_facts 64, 19, u₁₁, f₁₁
   peel_cell 64, 19, u₁₁
@@ -1319,9 +1319,9 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   simp only [hload₁₉]
   clear hload₁₉ hc₁₉blk hc₁₉len c₁₉blk hcell₁₉
   refine name_of (BitVec.ofNat 64 (16 * x20.toNat)) fun x22 hx22 => ?_
-  denote_step_all v 90
-  denote_eval v 90 90
-  eval_llvm 90 [show x20 <<< 4#64 = x22 from by
+  denote_step_all v 66
+  denote_eval v 66 66
+  eval_llvm 66 [show x20 <<< 4#64 = x22 from by
     rw [hx22]
     apply BitVec.eq_of_toNat_eq
     simp only [BitVec.shiftLeft_eq', BitVec.toNat_shiftLeft, BitVec.toNat_ofNat,
@@ -1341,9 +1341,9 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   simp only [hload₁₇]
   clear hload₁₇ hc₁₇blk hc₁₇len c₁₇blk hcell₁₇
   refine name_of (BitVec.ofNat 64 (2 * x18.toNat)) fun x23 hx23 => ?_
-  denote_step_all v 92
-  denote_eval v 92 92
-  eval_llvm 92 [show x18 <<< 1#64 = x23 from by
+  denote_step_all v 68
+  denote_eval v 68 68
+  eval_llvm 68 [show x18 <<< 1#64 = x23 from by
     rw [hx23]
     apply BitVec.eq_of_toNat_eq
     simp only [BitVec.shiftLeft_eq', BitVec.toNat_shiftLeft, BitVec.toNat_ofNat,
@@ -1364,9 +1364,9 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   simp only [hload₁₅]
   clear hload₁₅ hc₁₅blk hc₁₅len c₁₅blk hcell₁₅
   refine name_of (BitVec.ofNat 64 (64 * x16.toNat)) fun x24 hx24 => ?_
-  denote_step_all v 94
-  denote_eval v 94 94
-  eval_llvm 94 [show x16 <<< 6#64 = x24 from by
+  denote_step_all v 70
+  denote_eval v 70 70
+  eval_llvm 70 [show x16 <<< 6#64 = x24 from by
     rw [hx24]
     apply BitVec.eq_of_toNat_eq
     simp only [BitVec.shiftLeft_eq', BitVec.toNat_shiftLeft, BitVec.toNat_ofNat,
@@ -1388,9 +1388,9 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
   -- the shift is plain scaling; the stepper's bit-level form is proved back
   -- from this where it is needed, rather than carried alongside it
   refine name_of (BitVec.ofNat 64 (8 * x14.toNat)) fun x25 hx25 => ?_
-  denote_step_all v 96
-  denote_eval v 96 96
-  eval_llvm 96 [show x14 <<< 3#64 = x25 from by
+  denote_step_all v 72
+  denote_eval v 72 72
+  eval_llvm 72 [show x14 <<< 3#64 = x25 from by
     rw [hx25]
     apply BitVec.eq_of_toNat_eq
     simp only [BitVec.shiftLeft_eq', BitVec.toNat_shiftLeft, BitVec.toNat_ofNat,
@@ -1451,28 +1451,28 @@ theorem fiat_25519_to_bytes_conforms (o q : Pointer) (s : GlobalState)
     rw [hx79, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   have hx79bits : (x66 >>> 48#64 &&& 255#64) + x22 = x79 :=
     (accStep (a := x66) (b := x22) (by omega)).trans hx79.symm
-  -- %98-%167: the byte extraction, fiat's `x26`-`x91`. Pure arithmetic, so
+  -- %74-%143: the byte extraction, fiat's `x26`-`x91`. Pure arithmetic, so
   -- the stepper runs all of it in one go.
-  denote_step_all v 167
+  denote_step_all v 143
   -- fiat's `x38`, `x51`, `x66`, `x79` each feed seven byte extractions.
   -- Evaluating a consumer inlines its operand's equation, so unless each is
   -- named first the chain behind it is duplicated into every consumer and the
   -- terms grow multiplicatively.
-  denote_eval v 98 111
-  eval_llvm_range 98 110
-  eval_llvm 111 [hx38bits]
-  denote_eval v 112 125
-  eval_llvm_range 112 124
-  eval_llvm 125 [hx51bits]
-  denote_eval v 126 140
-  eval_llvm_range 126 139
-  eval_llvm 140 [hx66bits]
-  denote_eval v 141 154
-  eval_llvm_range 141 153
-  eval_llvm 154 [hx79bits]
+  denote_eval v 74 87
+  eval_llvm_range 74 86
+  eval_llvm 87 [hx38bits]
+  denote_eval v 88 101
+  eval_llvm_range 88 100
+  eval_llvm 101 [hx51bits]
+  denote_eval v 102 116
+  eval_llvm_range 102 115
+  eval_llvm 116 [hx66bits]
+  denote_eval v 117 130
+  eval_llvm_range 117 129
+  eval_llvm 130 [hx79bits]
   clear hx38bits hx51bits hx66bits hx79bits hx25lt hx38lt hx51lt hx66lt
-  denote_eval v 155 167
-  eval_llvm_range 155 167
+  denote_eval v 131 143
+  eval_llvm_range 131 143
   -- The out-buffer, reached through the frame.
   have hou : Fits u₁₁.mem o (32 * 8) := fits_of_live?_eq (f₁₁.fb o.id cells.ido) ho.left
 

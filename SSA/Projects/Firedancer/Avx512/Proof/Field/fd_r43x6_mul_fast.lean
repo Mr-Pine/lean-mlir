@@ -16,7 +16,7 @@ Denoting the lifted SLLVM program and decoding the six output limbs yields the
 product of the decoded inputs in `GF(2^255 - 19)`, within the widths the
 `fd_r43x6.h` table promises.
 
-The derivation runs at the N level throughout: each of the 209 instructions is
+The derivation runs at the N level throughout: each of the 146 instructions is
 reduced to a vector of `BitVec.ofNat 64` applied to an expression over `pl`
 and `ph` (`Spec/Common.lean`), so `denote_fd_r43x6_mul_fast` lands directly on
 the specified `mulVec x y` and the ring correctness of `Spec/` applies without
@@ -66,7 +66,7 @@ set_option maxHeartbeats 400000000 in
 set_option maxRecDepth 1000000 in
 /-- **Limb derivation** for `fd_r43x6_mul_fast`: on unreduced inputs whose
 two high `y` lanes are zero, the denotation *is* the specified limb vector
-`mulVec x y` -- every one of the 209 instructions carried through at the N
+`mulVec x y` -- every one of the 146 instructions carried through at the N
 level. -/
 theorem denote_fd_r43x6_mul_fast (x y : Vector (BitVec 64) 8)
     (hx : R43x6.Unreduced x) (hy : R43x6.Unreduced y)
@@ -101,128 +101,63 @@ theorem denote_fd_r43x6_mul_fast (x y : Vector (BitVec 64) 8)
   have ty4 : y[4].toNat < 4503599627370496 := by omega
   have ty5 : y[5].toNat < 4503599627370496 := by omega
   unfold fd_r43x6_mul_fast
-  denote_step_all v 4
+  denote_step_reduce v 96 [LLVM.const?, LLVM.Ty.poison] fold
   let zeroBVP : PoisonOr (BitVec 64) := .value 0
   let neg1BVP : PoisonOr (BitVec 64) := .value (-1)
-  let zeroVec := toBitVecValue 64 (Vector.replicate 8 0)
-  let nineVec := toBitVecValue 64 (Vector.replicate 8 9)
-  have v1Zero : v1 = zeroBVP := by
-    simp only [hv1, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
-    simp only [HVector.head]
-    rfl
-  have v2Value : v2 = zeroVec := by denote_dense hv2
-  have v3Value : v3 = nineVec := by denote_dense hv3
-  have v4Poison : v4 = PoisonOr.poison := by
-    simp only [hv4]
-    simp_peephole
-    rfl
-  subst v1Zero v2Value v3Value v4Poison
-  clear hv0 hv1 hv2 hv3 hv4
 
-  -- The `wwl_slide` zero operands: an `undef` vector with zero written into
-  -- the lanes each slide actually reads, the rest left poison.
-  let p7z1 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 7 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 1 (.value (BitVec.zero 64)))
-  denote_step_all v 21
-  have v21Value : v21 = p7z1 := by
-    denote_eval v 5 21
-    denote_expand v 5 21
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v21Value
-  denote_clear v 5 21
-
-  let p6z2 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 6 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 2 (.value (BitVec.zero 64)))
-  denote_step_all v 38
-  have v38Value : v38 = p6z2 := by
-    denote_eval v 22 38
-    denote_expand v 22 38
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v38Value
-  denote_clear v 22 38
-
-  let p5z3 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 5 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 3 (.value (BitVec.zero 64)))
-  denote_step_all v 55
-  have v55Value : v55 = p5z3 := by
-    denote_eval v 39 55
-    denote_expand v 39 55
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v55Value
-  denote_clear v 39 55
-
-  let z3p5 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 3 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 5 (.poison : PoisonOr (BitVec 64)))
-  denote_step_all v 72
-  have v72Value : v72 = z3p5 := by
-    denote_eval v 56 72
-    denote_expand v 56 72
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v72Value
-  denote_clear v 56 72
-
-  let p4z4 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 4 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 4 (.value (BitVec.zero 64)))
-  denote_step_all v 89
-  have v89Value : v89 = p4z4 := by
-    denote_eval v 73 89
-    denote_expand v 73 89
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v89Value
-  denote_clear v 73 89
-
-  let z2p6 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 2 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 6 (.poison : PoisonOr (BitVec 64)))
-  denote_step_all v 106
-  have v106Value : v106 = z2p6 := by
-    denote_eval v 90 106
-    denote_expand v 90 106
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v106Value
-  denote_clear v 90 106
-
-  let p3z5 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 3 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 5 (.value (BitVec.zero 64)))
-  denote_step_all v 123
-  have v123Value : v123 = p3z5 := by
-    denote_eval v 107 123
-    denote_expand v 107 123
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v123Value
-  denote_clear v 107 123
-
-  let z1p7 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 1 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 7 (.poison : PoisonOr (BitVec 64)))
-  denote_step_all v 140
-  have v140Value : v140 = z1p7 := by
-    denote_eval v 124 140
-    denote_expand v 124 140
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v140Value
-  denote_clear v 124 140
-
-  let p2z6 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 2 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 6 (.value (BitVec.zero 64)))
-  denote_step_all v 157
-  have v157Value : v157 = p2z6 := by
-    denote_eval v 141 157
-    denote_expand v 141 157
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  subst v157Value
-  denote_clear v 141 157
-
-  -- `%158`-`%160`: the `za` mask and the fold constants.
+  -- `%0`-`%2`, `%11`, `%12`: the dense constants.
   let zaMask : Vector (PoisonOr (BitVec 64)) 8 :=
     #v[neg1BVP, neg1BVP, neg1BVP, neg1BVP, neg1BVP, neg1BVP, zeroBVP, zeroBVP]
   let dense7 := toBitVecValue 64 (Vector.replicate 8 7)
   let dense24 := toBitVecValue 64 (Vector.replicate 8 24)
-  denote_step_all v 160
-  have v158Value : v158 = zaMask := by denote_dense hv158
-  have v159Value : v159 = dense7 := by denote_dense hv159
-  have v160Value : v160 = dense24 := by denote_dense hv160
-  subst v158Value v159Value v160Value
-  denote_clear v 158 160
+  let zeroVec := toBitVecValue 64 (Vector.replicate 8 0)
+  let nineVec := toBitVecValue 64 (Vector.replicate 8 9)
+  have v0Value : v0 = dense24 := by denote_dense hv0
+  have v1Value : v1 = dense7 := by denote_dense hv1
+  have v2Value : v2 = zaMask := by denote_dense hv2
+  have v11Value : v11 = nineVec := by denote_dense hv11
+  have v12Value : v12 = zeroVec := by denote_dense hv12
+
+  -- `%24`, `%33`, …, `%96`: the `wwl_slide` zero operands, zero in the lanes each slide reads.
+  let p7z1 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 7 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 1 (.value (BitVec.zero 64)))
+  let p6z2 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 6 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 2 (.value (BitVec.zero 64)))
+  let p5z3 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 5 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 3 (.value (BitVec.zero 64)))
+  let z3p5 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 3 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 5 (.poison : PoisonOr (BitVec 64)))
+  let p4z4 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 4 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 4 (.value (BitVec.zero 64)))
+  let z2p6 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 2 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 6 (.poison : PoisonOr (BitVec 64)))
+  let p3z5 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 3 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 5 (.value (BitVec.zero 64)))
+  let z1p7 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 1 (PoisonOr.value (BitVec.zero 64))).append (Vector.replicate 7 (.poison : PoisonOr (BitVec 64)))
+  let p2z6 : Vector (PoisonOr (BitVec 64)) 8 := (Vector.replicate 2 (PoisonOr.poison : PoisonOr (BitVec 64))).append (Vector.replicate 6 (.value (BitVec.zero 64)))
+  have v24Value : v24 = p7z1 := by
+    simp only [hv24]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p7z1] <;> rfl
+  have v33Value : v33 = p6z2 := by
+    simp only [hv33]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p6z2] <;> rfl
+  have v42Value : v42 = p5z3 := by
+    simp only [hv42]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p5z3] <;> rfl
+  have v51Value : v51 = z3p5 := by
+    simp only [hv51]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, z3p5] <;> rfl
+  have v60Value : v60 = p4z4 := by
+    simp only [hv60]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p4z4] <;> rfl
+  have v69Value : v69 = z2p6 := by
+    simp only [hv69]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, z2p6] <;> rfl
+  have v78Value : v78 = p3z5 := by
+    simp only [hv78]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p3z5] <;> rfl
+  have v87Value : v87 = z1p7 := by
+    simp only [hv87]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, z1p7] <;> rfl
+  have v96Value : v96 = p2z6 := by
+    simp only [hv96]; apply Vector.ext; intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p2z6] <;> rfl
+  subst v0Value v1Value v2Value v11Value v12Value
+  subst v24Value v33Value v42Value v51Value v60Value v69Value v78Value v87Value v96Value
+  denote_clear v 0 96
 
   -- Name the lanes once, so the uses below do not each re-elaborate an
   -- `x[i]`/`y[j]` bounds proof.
@@ -239,172 +174,172 @@ theorem denote_fd_r43x6_mul_fast (x y : Vector (BitVec 64) 8)
   let y_4 : ℕ := limbNat y 4
   let y_5 : ℕ := limbNat y 5
 
-  -- `%161`-`%166` = `x0`-`x5`: `wwl_permute( wwl_bcast( iL ), x )`.
-  denote_step_all v 166
+  -- `%97`-`%102` = `x0`-`x5`: `wwl_permute( wwl_bcast( iL ), x )`.
+  denote_step_all v 102
   let xb0 := toBitVecValue 64 #v[x_0, x_0, x_0, x_0, x_0, x_0, x_0, x_0]
   let xb1 := toBitVecValue 64 #v[x_1, x_1, x_1, x_1, x_1, x_1, x_1, x_1]
   let xb2 := toBitVecValue 64 #v[x_2, x_2, x_2, x_2, x_2, x_2, x_2, x_2]
   let xb3 := toBitVecValue 64 #v[x_3, x_3, x_3, x_3, x_3, x_3, x_3, x_3]
   let xb4 := toBitVecValue 64 #v[x_4, x_4, x_4, x_4, x_4, x_4, x_4, x_4]
   let xb5 := toBitVecValue 64 #v[x_5, x_5, x_5, x_5, x_5, x_5, x_5, x_5]
-  have v161Value : v161 = xb0 := by mul_shuffle hv161
-  have v162Value : v162 = xb1 := by mul_shuffle hv162
-  have v163Value : v163 = xb2 := by mul_shuffle hv163
-  have v164Value : v164 = xb3 := by mul_shuffle hv164
-  have v165Value : v165 = xb4 := by mul_shuffle hv165
-  have v166Value : v166 = xb5 := by mul_shuffle hv166
-  subst v161Value v162Value v163Value v164Value v165Value v166Value
-  denote_clear v 161 166
+  have v97Value : v97 = xb0 := by mul_shuffle hv97
+  have v98Value : v98 = xb1 := by mul_shuffle hv98
+  have v99Value : v99 = xb2 := by mul_shuffle hv99
+  have v100Value : v100 = xb3 := by mul_shuffle hv100
+  have v101Value : v101 = xb4 := by mul_shuffle hv101
+  have v102Value : v102 = xb5 := by mul_shuffle hv102
+  subst v97Value v98Value v99Value v100Value v101Value v102Value
+  denote_clear v 97 102
 
-  -- `%167`-`%184` = `t0`-`t6`: `t_i = wwl_madd52lo( wwl_shl( wwl_madd52hi( zero, x_(i-1), y ), 9 ), x_i, y )`.
-  denote_step_all v 184
+  -- `%103`-`%120` = `t0`-`t6`: `t_i = wwl_madd52lo( wwl_shl( wwl_madd52hi( zero, x_(i-1), y ), 9 ), x_i, y )`.
+  denote_step_all v 120
   let t0 := toBitVecValue 64 #v[pl (x_0) (y_0), pl (x_0) (y_1), pl (x_0) (y_2), pl (x_0) (y_3), pl (x_0) (y_4), pl (x_0) (y_5), 0, 0]
-  have v167Value : v167 = t0 := by mul_vpmadd52 hv167
-  subst v167Value
+  have v103Value : v103 = t0 := by mul_vpmadd52 hv103
+  subst v103Value
   let hi0 := toBitVecValue 64 #v[phRaw (x_0) (y_0), phRaw (x_0) (y_1), phRaw (x_0) (y_2), phRaw (x_0) (y_3), phRaw (x_0) (y_4), phRaw (x_0) (y_5), 0, 0]
-  have v168Value : v168 = hi0 := by mul_vpmadd52 hv168
-  subst v168Value
+  have v104Value : v104 = hi0 := by mul_vpmadd52 hv104
+  subst v104Value
   let hs0 := toBitVecValue 64 #v[ph (x_0) (y_0), ph (x_0) (y_1), ph (x_0) (y_2), ph (x_0) (y_3), ph (x_0) (y_4), ph (x_0) (y_5), 0, 0]
-  have v169Value : v169 = hs0 := by denote_vecbin hv169
-  subst v169Value
+  have v105Value : v105 = hs0 := by denote_vecbin hv105
+  subst v105Value
   let t1 := toBitVecValue 64 #v[ph (x_0) (y_0) + pl (x_1) (y_0), ph (x_0) (y_1) + pl (x_1) (y_1), ph (x_0) (y_2) + pl (x_1) (y_2), ph (x_0) (y_3) + pl (x_1) (y_3), ph (x_0) (y_4) + pl (x_1) (y_4), ph (x_0) (y_5) + pl (x_1) (y_5), 0, 0]
-  have v170Value : v170 = t1 := by mul_vpmadd52 hv170
-  subst v170Value
+  have v106Value : v106 = t1 := by mul_vpmadd52 hv106
+  subst v106Value
   let hi1 := toBitVecValue 64 #v[phRaw (x_1) (y_0), phRaw (x_1) (y_1), phRaw (x_1) (y_2), phRaw (x_1) (y_3), phRaw (x_1) (y_4), phRaw (x_1) (y_5), 0, 0]
-  have v171Value : v171 = hi1 := by mul_vpmadd52 hv171
-  subst v171Value
+  have v107Value : v107 = hi1 := by mul_vpmadd52 hv107
+  subst v107Value
   let hs1 := toBitVecValue 64 #v[ph (x_1) (y_0), ph (x_1) (y_1), ph (x_1) (y_2), ph (x_1) (y_3), ph (x_1) (y_4), ph (x_1) (y_5), 0, 0]
-  have v172Value : v172 = hs1 := by denote_vecbin hv172
-  subst v172Value
+  have v108Value : v108 = hs1 := by denote_vecbin hv108
+  subst v108Value
   let t2 := toBitVecValue 64 #v[ph (x_1) (y_0) + pl (x_2) (y_0), ph (x_1) (y_1) + pl (x_2) (y_1), ph (x_1) (y_2) + pl (x_2) (y_2), ph (x_1) (y_3) + pl (x_2) (y_3), ph (x_1) (y_4) + pl (x_2) (y_4), ph (x_1) (y_5) + pl (x_2) (y_5), 0, 0]
-  have v173Value : v173 = t2 := by mul_vpmadd52 hv173
-  subst v173Value
+  have v109Value : v109 = t2 := by mul_vpmadd52 hv109
+  subst v109Value
   let hi2 := toBitVecValue 64 #v[phRaw (x_2) (y_0), phRaw (x_2) (y_1), phRaw (x_2) (y_2), phRaw (x_2) (y_3), phRaw (x_2) (y_4), phRaw (x_2) (y_5), 0, 0]
-  have v174Value : v174 = hi2 := by mul_vpmadd52 hv174
-  subst v174Value
+  have v110Value : v110 = hi2 := by mul_vpmadd52 hv110
+  subst v110Value
   let hs2 := toBitVecValue 64 #v[ph (x_2) (y_0), ph (x_2) (y_1), ph (x_2) (y_2), ph (x_2) (y_3), ph (x_2) (y_4), ph (x_2) (y_5), 0, 0]
-  have v175Value : v175 = hs2 := by denote_vecbin hv175
-  subst v175Value
+  have v111Value : v111 = hs2 := by denote_vecbin hv111
+  subst v111Value
   let t3 := toBitVecValue 64 #v[ph (x_2) (y_0) + pl (x_3) (y_0), ph (x_2) (y_1) + pl (x_3) (y_1), ph (x_2) (y_2) + pl (x_3) (y_2), ph (x_2) (y_3) + pl (x_3) (y_3), ph (x_2) (y_4) + pl (x_3) (y_4), ph (x_2) (y_5) + pl (x_3) (y_5), 0, 0]
-  have v176Value : v176 = t3 := by mul_vpmadd52 hv176
-  subst v176Value
+  have v112Value : v112 = t3 := by mul_vpmadd52 hv112
+  subst v112Value
   let hi3 := toBitVecValue 64 #v[phRaw (x_3) (y_0), phRaw (x_3) (y_1), phRaw (x_3) (y_2), phRaw (x_3) (y_3), phRaw (x_3) (y_4), phRaw (x_3) (y_5), 0, 0]
-  have v177Value : v177 = hi3 := by mul_vpmadd52 hv177
-  subst v177Value
+  have v113Value : v113 = hi3 := by mul_vpmadd52 hv113
+  subst v113Value
   let hs3 := toBitVecValue 64 #v[ph (x_3) (y_0), ph (x_3) (y_1), ph (x_3) (y_2), ph (x_3) (y_3), ph (x_3) (y_4), ph (x_3) (y_5), 0, 0]
-  have v178Value : v178 = hs3 := by denote_vecbin hv178
-  subst v178Value
+  have v114Value : v114 = hs3 := by denote_vecbin hv114
+  subst v114Value
   let t4 := toBitVecValue 64 #v[ph (x_3) (y_0) + pl (x_4) (y_0), ph (x_3) (y_1) + pl (x_4) (y_1), ph (x_3) (y_2) + pl (x_4) (y_2), ph (x_3) (y_3) + pl (x_4) (y_3), ph (x_3) (y_4) + pl (x_4) (y_4), ph (x_3) (y_5) + pl (x_4) (y_5), 0, 0]
-  have v179Value : v179 = t4 := by mul_vpmadd52 hv179
-  subst v179Value
+  have v115Value : v115 = t4 := by mul_vpmadd52 hv115
+  subst v115Value
   let hi4 := toBitVecValue 64 #v[phRaw (x_4) (y_0), phRaw (x_4) (y_1), phRaw (x_4) (y_2), phRaw (x_4) (y_3), phRaw (x_4) (y_4), phRaw (x_4) (y_5), 0, 0]
-  have v180Value : v180 = hi4 := by mul_vpmadd52 hv180
-  subst v180Value
+  have v116Value : v116 = hi4 := by mul_vpmadd52 hv116
+  subst v116Value
   let hs4 := toBitVecValue 64 #v[ph (x_4) (y_0), ph (x_4) (y_1), ph (x_4) (y_2), ph (x_4) (y_3), ph (x_4) (y_4), ph (x_4) (y_5), 0, 0]
-  have v181Value : v181 = hs4 := by denote_vecbin hv181
-  subst v181Value
+  have v117Value : v117 = hs4 := by denote_vecbin hv117
+  subst v117Value
   let t5 := toBitVecValue 64 #v[ph (x_4) (y_0) + pl (x_5) (y_0), ph (x_4) (y_1) + pl (x_5) (y_1), ph (x_4) (y_2) + pl (x_5) (y_2), ph (x_4) (y_3) + pl (x_5) (y_3), ph (x_4) (y_4) + pl (x_5) (y_4), ph (x_4) (y_5) + pl (x_5) (y_5), 0, 0]
-  have v182Value : v182 = t5 := by mul_vpmadd52 hv182
-  subst v182Value
+  have v118Value : v118 = t5 := by mul_vpmadd52 hv118
+  subst v118Value
   let hi5 := toBitVecValue 64 #v[phRaw (x_5) (y_0), phRaw (x_5) (y_1), phRaw (x_5) (y_2), phRaw (x_5) (y_3), phRaw (x_5) (y_4), phRaw (x_5) (y_5), 0, 0]
-  have v183Value : v183 = hi5 := by mul_vpmadd52 hv183
-  subst v183Value
+  have v119Value : v119 = hi5 := by mul_vpmadd52 hv119
+  subst v119Value
   let t6 := toBitVecValue 64 #v[ph (x_5) (y_0), ph (x_5) (y_1), ph (x_5) (y_2), ph (x_5) (y_3), ph (x_5) (y_4), ph (x_5) (y_5), 0, 0]
-  have v184Value : v184 = t6 := by denote_vecbin hv184
-  subst v184Value
-  denote_clear v 167 184
+  have v120Value : v120 = t6 := by denote_vecbin hv120
+  subst v120Value
+  denote_clear v 103 120
 
-  -- `%185`-`%194`: the `wwl_slide` shuffles `p1j`-`p6j` and `q3j`-`q6j`.
-  denote_step_all v 194
+  -- `%121`-`%130`: the `wwl_slide` shuffles `p1j`-`p6j` and `q3j`-`q6j`.
+  denote_step_all v 130
   let p1j := toBitVecValue 64 #v[0, (ph (x_0) (y_0) + pl (x_1) (y_0)), (ph (x_0) (y_1) + pl (x_1) (y_1)), (ph (x_0) (y_2) + pl (x_1) (y_2)), (ph (x_0) (y_3) + pl (x_1) (y_3)), (ph (x_0) (y_4) + pl (x_1) (y_4)), (ph (x_0) (y_5) + pl (x_1) (y_5)), 0]
-  have v185Value : v185 = p1j := by mul_shuffle hv185
-  subst v185Value
+  have v121Value : v121 = p1j := by mul_shuffle hv121
+  subst v121Value
   let p2j := toBitVecValue 64 #v[0, 0, (ph (x_1) (y_0) + pl (x_2) (y_0)), (ph (x_1) (y_1) + pl (x_2) (y_1)), (ph (x_1) (y_2) + pl (x_2) (y_2)), (ph (x_1) (y_3) + pl (x_2) (y_3)), (ph (x_1) (y_4) + pl (x_2) (y_4)), (ph (x_1) (y_5) + pl (x_2) (y_5))]
-  have v186Value : v186 = p2j := by mul_shuffle hv186
-  subst v186Value
+  have v122Value : v122 = p2j := by mul_shuffle hv122
+  subst v122Value
   let p3j := toBitVecValue 64 #v[0, 0, 0, (ph (x_2) (y_0) + pl (x_3) (y_0)), (ph (x_2) (y_1) + pl (x_3) (y_1)), (ph (x_2) (y_2) + pl (x_3) (y_2)), (ph (x_2) (y_3) + pl (x_3) (y_3)), (ph (x_2) (y_4) + pl (x_3) (y_4))]
-  have v187Value : v187 = p3j := by mul_shuffle hv187
-  subst v187Value
+  have v123Value : v123 = p3j := by mul_shuffle hv123
+  subst v123Value
   let q3j : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 ((ph (x_2) (y_5) + pl (x_3) (y_5)))), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .poison, .poison]
-  have v188Value : v188 = q3j := by mul_shuffle hv188
-  subst v188Value
+  have v124Value : v124 = q3j := by mul_shuffle hv124
+  subst v124Value
   let p4j := toBitVecValue 64 #v[0, 0, 0, 0, (ph (x_3) (y_0) + pl (x_4) (y_0)), (ph (x_3) (y_1) + pl (x_4) (y_1)), (ph (x_3) (y_2) + pl (x_4) (y_2)), (ph (x_3) (y_3) + pl (x_4) (y_3))]
-  have v189Value : v189 = p4j := by mul_shuffle hv189
-  subst v189Value
+  have v125Value : v125 = p4j := by mul_shuffle hv125
+  subst v125Value
   let q4j : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 ((ph (x_3) (y_4) + pl (x_4) (y_4)))), .value (BitVec.ofNat 64 ((ph (x_3) (y_5) + pl (x_4) (y_5)))), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .poison, .poison]
-  have v190Value : v190 = q4j := by mul_shuffle hv190
-  subst v190Value
+  have v126Value : v126 = q4j := by mul_shuffle hv126
+  subst v126Value
   let p5j := toBitVecValue 64 #v[0, 0, 0, 0, 0, (ph (x_4) (y_0) + pl (x_5) (y_0)), (ph (x_4) (y_1) + pl (x_5) (y_1)), (ph (x_4) (y_2) + pl (x_5) (y_2))]
-  have v191Value : v191 = p5j := by mul_shuffle hv191
-  subst v191Value
+  have v127Value : v127 = p5j := by mul_shuffle hv127
+  subst v127Value
   let q5j : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 ((ph (x_4) (y_3) + pl (x_5) (y_3)))), .value (BitVec.ofNat 64 ((ph (x_4) (y_4) + pl (x_5) (y_4)))), .value (BitVec.ofNat 64 ((ph (x_4) (y_5) + pl (x_5) (y_5)))), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .poison, .poison]
-  have v192Value : v192 = q5j := by mul_shuffle hv192
-  subst v192Value
+  have v128Value : v128 = q5j := by mul_shuffle hv128
+  subst v128Value
   let p6j := toBitVecValue 64 #v[0, 0, 0, 0, 0, 0, ph (x_5) (y_0), ph (x_5) (y_1)]
-  have v193Value : v193 = p6j := by mul_shuffle hv193
-  subst v193Value
+  have v129Value : v129 = p6j := by mul_shuffle hv129
+  subst v129Value
   let q6j : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 (ph (x_5) (y_2))), .value (BitVec.ofNat 64 (ph (x_5) (y_3))), .value (BitVec.ofNat 64 (ph (x_5) (y_4))), .value (BitVec.ofNat 64 (ph (x_5) (y_5))), .value (BitVec.ofNat 64 (0)), .value (BitVec.ofNat 64 (0)), .poison, .poison]
-  have v194Value : v194 = q6j := by mul_shuffle hv194
-  subst v194Value
-  denote_clear v 185 194
+  have v130Value : v130 = q6j := by mul_shuffle hv130
+  subst v130Value
+  denote_clear v 121 130
 
-  -- `%195`-`%200` = `zl`, `%201`-`%203` = `zh`: the big adds.
-  denote_step_all v 203
+  -- `%131`-`%136` = `zl`, `%137`-`%139` = `zh`: the big adds.
+  denote_step_all v 139
   let zlAcc1 := toBitVecValue 64 #v[0 + pl (x_0) (y_0), (ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1), (ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2), (ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3), (ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4), (ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5), (ph (x_0) (y_5) + pl (x_1) (y_5)) + 0, 0 + 0]
-  have v195Value : v195 = zlAcc1 := by denote_vecbin hv195
-  subst v195Value
+  have v131Value : v131 = zlAcc1 := by denote_vecbin hv131
+  subst v131Value
   let zlAcc2 := toBitVecValue 64 #v[(0 + pl (x_0) (y_0)) + 0, ((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0, ((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0)), ((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1)), ((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2)), ((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3)), ((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4)), (0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))]
-  have v196Value : v196 = zlAcc2 := by denote_vecbin hv196
-  subst v196Value
+  have v132Value : v132 = zlAcc2 := by denote_vecbin hv132
+  subst v132Value
   let zlAcc3 := toBitVecValue 64 #v[((0 + pl (x_0) (y_0)) + 0) + 0, (((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0, (((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0, (((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0)), (((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1)), (((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2)), (((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3)), ((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))]
-  have v197Value : v197 = zlAcc3 := by denote_vecbin hv197
-  subst v197Value
+  have v133Value : v133 = zlAcc3 := by denote_vecbin hv133
+  subst v133Value
   let zlAcc4 := toBitVecValue 64 #v[(((0 + pl (x_0) (y_0)) + 0) + 0) + 0, ((((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0) + 0, ((((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0) + 0, ((((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0))) + 0, ((((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1))) + (ph (x_3) (y_0) + pl (x_4) (y_0)), ((((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2))) + (ph (x_3) (y_1) + pl (x_4) (y_1)), ((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2)), (((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))]
-  have v198Value : v198 = zlAcc4 := by denote_vecbin hv198
-  subst v198Value
+  have v134Value : v134 = zlAcc4 := by denote_vecbin hv134
+  subst v134Value
   let zlAcc5 := toBitVecValue 64 #v[((((0 + pl (x_0) (y_0)) + 0) + 0) + 0) + 0, (((((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0) + 0) + 0, (((((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0) + 0) + 0, (((((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0))) + 0) + 0, (((((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1))) + (ph (x_3) (y_0) + pl (x_4) (y_0))) + 0, (((((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2))) + (ph (x_3) (y_1) + pl (x_4) (y_1))) + (ph (x_4) (y_0) + pl (x_5) (y_0)), (((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1)), ((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))]
-  have v199Value : v199 = zlAcc5 := by denote_vecbin hv199
-  subst v199Value
+  have v135Value : v135 = zlAcc5 := by denote_vecbin hv135
+  subst v135Value
   let zl := toBitVecValue 64 #v[(((((0 + pl (x_0) (y_0)) + 0) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0))) + 0) + 0) + 0, ((((((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1))) + (ph (x_3) (y_0) + pl (x_4) (y_0))) + 0) + 0, ((((((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2))) + (ph (x_3) (y_1) + pl (x_4) (y_1))) + (ph (x_4) (y_0) + pl (x_5) (y_0))) + 0, ((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0), (((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1)]
-  have v200Value : v200 = zl := by denote_vecbin hv200
-  subst v200Value
+  have v136Value : v136 = zl := by denote_vecbin hv136
+  subst v136Value
   let zhAcc1 : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 ((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5)))), .value (BitVec.ofNat 64 ((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0)), .value (BitVec.ofNat 64 (0 + 0)), .value (BitVec.ofNat 64 (0 + 0)), .value (BitVec.ofNat 64 (0 + 0)), .value (BitVec.ofNat 64 (0 + 0)), .poison, .poison]
-  have v201Value : v201 = zhAcc1 := by denote_vecbin hv201
-  subst v201Value
+  have v137Value : v137 = zhAcc1 := by denote_vecbin hv137
+  subst v137Value
   let zhAcc2 : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 (((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3)))), .value (BitVec.ofNat 64 (((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4)))), .value (BitVec.ofNat 64 ((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5)))), .value (BitVec.ofNat 64 ((0 + 0) + 0)), .value (BitVec.ofNat 64 ((0 + 0) + 0)), .value (BitVec.ofNat 64 ((0 + 0) + 0)), .poison, .poison]
-  have v202Value : v202 = zhAcc2 := by denote_vecbin hv202
-  subst v202Value
+  have v138Value : v138 = zhAcc2 := by denote_vecbin hv138
+  subst v138Value
   let zh : Vector (PoisonOr (BitVec 64)) 8 := #v[.value (BitVec.ofNat 64 ((((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2))), .value (BitVec.ofNat 64 ((((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3))), .value (BitVec.ofNat 64 (((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4))), .value (BitVec.ofNat 64 (((0 + 0) + 0) + ph (x_5) (y_5))), .value (BitVec.ofNat 64 (((0 + 0) + 0) + 0)), .value (BitVec.ofNat 64 (((0 + 0) + 0) + 0)), .poison, .poison]
-  have v203Value : v203 = zh := by denote_vecbin hv203
-  subst v203Value
-  denote_clear v 195 203
+  have v139Value : v139 = zh := by denote_vecbin hv139
+  subst v139Value
+  denote_clear v 131 139
 
-  -- `%204` = `za`, `%205` = `zb`, `%206`-`%209`: the final fold.
-  denote_step_all v 209
+  -- `%140` = `za`, `%141` = `zb`, `%142`-`%145`: the final fold.
+  denote_step_all v 145
   let za := toBitVecValue 64 #v[(((((0 + pl (x_0) (y_0)) + 0) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0) + 0) + 0) + 0, ((((((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0))) + 0) + 0) + 0, ((((((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1))) + (ph (x_3) (y_0) + pl (x_4) (y_0))) + 0) + 0, ((((((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2))) + (ph (x_3) (y_1) + pl (x_4) (y_1))) + (ph (x_4) (y_0) + pl (x_5) (y_0))) + 0, 0, 0]
-  have v204Value : v204 = za := by denote_vecbin hv204
-  subst v204Value
+  have v140Value : v140 = za := by denote_vecbin hv140
+  subst v140Value
   let zb := toBitVecValue 64 #v[((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0), (((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1), (((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2), (((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3), ((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4), ((0 + 0) + 0) + ph (x_5) (y_5), ((0 + 0) + 0) + 0, ((0 + 0) + 0) + 0]
-  have v205Value : v205 = zb := by mul_shuffle hv205
-  subst v205Value
+  have v141Value : v141 = zb := by mul_shuffle hv141
+  subst v141Value
   let zbShl7 := toBitVecValue 64 #v[(((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0)) * 128, ((((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1)) * 128, ((((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2)) * 128, ((((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3)) * 128, (((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4)) * 128, (((0 + 0) + 0) + ph (x_5) (y_5)) * 128, (((0 + 0) + 0) + 0) * 128, (((0 + 0) + 0) + 0) * 128]
-  have v206Value : v206 = zbShl7 := by denote_vecbin hv206
-  subst v206Value
+  have v142Value : v142 = zbShl7 := by denote_vecbin hv142
+  subst v142Value
   let zbShl7Za := toBitVecValue 64 #v[((((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0)) * 128) + ((((((0 + pl (x_0) (y_0)) + 0) + 0) + 0) + 0) + 0), (((((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1)) * 128) + (((((((ph (x_0) (y_0) + pl (x_1) (y_0)) + pl (x_0) (y_1)) + 0) + 0) + 0) + 0) + 0), (((((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2)) * 128) + (((((((ph (x_0) (y_1) + pl (x_1) (y_1)) + pl (x_0) (y_2)) + (ph (x_1) (y_0) + pl (x_2) (y_0))) + 0) + 0) + 0) + 0), (((((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3)) * 128) + (((((((ph (x_0) (y_2) + pl (x_1) (y_2)) + pl (x_0) (y_3)) + (ph (x_1) (y_1) + pl (x_2) (y_1))) + (ph (x_2) (y_0) + pl (x_3) (y_0))) + 0) + 0) + 0), ((((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4)) * 128) + (((((((ph (x_0) (y_3) + pl (x_1) (y_3)) + pl (x_0) (y_4)) + (ph (x_1) (y_2) + pl (x_2) (y_2))) + (ph (x_2) (y_1) + pl (x_3) (y_1))) + (ph (x_3) (y_0) + pl (x_4) (y_0))) + 0) + 0), ((((0 + 0) + 0) + ph (x_5) (y_5)) * 128) + (((((((ph (x_0) (y_4) + pl (x_1) (y_4)) + pl (x_0) (y_5)) + (ph (x_1) (y_3) + pl (x_2) (y_3))) + (ph (x_2) (y_2) + pl (x_3) (y_2))) + (ph (x_3) (y_1) + pl (x_4) (y_1))) + (ph (x_4) (y_0) + pl (x_5) (y_0))) + 0), ((((0 + 0) + 0) + 0) * 128) + (0), ((((0 + 0) + 0) + 0) * 128) + (0)]
-  have v207Value : v207 = zbShl7Za := by denote_vecbin hv207
+  have v143Value : v143 = zbShl7Za := by denote_vecbin hv143
   let zbMul24 := toBitVecValue 64 #v[(((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0)) * 24, ((((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1)) * 24, ((((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2)) * 24, ((((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3)) * 24, (((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4)) * 24, (((0 + 0) + 0) + ph (x_5) (y_5)) * 24, (((0 + 0) + 0) + 0) * 24, (((0 + 0) + 0) + 0) * 24]
-  have v208Value : v208 = zbMul24 := by denote_vecbin hv208
-  subst v207Value v208Value
-  -- `%209`: the final add, against the specified limbs directly. The lane
+  have v144Value : v144 = zbMul24 := by denote_vecbin hv144
+  subst v143Value v144Value
+  -- `%145`: the final add, against the specified limbs directly. The lane
   -- sums are already N-level, so only `limb`/`col` unfolding and `ring`
   -- remain (`152 = 128 + 24` is where the two fold terms meet).
-  have v209Value : v209 = (mulVec x y).map PoisonOr.value := by
+  have v145Value : v145 = (mulVec x y).map PoisonOr.value := by
     simp only [mulVec, limbVec]
-    denote_vecbin hv209
+    denote_vecbin hv145
     all_goals try congr 1
     all_goals try simp [limb, col, limbNat, ph, pl]
     all_goals try ring_nf
-  subst v209Value
+  subst v145Value
   simp_peephole
 
 abbrev mulValue (x y : Vector (BitVec 64) 8) := (fd_r43x6_mul_fast.denote

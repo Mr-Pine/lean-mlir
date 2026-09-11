@@ -281,7 +281,7 @@ def packQuad (x y z t : Vector (BitVec 64) 8) : Quad where
 
 set_option maxHeartbeats 1000000 in
 /-- **`FD_R43X6_QUAD_PACK`'s `v03`**, as `denote_eval` leaves the instructions
-that reach it: the two `%24` gathers, the two `%25` gathers, their even/odd
+that reach it: the two `%12` gathers, the two `%11` gathers, their even/odd
 interleaves, and the splice of the two low halves.
 
 Three lemmas rather than one because the block *stores* each output as soon as
@@ -397,22 +397,22 @@ bias add, need no hypothesis: a masked lane is below `2 ^ 43` and a `>>> 40`
 is below `2 ^ 24` whatever the input, so no sum here can reach `2 ^ 63`.
 -/
 
-/-- `%47`, the reduce's mask on the `03` and `14` thirds. -/
+/-- `%1`, the reduce's mask on the `03` and `14` thirds. -/
 def quadMask43 : Vector Nat 8 :=
   #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
      8796093022207, 8796093022207, 8796093022207, 8796093022207]
 
-/-- `%48`, its mask on the `25` third: limb 5 keeps only `40` bits. -/
+/-- `%0`, its mask on the `25` third: limb 5 keeps only `40` bits. -/
 def quadMask48 : Vector Nat 8 :=
   #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
      1099511627775, 1099511627775, 1099511627775, 1099511627775]
 
-/-- `%26`/`%27`, the reduce's shifts. -/
+/-- `%10`/`%9`, the reduce's shifts. -/
 def quadShift43 : Vector Nat 8 := #v[43, 43, 43, 43, 43, 43, 43, 43]
 def quadShift48 : Vector Nat 8 := #v[43, 43, 43, 43, 40, 40, 40, 40]
 
-/-- `%46`, the `undef`/`insertelement` chain: `19` in the top four lanes and
-poison in the bottom four, which `%289` never reads. -/
+/-- `%44`, the `undef`/`insertelement` chain: `19` in the top four lanes and
+poison in the bottom four, which `%285` never reads. -/
 def quadMul19 : Vector (LLVM.IntW 64) 8 :=
   #v[PoisonOr.poison, PoisonOr.poison, PoisonOr.poison, PoisonOr.poison,
      .value 19#64, .value 19#64, .value 19#64, .value 19#64]
@@ -490,7 +490,7 @@ private theorem add_nswnuw' {a b : BitVec 64} (h : a.toNat + b.toNat < 2 ^ 63) :
       = PoisonOr.value (a + b) := by
   simp [LLVM.add, sadd_false' h, uadd_false' h, LLVM.add?]
 
-/-- `%293`/`%296`: a masked lane plus a shifted one. -/
+/-- `%289`/`%292`: a masked lane plus a shifted one. -/
 private theorem add_m43_s43 (x y : BitVec 64) :
     LLVM.add (PoisonOr.value (x &&& 8796093022207#64))
         (PoisonOr.value (y >>> (43 : ℕ))) { nsw := true, nuw := true }
@@ -511,7 +511,7 @@ private theorem add_m40_s43 (x y : BitVec 64) :
     simp only [BitVec.toNat_ofNat] at *
     omega)
 
-/-- `%290` on the lanes limb 5's carry did not wrap into. -/
+/-- `%286` on the lanes limb 5's carry did not wrap into. -/
 private theorem add_s43_m43 (x y : BitVec 64) :
     LLVM.add (PoisonOr.value (y >>> (43 : ℕ)))
         (PoisonOr.value (x &&& 8796093022207#64)) { nsw := true, nuw := true }
@@ -522,7 +522,7 @@ private theorem add_s43_m43 (x y : BitVec 64) :
     simp only [BitVec.toNat_ofNat] at *
     omega)
 
-/-- `%287`'s `mul`: limb 5's carry scaled by `19`, below `2 ^ 29`. -/
+/-- `%283`'s `mul`: limb 5's carry scaled by `19`, below `2 ^ 29`. -/
 private theorem mul19_s40 (y : BitVec 64) :
     LLVM.mul (PoisonOr.value (y >>> (40 : ℕ))) (PoisonOr.value 19#64)
         { nsw := true, nuw := true }
@@ -537,7 +537,7 @@ private theorem mul19_s40 (y : BitVec 64) :
     Firedancer.umulOverflow_eq_false (by omega)
   simp [LLVM.mul, hs, hu, LLVM.mul?]
 
-/-- ... and `%290` on the lanes it wrapped into. -/
+/-- ... and `%286` on the lanes it wrapped into. -/
 private theorem add_mul19_m43 (x y : BitVec 64) :
     LLVM.add (PoisonOr.value ((y >>> (40 : ℕ)) * 19#64))
         (PoisonOr.value (x &&& 8796093022207#64)) { nsw := true, nuw := true }
@@ -565,7 +565,7 @@ normalises all twenty-four lanes in every one of the eight lane goals. -/
     (q.v14[7] &&& 8796093022207#64) + (q.v03[7] >>> (43 : ℕ))] := rfl
 
 set_option maxHeartbeats 1000000 in
-/-- **The reduce's `v14`**: `%282`, `%292`, `%293`. -/
+/-- **The reduce's `v14`**: `%278`, `%288`, `%289`. -/
 theorem denote_quadFold_v14 {q : Quad} {a282 a292 a293 : Vector (LLVM.IntW 64) 8}
     (h282 : a282 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .lshr
       (q.v03.map PoisonOr.value)[i.val] (toBitVecValue 64 quadShift43)[i.val])
@@ -604,8 +604,8 @@ theorem denote_quadFold_v14 {q : Quad} {a282 a292 a293 : Vector (LLVM.IntW 64) 8
     (q.v25[3] >>> (43 : ℕ)) + (q.v03[7] &&& 8796093022207#64)] := rfl
 
 set_option maxHeartbeats 1000000 in
-/-- **... its `v25`**: `%284`, `%295`, `%296`. Limb 5 keeps only `40` bits, so
-the mask is `%48` rather than `%47`. -/
+/-- **... its `v25`**: `%280`, `%291`, `%292`. Limb 5 keeps only `40` bits, so
+the mask is `%0` rather than `%1`. -/
 theorem denote_quadFold_v25 {q : Quad} {a284 a295 a296 : Vector (LLVM.IntW 64) 8}
     (h284 : a284 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .lshr
       (q.v14.map PoisonOr.value)[i.val] (toBitVecValue 64 quadShift43)[i.val])
@@ -625,8 +625,8 @@ theorem denote_quadFold_v25 {q : Quad} {a284 a295 a296 : Vector (LLVM.IntW 64) 8
       add_m43_s43, add_m40_s43]
 
 set_option maxHeartbeats 1000000 in
-/-- **... and its `v03`**, the one that wraps: `%286`-`%290`. `%287`'s low
-four lanes are poison -- `%46` is poison there -- and `%289` takes only its
+/-- **... and its `v03`**, the one that wraps: `%282`-`%286`. `%283`'s low
+four lanes are poison -- `%44` is poison there -- and `%285` takes only its
 high four, which is why nothing downstream sees them. -/
 theorem denote_quadFold_v03 {q : Quad} {a286 a287 a288 a289 a290 : Vector (LLVM.IntW 64) 8}
     (h286 : a286 = Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote .lshr

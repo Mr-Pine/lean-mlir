@@ -31,10 +31,7 @@ theorem fd_ed25519_point_eq_conforms (p q: Pointer) (s: GlobalState)
     refine ⟨s.popFrame eqstate.mem, run_runFunction (s' := eqstate) ?_, GlobalState.Equiv.symm
       (GlobalState.killFrom_equiv eqstate.mem hs fun b _ => heqstate_eq.live b)⟩
 
-    denote_step_all v 2
-    denote_eval v 0 2
-    simp only [LLVM.const?] at hv0 hv1 hv2
-    subst hv0 hv1 hv2
+    denote_expose
 
     obtain ⟨pblk, hpblkE, hplen⟩ := hp.1
     have hplive : s.mem.live? p.id = some pblk := by simp [MemoryState.live?, hpblkE]

@@ -1,16 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fiat_25519_cmovznz_u64.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `fiat_25519_cmovznz_u64` (ref)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fiat_25519_cmovznz_u64.mlir`. Constant-time select: stores the second value when the condition byte is zero, the third otherwise.
-
-The argument context is the block arguments reversed, as `Ctxt` orders them.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

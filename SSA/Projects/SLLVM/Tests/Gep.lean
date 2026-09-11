@@ -6,10 +6,9 @@ import SSA.Projects.SLLVM.Dialect
 /-!
 # llvm.getelementptr
 
-`SLLVMOp.gep` covers the one gep shape the Firedancer ref extraction emits: a
-single dynamic index scaled by an integer element type
-(`rawConstantIndices = array<i32: -2147483648>`). The gep lines below carry
-the artifact's exact attribute dict, `inbounds` included.
+`SLLVMOp.gepConst`, `SLLVMOp.gep` and `SLLVMOp.gep2` cover geps with zero,
+one and two dynamic indices. The gep lines below carry the artifacts' exact
+attribute dicts, `inbounds` included.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Gep
@@ -89,20 +88,65 @@ def vectorStructGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 6
 
 #guard runScalar vectorStructGep == some (.value 99#64)
 
--- A gep with no leading dynamic index must be rejected, not silently
--- mis-scaled.
-/--
-error: llvm.getelementptr: the first index must be the dynamic operand (`-2147483648` sentinel); constant-only geps are not supported
--/
-#guard_msgs in
+/-- Constant-only `p + 1` on an `i64 *` lands at byte offset 8. -/
 def gepConstIndex : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
   ^entry():
     %p   = "ptr.alloca"() <{elem_type = i128}> : () -> (!ptr)
     %one = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> (i64)
-    %q = "llvm.getelementptr"(%p, %one) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: 0>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %b   = "llvm.mlir.constant"() <{value = 22 : i64}> : () -> (i64)
+    %s = "llvm.getelementptr"(%p, %one) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%b, %s) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %q = "llvm.getelementptr"(%p) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: 1>}> : (!llvm.ptr) -> !llvm.ptr
     %v = "llvm.load"(%q) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
     "llvm.return"(%v) : (i64) -> ()
 }]
+
+#guard runScalar gepConstIndex == some (.value 22#64)
+
+/-- `x->limb[3]` as `array<i32: 0, 3>` lands at byte offset 24. -/
+def gepConstArray : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p   = "ptr.alloca"() <{elem_type = i320}> : () -> (!ptr)
+    %v   = "llvm.mlir.constant"() <{value = 44 : i64}> : () -> (i64)
+    %i   = "llvm.mlir.constant"() <{value = 3 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p) <{elem_type = !llvm.array<5 x i64>, inbounds, rawConstantIndices = array<i32: 0, 3>}> : (!llvm.ptr) -> !llvm.ptr
+    "llvm.store"(%v, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %r = "llvm.getelementptr"(%p, %i) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %w = "llvm.load"(%r) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%w) : (i64) -> ()
+}]
+
+#guard runScalar gepConstArray == some (.value 44#64)
+
+/-- `sha->state[3]` as `array<i32: 0, 1, 3>` lands at byte offset `128 + 24`. -/
+def gepConstStructArray : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p     = "ptr.alloca"() <{elem_type = i1728}> : () -> (!ptr)
+    %nt    = "llvm.mlir.constant"() <{value = 19 : i64}> : () -> (i64)
+    %v     = "llvm.mlir.constant"() <{value = 66 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p) <{elem_type = !llvm.struct<"struct.fd_sha512_private", (array<128 x i8>, array<8 x i64>, i64, i64, i64, i64, array<32 x i8>)>, inbounds, rawConstantIndices = array<i32: 0, 1, 3>}> : (!llvm.ptr) -> !llvm.ptr
+    "llvm.store"(%v, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %r = "llvm.getelementptr"(%p, %nt) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %w = "llvm.load"(%r) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%w) : (i64) -> ()
+}]
+
+#guard runScalar gepConstStructArray == some (.value 66#64)
+
+/-- `W[2]` as `array<i32: 0, -2147483648>` lands at byte offset 16. -/
+def gepZeroThenDynamic : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {
+  ^entry():
+    %p   = "ptr.alloca"() <{elem_type = i320}> : () -> (!ptr)
+    %two = "llvm.mlir.constant"() <{value = 2 : i64}> : () -> (i64)
+    %v   = "llvm.mlir.constant"() <{value = 33 : i64}> : () -> (i64)
+    %q = "llvm.getelementptr"(%p, %two) <{elem_type = !llvm.array<5 x i64>, inbounds, rawConstantIndices = array<i32: 0, -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%v, %q) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %r = "llvm.getelementptr"(%p) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: 2>}> : (!llvm.ptr) -> !llvm.ptr
+    %w = "llvm.load"(%r) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%w) : (i64) -> ()
+}]
+
+#guard runScalar gepZeroThenDynamic == some (.value 33#64)
 
 /-- The `fd_f25519_set` gep shape, verbatim: `x->limb[k]` as a gep of
 `array<5 x i64>` with *two* dynamic index operands, the leading one the
@@ -165,9 +209,9 @@ def structArrayGep : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64
 
 #guard runScalar structArrayGep == some (.value 88#64)
 
--- The second dynamic index must step through an array or vector.
+-- A dynamic index after the first must step through an array or vector.
 /--
-error: llvm.getelementptr: the second dynamic index must index an array or vector, not LeanMLIR.SLLVM.AggTy.int 64
+error: llvm.getelementptr: a dynamic index must index an array or vector, not LeanMLIR.SLLVM.AggTy.int 64
 -/
 #guard_msgs in
 def gepSecondIntoScalar : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64] := [sllvm| {

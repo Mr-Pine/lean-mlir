@@ -54,7 +54,7 @@ so this file has no `<op>_lanes` layer and no `pl`/`ph` column sums.
 
 `Avx512/Mlir/fd_r43x6_is_nonzero.lean` holds the region as an `[sllvm| … ]`
 quotation, verbatim from the build artifact
-`build/native/gcc/mlir/avx512/region/fd_r43x6_is_nonzero.mlir`, which is
+`build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_is_nonzero.mlir`, which is
 checked in beside it. Its one callee is `fd_long_if`, lifted in
 `Mlir/fd_long_if.lean` and proved in `Proof/fd_long_if.lean`.
 

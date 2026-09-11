@@ -114,18 +114,15 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
   -- The walk starts here; each callee's state is obtained where it is reached.
   refine run_runFunction' (s ≈ ·) ?_
 
-  -- `%0`--`%5`: the `i32` 1 and the first global's dead initialiser chain
-  denote_step_all v 5
-  denote_eval v 0 0
-  simp only [LLVM.const?] at hv0
+  -- `%0`: the `i32` 1
+  denote_step_reduce v 0 only [LLVM.const?]
   subst hv0
 
-  -- `%6`, `%12`: the two `addressof`es, with `%7`--`%11` between them
+  -- `%1`, `%2`: the two `addressof`es
   peel_addressof hgp0
-  denote_step_all v 11
   peel_addressof hgp1
 
-  -- `%13`--`%16`: `x, y, z, t`
+  -- `%3`--`%6`: `x, y, z, t`
   peel_alloca from s as r1 with hr1def
   peel_alloca from r1 as r2 with hr2def
   peel_alloca from r2 as r3 with hr3def
@@ -210,11 +207,9 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
   have hg0IzYRead : readVec hg0IzY = readVec hg0 := by
     simp only [readVec, readVec?_of_live?_eq (fbIzY g0.id hg0lt)]
 
-  -- `%19 = or %18, %17`
-  denote_step_all v 19
-  denote_eval v 19 19
-  simp only [LLVM.or, LLVM.or?] at hv19
-  subst hv19
+  -- `%9 = or %8, %7`
+  denote_step_reduce v 9 only [LLVM.or, LLVM.or?]
+  subst hv9
 
   -- `fd_f25519_eq( y, y0 )`
   obtain ⟨eq0state, heq0, heq0_eq⟩ :=
@@ -234,11 +229,9 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
   have hg1Eq0Read : readVec hg1Eq0 = readVec hg1 := by
     simp only [readVec, readVec?_of_live?_eq (fbEq0 g1.id hg1lt)]
 
-  -- `%21 = or %19, %20`
-  denote_step_all v 21
-  denote_eval v 21 21
-  simp only [LLVM.or, LLVM.or?] at hv21
-  subst hv21
+  -- `%11 = or %9, %10`
+  denote_step_reduce v 11 only [LLVM.or, LLVM.or?]
+  subst hv11
 
   -- `fd_f25519_eq( y, y1 )`
   obtain ⟨eq1state, heq1, heq1_eq⟩ :=
@@ -251,11 +244,9 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
   -- the state the region returns in, and the frame it restores
   refine ⟨eq1state, ?_, GlobalState.Equiv.symm (FrameBelow.popFrame_equiv hs fbEq1)⟩
 
-  -- `%23 = or %21, %22`
-  denote_step_all v 23
-  denote_eval v 23 23
-  simp only [LLVM.or, LLVM.or?] at hv23
-  subst hv23
+  -- `%13 = or %11, %12`
+  denote_step_reduce v 13 only [LLVM.or, LLVM.or?]
+  subst hv13
 
   peel_lifetime
   peel_lifetime

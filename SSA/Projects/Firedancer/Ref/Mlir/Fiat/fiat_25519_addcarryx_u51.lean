@@ -1,16 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fiat_25519_addcarryx_u51.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `fiat_25519_addcarryx_u51` (ref)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fiat_25519_addcarryx_u51.mlir`. Adds two 51-bit limbs plus a carry-in, storing the low 51 bits and the carry-out through the two out-parameters.
-
-The argument context is the block arguments reversed, as `Ctxt` orders them.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

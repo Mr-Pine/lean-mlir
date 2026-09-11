@@ -51,24 +51,23 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
 
   refine wrap hs ?_
 
-  denote_step_reduce v 12 [LLVM.const?]
+  denote_step_reduce v 8 [LLVM.const?]
   obtain ⟨blk, hblk, hlen⟩ := hp.left
   have hoff : p.offset.toNat + 32 ≤ 2 ^ 64 := hp.right
-  subst hv0 hv4 hv5 hv6
-  -- `%13`: `s + 31`
+  -- `%9`: `s + 31`
   peel_gep 31 with p, hp.left, s as p31
   have hoff31 : p31.offsetInBits = p.offsetInBits + 248 :=
     offsetInBits_withOffset p 31 (by simp; omega)
   have hblk31 : s.mem[p31.id]? = some (.live blk) := hblk
-  -- `%14`: the top byte
+  -- `%10`: the top byte
   peel_load (.bitvec (.concrete 8)), blk, p31, hblk31, s
-  denote_step_reduce v 15 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv1]
-  simp only [BlockCom.denote_term, Terminator.denote_condBr, hv15, simp_denote, simp_sllvm]
+  denote_step_reduce v 11 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv6]
+  simp only [BlockCom.denote_term, Terminator.denote_condBr, hv11, simp_denote, simp_sllvm]
   -- the top byte, named once
   obtain ⟨top, htop⟩ : ∃ top : BitVec 8, blk.bytes.extractLsb' p31.offsetInBits 8 = top :=
     ⟨_, rfl⟩
-  rw [htop] at hv15
-  subst hv15
+  rw [htop] at hv11
+  subst hv11
   by_cases hlt16 : top <ᵤ 16#8
   case pos =>
     -- `^bb3(%arg0)`: below `0x10`, accept
@@ -79,58 +78,56 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
 
   simp [hlt16, htop]
   denote_enter_block
-  -- `^bb1`: `%16 = top <u 32`
-  denote_step_reduce v 16 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', htop, hv2]
+  -- `^bb1`: `%12 = top <u 32`
+  denote_step_reduce v 12 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', htop, hv7]
   by_cases hlt32 : top <ᵤ 32#8
   case neg =>
     -- `^bb3(NULL)`: at or above `0x20`, reject
-    simp [hv16, hlt32, BitVec.ofBool_false, BlockCom.denote_term,
+    simp [hv12, hlt32, BitVec.ofBool_false, BlockCom.denote_term,
       Terminator.denote_condBr_value, simp_denote, simp_sllvm]
     denote_enter_block
     simp_return
-    simp [hv3, Ptr.null]
+    simp [hv8, Ptr.null]
     rfl
 
-  simp only [hv16, hlt32, BitVec.ofBool_true, BlockCom.denote_term,
+  simp only [hv12, hlt32, BitVec.ofBool_true, BlockCom.denote_term,
     Terminator.denote_condBr_value, simp_denote, simp_sllvm]
   denote_enter_block
-  -- `^bb2`: the four `fd_ulong_load_8` calls. `^bb2` is dominated by the
-  -- entry block, so the stepper's index restarts at the entry's depth;
-  -- MLIR keeps counting from `%17`.
-  denote_number_from 17
+  -- `^bb2`: the four `fd_ulong_load_8` calls; the stepper restarts at the entry's depth, MLIR at `%13`.
+  denote_number_from 13
   have hfit0 : Fits s.mem p 64 := Fits.mono hp.left (by omega)
   obtain ⟨t0, hcall0, he0⟩ := fd_ulong_load_8_conforms p s hs hfit0
   peel_call hcall0
   -- the scalar still fits, at each state the calls leave behind
   have hfit0' : Fits t0.mem p (32 * 8) := fits_of_live?_eq (he0.live p.id).symm hp.left
-  -- `%18`/`%19`: `s + 8`
+  -- `%14`/`%15`: `s + 8`
   peel_gep 8 with p, hfit0', t0 as p8
   obtain ⟨t1, hcall1, he1⟩ :=
     fd_ulong_load_8_conforms p8 t0 (hs.of_equiv he0) (Fits.mono hp8 (by bv_omega))
   peel_call hcall1
   have hfit1' : Fits t1.mem p (32 * 8) := fits_of_live?_eq (he1.live p.id).symm hfit0'
-  -- `%20`/`%21`: `s + 16`
+  -- `%16`/`%17`: `s + 16`
   peel_gep 16 with p, hfit1', t1 as p16
   obtain ⟨t2, hcall2, he2⟩ :=
     fd_ulong_load_8_conforms p16 t1 ((hs.of_equiv he0).of_equiv he1) (Fits.mono hp16 (by bv_omega))
   peel_call hcall2
   have hfit2' : Fits t2.mem p (32 * 8) := fits_of_live?_eq (he2.live p.id).symm hfit1'
-  -- `%22`/`%23`: `s + 24`
+  -- `%18`/`%19`: `s + 24`
   peel_gep 24 with p, hfit2', t2 as p24
   obtain ⟨t3, hcall3, he3⟩ :=
     fd_ulong_load_8_conforms p24 t2 (((hs.of_equiv he0).of_equiv he1).of_equiv he2)
       (Fits.mono hp24 (by bv_omega))
   peel_call hcall3
 
-  denote_step_reduce v 31 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.and, LLVM.and?, htop, hv3, hv10, hv7, hv8, hv9, hv11, hv12, Ctxt.Valuation.singleton, ptrselect, Ptr.null] fold
+  denote_step_reduce v 27 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.and, LLVM.and?, htop, hv8, hv2, hv5, hv4, hv3, hv1, hv0, Ctxt.Valuation.singleton, ptrselect, Ptr.null] fold
 
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
   denote_enter_block
   simp_return
-  obtain ⟨ret, hret⟩ : ∃ ret, v31 = .value ret := by simp [hv31]
+  obtain ⟨ret, hret⟩ : ∃ ret, v27 = .value ret := by simp [hv27]
   refine ⟨ret, hret, ?_⟩
-  have : v31 = .value p ∨ v31 = .value { id := nullBlock, offset := 0#64 } := by
-    split_ifs at hv31 <;> simp [hv31]
+  have : v27 = .value p ∨ v27 = .value { id := nullBlock, offset := 0#64 } := by
+    split_ifs at hv27 <;> simp [hv27]
   simp [hret] at this
   simp [this]
   apply fun h => GlobalState.Equiv.trans h he3

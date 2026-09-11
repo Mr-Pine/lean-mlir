@@ -1,16 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_abs.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
-
-/-!
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fd_f25519_abs.mlir`. One 40-byte local holds
-`-a`; `fd_f25519_if` selects it or `a` on `fd_f25519_sgn`'s bit.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

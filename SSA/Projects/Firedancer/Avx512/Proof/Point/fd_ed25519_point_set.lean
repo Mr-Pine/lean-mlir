@@ -29,18 +29,14 @@ theorem fd_ed25519_point_set_conforms (r a : Pointer) (s : GlobalState) (hs : s.
       live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none (hs q hq))))
 
   case run =>
-    denote_step_all v 2
-    denote_eval v 0 2
-    simp only [LLVM.const?] at hv0
-    subst hv0
-    clear hv1 hv2
+    denote_expose
 
     obtain ⟨ablk, hablkE, halen⟩ := ha.1
     have halive : s.mem.live? a.id = some ablk := by simp [MemoryState.live?, hablkE]
     have h64 : (64 : BitVec 64).toNat = 64 := rfl
     have h128 : (128 : BitVec 64).toNat = 128 := rfl
 
-    -- `%3`: `v03`, stored to `r`
+    -- `%0`: `v03`, stored to `r`
     peel_load (.vector 8 (.bitvec (.concrete 64))), ablk, a, hablkE, s
     rw [unflatten_readQuad_v03 ha halive]
     refine name_of ({ s with mem := s.mem.splice r (vecBV (readQuad ha).v03) })
@@ -48,7 +44,7 @@ theorem fd_ed25519_point_set_conforms (r a : Pointer) (s : GlobalState) (hs : s.
     peel_store (readQuad ha).v03, r, hr.1, s as s₁ := hs₁
     have f₁ : Fits s₁.mem r (3 * 8 * 64) := hs₁ ▸ fits_splice hr.1
 
-    -- `%4 … %6`: `v14`, stored 64 bytes into `r`
+    -- `%1 … %3`: `v14`, stored 64 bytes into `r`
     peel_gep 64 with a, ha.1, s as aField
     have hoffA : aField.offsetInBits = a.offsetInBits + 512 := by
       have hb := ha.2
@@ -67,7 +63,7 @@ theorem fd_ed25519_point_set_conforms (r a : Pointer) (s : GlobalState) (hs : s.
     peel_store (readQuad ha).v14, rField, fR, s₁ as s₂ := hs₂
     have f₂ : Fits s₂.mem r (3 * 8 * 64) := hs₂ ▸ fits_splice f₁
 
-    -- `%7 … %9`: `v25`, stored 128 bytes into `r`
+    -- `%4 … %6`: `v25`, stored 128 bytes into `r`
     peel_gep 128 with a, ha.1, s as aField25
     have hoffA25 : aField25.offsetInBits = a.offsetInBits + 1024 := by
       have hb := ha.2

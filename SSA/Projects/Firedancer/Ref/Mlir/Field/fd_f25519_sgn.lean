@@ -1,16 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_sgn.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_tobytes
-
-/-!
-# `fd_f25519_sgn` (ref)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/ref/region/fd_f25519_sgn.mlir`. Serialises the field
-element into a 32-byte stack buffer and returns its low bit, zero-extended.
--/
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

@@ -231,7 +231,7 @@ set_option maxHeartbeats 40000000 in
 set_option maxRecDepth 100000 in
 /-- **Limb derivation**: on unreduced inputs the region denotes to exactly
 three whole-vector stores, of the three vectors the specification predicts,
-through the three pointer parameters in declaration order. All 115
+through the three pointer parameters in declaration order. All 107
 instructions are carried through at the N level. -/
 theorem denote_fd_r43x6_quad_sqr_fast (x : Quad)
     (hx03 : R43x6.U47 x.v03) (hx14 : R43x6.U47 x.v14) (hx25 : R43x6.U47 x.v25)
@@ -269,444 +269,438 @@ theorem denote_fd_r43x6_quad_sqr_fast (x : Quad)
   unfold fd_r43x6_quad_sqr_fast
   let X : Fin 4 → Fin 6 → ℕ := quadLimb x.v03 x.v14 x.v25
 
-  -- the constants, including the two `insertelement` chains that build a
-  -- half-zero half-poison mask; the poison half is never selected
-  denote_step_all v 41
-  let zeroBVP : PoisonOr (BitVec 64) := .value 0
-  have hz64 : v2 = zeroBVP := by
-    simp only [hv2, Expr.denoteOp1, Expr.denoteOpPure]; simp_peephole
-    simp only [HVector.head]; rfl
-  have hpoison : v1 = PoisonOr.poison := by
-    simp only [hv1]; simp_peephole; rfl
-  subst hz64 hpoison
+  -- the constants and two `insertelement` chains building half-zero, half-poison
+  -- masks; the poison half is never selected
+  denote_step_reduce v 33 [LLVM.const?, LLVM.Ty.poison] fold
   let zero4_p4 : Vector (PoisonOr (BitVec 64)) 8 :=
     (Vector.replicate 4 (.value (BitVec.zero 64))).append (Vector.replicate 4 .poison)
   let p4_zero4 : Vector (PoisonOr (BitVec 64)) 8 :=
     (Vector.replicate 4 .poison).append (Vector.replicate 4 (.value (BitVec.zero 64)))
-  have hzlo : v19 = zero4_p4 := by
-    denote_eval v 3 19
-    denote_expand v 3 19
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
-  have hzhi : v39 = p4_zero4 := by
-    denote_eval v 23 39
-    denote_expand v 23 39
-    simp [LLVM.Ty.insertelement, LLVM.Ty.poison, LLVM.const?]
-    rfl
+  have hzlo : v24 = zero4_p4 := by
+    simp only [hv24]
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, zero4_p4] <;> rfl
+  have hzhi : v33 = p4_zero4 := by
+    simp only [hv33]
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;> simp [LLVM.Ty.insertelement, p4_zero4] <;> rfl
   subst hzlo hzhi
-  denote_clear v 3 18
-  denote_clear v 23 38
+  denote_clear v 5 13
+  denote_clear v 15 23
+  denote_clear v 25 32
   let oneVec := toBitVecValue 64 (Vector.replicate 8 1)
   let zeroVec := toBitVecValue 64 (Vector.replicate 8 0)
   let nineVec := toBitVecValue 64 (Vector.replicate 8 9)
   let sevenVec := toBitVecValue 64 (Vector.replicate 8 7)
   let tf4Vec := toBitVecValue 64 (Vector.replicate 8 24)
-  have h1 : v20 = oneVec := by denote_dense hv20
-  have hzz : v21 = zeroVec := by denote_dense hv21
-  have h9 : v22 = nineVec := by denote_dense hv22
-  have h7 : v40 = sevenVec := by denote_dense hv40
-  have h24 : v41 = tf4Vec := by denote_dense hv41
+  have h24 : v0 = tf4Vec := by denote_dense hv0
+  have h7 : v1 = sevenVec := by denote_dense hv1
+  have h9 : v2 = nineVec := by denote_dense hv2
+  have hzz : v3 = zeroVec := by denote_dense hv3
+  have h1 : v4 = oneVec := by denote_dense hv4
   subst h1 hzz h9 h7 h24
 
   -- x05 .. x4z and the doubled operands
-  denote_step_all v 42
+  denote_step_all v 34
   -- x05: `wwl_pack_h0_h1( x03, x25 )`: limb 0 in the low half, limb 5 in the high
   let x05 := toBitVecValue 64 #v[(X 0 0), (X 1 0), (X 2 0), (X 3 0), (X 0 5), (X 1 5), (X 2 5), (X 3 5)]
-  have hx05 : v42 = x05 := by quad_shuffle hv42 with x05
+  have hx05 : v34 = x05 := by quad_shuffle hv34 with x05
   subst hx05
-  denote_clear v 42 42
-  denote_step_all v 43
+  denote_clear v 34 34
+  denote_step_all v 35
   -- x12: limbs 1 and 2
   let x12 := toBitVecValue 64 #v[(X 0 1), (X 1 1), (X 2 1), (X 3 1), (X 0 2), (X 1 2), (X 2 2), (X 3 2)]
-  have hx12 : v43 = x12 := by quad_shuffle hv43 with x12
+  have hx12 : v35 = x12 := by quad_shuffle hv35 with x12
   subst hx12
-  denote_clear v 43 43
-  denote_step_all v 44
+  denote_clear v 35 35
+  denote_step_all v 36
   -- x34: limbs 3 and 4
   let x34 := toBitVecValue 64 #v[(X 0 3), (X 1 3), (X 2 3), (X 3 3), (X 0 4), (X 1 4), (X 2 4), (X 3 4)]
-  have hx34 : v44 = x34 := by quad_shuffle hv44 with x34
+  have hx34 : v36 = x34 := by quad_shuffle hv36 with x34
   subst hx34
-  denote_clear v 44 44
-  denote_step_all v 45
+  denote_clear v 36 36
+  denote_step_all v 37
   -- x41: limbs 4 and 1
   let x41 := toBitVecValue 64 #v[(X 0 4), (X 1 4), (X 2 4), (X 3 4), (X 0 1), (X 1 1), (X 2 1), (X 3 1)]
-  have hx41 : v45 = x41 := by quad_shuffle hv45 with x41
+  have hx41 : v37 = x41 := by quad_shuffle hv37 with x41
   subst hx41
-  denote_clear v 45 45
-  denote_step_all v 46
+  denote_clear v 37 37
+  denote_step_all v 38
   -- x23: limbs 2 and 3
   let x23 := toBitVecValue 64 #v[(X 0 2), (X 1 2), (X 2 2), (X 3 2), (X 0 3), (X 1 3), (X 2 3), (X 3 3)]
-  have hx23 : v46 = x23 := by quad_shuffle hv46 with x23
+  have hx23 : v38 = x23 := by quad_shuffle hv38 with x23
   subst hx23
-  denote_clear v 46 46
-  denote_step_all v 47
+  denote_clear v 38 38
+  denote_step_all v 39
   -- x52: limbs 5 and 2
   let x52 := toBitVecValue 64 #v[(X 0 5), (X 1 5), (X 2 5), (X 3 5), (X 0 2), (X 1 2), (X 2 2), (X 3 2)]
-  have hx52 : v47 = x52 := by quad_shuffle hv47 with x52
+  have hx52 : v39 = x52 := by quad_shuffle hv39 with x52
   subst hx52
-  denote_clear v 47 47
-  denote_step_all v 48
+  denote_clear v 39 39
+  denote_step_all v 40
   -- x4z: limb 4 and a zero -- the kernel's own constant, so that the mirrored schedule has a partner for `2*p41l`
   let x4z := toBitVecValue 64 #v[(X 0 4), (X 1 4), (X 2 4), (X 3 4), 0, 0, 0, 0]
-  have hx4z : v48 = x4z := by quad_shuffle hv48 with x4z
+  have hx4z : v40 = x4z := by quad_shuffle hv40 with x4z
   subst hx4z
-  denote_clear v 48 48
-  denote_step_all v 49
+  denote_clear v 40 40
+  denote_step_all v 41
   let two_x03 := toBitVecValue 64 #v[2 * (X 0 0), 2 * (X 1 0), 2 * (X 2 0), 2 * (X 3 0), 2 * (X 0 3), 2 * (X 1 3), 2 * (X 2 3), 2 * (X 3 3)]
-  have htwo_x03 : v49 = two_x03 := by quad_vecbin_ring hv49 with quadValMem, shl_lane, two_x03
+  have htwo_x03 : v41 = two_x03 := by quad_vecbin_ring hv41 with quadValMem, shl_lane, two_x03
   subst htwo_x03
-  denote_clear v 49 49
-  denote_step_all v 50
+  denote_clear v 41 41
+  denote_step_all v 42
   let two_x14 := toBitVecValue 64 #v[2 * (X 0 1), 2 * (X 1 1), 2 * (X 2 1), 2 * (X 3 1), 2 * (X 0 4), 2 * (X 1 4), 2 * (X 2 4), 2 * (X 3 4)]
-  have htwo_x14 : v50 = two_x14 := by quad_vecbin_ring hv50 with quadValMem, shl_lane, two_x14
+  have htwo_x14 : v42 = two_x14 := by quad_vecbin_ring hv42 with quadValMem, shl_lane, two_x14
   subst htwo_x14
-  denote_clear v 50 50
-  denote_step_all v 51
+  denote_clear v 42 42
+  denote_step_all v 43
   let two_x05 := toBitVecValue 64 #v[2 * (X 0 0), 2 * (X 1 0), 2 * (X 2 0), 2 * (X 3 0), 2 * (X 0 5), 2 * (X 1 5), 2 * (X 2 5), 2 * (X 3 5)]
-  have htwo_x05 : v51 = two_x05 := by quad_vecbin_ring hv51 with quadValMem, two_x05, x05
+  have htwo_x05 : v43 = two_x05 := by quad_vecbin_ring hv43 with quadValMem, two_x05, x05
   subst htwo_x05
-  denote_clear v 51 51
-  denote_step_all v 52
+  denote_clear v 43 43
+  denote_step_all v 44
   let two_x12 := toBitVecValue 64 #v[2 * (X 0 1), 2 * (X 1 1), 2 * (X 2 1), 2 * (X 3 1), 2 * (X 0 2), 2 * (X 1 2), 2 * (X 2 2), 2 * (X 3 2)]
-  have htwo_x12 : v52 = two_x12 := by quad_vecbin_ring hv52 with quadValMem, two_x12, x12
+  have htwo_x12 : v44 = two_x12 := by quad_vecbin_ring hv44 with quadValMem, two_x12, x12
   subst htwo_x12
-  denote_clear v 52 52
+  denote_clear v 44 44
 
   -- p0a .. p55 and q1b .. q66: the 21 products per element
-  denote_step_all v 53
+  denote_step_all v 45
   -- p0a: columns 0 and 10
   let p0a := toBitVecValue 64 #v[pl (X 0 0) (X 0 0), pl (X 1 0) (X 1 0), pl (X 2 0) (X 2 0), pl (X 3 0) (X 3 0), pl (X 0 5) (X 0 5), pl (X 1 5) (X 1 5), pl (X 2 5) (X 2 5), pl (X 3 5) (X 3 5)]
-  have hp0a : v53 = p0a := by quad_madd52 hv53 with p0a, x05
+  have hp0a : v45 = p0a := by quad_madd52 hv45 with p0a, x05
   subst hp0a
-  denote_clear v 53 53
-  denote_step_all v 54
+  denote_clear v 45 45
+  denote_step_all v 46
   -- p19: columns 1 and 9
   let p19 := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 1), pl (2 * X 1 0) (X 1 1), pl (2 * X 2 0) (X 2 1), pl (2 * X 3 0) (X 3 1), pl (2 * X 0 5) (X 0 4), pl (2 * X 1 5) (X 1 4), pl (2 * X 2 5) (X 2 4), pl (2 * X 3 5) (X 3 4)]
-  have hp19 : v54 = p19 := by quad_madd52 hv54 with p19, two_x05
+  have hp19 : v46 = p19 := by quad_madd52 hv46 with p19, two_x05
   subst hp19
-  denote_clear v 54 54
-  denote_step_all v 55
+  denote_clear v 46 46
+  denote_step_all v 47
   let p28_lo1 := toBitVecValue 64 #v[pl (X 0 1) (X 0 1), pl (X 1 1) (X 1 1), pl (X 2 1) (X 2 1), pl (X 3 1) (X 3 1), pl (X 0 4) (X 0 4), pl (X 1 4) (X 1 4), pl (X 2 4) (X 2 4), pl (X 3 4) (X 3 4)]
-  have hp28_lo1 : v55 = p28_lo1 := by quad_madd52 hv55 with p28_lo1
+  have hp28_lo1 : v47 = p28_lo1 := by quad_madd52 hv47 with p28_lo1
   subst hp28_lo1
-  denote_clear v 55 55
-  denote_step_all v 56
+  denote_clear v 47 47
+  denote_step_all v 48
   -- p28: columns 2 and 8
   let p28 := toBitVecValue 64 #v[pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2), pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2), pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2), pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2), pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5), pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5), pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5), pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5)]
-  have hp28 : v56 = p28 := by quad_madd52 hv56 with p28, p28_lo1, two_x03
+  have hp28 : v48 = p28 := by quad_madd52 hv48 with p28, p28_lo1, two_x03
   subst hp28
-  denote_clear v 56 56
-  denote_step_all v 57
+  denote_clear v 48 48
+  denote_step_all v 49
   let p37_lo1 := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 3), pl (2 * X 1 0) (X 1 3), pl (2 * X 2 0) (X 2 3), pl (2 * X 3 0) (X 3 3), pl (2 * X 0 3) (X 0 4), pl (2 * X 1 3) (X 1 4), pl (2 * X 2 3) (X 2 4), pl (2 * X 3 3) (X 3 4)]
-  have hp37_lo1 : v57 = p37_lo1 := by quad_madd52 hv57 with p37_lo1, two_x03, x34
+  have hp37_lo1 : v49 = p37_lo1 := by quad_madd52 hv49 with p37_lo1, two_x03, x34
   subst hp37_lo1
-  denote_clear v 57 57
-  denote_step_all v 58
+  denote_clear v 49 49
+  denote_step_all v 50
   -- p37: columns 3 and 7
   let p37 := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 3) + pl (2 * X 0 1) (X 0 2), pl (2 * X 1 0) (X 1 3) + pl (2 * X 1 1) (X 1 2), pl (2 * X 2 0) (X 2 3) + pl (2 * X 2 1) (X 2 2), pl (2 * X 3 0) (X 3 3) + pl (2 * X 3 1) (X 3 2), pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5), pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5), pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5), pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5)]
-  have hp37 : v58 = p37 := by quad_madd52 hv58 with p37, p37_lo1, two_x12
+  have hp37 : v50 = p37 := by quad_madd52 hv50 with p37, p37_lo1, two_x12
   subst hp37
-  denote_clear v 58 58
-  denote_step_all v 59
+  denote_clear v 50 50
+  denote_step_all v 51
   let p46_lo1 := toBitVecValue 64 #v[pl (X 0 2) (X 0 2), pl (X 1 2) (X 1 2), pl (X 2 2) (X 2 2), pl (X 3 2) (X 3 2), pl (X 0 3) (X 0 3), pl (X 1 3) (X 1 3), pl (X 2 3) (X 2 3), pl (X 3 3) (X 3 3)]
-  have hp46_lo1 : v59 = p46_lo1 := by quad_madd52 hv59 with p46_lo1, x23
+  have hp46_lo1 : v51 = p46_lo1 := by quad_madd52 hv51 with p46_lo1, x23
   subst hp46_lo1
-  denote_clear v 59 59
-  denote_step_all v 60
+  denote_clear v 51 51
+  denote_step_all v 52
   let p46_lo2 := toBitVecValue 64 #v[pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4), pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4), pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4), pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4), pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1), pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1), pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1), pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1)]
-  have hp46_lo2 : v60 = p46_lo2 := by quad_madd52 hv60 with p46_lo1, p46_lo2, two_x05, x41
+  have hp46_lo2 : v52 = p46_lo2 := by quad_madd52 hv52 with p46_lo1, p46_lo2, two_x05, x41
   subst hp46_lo2
-  denote_clear v 60 60
-  denote_step_all v 61
+  denote_clear v 52 52
+  denote_step_all v 53
   -- p46: columns 4 and 6
   let p46 := toBitVecValue 64 #v[pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4) + pl (2 * X 0 1) (X 0 3), pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4) + pl (2 * X 1 1) (X 1 3), pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4) + pl (2 * X 2 1) (X 2 3), pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4) + pl (2 * X 3 1) (X 3 3), pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4), pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4), pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4), pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4)]
-  have hp46 : v61 = p46 := by quad_madd52 hv61 with p46, p46_lo2, two_x12, x34
+  have hp46 : v53 = p46 := by quad_madd52 hv53 with p46, p46_lo2, two_x12, x34
   subst hp46
-  denote_clear v 61 61
-  denote_step_all v 62
+  denote_clear v 53 53
+  denote_step_all v 54
   let p55_lo1 := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 5), pl (2 * X 1 0) (X 1 5), pl (2 * X 2 0) (X 2 5), pl (2 * X 3 0) (X 3 5), pl (2 * X 0 3) (X 0 2), pl (2 * X 1 3) (X 1 2), pl (2 * X 2 3) (X 2 2), pl (2 * X 3 3) (X 3 2)]
-  have hp55_lo1 : v62 = p55_lo1 := by quad_madd52 hv62 with p55_lo1, two_x03, x52
+  have hp55_lo1 : v54 = p55_lo1 := by quad_madd52 hv54 with p55_lo1, two_x03, x52
   subst hp55_lo1
-  denote_clear v 62 62
-  denote_step_all v 63
+  denote_clear v 54 54
+  denote_step_all v 55
   -- p55: column 5, split across *both* halves; they are re-joined below
   let p55 := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4), pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4), pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4), pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4), pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0, pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0, pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0, pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0]
-  have hp55 : v63 = p55 := by quad_madd52 hv63 with p55, p55_lo1, two_x14, x4z
+  have hp55 : v55 = p55 := by quad_madd52 hv55 with p55, p55_lo1, two_x14, x4z
   subst hp55
-  denote_clear v 63 63
-  denote_step_all v 64
+  denote_clear v 55 55
+  denote_step_all v 56
   let q1b_raw := toBitVecValue 64 #v[phRaw (X 0 0) (X 0 0), phRaw (X 1 0) (X 1 0), phRaw (X 2 0) (X 2 0), phRaw (X 3 0) (X 3 0), phRaw (X 0 5) (X 0 5), phRaw (X 1 5) (X 1 5), phRaw (X 2 5) (X 2 5), phRaw (X 3 5) (X 3 5)]
-  have hq1b_raw : v64 = q1b_raw := by quad_madd52 hv64 with q1b_raw, x05
+  have hq1b_raw : v56 = q1b_raw := by quad_madd52 hv56 with q1b_raw, x05
   subst hq1b_raw
-  denote_clear v 64 64
-  denote_step_all v 65
+  denote_clear v 56 56
+  denote_step_all v 57
   -- q1b: columns 1 and 11
   let q1b := toBitVecValue 64 #v[ph (X 0 0) (X 0 0), ph (X 1 0) (X 1 0), ph (X 2 0) (X 2 0), ph (X 3 0) (X 3 0), ph (X 0 5) (X 0 5), ph (X 1 5) (X 1 5), ph (X 2 5) (X 2 5), ph (X 3 5) (X 3 5)]
-  have hq1b : v65 = q1b := by quad_vecbin_ring hv65 with quadValMem, q1b, q1b_raw
+  have hq1b : v57 = q1b := by quad_vecbin_ring hv57 with quadValMem, q1b, q1b_raw
   subst hq1b
-  denote_clear v 65 65
-  denote_step_all v 66
+  denote_clear v 57 57
+  denote_step_all v 58
   let q2a_raw := toBitVecValue 64 #v[phRaw (2 * X 0 0) (X 0 1), phRaw (2 * X 1 0) (X 1 1), phRaw (2 * X 2 0) (X 2 1), phRaw (2 * X 3 0) (X 3 1), phRaw (2 * X 0 5) (X 0 4), phRaw (2 * X 1 5) (X 1 4), phRaw (2 * X 2 5) (X 2 4), phRaw (2 * X 3 5) (X 3 4)]
-  have hq2a_raw : v66 = q2a_raw := by quad_madd52 hv66 with q2a_raw, two_x05
+  have hq2a_raw : v58 = q2a_raw := by quad_madd52 hv58 with q2a_raw, two_x05
   subst hq2a_raw
-  denote_clear v 66 66
-  denote_step_all v 67
+  denote_clear v 58 58
+  denote_step_all v 59
   -- q2a: columns 2 and 10
   let q2a := toBitVecValue 64 #v[ph (2 * X 0 0) (X 0 1), ph (2 * X 1 0) (X 1 1), ph (2 * X 2 0) (X 2 1), ph (2 * X 3 0) (X 3 1), ph (2 * X 0 5) (X 0 4), ph (2 * X 1 5) (X 1 4), ph (2 * X 2 5) (X 2 4), ph (2 * X 3 5) (X 3 4)]
-  have hq2a : v67 = q2a := by quad_vecbin_ring hv67 with quadValMem, q2a, q2a_raw
+  have hq2a : v59 = q2a := by quad_vecbin_ring hv59 with quadValMem, q2a, q2a_raw
   subst hq2a
-  denote_clear v 67 67
-  denote_step_all v 68
+  denote_clear v 59 59
+  denote_step_all v 60
   let q39_raw1 := toBitVecValue 64 #v[phRaw (X 0 1) (X 0 1), phRaw (X 1 1) (X 1 1), phRaw (X 2 1) (X 2 1), phRaw (X 3 1) (X 3 1), phRaw (X 0 4) (X 0 4), phRaw (X 1 4) (X 1 4), phRaw (X 2 4) (X 2 4), phRaw (X 3 4) (X 3 4)]
-  have hq39_raw1 : v68 = q39_raw1 := by quad_madd52 hv68 with q39_raw1
+  have hq39_raw1 : v60 = q39_raw1 := by quad_madd52 hv60 with q39_raw1
   subst hq39_raw1
-  denote_clear v 68 68
-  denote_step_all v 69
+  denote_clear v 60 60
+  denote_step_all v 61
   let q39_raw := toBitVecValue 64 #v[phRaw (X 0 1) (X 0 1) + phRaw (2 * X 0 0) (X 0 2), phRaw (X 1 1) (X 1 1) + phRaw (2 * X 1 0) (X 1 2), phRaw (X 2 1) (X 2 1) + phRaw (2 * X 2 0) (X 2 2), phRaw (X 3 1) (X 3 1) + phRaw (2 * X 3 0) (X 3 2), phRaw (X 0 4) (X 0 4) + phRaw (2 * X 0 3) (X 0 5), phRaw (X 1 4) (X 1 4) + phRaw (2 * X 1 3) (X 1 5), phRaw (X 2 4) (X 2 4) + phRaw (2 * X 2 3) (X 2 5), phRaw (X 3 4) (X 3 4) + phRaw (2 * X 3 3) (X 3 5)]
-  have hq39_raw : v69 = q39_raw := by quad_madd52 hv69 with q39_raw, q39_raw1, two_x03
+  have hq39_raw : v61 = q39_raw := by quad_madd52 hv61 with q39_raw, q39_raw1, two_x03
   subst hq39_raw
-  denote_clear v 69 69
-  denote_step_all v 70
+  denote_clear v 61 61
+  denote_step_all v 62
   -- q39: columns 3 and 9
   let q39 := toBitVecValue 64 #v[ph (X 0 1) (X 0 1) + ph (2 * X 0 0) (X 0 2), ph (X 1 1) (X 1 1) + ph (2 * X 1 0) (X 1 2), ph (X 2 1) (X 2 1) + ph (2 * X 2 0) (X 2 2), ph (X 3 1) (X 3 1) + ph (2 * X 3 0) (X 3 2), ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5), ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5), ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5), ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)]
-  have hq39 : v70 = q39 := by quad_vecbin_ring hv70 with quadValMem, q39, q39_raw
+  have hq39 : v62 = q39 := by quad_vecbin_ring hv62 with quadValMem, q39, q39_raw
   subst hq39
-  denote_clear v 70 70
-  denote_step_all v 71
+  denote_clear v 62 62
+  denote_step_all v 63
   let q48_raw1 := toBitVecValue 64 #v[phRaw (2 * X 0 0) (X 0 3), phRaw (2 * X 1 0) (X 1 3), phRaw (2 * X 2 0) (X 2 3), phRaw (2 * X 3 0) (X 3 3), phRaw (2 * X 0 3) (X 0 4), phRaw (2 * X 1 3) (X 1 4), phRaw (2 * X 2 3) (X 2 4), phRaw (2 * X 3 3) (X 3 4)]
-  have hq48_raw1 : v71 = q48_raw1 := by quad_madd52 hv71 with q48_raw1, two_x03, x34
+  have hq48_raw1 : v63 = q48_raw1 := by quad_madd52 hv63 with q48_raw1, two_x03, x34
   subst hq48_raw1
-  denote_clear v 71 71
-  denote_step_all v 72
+  denote_clear v 63 63
+  denote_step_all v 64
   let q48_raw := toBitVecValue 64 #v[phRaw (2 * X 0 0) (X 0 3) + phRaw (2 * X 0 1) (X 0 2), phRaw (2 * X 1 0) (X 1 3) + phRaw (2 * X 1 1) (X 1 2), phRaw (2 * X 2 0) (X 2 3) + phRaw (2 * X 2 1) (X 2 2), phRaw (2 * X 3 0) (X 3 3) + phRaw (2 * X 3 1) (X 3 2), phRaw (2 * X 0 3) (X 0 4) + phRaw (2 * X 0 2) (X 0 5), phRaw (2 * X 1 3) (X 1 4) + phRaw (2 * X 1 2) (X 1 5), phRaw (2 * X 2 3) (X 2 4) + phRaw (2 * X 2 2) (X 2 5), phRaw (2 * X 3 3) (X 3 4) + phRaw (2 * X 3 2) (X 3 5)]
-  have hq48_raw : v72 = q48_raw := by quad_madd52 hv72 with q48_raw, q48_raw1, two_x12
+  have hq48_raw : v64 = q48_raw := by quad_madd52 hv64 with q48_raw, q48_raw1, two_x12
   subst hq48_raw
-  denote_clear v 72 72
-  denote_step_all v 73
+  denote_clear v 64 64
+  denote_step_all v 65
   -- q48: columns 4 and 8
   let q48 := toBitVecValue 64 #v[ph (2 * X 0 0) (X 0 3) + ph (2 * X 0 1) (X 0 2), ph (2 * X 1 0) (X 1 3) + ph (2 * X 1 1) (X 1 2), ph (2 * X 2 0) (X 2 3) + ph (2 * X 2 1) (X 2 2), ph (2 * X 3 0) (X 3 3) + ph (2 * X 3 1) (X 3 2), ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5), ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5), ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5), ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)]
-  have hq48 : v73 = q48 := by quad_vecbin_ring hv73 with quadValMem, q48, q48_raw
+  have hq48 : v65 = q48 := by quad_vecbin_ring hv65 with quadValMem, q48, q48_raw
   subst hq48
-  denote_clear v 73 73
-  denote_step_all v 74
+  denote_clear v 65 65
+  denote_step_all v 66
   let q57_raw1 := toBitVecValue 64 #v[phRaw (X 0 2) (X 0 2), phRaw (X 1 2) (X 1 2), phRaw (X 2 2) (X 2 2), phRaw (X 3 2) (X 3 2), phRaw (X 0 3) (X 0 3), phRaw (X 1 3) (X 1 3), phRaw (X 2 3) (X 2 3), phRaw (X 3 3) (X 3 3)]
-  have hq57_raw1 : v74 = q57_raw1 := by quad_madd52 hv74 with q57_raw1, x23
+  have hq57_raw1 : v66 = q57_raw1 := by quad_madd52 hv66 with q57_raw1, x23
   subst hq57_raw1
-  denote_clear v 74 74
-  denote_step_all v 75
+  denote_clear v 66 66
+  denote_step_all v 67
   let q57_raw2 := toBitVecValue 64 #v[phRaw (X 0 2) (X 0 2) + phRaw (2 * X 0 0) (X 0 4), phRaw (X 1 2) (X 1 2) + phRaw (2 * X 1 0) (X 1 4), phRaw (X 2 2) (X 2 2) + phRaw (2 * X 2 0) (X 2 4), phRaw (X 3 2) (X 3 2) + phRaw (2 * X 3 0) (X 3 4), phRaw (X 0 3) (X 0 3) + phRaw (2 * X 0 5) (X 0 1), phRaw (X 1 3) (X 1 3) + phRaw (2 * X 1 5) (X 1 1), phRaw (X 2 3) (X 2 3) + phRaw (2 * X 2 5) (X 2 1), phRaw (X 3 3) (X 3 3) + phRaw (2 * X 3 5) (X 3 1)]
-  have hq57_raw2 : v75 = q57_raw2 := by quad_madd52 hv75 with q57_raw1, q57_raw2, two_x05, x41
+  have hq57_raw2 : v67 = q57_raw2 := by quad_madd52 hv67 with q57_raw1, q57_raw2, two_x05, x41
   subst hq57_raw2
-  denote_clear v 75 75
-  denote_step_all v 76
+  denote_clear v 67 67
+  denote_step_all v 68
   let q57_raw := toBitVecValue 64 #v[phRaw (X 0 2) (X 0 2) + phRaw (2 * X 0 0) (X 0 4) + phRaw (2 * X 0 1) (X 0 3), phRaw (X 1 2) (X 1 2) + phRaw (2 * X 1 0) (X 1 4) + phRaw (2 * X 1 1) (X 1 3), phRaw (X 2 2) (X 2 2) + phRaw (2 * X 2 0) (X 2 4) + phRaw (2 * X 2 1) (X 2 3), phRaw (X 3 2) (X 3 2) + phRaw (2 * X 3 0) (X 3 4) + phRaw (2 * X 3 1) (X 3 3), phRaw (X 0 3) (X 0 3) + phRaw (2 * X 0 5) (X 0 1) + phRaw (2 * X 0 2) (X 0 4), phRaw (X 1 3) (X 1 3) + phRaw (2 * X 1 5) (X 1 1) + phRaw (2 * X 1 2) (X 1 4), phRaw (X 2 3) (X 2 3) + phRaw (2 * X 2 5) (X 2 1) + phRaw (2 * X 2 2) (X 2 4), phRaw (X 3 3) (X 3 3) + phRaw (2 * X 3 5) (X 3 1) + phRaw (2 * X 3 2) (X 3 4)]
-  have hq57_raw : v76 = q57_raw := by quad_madd52 hv76 with q57_raw, q57_raw2, two_x12, x34
+  have hq57_raw : v68 = q57_raw := by quad_madd52 hv68 with q57_raw, q57_raw2, two_x12, x34
   subst hq57_raw
-  denote_clear v 76 76
-  denote_step_all v 77
+  denote_clear v 68 68
+  denote_step_all v 69
   -- q57: columns 5 and 7
   let q57 := toBitVecValue 64 #v[ph (X 0 2) (X 0 2) + ph (2 * X 0 0) (X 0 4) + ph (2 * X 0 1) (X 0 3), ph (X 1 2) (X 1 2) + ph (2 * X 1 0) (X 1 4) + ph (2 * X 1 1) (X 1 3), ph (X 2 2) (X 2 2) + ph (2 * X 2 0) (X 2 4) + ph (2 * X 2 1) (X 2 3), ph (X 3 2) (X 3 2) + ph (2 * X 3 0) (X 3 4) + ph (2 * X 3 1) (X 3 3), ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4), ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4), ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4), ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)]
-  have hq57 : v77 = q57 := by quad_vecbin_ring hv77 with quadValMem, q57, q57_raw
+  have hq57 : v69 = q57 := by quad_vecbin_ring hv69 with quadValMem, q57, q57_raw
   subst hq57
-  denote_clear v 77 77
-  denote_step_all v 78
+  denote_clear v 69 69
+  denote_step_all v 70
   let q66_raw1 := toBitVecValue 64 #v[phRaw (2 * X 0 0) (X 0 5), phRaw (2 * X 1 0) (X 1 5), phRaw (2 * X 2 0) (X 2 5), phRaw (2 * X 3 0) (X 3 5), phRaw (2 * X 0 3) (X 0 2), phRaw (2 * X 1 3) (X 1 2), phRaw (2 * X 2 3) (X 2 2), phRaw (2 * X 3 3) (X 3 2)]
-  have hq66_raw1 : v78 = q66_raw1 := by quad_madd52 hv78 with q66_raw1, two_x03, x52
+  have hq66_raw1 : v70 = q66_raw1 := by quad_madd52 hv70 with q66_raw1, two_x03, x52
   subst hq66_raw1
-  denote_clear v 78 78
-  denote_step_all v 79
+  denote_clear v 70 70
+  denote_step_all v 71
   let q66_raw := toBitVecValue 64 #v[phRaw (2 * X 0 0) (X 0 5) + phRaw (2 * X 0 1) (X 0 4), phRaw (2 * X 1 0) (X 1 5) + phRaw (2 * X 1 1) (X 1 4), phRaw (2 * X 2 0) (X 2 5) + phRaw (2 * X 2 1) (X 2 4), phRaw (2 * X 3 0) (X 3 5) + phRaw (2 * X 3 1) (X 3 4), phRaw (2 * X 0 3) (X 0 2) + phRaw (2 * X 0 4) 0, phRaw (2 * X 1 3) (X 1 2) + phRaw (2 * X 1 4) 0, phRaw (2 * X 2 3) (X 2 2) + phRaw (2 * X 2 4) 0, phRaw (2 * X 3 3) (X 3 2) + phRaw (2 * X 3 4) 0]
-  have hq66_raw : v79 = q66_raw := by quad_madd52 hv79 with q66_raw, q66_raw1, two_x14, x4z
+  have hq66_raw : v71 = q66_raw := by quad_madd52 hv71 with q66_raw, q66_raw1, two_x14, x4z
   subst hq66_raw
-  denote_clear v 79 79
-  denote_step_all v 80
+  denote_clear v 71 71
+  denote_step_all v 72
   -- q66: column 6, likewise split across both halves
   let q66 := toBitVecValue 64 #v[ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4), ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4), ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4), ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4), ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0, ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0, ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0, ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0]
-  have hq66 : v80 = q66 := by quad_vecbin_ring hv80 with quadValMem, q66, q66_raw
+  have hq66 : v72 = q66 := by quad_vecbin_ring hv72 with quadValMem, q66, q66_raw
   subst hq66
-  denote_clear v 80 80
+  denote_clear v 72 72
 
   -- za03 .. zb25 and the `za + 152*zb` fold
-  denote_step_all v 81
+  denote_step_all v 73
   let za03_p := toBitVecValue 64 #v[pl (X 0 0) (X 0 0), pl (X 1 0) (X 1 0), pl (X 2 0) (X 2 0), pl (X 3 0) (X 3 0), pl (2 * X 0 0) (X 0 3) + pl (2 * X 0 1) (X 0 2), pl (2 * X 1 0) (X 1 3) + pl (2 * X 1 1) (X 1 2), pl (2 * X 2 0) (X 2 3) + pl (2 * X 2 1) (X 2 2), pl (2 * X 3 0) (X 3 3) + pl (2 * X 3 1) (X 3 2)]
-  have hza03_p : v81 = za03_p := by quad_shuffle hv81 with p0a, p37, za03_p
+  have hza03_p : v73 = za03_p := by quad_shuffle hv73 with p0a, p37, za03_p
   subst hza03_p
-  denote_clear v 81 81
-  denote_step_all v 82
+  denote_clear v 73 73
+  denote_step_all v 74
   let za03_q := toBitVecValue 64 #v[0, 0, 0, 0, ph (X 0 1) (X 0 1) + ph (2 * X 0 0) (X 0 2), ph (X 1 1) (X 1 1) + ph (2 * X 1 0) (X 1 2), ph (X 2 1) (X 2 1) + ph (2 * X 2 0) (X 2 2), ph (X 3 1) (X 3 1) + ph (2 * X 3 0) (X 3 2)]
-  have hza03_q : v82 = za03_q := by quad_shuffle hv82 with q39, za03_q
+  have hza03_q : v74 = za03_q := by quad_shuffle hv74 with q39, za03_q
   subst hza03_q
-  denote_clear v 82 82
-  denote_step_all v 83
+  denote_clear v 74 74
+  denote_step_all v 75
   -- za03: columns 0 and 3
   let za03 := toBitVecValue 64 #v[(0) + (pl (X 0 0) (X 0 0)), (0) + (pl (X 1 0) (X 1 0)), (0) + (pl (X 2 0) (X 2 0)), (0) + (pl (X 3 0) (X 3 0)), (ph (X 0 1) (X 0 1) + ph (2 * X 0 0) (X 0 2)) + (pl (2 * X 0 0) (X 0 3) + pl (2 * X 0 1) (X 0 2)), (ph (X 1 1) (X 1 1) + ph (2 * X 1 0) (X 1 2)) + (pl (2 * X 1 0) (X 1 3) + pl (2 * X 1 1) (X 1 2)), (ph (X 2 1) (X 2 1) + ph (2 * X 2 0) (X 2 2)) + (pl (2 * X 2 0) (X 2 3) + pl (2 * X 2 1) (X 2 2)), (ph (X 3 1) (X 3 1) + ph (2 * X 3 0) (X 3 2)) + (pl (2 * X 3 0) (X 3 3) + pl (2 * X 3 1) (X 3 2))]
-  have hza03 : v83 = za03 := by quad_vecbin hv83 with quadValMem, za03, za03_p, za03_q
+  have hza03 : v75 = za03 := by quad_vecbin hv75 with quadValMem, za03, za03_p, za03_q
   subst hza03
-  denote_clear v 83 83
-  denote_step_all v 84
+  denote_clear v 75 75
+  denote_step_all v 76
   let za14_p := toBitVecValue 64 #v[pl (2 * X 0 0) (X 0 1), pl (2 * X 1 0) (X 1 1), pl (2 * X 2 0) (X 2 1), pl (2 * X 3 0) (X 3 1), pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4) + pl (2 * X 0 1) (X 0 3), pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4) + pl (2 * X 1 1) (X 1 3), pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4) + pl (2 * X 2 1) (X 2 3), pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4) + pl (2 * X 3 1) (X 3 3)]
-  have hza14_p : v84 = za14_p := by quad_shuffle hv84 with p19, p46, za14_p
+  have hza14_p : v76 = za14_p := by quad_shuffle hv76 with p19, p46, za14_p
   subst hza14_p
-  denote_clear v 84 84
-  denote_step_all v 85
+  denote_clear v 76 76
+  denote_step_all v 77
   let za14_q := toBitVecValue 64 #v[ph (X 0 0) (X 0 0), ph (X 1 0) (X 1 0), ph (X 2 0) (X 2 0), ph (X 3 0) (X 3 0), ph (2 * X 0 0) (X 0 3) + ph (2 * X 0 1) (X 0 2), ph (2 * X 1 0) (X 1 3) + ph (2 * X 1 1) (X 1 2), ph (2 * X 2 0) (X 2 3) + ph (2 * X 2 1) (X 2 2), ph (2 * X 3 0) (X 3 3) + ph (2 * X 3 1) (X 3 2)]
-  have hza14_q : v85 = za14_q := by quad_shuffle hv85 with q1b, q48, za14_q
+  have hza14_q : v77 = za14_q := by quad_shuffle hv77 with q1b, q48, za14_q
   subst hza14_q
-  denote_clear v 85 85
-  denote_step_all v 86
+  denote_clear v 77 77
+  denote_step_all v 78
   -- za14: columns 1 and 4
   let za14 := toBitVecValue 64 #v[(ph (X 0 0) (X 0 0)) + (pl (2 * X 0 0) (X 0 1)), (ph (X 1 0) (X 1 0)) + (pl (2 * X 1 0) (X 1 1)), (ph (X 2 0) (X 2 0)) + (pl (2 * X 2 0) (X 2 1)), (ph (X 3 0) (X 3 0)) + (pl (2 * X 3 0) (X 3 1)), (ph (2 * X 0 0) (X 0 3) + ph (2 * X 0 1) (X 0 2)) + (pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4) + pl (2 * X 0 1) (X 0 3)), (ph (2 * X 1 0) (X 1 3) + ph (2 * X 1 1) (X 1 2)) + (pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4) + pl (2 * X 1 1) (X 1 3)), (ph (2 * X 2 0) (X 2 3) + ph (2 * X 2 1) (X 2 2)) + (pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4) + pl (2 * X 2 1) (X 2 3)), (ph (2 * X 3 0) (X 3 3) + ph (2 * X 3 1) (X 3 2)) + (pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4) + pl (2 * X 3 1) (X 3 3))]
-  have hza14 : v86 = za14 := by quad_vecbin hv86 with quadValMem, za14, za14_p, za14_q
+  have hza14 : v78 = za14 := by quad_vecbin hv78 with quadValMem, za14, za14_p, za14_q
   subst hza14
-  denote_clear v 86 86
-  denote_step_all v 87
+  denote_clear v 78 78
+  denote_step_all v 79
   let za25_p := toBitVecValue 64 #v[pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2), pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2), pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2), pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2), pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4), pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4), pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4), pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4)]
-  have hza25_p : v87 = za25_p := by quad_shuffle hv87 with p28, p55, za25_p
+  have hza25_p : v79 = za25_p := by quad_shuffle hv79 with p28, p55, za25_p
   subst hza25_p
-  denote_clear v 87 87
-  denote_step_all v 88
+  denote_clear v 79 79
+  denote_step_all v 80
   let za25_q := toBitVecValue 64 #v[ph (2 * X 0 0) (X 0 1), ph (2 * X 1 0) (X 1 1), ph (2 * X 2 0) (X 2 1), ph (2 * X 3 0) (X 3 1), ph (X 0 2) (X 0 2) + ph (2 * X 0 0) (X 0 4) + ph (2 * X 0 1) (X 0 3), ph (X 1 2) (X 1 2) + ph (2 * X 1 0) (X 1 4) + ph (2 * X 1 1) (X 1 3), ph (X 2 2) (X 2 2) + ph (2 * X 2 0) (X 2 4) + ph (2 * X 2 1) (X 2 3), ph (X 3 2) (X 3 2) + ph (2 * X 3 0) (X 3 4) + ph (2 * X 3 1) (X 3 3)]
-  have hza25_q : v88 = za25_q := by quad_shuffle hv88 with q2a, q57, za25_q
+  have hza25_q : v80 = za25_q := by quad_shuffle hv80 with q2a, q57, za25_q
   subst hza25_q
-  denote_clear v 88 88
-  denote_step_all v 89
+  denote_clear v 80 80
+  denote_step_all v 81
   let za25_hi := toBitVecValue 64 #v[0, 0, 0, 0, pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0, pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0, pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0, pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0]
-  have hza25_hi : v89 = za25_hi := by quad_shuffle hv89 with p55, za25_hi
+  have hza25_hi : v81 = za25_hi := by quad_shuffle hv81 with p55, za25_hi
   subst hza25_hi
-  denote_clear v 89 89
-  denote_step_all v 90
+  denote_clear v 81 81
+  denote_step_all v 82
   let zb03_p := toBitVecValue 64 #v[pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4), pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4), pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4), pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4), pl (2 * X 0 5) (X 0 4), pl (2 * X 1 5) (X 1 4), pl (2 * X 2 5) (X 2 4), pl (2 * X 3 5) (X 3 4)]
-  have hzb03_p : v90 = zb03_p := by quad_shuffle hv90 with p19, p46, zb03_p
+  have hzb03_p : v82 = zb03_p := by quad_shuffle hv82 with p19, p46, zb03_p
   subst hzb03_p
-  denote_clear v 90 90
-  denote_step_all v 91
+  denote_clear v 82 82
+  denote_step_all v 83
   let zb03_q := toBitVecValue 64 #v[ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0, ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0, ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0, ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0, ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5), ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5), ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5), ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)]
-  have hzb03_q : v91 = zb03_q := by quad_shuffle hv91 with q39, q66, zb03_q
+  have hzb03_q : v83 = zb03_q := by quad_shuffle hv83 with q39, q66, zb03_q
   subst hzb03_q
-  denote_clear v 91 91
-  denote_step_all v 92
+  denote_clear v 83 83
+  denote_step_all v 84
   let zb03_pq := toBitVecValue 64 #v[(ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4)), (ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4)), (ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4)), (ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4)), (ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4)), (ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4)), (ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4)), (ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))]
-  have hzb03_pq : v92 = zb03_pq := by quad_vecbin hv92 with quadValMem, zb03_p, zb03_pq, zb03_q
+  have hzb03_pq : v84 = zb03_pq := by quad_vecbin hv84 with quadValMem, zb03_p, zb03_pq, zb03_q
   subst hzb03_pq
-  denote_clear v 92 92
-  denote_step_all v 93
+  denote_clear v 84 84
+  denote_step_all v 85
   let zb03_lo := toBitVecValue 64 #v[ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4), ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4), ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4), ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4), 0, 0, 0, 0]
-  have hzb03_lo : v93 = zb03_lo := by quad_shuffle hv93 with q66, zb03_lo
+  have hzb03_lo : v85 = zb03_lo := by quad_shuffle hv85 with q66, zb03_lo
   subst hzb03_lo
-  denote_clear v 93 93
-  denote_step_all v 94
+  denote_clear v 85 85
+  denote_step_all v 86
   -- zb03: columns 6 and 9
   let zb03 := toBitVecValue 64 #v[((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4)), ((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4)), ((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4)), ((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4)), ((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0), ((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0), ((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0), ((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)]
-  have hzb03 : v94 = zb03 := by quad_vecbin hv94 with quadValMem, zb03, zb03_lo, zb03_pq
+  have hzb03 : v86 = zb03 := by quad_vecbin hv86 with quadValMem, zb03, zb03_lo, zb03_pq
   subst hzb03
-  denote_clear v 94 94
-  denote_step_all v 95
+  denote_clear v 86 86
+  denote_step_all v 87
   let zb14_p := toBitVecValue 64 #v[pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5), pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5), pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5), pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5), pl (X 0 5) (X 0 5), pl (X 1 5) (X 1 5), pl (X 2 5) (X 2 5), pl (X 3 5) (X 3 5)]
-  have hzb14_p : v95 = zb14_p := by quad_shuffle hv95 with p0a, p37, zb14_p
+  have hzb14_p : v87 = zb14_p := by quad_shuffle hv87 with p0a, p37, zb14_p
   subst hzb14_p
-  denote_clear v 95 95
-  denote_step_all v 96
+  denote_clear v 87 87
+  denote_step_all v 88
   let zb14_q := toBitVecValue 64 #v[ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4), ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4), ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4), ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4), ph (2 * X 0 5) (X 0 4), ph (2 * X 1 5) (X 1 4), ph (2 * X 2 5) (X 2 4), ph (2 * X 3 5) (X 3 4)]
-  have hzb14_q : v96 = zb14_q := by quad_shuffle hv96 with q2a, q57, zb14_q
+  have hzb14_q : v88 = zb14_q := by quad_shuffle hv88 with q2a, q57, zb14_q
   subst hzb14_q
-  denote_clear v 96 96
-  denote_step_all v 97
+  denote_clear v 88 88
+  denote_step_all v 89
   -- zb14: columns 7 and 10
   let zb14 := toBitVecValue 64 #v[(ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5)), (ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5)), (ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5)), (ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5)), (ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5)), (ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5)), (ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5)), (ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))]
-  have hzb14 : v97 = zb14 := by quad_vecbin hv97 with quadValMem, zb14, zb14_p, zb14_q
+  have hzb14 : v89 = zb14 := by quad_vecbin hv89 with quadValMem, zb14, zb14_p, zb14_q
   subst hzb14
-  denote_clear v 97 97
-  denote_step_all v 98
+  denote_clear v 89 89
+  denote_step_all v 90
   let zb25_p := toBitVecValue 64 #v[pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5), pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5), pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5), pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5), 0, 0, 0, 0]
-  have hzb25_p : v98 = zb25_p := by quad_shuffle hv98 with p28, zb25_p
+  have hzb25_p : v90 = zb25_p := by quad_shuffle hv90 with p28, zb25_p
   subst hzb25_p
-  denote_clear v 98 98
-  denote_step_all v 99
+  denote_clear v 90 90
+  denote_step_all v 91
   let zb25_q := toBitVecValue 64 #v[ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5), ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5), ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5), ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5), ph (X 0 5) (X 0 5), ph (X 1 5) (X 1 5), ph (X 2 5) (X 2 5), ph (X 3 5) (X 3 5)]
-  have hzb25_q : v99 = zb25_q := by quad_shuffle hv99 with q1b, q48, zb25_q
+  have hzb25_q : v91 = zb25_q := by quad_shuffle hv91 with q1b, q48, zb25_q
   subst hzb25_q
-  denote_clear v 99 99
-  denote_step_all v 100
+  denote_clear v 91 91
+  denote_step_all v 92
   -- zb25: columns 8 and 11
   let zb25 := toBitVecValue 64 #v[(ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5)), (ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5)), (ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5)), (ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5)), (ph (X 0 5) (X 0 5)) + (0), (ph (X 1 5) (X 1 5)) + (0), (ph (X 2 5) (X 2 5)) + (0), (ph (X 3 5) (X 3 5)) + (0)]
-  have hzb25 : v100 = zb25 := by quad_vecbin hv100 with quadValMem, zb25, zb25_p, zb25_q
+  have hzb25 : v92 = zb25 := by quad_vecbin hv92 with quadValMem, zb25, zb25_p, zb25_q
   subst hzb25
-  denote_clear v 100 100
-  denote_step_all v 101
+  denote_clear v 92 92
+  denote_step_all v 93
   let zb03_shl7 := toBitVecValue 64 #v[(((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4))) * 128, (((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4))) * 128, (((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4))) * 128, (((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4))) * 128, (((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0)) * 128, (((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0)) * 128, (((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0)) * 128, (((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)) * 128]
-  have hzb03_shl7 : v101 = zb03_shl7 := by quad_vecbin hv101 with quadValMem, zb03, zb03_shl7
+  have hzb03_shl7 : v93 = zb03_shl7 := by quad_vecbin hv93 with quadValMem, zb03, zb03_shl7
   subst hzb03_shl7
-  denote_clear v 101 101
-  denote_step_all v 102
+  denote_clear v 93 93
+  denote_step_all v 94
   let z03_part := toBitVecValue 64 #v[((0) + (pl (X 0 0) (X 0 0))) + ((((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4))) * 128), ((0) + (pl (X 1 0) (X 1 0))) + ((((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4))) * 128), ((0) + (pl (X 2 0) (X 2 0))) + ((((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4))) * 128), ((0) + (pl (X 3 0) (X 3 0))) + ((((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4))) * 128), ((ph (X 0 1) (X 0 1) + ph (2 * X 0 0) (X 0 2)) + (pl (2 * X 0 0) (X 0 3) + pl (2 * X 0 1) (X 0 2))) + ((((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0)) * 128), ((ph (X 1 1) (X 1 1) + ph (2 * X 1 0) (X 1 2)) + (pl (2 * X 1 0) (X 1 3) + pl (2 * X 1 1) (X 1 2))) + ((((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0)) * 128), ((ph (X 2 1) (X 2 1) + ph (2 * X 2 0) (X 2 2)) + (pl (2 * X 2 0) (X 2 3) + pl (2 * X 2 1) (X 2 2))) + ((((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0)) * 128), ((ph (X 3 1) (X 3 1) + ph (2 * X 3 0) (X 3 2)) + (pl (2 * X 3 0) (X 3 3) + pl (2 * X 3 1) (X 3 2))) + ((((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)) * 128)]
-  have hz03_part : v102 = z03_part := by quad_vecbin hv102 with quadValMem, z03_part, za03, zb03_shl7
+  have hz03_part : v94 = z03_part := by quad_vecbin hv94 with quadValMem, z03_part, za03, zb03_shl7
   subst hz03_part
-  denote_clear v 102 102
-  denote_step_all v 103
+  denote_clear v 94 94
+  denote_step_all v 95
   let zb03_mul24 := toBitVecValue 64 #v[(((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4))) * 24, (((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4))) * 24, (((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4))) * 24, (((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4))) * 24, (((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0)) * 24, (((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0)) * 24, (((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0)) * 24, (((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)) * 24]
-  have hzb03_mul24 : v103 = zb03_mul24 := by quad_vecbin hv103 with quadValMem, zb03, zb03_mul24
+  have hzb03_mul24 : v95 = zb03_mul24 := by quad_vecbin hv95 with quadValMem, zb03, zb03_mul24
   subst hzb03_mul24
-  denote_clear v 103 103
-  denote_step_all v 104
+  denote_clear v 95 95
+  denote_step_all v 96
   -- z03: `za03 + 152*zb03`, limbs 0 and 3 of all four elements
   let z03 := toBitVecValue 64 #v[(((0) + (pl (X 0 0) (X 0 0))) + ((((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4))) * 128)) + ((((ph (2 * X 0 3) (X 0 2) + ph (2 * X 0 4) 0) + (pl (X 0 3) (X 0 3) + pl (2 * X 0 5) (X 0 1) + pl (2 * X 0 2) (X 0 4))) + (ph (2 * X 0 0) (X 0 5) + ph (2 * X 0 1) (X 0 4))) * 24), (((0) + (pl (X 1 0) (X 1 0))) + ((((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4))) * 128)) + ((((ph (2 * X 1 3) (X 1 2) + ph (2 * X 1 4) 0) + (pl (X 1 3) (X 1 3) + pl (2 * X 1 5) (X 1 1) + pl (2 * X 1 2) (X 1 4))) + (ph (2 * X 1 0) (X 1 5) + ph (2 * X 1 1) (X 1 4))) * 24), (((0) + (pl (X 2 0) (X 2 0))) + ((((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4))) * 128)) + ((((ph (2 * X 2 3) (X 2 2) + ph (2 * X 2 4) 0) + (pl (X 2 3) (X 2 3) + pl (2 * X 2 5) (X 2 1) + pl (2 * X 2 2) (X 2 4))) + (ph (2 * X 2 0) (X 2 5) + ph (2 * X 2 1) (X 2 4))) * 24), (((0) + (pl (X 3 0) (X 3 0))) + ((((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4))) * 128)) + ((((ph (2 * X 3 3) (X 3 2) + ph (2 * X 3 4) 0) + (pl (X 3 3) (X 3 3) + pl (2 * X 3 5) (X 3 1) + pl (2 * X 3 2) (X 3 4))) + (ph (2 * X 3 0) (X 3 5) + ph (2 * X 3 1) (X 3 4))) * 24), (((ph (X 0 1) (X 0 1) + ph (2 * X 0 0) (X 0 2)) + (pl (2 * X 0 0) (X 0 3) + pl (2 * X 0 1) (X 0 2))) + ((((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0)) * 128)) + ((((ph (X 0 4) (X 0 4) + ph (2 * X 0 3) (X 0 5)) + (pl (2 * X 0 5) (X 0 4))) + (0)) * 24), (((ph (X 1 1) (X 1 1) + ph (2 * X 1 0) (X 1 2)) + (pl (2 * X 1 0) (X 1 3) + pl (2 * X 1 1) (X 1 2))) + ((((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0)) * 128)) + ((((ph (X 1 4) (X 1 4) + ph (2 * X 1 3) (X 1 5)) + (pl (2 * X 1 5) (X 1 4))) + (0)) * 24), (((ph (X 2 1) (X 2 1) + ph (2 * X 2 0) (X 2 2)) + (pl (2 * X 2 0) (X 2 3) + pl (2 * X 2 1) (X 2 2))) + ((((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0)) * 128)) + ((((ph (X 2 4) (X 2 4) + ph (2 * X 2 3) (X 2 5)) + (pl (2 * X 2 5) (X 2 4))) + (0)) * 24), (((ph (X 3 1) (X 3 1) + ph (2 * X 3 0) (X 3 2)) + (pl (2 * X 3 0) (X 3 3) + pl (2 * X 3 1) (X 3 2))) + ((((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)) * 128)) + ((((ph (X 3 4) (X 3 4) + ph (2 * X 3 3) (X 3 5)) + (pl (2 * X 3 5) (X 3 4))) + (0)) * 24)]
-  have hz03 : v104 = z03 := by quad_vecbin hv104 with quadValMem, z03, z03_part, zb03_mul24
+  have hz03 : v96 = z03 := by quad_vecbin hv96 with quadValMem, z03, z03_part, zb03_mul24
   subst hz03
-  denote_clear v 104 104
-  denote_step_all v 105
+  denote_clear v 96 96
+  denote_step_all v 97
   let zb14_shl7 := toBitVecValue 64 #v[((ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5))) * 128, ((ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5))) * 128, ((ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5))) * 128, ((ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5))) * 128, ((ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5))) * 128, ((ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5))) * 128, ((ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5))) * 128, ((ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))) * 128]
-  have hzb14_shl7 : v105 = zb14_shl7 := by quad_vecbin hv105 with quadValMem, zb14, zb14_shl7
+  have hzb14_shl7 : v97 = zb14_shl7 := by quad_vecbin hv97 with quadValMem, zb14, zb14_shl7
   subst hzb14_shl7
-  denote_clear v 105 105
-  denote_step_all v 106
+  denote_clear v 97 97
+  denote_step_all v 98
   let z14_part := toBitVecValue 64 #v[((ph (X 0 0) (X 0 0)) + (pl (2 * X 0 0) (X 0 1))) + (((ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5))) * 128), ((ph (X 1 0) (X 1 0)) + (pl (2 * X 1 0) (X 1 1))) + (((ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5))) * 128), ((ph (X 2 0) (X 2 0)) + (pl (2 * X 2 0) (X 2 1))) + (((ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5))) * 128), ((ph (X 3 0) (X 3 0)) + (pl (2 * X 3 0) (X 3 1))) + (((ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5))) * 128), ((ph (2 * X 0 0) (X 0 3) + ph (2 * X 0 1) (X 0 2)) + (pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4) + pl (2 * X 0 1) (X 0 3))) + (((ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5))) * 128), ((ph (2 * X 1 0) (X 1 3) + ph (2 * X 1 1) (X 1 2)) + (pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4) + pl (2 * X 1 1) (X 1 3))) + (((ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5))) * 128), ((ph (2 * X 2 0) (X 2 3) + ph (2 * X 2 1) (X 2 2)) + (pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4) + pl (2 * X 2 1) (X 2 3))) + (((ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5))) * 128), ((ph (2 * X 3 0) (X 3 3) + ph (2 * X 3 1) (X 3 2)) + (pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4) + pl (2 * X 3 1) (X 3 3))) + (((ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))) * 128)]
-  have hz14_part : v106 = z14_part := by quad_vecbin hv106 with quadValMem, z14_part, za14, zb14_shl7
+  have hz14_part : v98 = z14_part := by quad_vecbin hv98 with quadValMem, z14_part, za14, zb14_shl7
   subst hz14_part
-  denote_clear v 106 106
-  denote_step_all v 107
+  denote_clear v 98 98
+  denote_step_all v 99
   let zb14_mul24 := toBitVecValue 64 #v[((ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5))) * 24, ((ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5))) * 24, ((ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5))) * 24, ((ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5))) * 24, ((ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5))) * 24, ((ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5))) * 24, ((ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5))) * 24, ((ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))) * 24]
-  have hzb14_mul24 : v107 = zb14_mul24 := by quad_vecbin hv107 with quadValMem, zb14, zb14_mul24
+  have hzb14_mul24 : v99 = zb14_mul24 := by quad_vecbin hv99 with quadValMem, zb14, zb14_mul24
   subst hzb14_mul24
-  denote_clear v 107 107
-  denote_step_all v 108
+  denote_clear v 99 99
+  denote_step_all v 100
   -- z14: limbs 1 and 4
   let z14 := toBitVecValue 64 #v[(((ph (X 0 0) (X 0 0)) + (pl (2 * X 0 0) (X 0 1))) + (((ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5))) * 128)) + (((ph (X 0 3) (X 0 3) + ph (2 * X 0 5) (X 0 1) + ph (2 * X 0 2) (X 0 4)) + (pl (2 * X 0 3) (X 0 4) + pl (2 * X 0 2) (X 0 5))) * 24), (((ph (X 1 0) (X 1 0)) + (pl (2 * X 1 0) (X 1 1))) + (((ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5))) * 128)) + (((ph (X 1 3) (X 1 3) + ph (2 * X 1 5) (X 1 1) + ph (2 * X 1 2) (X 1 4)) + (pl (2 * X 1 3) (X 1 4) + pl (2 * X 1 2) (X 1 5))) * 24), (((ph (X 2 0) (X 2 0)) + (pl (2 * X 2 0) (X 2 1))) + (((ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5))) * 128)) + (((ph (X 2 3) (X 2 3) + ph (2 * X 2 5) (X 2 1) + ph (2 * X 2 2) (X 2 4)) + (pl (2 * X 2 3) (X 2 4) + pl (2 * X 2 2) (X 2 5))) * 24), (((ph (X 3 0) (X 3 0)) + (pl (2 * X 3 0) (X 3 1))) + (((ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5))) * 128)) + (((ph (X 3 3) (X 3 3) + ph (2 * X 3 5) (X 3 1) + ph (2 * X 3 2) (X 3 4)) + (pl (2 * X 3 3) (X 3 4) + pl (2 * X 3 2) (X 3 5))) * 24), (((ph (2 * X 0 0) (X 0 3) + ph (2 * X 0 1) (X 0 2)) + (pl (X 0 2) (X 0 2) + pl (2 * X 0 0) (X 0 4) + pl (2 * X 0 1) (X 0 3))) + (((ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5))) * 128)) + (((ph (2 * X 0 5) (X 0 4)) + (pl (X 0 5) (X 0 5))) * 24), (((ph (2 * X 1 0) (X 1 3) + ph (2 * X 1 1) (X 1 2)) + (pl (X 1 2) (X 1 2) + pl (2 * X 1 0) (X 1 4) + pl (2 * X 1 1) (X 1 3))) + (((ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5))) * 128)) + (((ph (2 * X 1 5) (X 1 4)) + (pl (X 1 5) (X 1 5))) * 24), (((ph (2 * X 2 0) (X 2 3) + ph (2 * X 2 1) (X 2 2)) + (pl (X 2 2) (X 2 2) + pl (2 * X 2 0) (X 2 4) + pl (2 * X 2 1) (X 2 3))) + (((ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5))) * 128)) + (((ph (2 * X 2 5) (X 2 4)) + (pl (X 2 5) (X 2 5))) * 24), (((ph (2 * X 3 0) (X 3 3) + ph (2 * X 3 1) (X 3 2)) + (pl (X 3 2) (X 3 2) + pl (2 * X 3 0) (X 3 4) + pl (2 * X 3 1) (X 3 3))) + (((ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))) * 128)) + (((ph (2 * X 3 5) (X 3 4)) + (pl (X 3 5) (X 3 5))) * 24)]
-  have hz14 : v108 = z14 := by quad_vecbin hv108 with quadValMem, z14, z14_part, zb14_mul24
+  have hz14 : v100 = z14 := by quad_vecbin hv100 with quadValMem, z14, z14_part, zb14_mul24
   subst hz14
-  denote_clear v 108 108
-  denote_step_all v 109
+  denote_clear v 100 100
+  denote_step_all v 101
   let zb25_shl7 := toBitVecValue 64 #v[((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 128, ((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 128, ((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 128, ((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 128, ((ph (X 0 5) (X 0 5)) + (0)) * 128, ((ph (X 1 5) (X 1 5)) + (0)) * 128, ((ph (X 2 5) (X 2 5)) + (0)) * 128, ((ph (X 3 5) (X 3 5)) + (0)) * 128]
-  have hzb25_shl7 : v109 = zb25_shl7 := by quad_vecbin hv109 with quadValMem, zb25, zb25_shl7
+  have hzb25_shl7 : v101 = zb25_shl7 := by quad_vecbin hv101 with quadValMem, zb25, zb25_shl7
   subst hzb25_shl7
-  denote_clear v 109 109
-  denote_step_all v 110
+  denote_clear v 101 101
+  denote_step_all v 102
   let zb25_mul24 := toBitVecValue 64 #v[((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 24, ((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 24, ((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 24, ((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 24, ((ph (X 0 5) (X 0 5)) + (0)) * 24, ((ph (X 1 5) (X 1 5)) + (0)) * 24, ((ph (X 2 5) (X 2 5)) + (0)) * 24, ((ph (X 3 5) (X 3 5)) + (0)) * 24]
-  have hzb25_mul24 : v110 = zb25_mul24 := by quad_vecbin hv110 with quadValMem, zb25, zb25_mul24
+  have hzb25_mul24 : v102 = zb25_mul24 := by quad_vecbin hv102 with quadValMem, zb25, zb25_mul24
   subst hzb25_mul24
-  denote_clear v 110 110
-  denote_step_all v 111
+  denote_clear v 102 102
+  denote_step_all v 103
   let za25_a := toBitVecValue 64 #v[(0) + (pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2)), (0) + (pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2)), (0) + (pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2)), (0) + (pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2)), (pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0) + (pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4)), (pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0) + (pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4)), (pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0) + (pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4)), (pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0) + (pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4))]
-  have hza25_a : v111 = za25_a := by quad_vecbin hv111 with quadValMem, za25_a, za25_hi, za25_p
+  have hza25_a : v103 = za25_a := by quad_vecbin hv103 with quadValMem, za25_a, za25_hi, za25_p
   subst hza25_a
-  denote_clear v 111 111
-  denote_step_all v 112
+  denote_clear v 103 103
+  denote_step_all v 104
   let za25_b := toBitVecValue 64 #v[((0) + (pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2))) + (((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 128), ((0) + (pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2))) + (((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 128), ((0) + (pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2))) + (((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 128), ((0) + (pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2))) + (((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 128), ((pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0) + (pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4))) + (((ph (X 0 5) (X 0 5)) + (0)) * 128), ((pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0) + (pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4))) + (((ph (X 1 5) (X 1 5)) + (0)) * 128), ((pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0) + (pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4))) + (((ph (X 2 5) (X 2 5)) + (0)) * 128), ((pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0) + (pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4))) + (((ph (X 3 5) (X 3 5)) + (0)) * 128)]
-  have hza25_b : v112 = za25_b := by quad_vecbin hv112 with quadValMem, za25_a, za25_b, zb25_shl7
+  have hza25_b : v104 = za25_b := by quad_vecbin hv104 with quadValMem, za25_a, za25_b, zb25_shl7
   subst hza25_b
-  denote_clear v 112 112
-  denote_step_all v 113
+  denote_clear v 104 104
+  denote_step_all v 105
   let za25_c := toBitVecValue 64 #v[(((0) + (pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2))) + (((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 128)) + (((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 24), (((0) + (pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2))) + (((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 128)) + (((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 24), (((0) + (pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2))) + (((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 128)) + (((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 24), (((0) + (pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2))) + (((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 128)) + (((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 24), (((pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0) + (pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4))) + (((ph (X 0 5) (X 0 5)) + (0)) * 128)) + (((ph (X 0 5) (X 0 5)) + (0)) * 24), (((pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0) + (pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4))) + (((ph (X 1 5) (X 1 5)) + (0)) * 128)) + (((ph (X 1 5) (X 1 5)) + (0)) * 24), (((pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0) + (pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4))) + (((ph (X 2 5) (X 2 5)) + (0)) * 128)) + (((ph (X 2 5) (X 2 5)) + (0)) * 24), (((pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0) + (pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4))) + (((ph (X 3 5) (X 3 5)) + (0)) * 128)) + (((ph (X 3 5) (X 3 5)) + (0)) * 24)]
-  have hza25_c : v113 = za25_c := by quad_vecbin hv113 with quadValMem, za25_b, za25_c, zb25_mul24
+  have hza25_c : v105 = za25_c := by quad_vecbin hv105 with quadValMem, za25_b, za25_c, zb25_mul24
   subst hza25_c
-  denote_clear v 113 113
-  denote_step_all v 114
+  denote_clear v 105 105
+  denote_step_all v 106
   -- z25: limbs 2 and 5
   let z25 := toBitVecValue 64 #v[((((0) + (pl (X 0 1) (X 0 1) + pl (2 * X 0 0) (X 0 2))) + (((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 128)) + (((ph (2 * X 0 3) (X 0 4) + ph (2 * X 0 2) (X 0 5)) + (pl (X 0 4) (X 0 4) + pl (2 * X 0 3) (X 0 5))) * 24)) + (ph (2 * X 0 0) (X 0 1)), ((((0) + (pl (X 1 1) (X 1 1) + pl (2 * X 1 0) (X 1 2))) + (((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 128)) + (((ph (2 * X 1 3) (X 1 4) + ph (2 * X 1 2) (X 1 5)) + (pl (X 1 4) (X 1 4) + pl (2 * X 1 3) (X 1 5))) * 24)) + (ph (2 * X 1 0) (X 1 1)), ((((0) + (pl (X 2 1) (X 2 1) + pl (2 * X 2 0) (X 2 2))) + (((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 128)) + (((ph (2 * X 2 3) (X 2 4) + ph (2 * X 2 2) (X 2 5)) + (pl (X 2 4) (X 2 4) + pl (2 * X 2 3) (X 2 5))) * 24)) + (ph (2 * X 2 0) (X 2 1)), ((((0) + (pl (X 3 1) (X 3 1) + pl (2 * X 3 0) (X 3 2))) + (((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 128)) + (((ph (2 * X 3 3) (X 3 4) + ph (2 * X 3 2) (X 3 5)) + (pl (X 3 4) (X 3 4) + pl (2 * X 3 3) (X 3 5))) * 24)) + (ph (2 * X 3 0) (X 3 1)), ((((pl (2 * X 0 3) (X 0 2) + pl (2 * X 0 4) 0) + (pl (2 * X 0 0) (X 0 5) + pl (2 * X 0 1) (X 0 4))) + (((ph (X 0 5) (X 0 5)) + (0)) * 128)) + (((ph (X 0 5) (X 0 5)) + (0)) * 24)) + (ph (X 0 2) (X 0 2) + ph (2 * X 0 0) (X 0 4) + ph (2 * X 0 1) (X 0 3)), ((((pl (2 * X 1 3) (X 1 2) + pl (2 * X 1 4) 0) + (pl (2 * X 1 0) (X 1 5) + pl (2 * X 1 1) (X 1 4))) + (((ph (X 1 5) (X 1 5)) + (0)) * 128)) + (((ph (X 1 5) (X 1 5)) + (0)) * 24)) + (ph (X 1 2) (X 1 2) + ph (2 * X 1 0) (X 1 4) + ph (2 * X 1 1) (X 1 3)), ((((pl (2 * X 2 3) (X 2 2) + pl (2 * X 2 4) 0) + (pl (2 * X 2 0) (X 2 5) + pl (2 * X 2 1) (X 2 4))) + (((ph (X 2 5) (X 2 5)) + (0)) * 128)) + (((ph (X 2 5) (X 2 5)) + (0)) * 24)) + (ph (X 2 2) (X 2 2) + ph (2 * X 2 0) (X 2 4) + ph (2 * X 2 1) (X 2 3)), ((((pl (2 * X 3 3) (X 3 2) + pl (2 * X 3 4) 0) + (pl (2 * X 3 0) (X 3 5) + pl (2 * X 3 1) (X 3 4))) + (((ph (X 3 5) (X 3 5)) + (0)) * 128)) + (((ph (X 3 5) (X 3 5)) + (0)) * 24)) + (ph (X 3 2) (X 3 2) + ph (2 * X 3 0) (X 3 4) + ph (2 * X 3 1) (X 3 3))]
-  have hz25 : v114 = z25 := by quad_vecbin hv114 with quadValMem, z25, za25_c, za25_q
+  have hz25 : v106 = z25 := by quad_vecbin hv106 with quadValMem, z25, za25_c, za25_q
   subst hz25
-  denote_clear v 114 114
+  denote_clear v 106 106
 
-  -- the three stores. `denote_step_all` stops at %114: a store has an
+  -- the three stores. `denote_step_all` stops at %106: a store has an
   -- impure operation, so there is nothing left to push into the
   -- valuation. What remains is to identify the three stored values with
   -- the specification, which is the `lane_*` lemmas above, and then to

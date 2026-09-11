@@ -21,7 +21,7 @@ namespace Firedancer.Ref
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-/-- `%33`/`%36`: the region ors two 0/1 flags, which is the flag of their
+/-- `%28`/`%31`: the region ors two 0/1 flags, which is the flag of their
 disjunction. -/
 theorem or_flag {A B : Prop} [Decidable A] [Decidable B] :
     ((if A then 1#32 else 0#32) ||| (if B then 1#32 else 0#32)) = if A ∨ B then 1#32 else 0#32 := by
@@ -36,8 +36,8 @@ private theorem splice_trans (s₀ : GlobalState) {m₁ m₂ : MemoryState} {q :
     m₂.live? q.id = (s₀.mem.splice q y).live? q.id :=
   h₂.trans ((live?_splice_congr h₁).trans ((splice_splice_equiv (s := s₀) x y).live q.id))
 
-/-- The ten `fd_f25519_t` locals `%7 … %16` allocate. In allocation order --
-`%7 … %16` of the region -- they are the locals `fd_f25519.c` declares:
+/-- The ten `fd_f25519_t` locals `%2 … %11` allocate. In allocation order --
+`%2 … %11` of the region -- they are the locals `fd_f25519.c` declares:
 
     0 v2      1 v3      2 uv3          3 v6              4 v7
     5 uv7     6 check   7 u_neg        8 u_neg_sqrtm1    9 r_prime -/
@@ -46,7 +46,7 @@ abbrev sqrtRatioLocal (s : GlobalState) : Fin 10 → Pointer := fieldLocal s
 open Pow22523 in
 /-- What holds at every point of the walk: the ten locals and the
 out-parameter are addressable, and every other block the caller holds reads as
-it did on entry. `r` is the one caller block the region writes (`%23`/`%24`),
+it did on entry. `r` is the one caller block the region writes (`%18`/`%19`),
 so it is carried separately from the frame clause. -/
 structure Frame (s₀ : GlobalState) (r : Pointer) (w : GlobalState) : Prop where
   wf : w.WF
@@ -102,8 +102,8 @@ open Pow22523 in
 /-- The spec, assembled: the walk says what is at `o`, the field theory says
 what that value is worth.
 
-`hsqrtm1` packs everything the region needs of `@fd_f25519_sqrtm1`: `%6` reads
-its address, `%28`/`%32` multiply through it, and `%23`/`%24` write through `r`
+`hsqrtm1` packs everything the region needs of `@fd_f25519_sqrtm1`: `%1` reads
+its address, `%23`/`%27` multiply through it, and `%18`/`%19` write through `r`
 before either -- so the value, the limb bound and `q.id ≠ r.id` all come in
 together. `decodeFieldElem_sqrtm1` is what discharges the value half for a
 state loaded from `fd_f25519_sqrtm1_init`. -/
@@ -117,7 +117,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     (hv : IsFieldElemPtr s.mem v)
     (hulimb : LimbBounds hu)
     (hvlimb : LimbBounds hv)
-    -- `%23`/`%24` write `r` before `%26`/`%27` read `v` and `u`, so a spec
+    -- `%18`/`%19` write `r` before `%21`/`%22` read `v` and `u`, so a spec
     -- stated over the entry values needs the out-parameter kept apart
     (hur : u.id ≠ r.id)
     (hvr : v.id ≠ r.id) :
@@ -147,8 +147,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   refine run_runFunction' _ ?_
   simp only [Cfg.denote]
 
-
-  denote_step_reduce v 5 [LLVM.const?, insertvalue] fold
+  denote_step_reduce v 0 [LLVM.const?]
   obtain ⟨psqrtm1, hpsqrtm1, hglobal, hsqrtm1, hsqrtm1limbs, hglobne⟩ := hsqrtm1
 
   peel_addressof hglobal
@@ -178,14 +177,13 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   set sLocals : GlobalState := s.allocaChain fieldW 10 with hsLocals
   clear_value sLocals
 
-  -- %7 … %16, folded to `sqrtRatioLocal s k` and sealed as `sLocals`
+  -- %2 … %11, folded to `sqrtRatioLocal s k` and sealed as `sLocals`
   peel_alloca_chain s, fieldW, 10
   fold_cells s, fieldW, sqrtRatioLocal, 10
   rw [← hsLocals]
 
-  -- the stepper's `v0 … v5`: the alloca count, and the `@fd_f25519_sqrtm1`
-  -- initialiser the region materialises and never reads
-  denote_clear v 0 5
+  -- the stepper's `v0`: the alloca count
+  denote_clear v 0 0
 
   -- `fd_f25519.c`'s names for the ten locals
   set v2 := sqrtRatioLocal s 0 with hv2ptr
@@ -217,7 +215,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
       ∃ h : IsFieldElemPtr w.mem u, readFieldElem h = readFieldElem hu ∧ LimbBounds h :=
     fun F => F.caller hu hnu hur hulimb
 
-  -- %17 `fd_f25519_sqr( v2, v )`
+  -- %12 `fd_f25519_sqr( v2, v )`
   obtain ⟨pv₀, hval₀, hbnd₀⟩ := vAt F₀
   have pv2₀ : IsFieldElemPtr sLocals.mem v2 := by rw [hv2ptr]; exact F₀.locals 0
   obtain ⟨s₁, hrun₁, f₁⟩ := sqr_step F₀.wf pv2₀ pv₀ hval₀ hbnd₀.loose
@@ -226,7 +224,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁ : Frame s r s₁ := F₀.stepLocal hnr (hv2ptr ▸ f₁.wrote)
   clear pv2₀ pv₀ hval₀ hbnd₀ hrc hlf hwf hnv hnu
 
-  -- %18 `fd_f25519_mul( v3, v2, v )`
+  -- %13 `fd_f25519_mul( v3, v2, v )`
   peel_lifetime
   obtain ⟨pv₁, hval₁, hbnd₁⟩ := vAt F₁
   have pv3₁ : IsFieldElemPtr s₁.mem v3 := by rw [hv3ptr]; exact F₁.locals 1
@@ -237,7 +235,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₂ : Frame s r s₂ := F₁.stepLocal hnr (hv3ptr ▸ f₂.wrote)
   clear pv3₁ pv₁ hval₁ hbnd₁
 
-  -- %19 `fd_f25519_mul( uv3, u, v3 )`
+  -- %14 `fd_f25519_mul( uv3, u, v3 )`
   peel_lifetime
   obtain ⟨pu₂, hval₂, hbnd₂⟩ := uAt F₂
   have puv3₂ : IsFieldElemPtr s₂.mem uv3 := by rw [huv3ptr]; exact F₂.locals 2
@@ -248,7 +246,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₃ : Frame s r s₃ := F₂.stepLocal hnr (huv3ptr ▸ f₃.wrote)
   clear puv3₂ pu₂ hval₂ hbnd₂
 
-  -- %20 `fd_f25519_sqr( v6, v3 )` -- `v3` survives the write at `uv3`
+  -- %15 `fd_f25519_sqr( v6, v3 )` -- `v3` survives the write at `uv3`
   peel_lifetime
   obtain ⟨pv3₃, hv3₃, hb3₃⟩ :=
     survive (f₃.live v3.id (by rw [huv3ptr, hv3ptr]; exact fieldLocal_ne (by decide)))
@@ -260,7 +258,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₄ : Frame s r s₄ := F₃.stepLocal hnr (hv6ptr ▸ f₄.wrote)
   clear pv6₃ pv3₃ hv3₃ hb3₃
 
-  -- %21 `fd_f25519_mul( v7, v6, v )`
+  -- %16 `fd_f25519_mul( v7, v6, v )`
   peel_lifetime
   obtain ⟨pv₄, hval₄, hbnd₄⟩ := vAt F₄
   have pv7₄ : IsFieldElemPtr s₄.mem v7 := by rw [hv7ptr]; exact F₄.locals 4
@@ -271,7 +269,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₅ : Frame s r s₅ := F₄.stepLocal hnr (hv7ptr ▸ f₅.wrote)
   clear pv7₄ pv₄ hval₄ hbnd₄
 
-  -- %22 `fd_f25519_mul( uv7, u, v7 )`
+  -- %17 `fd_f25519_mul( uv7, u, v7 )`
   peel_lifetime
   obtain ⟨pu₅, hval₅, hbnd₅⟩ := uAt F₅
   have puv7₅ : IsFieldElemPtr s₅.mem uv7 := by rw [huv7ptr]; exact F₅.locals 5
@@ -282,13 +280,13 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₆ : Frame s r s₆ := F₅.stepLocal hnr (huv7ptr ▸ f₆.wrote)
   clear puv7₅ pu₅ hval₅ hbnd₅
 
-  -- %23 `fd_f25519_pow22523( r, uv7 )` -- the first write to the out-parameter
+  -- %18 `fd_f25519_pow22523( r, uv7 )` -- the first write to the out-parameter
   obtain ⟨s₇, hrun₇, f₇⟩ := pow_step F₆.wf F₆.ptr f₆.ptr f₆.val f₆.bnd.loose
   peel_call hrun₇
   clear hrun₇
   have F₇ : Frame s r s₇ := F₆.stepOut hnr f₇.wrote
 
-  -- %24 `fd_f25519_mul( r, r, uv3 )` -- `uv3` survives the four writes since %19
+  -- %19 `fd_f25519_mul( r, r, uv3 )` -- `uv3` survives the four writes since %14
   obtain ⟨puv3₄, huv3₄, hbuv3₄⟩ :=
     survive (f₄.live uv3.id (by rw [hv6ptr, huv3ptr]; exact fieldLocal_ne (by decide)))
       f₃.ptr f₃.val f₃.bnd
@@ -308,7 +306,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₈ : Frame s r s₈ := F₇.stepOut hnr f₈.wrote
   clear puv3₇ huv3₇ hbuv3₇ puv3₆ huv3₆ hbuv3₆ puv3₅ huv3₅ hbuv3₅ puv3₄ huv3₄ hbuv3₄
 
-  -- %25 `fd_f25519_sqr( check, r )`
+  -- %20 `fd_f25519_sqr( check, r )`
   peel_lifetime
   have pcheck₈ : IsFieldElemPtr s₈.mem check := by rw [hcheckptr]; exact F₈.locals 6
   obtain ⟨s₉, hrun₉, f₉⟩ := sqr_step F₈.wf pcheck₈ f₈.ptr f₈.val f₈.bnd.loose
@@ -317,7 +315,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₉ : Frame s r s₉ := F₈.stepLocal hnr (hcheckptr ▸ f₉.wrote)
   clear pcheck₈
 
-  -- %26 `fd_f25519_mul( check, check, v )` -- `check = v * r²`, as the comment says
+  -- %21 `fd_f25519_mul( check, check, v )` -- `check = v * r²`, as the comment says
   obtain ⟨pv₉, hval₉, hbnd₉⟩ := vAt F₉
   obtain ⟨s₁₀, hrun₁₀, f₁₀⟩ :=
     mul_step F₉.wf f₉.ptr f₉.ptr pv₉ f₉.val hval₉ f₉.bnd.loose hbnd₉.loose
@@ -326,7 +324,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁₀ : Frame s r s₁₀ := F₉.stepLocal hnr (hcheckptr ▸ f₁₀.wrote)
   clear pv₉ hval₉ hbnd₉
 
-  -- %27 `fd_f25519_neg( u_neg, u )` -- the limbs come back at the opp bound
+  -- %22 `fd_f25519_neg( u_neg, u )` -- the limbs come back at the opp bound
   peel_lifetime
   obtain ⟨pu₁₀, huval₁₀, hubnd₁₀⟩ := uAt F₁₀
   have puneg₁₀ : IsFieldElemPtr s₁₀.mem u_neg := by rw [hu_negptr]; exact F₁₀.locals 7
@@ -336,7 +334,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁₁ : Frame s r s₁₁ := F₁₀.stepLocal hnr (hu_negptr ▸ w₁₁)
   clear puneg₁₀ pu₁₀ huval₁₀ hubnd₁₀
 
-  -- %28 `fd_f25519_mul( u_neg_sqrtm1, u_neg, fd_f25519_sqrtm1 )` -- the global
+  -- %23 `fd_f25519_mul( u_neg_sqrtm1, u_neg, fd_f25519_sqrtm1 )` -- the global
   -- enters here, as the value `hsqrtm1` pins
   peel_lifetime
   obtain ⟨pg₁₁, hgval₁₁, hgbnd₁₁⟩ := F₁₁.caller hpsqrtm1 hng hglobne hsqrtm1limbs
@@ -363,7 +361,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
         (by rw [hu_neg_sqrtm1ptr, hu_negptr]; exact fieldLocal_ne (by decide)))
       w₁₁.ptr hnegval hnegbnd
 
-  -- %29 `fd_f25519_eq( check, u )` -- `correct_sign_sqrt`. `eq` only reads, so
+  -- %24 `fd_f25519_eq( check, u )` -- `correct_sign_sqrt`. `eq` only reads, so
   -- every fact crosses it by `≈`.
   obtain ⟨pu₁₂, huval₁₂, hubnd₁₂⟩ := uAt F₁₂
   obtain ⟨s₁₃, hrun₁₃, heq₁₃⟩ :=
@@ -379,7 +377,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨pusq₁₃, husqval₁₃, husqbnd₁₃⟩ :=
     survive (heq₁₃.live u_neg_sqrtm1.id).symm f₁₂.ptr f₁₂.val f₁₂.bnd
 
-  -- %30 `fd_f25519_eq( check, u_neg )` -- `flipped_sign_sqrt`. The subtrahend is
+  -- %25 `fd_f25519_eq( check, u_neg )` -- `flipped_sign_sqrt`. The subtrahend is
   -- `fd_f25519_neg`'s uncarried result, which is why `eq` asks for the bias
   -- bound rather than the tight one.
   obtain ⟨s₁₄, hrun₁₄, heq₁₄⟩ :=
@@ -393,7 +391,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨pusq₁₄, husqval₁₄, husqbnd₁₄⟩ :=
     survive (heq₁₄.live u_neg_sqrtm1.id).symm pusq₁₃ husqval₁₃ husqbnd₁₃
 
-  -- %31 `fd_f25519_eq( check, u_neg_sqrtm1 )` -- `flipped_sign_sqrt_i`
+  -- %26 `fd_f25519_eq( check, u_neg_sqrtm1 )` -- `flipped_sign_sqrt_i`
   obtain ⟨s₁₅, hrun₁₅, heq₁₅⟩ :=
     eq_step F₁₄.wf pchk₁₄ pusq₁₄ hchkbnd₁₄ (LimbBounds.bias husqbnd₁₄) hchkval₁₄ husqval₁₄
   peel_call hrun₁₅
@@ -401,8 +399,8 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁₅ : Frame s r s₁₅ := F₁₄.of_equiv heq₁₅
   clear pusq₁₄ husqval₁₄ husqbnd₁₄ pchk₁₄ hchkval₁₄ hchkbnd₁₄ pusq₁₃ husqval₁₃ husqbnd₁₃ pchk₁₃ hchkval₁₃ hchkbnd₁₃
 
-  -- `r` has held `(u v⁷)^((p-5)/8) · u v³` since %24; carry it past the four
-  -- writes and the three comparisons to where %32 multiplies it by `√-1`
+  -- `r` has held `(u v⁷)^((p-5)/8) · u v³` since %19; carry it past the four
+  -- writes and the three comparisons to where %27 multiplies it by `√-1`
   have hcheckr : check.id ≠ r.id := by rw [hcheckptr]; exact fieldLocal_ne_below hnr
   obtain ⟨pr₉, hrval₉, hrbnd₉⟩ := survive (f₉.live r.id hcheckr) f₈.ptr f₈.val f₈.bnd
   obtain ⟨pr₁₀, hrval₁₀, hrbnd₁₀⟩ := survive (f₁₀.live r.id hcheckr) pr₉ hrval₉ hrbnd₉
@@ -416,7 +414,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨pr₁₄, hrval₁₄, hrbnd₁₄⟩ := survive (heq₁₄.live r.id).symm pr₁₃ hrval₁₃ hrbnd₁₃
   obtain ⟨pr₁₅, hrval₁₅, hrbnd₁₅⟩ := survive (heq₁₅.live r.id).symm pr₁₄ hrval₁₄ hrbnd₁₄
 
-  -- %32 `fd_f25519_mul( r_prime, r, fd_f25519_sqrtm1 )`
+  -- %27 `fd_f25519_mul( r_prime, r, fd_f25519_sqrtm1 )`
   peel_lifetime
   obtain ⟨pg₁₅, hgval₁₅, hgbnd₁₅⟩ := F₁₅.caller hpsqrtm1 hng hglobne hsqrtm1limbs
   have prp₁₅ : IsFieldElemPtr s₁₅.mem r_prime := by rw [hr_primeptr]; exact F₁₅.locals 9
@@ -433,24 +431,24 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
                           (readFieldElem hv * readFieldElem hv * readFieldElem hv) *
                         readFieldElem hv)) = readFieldElem hu * ((readFieldElem hv) ^ 7) := by ring
   have uv3 : (readFieldElem hu * (readFieldElem hv * readFieldElem hv * readFieldElem hv)) = readFieldElem hu * ((readFieldElem hv) ^ 3) := by ring
-  denote_step_reduce v 33 only [LLVM.or, LLVM.or?, uv7, uv3]
+  denote_step_reduce v 28 only [LLVM.or, LLVM.or?, uv7, uv3]
   set uv7powuv3 := (readFieldElem hu * readFieldElem hv ^ 7) ^ (2 ^ 252 - 3) * (readFieldElem hu * readFieldElem hv ^ 3)
   set checkVal := uv7powuv3 * uv7powuv3 * readFieldElem hv
-  simp at hv33
+  simp at hv28
   set cond := checkVal = -(readFieldElem hu * sqrtm1) ∨ checkVal = -(readFieldElem hu)
-  replace hv33 : v33 = .value (if cond then 1#32 else 0#32) := by
-    rw [hv33]
+  replace hv28 : v28 = .value (if cond then 1#32 else 0#32) := by
+    rw [hv28]
     simp only [or_flag]
     rfl
   -- the flag is now the region's operand, so the `if` peels against it
-  subst hv33
+  subst hv28
 
   -- `r` survives the write at `r_prime`
   obtain ⟨pr₁₆, hrval₁₆, hrbnd₁₆⟩ :=
     survive (f₁₆.live r.id (by rw [hr_primeptr]; exact fieldLocal_ne_below hnr))
       pr₁₅ hrval₁₅ hrbnd₁₅
 
-  -- %34 `fd_f25519_if( r, flipped_sign_sqrt | flipped_sign_sqrt_i, r_prime, r )`
+  -- %29 `fd_f25519_if( r, flipped_sign_sqrt | flipped_sign_sqrt_i, r_prime, r )`
   obtain ⟨s₁₇, w₁₇, hrun₁₇, hifval, hifbnd⟩ :=
     if_step F₁₆.wf pr₁₆ f₁₆.ptr pr₁₆ f₁₆.val hrval₁₆ f₁₆.bnd hrbnd₁₆ cond
   peel_call hrun₁₇
@@ -458,7 +456,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁₇ : Frame s r s₁₇ := F₁₆.stepOut hnr w₁₇
   clear pr₁₆ hrval₁₆ hrbnd₁₆ pr₁₅ hrval₁₅ hrbnd₁₅
 
-  -- %35 `fd_f25519_abs( r, r )` -- the region's last write
+  -- %30 `fd_f25519_abs( r, r )` -- the region's last write
   obtain ⟨s₁₈, w₁₈, hrun₁₈, habsval, habsbnd, habssum⟩ :=
     abs_step F₁₇.wf w₁₇.ptr w₁₇.ptr hifval hifbnd
   peel_call hrun₁₈
@@ -466,12 +464,12 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have F₁₈ : Frame s r s₁₈ := F₁₇.stepOut hnr w₁₈
   clear hifval hifbnd
 
-  denote_step_reduce v 36 [LLVM.or, LLVM.or?, uv7, uv3]
+  denote_step_reduce v 31 [LLVM.or, LLVM.or?, uv7, uv3]
 
   iterate 10 peel_lifetime
   simp_return
-  simp [hv36]
-  clear hv36
+  simp [hv31]
+  clear hv31
 
   -- `c² · v = u · (u v⁷) ^ ((p-1)/4)`: the classification's left-hand side.
   -- The candidate is the one both backends form, so the algebra behind it is
@@ -614,7 +612,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     exact habssum
 
   case stateEq =>
-    -- `r`'s block: untouched until %23, then four writes, each a 320-bit
+    -- `r`'s block: untouched until %18, then four writes, each a 320-bit
     -- splice, which `splice_trans` collapses to the last one
     have hlr : ∀ k : Fin 10, (sqrtRatioLocal s k).id ≠ r.id :=
       fun _ => fieldLocal_ne_below hnr
@@ -629,11 +627,11 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     obtain ⟨x₈, hx₈⟩ := f₈.splice
     obtain ⟨x₁₇, hx₁₇⟩ := w₁₇.splice
     obtain ⟨x₁₈, hx₁₈⟩ := w₁₈.splice
-    -- %23 and %24
+    -- %18 and %19
     have h₇ : s₇.mem.live? r.id = (s.mem.splice r x₇).live? r.id :=
       hx₇.trans (live?_splice_congr hpre)
     have h₈ : s₈.mem.live? r.id = (s.mem.splice r x₈).live? r.id := splice_trans s h₇ hx₈
-    -- %25 … %32 write locals only, and the three `eq`s write nothing
+    -- %20 … %27 write locals only, and the three `eq`s write nothing
     have hmid : s₁₆.mem.live? r.id = (s.mem.splice r x₈).live? r.id :=
       ((f₁₆.live r.id (hr_primeptr ▸ hlr 9)).trans <|
         (heq₁₅.live r.id).symm.trans <|
@@ -643,7 +641,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
         (w₁₁.live r.id (hu_negptr ▸ hlr 7)).trans <|
         (f₁₀.live r.id (hcheckptr ▸ hlr 6)).trans
           (f₉.live r.id (hcheckptr ▸ hlr 6))).trans h₈
-    -- %34 and %35
+    -- %29 and %30
     have h₁₇ : s₁₇.mem.live? r.id = (s.mem.splice r x₁₇).live? r.id := splice_trans s hmid hx₁₇
     have h₁₈ : s₁₈.mem.live? r.id = (s.mem.splice r x₁₈).live? r.id := splice_trans s h₁₇ hx₁₈
     -- the limbs read back at `r` are `x₁₈`'s, so the two writes agree

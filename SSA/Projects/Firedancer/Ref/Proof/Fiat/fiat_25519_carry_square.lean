@@ -148,10 +148,10 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
       exact GlobalState.Equiv.symm
         (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) ho)
 
-    denote_step_all v 9
-    denote_eval v 0 9
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9
-    subst hv0 hv1 hv2 hv3 hv4 hv5 hv6 hv7 hv8 hv9
+    denote_step_all v 6
+    denote_eval v 0 6
+    simp only [LLVM.const?] at hv0 hv1 hv2 hv3 hv4 hv5 hv6
+    subst hv0 hv1 hv2 hv3 hv4 hv5 hv6
 
     have hpoff : ∀ (i : Fin 5) (off : BitVec 64), off.toNat = 8 * i.toNat →
         (p.withOffset off).offsetInBits = p.offsetInBits + 64 * i.toNat :=
@@ -164,125 +164,125 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
     rw [show pl₄ = BitVec.ofNat 64 (pinput 4) from hpl₄.trans (hpbits 4 _ (hpoff 4 32 (by simp)))]
     clear hpl₄ pl₄
 
-    denote_step_all v 14
+    denote_step_all v 11
     peel_gep_limb 3, p, hp.left, s, p
     peel_limb 3, p₃, hp₃, pblk, hpblk, pl
     rw [show pl₃ = BitVec.ofNat 64 (pinput 3) from hpl₃.trans (hpbits 3 _ (hpoff 3 24 (by simp)))]
     clear hpl₃ pl₃
 
-    denote_step_all v 19
+    denote_step_all v 16
     peel_gep_limb 2, p, hp.left, s, p
     peel_limb 2, p₂, hp₂, pblk, hpblk, pl
     rw [show pl₂ = BitVec.ofNat 64 (pinput 2) from hpl₂.trans (hpbits 2 _ (hpoff 2 16 (by simp)))]
     clear hpl₂ pl₂
 
-    denote_step_all v 22
+    denote_step_all v 19
     peel_gep_limb 1, p, hp.left, s, p
     peel_limb 1, p₁, hp₁, pblk, hpblk, pl
     rw [show pl₁ = BitVec.ofNat 64 (pinput 1) from hpl₁.trans (hpbits 1 _ (hpoff 1 8 (by simp)))]
     clear hpl₁ pl₁
 
-    denote_step_all v 45
+    denote_step_all v 42
     peel_limb 0, p, hp.left, pblk, hpblk, pl
     rw [show pl₀ = BitVec.ofNat 64 (pinput 0) from hpl₀.trans (hpbits 0 _ (by simp))]
     clear hpl₀ pl₀
 
-    denote_step_all v 96
-    denote_eval v 12 96
+    denote_step_all v 93
+    denote_eval v 9 93
 
-    have key : v92 = PoisonOr.value (outputBV 0) ∧ v95 = PoisonOr.value (outputBV 1)
-        ∧ v96 = PoisonOr.value (outputBV 2) ∧ v82 = PoisonOr.value (outputBV 3)
-        ∧ v88 = PoisonOr.value (outputBV 4) := by
+    have key : v89 = PoisonOr.value (outputBV 0) ∧ v92 = PoisonOr.value (outputBV 1)
+        ∧ v93 = PoisonOr.value (outputBV 2) ∧ v79 = PoisonOr.value (outputBV 3)
+        ∧ v85 = PoisonOr.value (outputBV 4) := by
       have h64 : ∀ i, pinput i < 2 ^ 64 := fun i => by have := hpb i; omega
       have h19 : ∀ i, pinput i * 19 < 2 ^ 64 := fun i => by have := hpb i; omega
       have h38 : ∀ i, pinput i * 38 < 2 ^ 64 := fun i => by have := hpb i; omega
       have h2 : ∀ i, pinput i * 2 < 2 ^ 64 := fun i => by have := hpb i; omega
 
-      -- %12-%25: the scaled and doubled limbs, the C's `x1`-`x8`. These stay as
+      -- %9-%22: the scaled and doubled limbs, the C's `x1`-`x8`. These stay as
       -- expressions rather than atoms: the widening lemmas below match on the
       -- `* 19#64` / `* 38#64` / `<<< 1#64` a product's operand is built from.
-      eval_llvm 12
-      eval_llvm 13
+      eval_llvm 9
+      eval_llvm 10
+      eval_llvm 11
       eval_llvm 14
-      eval_llvm 17
-      eval_llvm 18
+      eval_llvm 15
+      eval_llvm 16
       eval_llvm 19
       eval_llvm 22
-      eval_llvm 25
 
-      -- %26-%54: the fifteen products, `x9`-`x23`
+      -- %23-%51: the fifteen products, `x9`-`x23`
+      eval_llvm 23
+      eval_llvm 24
+      eval_llvm 25 as x9
       eval_llvm 26
       eval_llvm 27
-      eval_llvm 28 as x9
+      eval_llvm 28 as x10
       eval_llvm 29
-      eval_llvm 30
-      eval_llvm 31 as x10
-      eval_llvm 32
-      eval_llvm 33 as x11
-      eval_llvm 34
-      eval_llvm 35 as x12
+      eval_llvm 30 as x11
+      eval_llvm 31
+      eval_llvm 32 as x12
+      eval_llvm 33
+      eval_llvm 34 as x13
+      eval_llvm 35 as x14
       eval_llvm 36
-      eval_llvm 37 as x13
-      eval_llvm 38 as x14
-      eval_llvm 39
-      eval_llvm 40 as x15
-      eval_llvm 41
-      eval_llvm 42 as x16
-      eval_llvm 43
-      eval_llvm 44 as x17
-      eval_llvm 45 as x18
-      eval_llvm 47
-      eval_llvm 48
-      eval_llvm 49 as x19
-      eval_llvm 50 as x20
-      eval_llvm 51 as x21
+      eval_llvm 37 as x15
+      eval_llvm 38
+      eval_llvm 39 as x16
+      eval_llvm 40
+      eval_llvm 41 as x17
+      eval_llvm 42 as x18
+      eval_llvm 44
+      eval_llvm 45
+      eval_llvm 46 as x19
+      eval_llvm 47 as x20
+      eval_llvm 48 as x21
+      eval_llvm 49
+      eval_llvm 50 as x22
+      eval_llvm 51 as x23
+
+      -- %52-%64: the five columns, `x24` and `x27`-`x30`, plus `x25`/`x26`
       eval_llvm 52
-      eval_llvm 53 as x22
-      eval_llvm 54 as x23
-
-      -- %55-%67: the five columns, `x24` and `x27`-`x30`, plus `x25`/`x26`
+      eval_llvm 53 as x24
+      eval_llvm 54 as x25
       eval_llvm 55
-      eval_llvm 56 as x24
-      eval_llvm 57 as x25
-      eval_llvm 58
-      eval_llvm 59 as x26
-      eval_llvm 60
-      eval_llvm 61 as x27
-      eval_llvm 62
-      eval_llvm 63 as x28
-      eval_llvm 64
-      eval_llvm 65 as x29
-      eval_llvm 66
-      eval_llvm 67 as x30
+      eval_llvm 56 as x26
+      eval_llvm 57
+      eval_llvm 58 as x27
+      eval_llvm 59
+      eval_llvm 60 as x28
+      eval_llvm 61
+      eval_llvm 62 as x29
+      eval_llvm 63
+      eval_llvm 64 as x30
 
-      -- %68-%88: the carry chain, `x31`-`x42`
+      -- %65-%85: the carry chain, `x31`-`x42`
+      eval_llvm 65
+      eval_llvm 66 as x31
+      eval_llvm 67 as x32
       eval_llvm 68
-      eval_llvm 69 as x31
-      eval_llvm 70 as x32
-      eval_llvm 71
-      eval_llvm 72 as x33
+      eval_llvm 69 as x33
+      eval_llvm 70
+      eval_llvm 71 as x34
+      eval_llvm 72 as x35
       eval_llvm 73
-      eval_llvm 74 as x34
-      eval_llvm 75 as x35
-      eval_llvm 76
-      eval_llvm 77 as x36
+      eval_llvm 74 as x36
+      eval_llvm 75
+      eval_llvm 76 as x37
+      eval_llvm 77 as x38
       eval_llvm 78
-      eval_llvm 79 as x37
-      eval_llvm 80 as x38
-      eval_llvm 81
-      eval_llvm 82 as x39
-      eval_llvm 83
-      eval_llvm 84 as x40
-      eval_llvm 85
-      eval_llvm 86 as x41
-      eval_llvm 87
-      eval_llvm 88 as x42
+      eval_llvm 79 as x39
+      eval_llvm 80
+      eval_llvm 81 as x40
+      eval_llvm 82
+      eval_llvm 83 as x41
+      eval_llvm 84
+      eval_llvm 85 as x42
 
-      -- %89-%92: the top carry, folded back into limb 0
-      eval_llvm 89 as x43
-      eval_llvm 90 as x44
-      eval_llvm 91 as x45
-      eval_llvm 92 as x46
+      -- %86-%89: the top carry, folded back into limb 0
+      eval_llvm 86 as x43
+      eval_llvm 87 as x44
+      eval_llvm 88 as x45
+      eval_llvm 89 as x46
 
       -- each product in the form `carry_product_repr_self_eq` names it
       have n9 : x9.toNat = pinput 4 * (pinput 4 * 19) := by
@@ -398,12 +398,12 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
       have b45 : x45.toNat ≤ 856 := by rw [n45]; omega
       have n46 : x46.toNat = x44.toNat % 2 ^ 51 := by rw [← hx46]; exact mask_toNat x44
 
-      -- `%93`/`%96` carry `nsw, nuw`, so their bounds come first
+      -- `%90`/`%93` carry `nsw, nuw`, so their bounds come first
       have hno47s : x45.saddOverflow x33 = false := saddOverflow_eq_false (by omega)
       have hno47u : x45.uaddOverflow x33 = false := uaddOverflow_eq_false (by omega)
-      eval_llvm 93 [hno47s, hno47u] as x47
-      eval_llvm 94 as x48
-      eval_llvm 95 as x49
+      eval_llvm 90 [hno47s, hno47u] as x47
+      eval_llvm 91 as x48
+      eval_llvm 92 as x49
       have n47 : x47.toNat = x45.toNat + x33.toNat := by
         rw [← hx47, toNat_add (by omega)]
       have n48 : x48.toNat = x47.toNat / 2 ^ 51 := by rw [← hx48]; exact shift_toNat x47
@@ -411,7 +411,7 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
       have n49 : x49.toNat = x47.toNat % 2 ^ 51 := by rw [← hx49]; exact mask_toNat x47
       have hno50s : x48.saddOverflow x36 = false := saddOverflow_eq_false (by omega)
       have hno50u : x48.uaddOverflow x36 = false := uaddOverflow_eq_false (by omega)
-      eval_llvm 96 [hno50s, hno50u] as x50
+      eval_llvm 93 [hno50s, hno50u] as x50
       have n50 : x50.toNat = x48.toNat + x36.toNat := by
         rw [← hx50, toNat_add (by omega)]
 
@@ -425,11 +425,11 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
           ← n40, ← n41, ← n42, ← n43, ← n44, ← n45, ← n46, ← n47, ← n48, t48, ← n49, ← n50]
       have hbv : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
         fun _ _ h => eq_ofNat_of_toNat h
-      exact ⟨hv92.trans (congrArg _ (hbv _ 0 (by simp [hout]))),
-        hv95.trans (congrArg _ (hbv _ 1 (by simp [hout]))),
-        hv96.trans (congrArg _ (hbv _ 2 (by simp [hout]))),
-        hv82.trans (congrArg _ (hbv _ 3 (by simp [hout]))),
-        hv88.trans (congrArg _ (hbv _ 4 (by simp [hout])))⟩
+      exact ⟨hv89.trans (congrArg _ (hbv _ 0 (by simp [hout]))),
+        hv92.trans (congrArg _ (hbv _ 1 (by simp [hout]))),
+        hv93.trans (congrArg _ (hbv _ 2 (by simp [hout]))),
+        hv79.trans (congrArg _ (hbv _ 3 (by simp [hout]))),
+        hv85.trans (congrArg _ (hbv _ 4 (by simp [hout])))⟩
 
     obtain ⟨k0, k1, k2, k3, k4⟩ := key
     rw [k0, k1, k2, k3, k4]

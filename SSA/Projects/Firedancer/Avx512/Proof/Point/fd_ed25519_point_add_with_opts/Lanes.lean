@@ -45,7 +45,7 @@ theorem add_sub_nsw_value {a b c : BitVec 64} (ha : a.toNat < 2 ^ 62) (hb : b.to
     omega
   simp [LLVM.add, hs, LLVM.add?]
 
-/-- `%246`: a biased masked lane plus a carry, `nsw`. -/
+/-- `%194`: a biased masked lane plus a carry, `nsw`. -/
 theorem add_and_bias_sshr {x y m : BitVec 64} {c : ℕ} (fs : LLVM.NoWrapFlags)
     (hfs : fs.nuw = false) (hm : m.toNat < 2 ^ 44) (hc : c < 2 ^ 44) :
     LLVM.add (.value ((y &&& m) + BitVec.ofNat 64 c)) (.value (x.sshiftRight 43)) fs
@@ -65,11 +65,11 @@ theorem add_and_bias_sshr {x y m : BitVec 64} {c : ℕ} (fs : LLVM.NoWrapFlags)
 
 /-! ## The runs -/
 
-/-- `%102`/`%119`/`%136`: `p`'s limbs on the lanes `(E, H, G, F)` subtracts. -/
+/-- `%69`/`%78`/`%87`: `p`'s limbs on the lanes `(E, H, G, F)` subtracts. -/
 def pmaskEF (c d : BitVec 64) : Vector (LLVM.IntW 64) 8 :=
   #v[.value c, .poison, .poison, .value c, .value d, .poison, .poison, .value d]
 
-/-- **`%162`/`%169`/`%170`/`%171`/`%178`/`%179`**: `(Y-X+c, X+Y, 2Z, T)`. -/
+/-- **`%110`/`%117`/`%118`/`%119`/`%126`/`%127`**: `(Y-X+c, X+Y, 2Z, T)`. -/
 theorem denote_tb {x : Vector (BitVec 64) 8} {c d : BitVec 64}
     {z m a b e f g h : Vector (LLVM.IntW 64) 8} (hm : m = pmaskE c d)
     (ha : a = vshuf [1, 0, 2, 3, 5, 4, 6, 7] (x.map PoisonOr.value) z)
@@ -93,7 +93,7 @@ theorem denote_tb {x : Vector (BitVec 64) 8} {c d : BitVec 64}
   subst hf hg hh
   ge_lanes [tbVec, add_value]
 
-/-- **`%215`/`%218`/`%219`/`%220`/`%227`/`%228`**: `(B-A+c, A+B, C+D, D-C+c)` over
+/-- **`%163`/`%166`/`%167`/`%168`/`%175`/`%176`**: `(B-A+c, A+B, C+D, D-C+c)` over
 `(A, B, D, C)`. -/
 theorem denote_ehgf {v : Vector (BitVec 64) 8} {c d : BitVec 64} {fs : LLVM.NoWrapFlags}
     {z m a b e f g h : Vector (LLVM.IntW 64) 8} (hv : R43x6.U44 v)
@@ -135,7 +135,7 @@ theorem denote_ehgf {v : Vector (BitVec 64) 8} {c d : BitVec 64} {fs : LLVM.NoWr
     | rfl
     | exact add_value_of_lt62 _ (hl _ _) (hl _ _)
 
-/-- **The second `FD_R43X6_QUAD_FOLD_SIGNED`'s `03`**, `%233`, `%235`, `%238`-`%243`: the bias
+/-- **The second `FD_R43X6_QUAD_FOLD_SIGNED`'s `03`**, `%181`, `%183`, `%186`-`%191`: the bias
 goes on the carry. -/
 theorem denote_foldSigned03' {P : Quad} {c60 c61 c63 c81 c82 c83 : Vector (LLVM.IntW 64) 8}
     (hc60 : c60 = toBitVecValue 64 nbias03) (hc61 : c61 = toBitVecValue 64 nbias)
@@ -167,7 +167,7 @@ theorem denote_foldSigned03' {P : Quad} {c60 c61 c63 c81 c82 c83 : Vector (LLVM.
       BitVec.toNat_ofNat, Nat.reducePow, Nat.reduceMod, foldSignedQuad, fsL0, fsL3, nb03v, nbv] <;>
     ac_rfl
 
-/-- **The second `FD_R43X6_QUAD_FOLD_SIGNED`'s `14`**, `%233`, `%234`, `%236`, `%244`-`%246`. -/
+/-- **The second `FD_R43X6_QUAD_FOLD_SIGNED`'s `14`**, `%181`, `%182`, `%184`, `%192`-`%194`. -/
 theorem denote_foldSigned14' {P : Quad} {c60 c61 c62 c82 c84 : Vector (LLVM.IntW 64) 8}
     (hc60 : c60 = toBitVecValue 64 nbias03) (hc61 : c61 = toBitVecValue 64 nbias)
     (hc62 : c62 = toBitVecValue 64 quadShift43) (hc82 : c82 = toBitVecValue 64 quadMask43)

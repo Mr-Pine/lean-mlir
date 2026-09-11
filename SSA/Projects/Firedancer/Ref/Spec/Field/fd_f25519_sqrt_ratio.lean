@@ -29,8 +29,8 @@ per-limb, plus the sum bound `fd_f25519_sgn` needs downstream.
 `@fd_f25519_sqrtm1` through `llvm.mlir.addressof`, so its address never enters
 the statement. A conformance proof is what connects the two, with
 `HoldsGlobal "fd_f25519_sqrtm1" fd_f25519_sqrtm1_init s g`, and it also needs
-`g.id ≠ o.id` -- the region writes through `o` at `%23`/`%24` before reading
-the global at `%28`/`%32`, and nothing else says those writes miss it.
+`g.id ≠ o.id` -- the region writes through `o` at `%18`/`%19` before reading
+the global at `%23`/`%27`, and nothing else says those writes miss it.
 
 NOTE this is a real proof obligation, not a restatement of the code: getting
 from what the region computes -- `c = (u v⁷)^((p-5)/8) · u v³` and three

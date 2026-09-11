@@ -978,6 +978,28 @@ elab "denote_enter_block" : tactic => do
   evalTactic (← `(tactic| denote_reduce_get))
 
 open Lean Meta Elab Tactic in
+/-- `denote_expose` unfolds the goal's program to its first instruction without
+stepping it, for a block that opens with an impure instruction. -/
+elab "denote_expose" : tactic => do
+  let goal ← getMainGoal
+  let goal ← goal.withContext do
+    let tgt ← instantiateMVars (← goal.getType)
+    let some (lhs, _) ← findDenoteTerm? tgt
+      | throwError "denote_expose: no denotation in the goal"
+    let (core, _, _) ← peelWrappers lhs
+    unless core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote do
+      throwError "denote_expose: the goal is not a `Com` or `BlockCom` denotation"
+    let args := core.getAppArgs
+    let prog := args[args.size - 2]!
+    let prog' ← whnfProgram prog
+    if prog == prog' then return goal
+    let abst ← kabstract tgt prog
+    unless abst.hasLooseBVars do
+      throwError "denote_expose: cannot locate the program in the goal"
+    goal.replaceTargetDefEq (abst.instantiate1 prog')
+  replaceMainGoal [goal]
+
+open Lean Meta Elab Tactic in
 /-- `denote_step_all v` symbolically executes a pure, single-result-per-op
 `Com` denotation: as long as the goal has the shape
 `(Com.var e body).denote V = rhs`, it introduces a fresh variable `v<i>` with

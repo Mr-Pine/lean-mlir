@@ -1,17 +1,8 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_ulong_bswap.mlir
 import SSA.Projects.SLLVM.Cfg
-
-/-!
-# `fd_ulong_bswap` (common)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/{ref,avx512}/region/fd_ulong_bswap.mlir`. The two
-backends emit the same file, so the function is lifted once, here.
-
-`fd_bits.h`: reverse the byte order of a `ulong`.
--/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM

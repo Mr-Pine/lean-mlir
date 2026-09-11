@@ -255,13 +255,11 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
     (V : fd_ed25519_point_add_with_opts.Γout.Valuation)
     (hv1 : V (⟨1, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 1))
       = .value 0#1)
-    (hv22 : V (⟨22, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 32))
+    (hv15 : V (⟨15, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 32))
       = .value 0#32)
-    (hv23 : V (⟨23, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 64))
-      = .value 0#64)
-    (hv25 : V (⟨25, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 32))
+    (hv17 : V (⟨17, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var (SLLVM.Ty.bitvec 32))
       = .value 1#32)
-    (hv30 : V (⟨30, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var SLLVM.Ty.ptr) = .value r)
+    (hv22 : V (⟨22, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var SLLVM.Ty.ptr) = .value r)
     (hv9 : V (⟨9, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var SLLVM.Ty.ptr)
       = .value (addLocal s 4))
     (hv8 : V (⟨8, by rfl⟩ : fd_ed25519_point_add_with_opts.Γout.Var SLLVM.Ty.ptr)
@@ -297,31 +295,30 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
 
   -- `^bb7`: `skip_last_mul ≠ 0`
   denote_enter_block
-  denote_number_from 40
-  denote_step_reduce v 40 [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
-  have e40 : v40 = .value 0#1 := by simp only [hv40, hv25, hv22]; rfl
+  denote_number_from 32
+  denote_step_reduce v 32 [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
+  have e32 : v32 = .value 0#1 := by simp only [hv32, hv17, hv15]; rfl
   simp only [BlockCom.denote_term]
-  rw [Terminator.denote_condBr_value (b := 0#1) (by exact e40)]
+  rw [Terminator.denote_condBr_value (b := 0#1) (by exact e32)]
   simp only [simp_denote, simp_sllvm]
   rw [if_neg (by decide : ¬ ((0#1 : BitVec 1) = 1))]
 
   -- `^bb8`: `X = r6 - r5`
   denote_enter_block
-  denote_number_from 41
+  denote_number_from 33
   have hr0 : IsFieldElemPtr w.mem r :=
     isFieldElemPtr_of_live?_eq (F.live r.id hnr) (coordPtr_zero r ▸ isCoordPtr hr 0)
   refine subNr_step F.wf hr0 hB hA
     fun w₁ hrun₁ st₁ HX => ?_
-  peel_call hrun₁ with hmapnil, Target.denote, hv30, hv8, hv9
+  peel_call hrun₁ with hmapnil, Target.denote, hv22, hv8, hv9
   have hl₁ : ∀ k : Fin 9, w₁.mem.live? (addLocal s k).id = w.mem.live? (addLocal s k).id :=
     fun _ => st₁.live _ (Ne.symm (fieldLocal_ne_below hnr))
 
-  -- `%42`, `%43`: `Y = r8 - r7`
-  denote_step_reduce v 42 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-    hmapnil, Target.denote, hv30, hv23]
-  have e42 : v42 = .value (r.withOffset 40) := hv42
-  subst e42
-  clear hv42
+  -- `%34`, `%35`: `Y = r8 - r7`
+  denote_step_reduce v 34 [gepConst, ptradd, LLVM.const?, hmapnil, Target.denote, hv22]
+  have e34 : v34 = .value (r.withOffset 40) := hv34
+  subst e34
+  clear hv34
   have hr1 : IsFieldElemPtr w₁.mem (r.withOffset 40) :=
     st₁.isFieldElemPtr (isFieldElemPtr_of_live?_eq (F.live r.id hnr) (isCoordPtr hr 1))
   refine subNr_step st₁.wf hr1 (hD.carry (hl₁ 7)) (hC.carry (hl₁ 6))
@@ -330,12 +327,11 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
   have hl₂ : ∀ k : Fin 9, w₂.mem.live? (addLocal s k).id = w₁.mem.live? (addLocal s k).id :=
     fun _ => st₂.live _ (Ne.symm (fieldLocal_ne_below hnr))
 
-  -- `%44`, `%45`: `Z = r8 + r7`
-  denote_step_reduce v 44 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-    hmapnil, Target.denote, hv30, hv23]
-  have e44 : v44 = .value (r.withOffset 120) := hv44
-  subst e44
-  clear hv44
+  -- `%36`, `%37`: `Z = r8 + r7`
+  denote_step_reduce v 36 [gepConst, ptradd, LLVM.const?, hmapnil, Target.denote, hv22]
+  have e36 : v36 = .value (r.withOffset 120) := hv36
+  subst e36
+  clear hv36
   have hr3 : IsFieldElemPtr w₂.mem (r.withOffset 120) :=
     st₂.isFieldElemPtr (st₁.isFieldElemPtr
       (isFieldElemPtr_of_live?_eq (F.live r.id hnr) (isCoordPtr hr 3)))
@@ -345,12 +341,11 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
   have hl₃ : ∀ k : Fin 9, w₃.mem.live? (addLocal s k).id = w₂.mem.live? (addLocal s k).id :=
     fun _ => st₃.live _ (Ne.symm (fieldLocal_ne_below hnr))
 
-  -- `%46`, `%47`: `T = r6 + r5`
-  denote_step_reduce v 46 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-    hmapnil, Target.denote, hv30, hv23]
-  have e46 : v46 = .value (r.withOffset 80) := hv46
-  subst e46
-  clear hv46
+  -- `%38`, `%39`: `T = r6 + r5`
+  denote_step_reduce v 38 [gepConst, ptradd, LLVM.const?, hmapnil, Target.denote, hv22]
+  have e38 : v38 = .value (r.withOffset 80) := hv38
+  subst e38
+  clear hv38
   have hr2 : IsFieldElemPtr w₃.mem (r.withOffset 80) :=
     st₃.isFieldElemPtr (st₂.isFieldElemPtr (st₁.isFieldElemPtr
       (isFieldElemPtr_of_live?_eq (F.live r.id hnr) (isCoordPtr hr 2))))
@@ -364,7 +359,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
   denote_enter_block
   iterate 9 peel_lifetime
   simp_return
-  simp [hv30]
+  simp [hv22]
 
   /- The region has returned: `r`'s block as the four stores left it. -/
   have h40 : (r.withOffset 40).offsetInBits = r.offsetInBits + 320 := by
@@ -426,7 +421,7 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
   have hs := hm.wf
   obtain ⟨pk, hgk, -⟩ := hm.gk
   refine run_runFunction' _ ?_
-  denote_step_reduce v 9 [LLVM.const?, insertvalue, LLVM.Ty.poison, LLVM.Ty.width] fold
+  denote_step_reduce v 1 [LLVM.const?] fold
   peel_addressof hgk.addr
 
   have hnr : r.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs hr.left
@@ -440,18 +435,17 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
   set sL : GlobalState := s.allocaChain fieldW 9 with hsL
   clear_value sL
 
-  -- `%11 … %19`: `r1 … r8, t`
+  -- `%3 … %11`: `r1 … r8, t`
   peel_alloca_chain s, fieldW, 9
   fold_cells s, fieldW, addLocal, 9
   rw [← hsL]
   iterate 9 peel_lifetime
 
-  -- `%20`: `a->Y`
-  denote_step_reduce v 20 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-    hv1]
-  have e20 : v20 = .value (a.withOffset 40) := hv20
-  subst e20
-  clear hv20
+  -- `%12`: `a->Y`
+  denote_step_reduce v 12 [gepConst, ptradd, LLVM.const?]
+  have e12 : v12 = .value (a.withOffset 40) := hv12
+  subst e12
+  clear hv12
 
   have F₀ : Frame s sL := ⟨hwf, fun k => ⟨hlf k, by simp [addLocal, fieldLocal]⟩, fb⟩
   -- the operands' coordinates, on entry
@@ -463,34 +457,33 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
   have hY : Holds s.mem (a.withOffset 40) (readPoint ha).Y 0x8000000000000 :=
     ⟨_, (congrArg Point.Y hPa).symm, haY⟩
 
-  -- `%21`: `r1 = a->Y - a->X`
+  -- `%13`: `r1 = a->Y - a->X`
   refine subNr_step F₀.wf (F₀.locals 0) (F₀.caller hY hna) (F₀.caller hX hna)
     fun u₁ hrun₁ st₁ H1 => ?_
   peel_call hrun₁
   have F₁ := F₀.stepLocal st₁
 
-  -- `%22`: `r3 = a->Y + a->X`
+  -- `%14`: `r3 = a->Y + a->X`
   refine addNr_step F₁.wf (F₁.locals 2) (F₁.caller hY hna) (F₁.caller hX hna)
     fun u₂ hrun₂ st₂ H3 => ?_
   peel_call hrun₂
   have F₂ := F₁.stepLocal st₂
   have H1₂ := H1.carry (st₂.live _ (fieldLocal_ne (by decide)))
 
-  -- `%23`, `%24`
-  denote_step_reduce v 24 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', gep, ptradd, LLVM.const?, LLVM.add,
-    LLVM.mul, LLVM.add?, LLVM.mul?, hv1, hv2]
-  have e24 : v24 = .value (b.withOffset 40) := hv24
-  subst e24
-  clear hv24
-  simp only [hv23, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote, simp_sllvm]
+  -- `%15`, `%16`
+  denote_step_reduce v 16 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', gepConst, ptradd, LLVM.const?, hv1]
+  have e16 : v16 = .value (b.withOffset 40) := hv16
+  subst e16
+  clear hv16
+  simp only [hv15, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote, simp_sllvm]
   rw [if_neg (by decide : ¬ ((0#1 : BitVec 1) = 1))]
 
   -- `^bb2(b, b->Y)`: branch on `b_Z_is_one`
   denote_enter_block
-  denote_number_from 29
-  denote_step_reduce v 29 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv2]
+  denote_number_from 21
+  denote_step_reduce v 21 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv1]
   simp only [BlockCom.denote_term]
-  rw [Terminator.denote_condBr_value (by exact hv29)]
+  rw [Terminator.denote_condBr_value (by exact hv21)]
   simp only [simp_denote, simp_sllvm]
 
   -- the remaining coordinates, on entry
@@ -514,25 +507,23 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
   · -- `^bb4`: `t = 2 a->Z`, then four `mul`s, the last by `b->Z`
     rw [if_pos (by simp [hz] : BitVec.ofBool (bZ1 == 0#32) = 1)]
     denote_enter_block
-    denote_number_from 34
-    denote_step_reduce v 34 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-      hv1]
-    have e34 : v34 = .value (a.withOffset 120) := hv34
-    subst e34
-    clear hv34
+    denote_number_from 26
+    denote_step_reduce v 26 [gepConst, ptradd, LLVM.const?]
+    have e26 : v26 = .value (a.withOffset 120) := hv26
+    subst e26
+    clear hv26
     refine addNr_step F₂.wf (F₂.locals 8) (F₂.caller hZ hna) (F₂.caller hZ hna)
       fun u₃ hrun₃ st₃ H8 => ?_
     peel_call hrun₃
     have F₃ := F₂.stepLocal st₃
 
-    -- `%36 … %38`, then `mul4( r5, r1, b->X, r6, r3, b->Y, r7, a->T, b->T, r8, t, b->Z )`
-    denote_step_reduce v 38 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-      hv1]
-    have e36 : v36 = .value (a.withOffset 80) := hv36
-    have e37 : v37 = .value (b.withOffset 80) := hv37
-    have e38 : v38 = .value (b.withOffset 120) := hv38
-    subst e36 e37 e38
-    clear hv36 hv37 hv38
+    -- `%28 … %30`, then `mul4( r5, r1, b->X, r6, r3, b->Y, r7, a->T, b->T, r8, t, b->Z )`
+    denote_step_reduce v 30 [gepConst, ptradd, LLVM.const?]
+    have e28 : v28 = .value (a.withOffset 80) := hv28
+    have e29 : v29 = .value (b.withOffset 80) := hv29
+    have e30 : v30 = .value (b.withOffset 120) := hv30
+    subst e28 e29 e30
+    clear hv28 hv29 hv30
     have hsrc : ∀ d ∈ [addLocal s 4, addLocal s 5, addLocal s 6, addLocal s 7],
         ∀ x ∈ [addLocal s 0, b, addLocal s 2, b.withOffset 40, a.withOffset 80, b.withOffset 80,
           addLocal s 8, b.withOffset 120], d.id ≠ x.id := by
@@ -558,7 +549,7 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
 
     -- `br ^bb5`
     simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
-    refine tail_run hs hr hnr _ rfl (by exact hv2) (by exact hv1) rfl rfl rfl rfl rfl rfl F₄
+    refine tail_run hs hr hnr _ rfl (by exact hv1) rfl rfl rfl rfl rfl rfl F₄
       R5 R6 R7 R8 _ ?_
     rw [if_pos hz]
     simp only [Point.addPrecomputedPartial, PrecomputedPoint.ofSlots]
@@ -567,13 +558,12 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
     have hz' : (bZ1 == 0#32) = false := by simpa using hz
     rw [hz', if_neg (by decide)]
     denote_enter_block
-    denote_number_from 30
-    denote_step_reduce v 31 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-      hv1]
-    have e30 : v30 = .value (a.withOffset 80) := hv30
-    have e31 : v31 = .value (b.withOffset 80) := hv31
-    subst e30 e31
-    clear hv30 hv31
+    denote_number_from 22
+    denote_step_reduce v 23 [gepConst, ptradd, LLVM.const?]
+    have e22 : v22 = .value (a.withOffset 80) := hv22
+    have e23 : v23 = .value (b.withOffset 80) := hv23
+    subst e22 e23
+    clear hv22 hv23
     have hsrc : ∀ d ∈ [addLocal s 4, addLocal s 5, addLocal s 6],
         ∀ x ∈ [addLocal s 0, b, addLocal s 2, b.withOffset 40, a.withOffset 80, b.withOffset 80],
           d.id ≠ x.id := by
@@ -594,12 +584,11 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
     have F₃ : Frame s u₃ := F₂.step hwf₃ hptr₃ fun blk hblk =>
       hlive₃ blk (fieldLocal_ne_below hblk) (fieldLocal_ne_below hblk) (fieldLocal_ne_below hblk)
 
-    -- `%32`, `%33`: `r8 = a->Z + a->Z`
-    denote_step_reduce v 32 [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?,
-      hv1]
-    have e32 : v32 = .value (a.withOffset 120) := hv32
-    subst e32
-    clear hv32
+    -- `%24`, `%25`: `r8 = a->Z + a->Z`
+    denote_step_reduce v 24 [gepConst, ptradd, LLVM.const?]
+    have e24 : v24 = .value (a.withOffset 120) := hv24
+    subst e24
+    clear hv24
     refine add_step' F₃.wf (F₃.locals 7) (F₃.caller hZ hna) (F₃.caller hZ hna)
       fun u₄ hrun₄ st₄ R8 => ?_
     peel_call hrun₄
@@ -607,7 +596,7 @@ theorem fd_ed25519_point_add_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
 
     -- `br ^bb5`
     simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
-    refine tail_run hs hr hnr _ rfl (by exact hv2) (by exact hv1) rfl rfl rfl rfl rfl rfl F₄
+    refine tail_run hs hr hnr _ rfl (by exact hv1) rfl rfl rfl rfl rfl rfl F₄
       (R5.carry (st₄.live _ (fieldLocal_ne (by decide))))
       (R6.carry (st₄.live _ (fieldLocal_ne (by decide))))
       (R7.carry (st₄.live _ (fieldLocal_ne (by decide)))) R8 _ ?_

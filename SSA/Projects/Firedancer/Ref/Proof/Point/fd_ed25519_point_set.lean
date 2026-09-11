@@ -200,52 +200,49 @@ theorem fd_ed25519_point_set_conforms (r a : Pointer) (s : GlobalState) (hs : s.
     exact GlobalState.Equiv.trans hchain (GlobalState.Equiv.symm hpop)
 
   case run =>
-    denote_step_all v 3
-    denote_eval v 0 3
-    simp only [LLVM.const?] at hv0 hv1 hv2 hv3
-    subst hv0 hv1 hv2 hv3
+    denote_expose
 
     refine (BlockCom.run_bind_denote_call_of_value
         (x := PoisonOr.value r) (s' := u₁) ?_).trans ?_
     · exact hrun₁
 
-    denote_step_all v 6
-    denote_eval v 5 6
-    simp [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?] at hv5 hv6
-    have v5Value : v5 = .value (r.withOffset 40) := by
-      simp [hv5, Pointer.withOffset, simp_sllvm]
-    have v6Value : v6 = .value (a.withOffset 40) := by
-      simp [hv6, Pointer.withOffset, simp_sllvm]
-    subst v5Value v6Value
-    clear hv5 hv6
+    denote_step_all v 2
+    denote_eval v 1 2
+    simp [gepConst, ptradd, LLVM.const?] at hv1 hv2
+    have v1Value : v1 = .value (r.withOffset 40) := by
+      simp [hv1, Pointer.withOffset, simp_sllvm]
+    have v2Value : v2 = .value (a.withOffset 40) := by
+      simp [hv2, Pointer.withOffset, simp_sllvm]
+    subst v1Value v2Value
+    clear hv1 hv2
 
     refine (BlockCom.run_bind_denote_call_of_value
         (x := PoisonOr.value (r.withOffset 40)) (s' := u₂) ?_).trans ?_
     · exact hrun₂
 
-    denote_step_all v 9
-    denote_eval v 8 9
-    simp [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?] at hv8 hv9
-    have v8Value : v8 = .value (r.withOffset 120) := by
-      simp [hv8, Pointer.withOffset, simp_sllvm]
-    have v9Value : v9 = .value (a.withOffset 120) := by
-      simp [hv9, Pointer.withOffset, simp_sllvm]
-    subst v8Value v9Value
-    clear hv8 hv9
+    denote_step_all v 5
+    denote_eval v 4 5
+    simp [gepConst, ptradd, LLVM.const?] at hv4 hv5
+    have v4Value : v4 = .value (r.withOffset 120) := by
+      simp [hv4, Pointer.withOffset, simp_sllvm]
+    have v5Value : v5 = .value (a.withOffset 120) := by
+      simp [hv5, Pointer.withOffset, simp_sllvm]
+    subst v4Value v5Value
+    clear hv4 hv5
 
     refine (BlockCom.run_bind_denote_call_of_value
         (x := PoisonOr.value (r.withOffset 120)) (s' := u₃) ?_).trans ?_
     · exact hrun₃
 
-    denote_step_all v 12
-    denote_eval v 11 12
-    simp [gep, ptradd, LLVM.const?, LLVM.add, LLVM.mul, LLVM.add?, LLVM.mul?] at hv11 hv12
-    have v11Value : v11 = .value (r.withOffset 80) := by
-      simp [hv11, Pointer.withOffset, simp_sllvm]
-    have v12Value : v12 = .value (a.withOffset 80) := by
-      simp [hv12, Pointer.withOffset, simp_sllvm]
-    subst v11Value v12Value
-    clear hv11 hv12
+    denote_step_all v 8
+    denote_eval v 7 8
+    simp [gepConst, ptradd, LLVM.const?] at hv7 hv8
+    have v7Value : v7 = .value (r.withOffset 80) := by
+      simp [hv7, Pointer.withOffset, simp_sllvm]
+    have v8Value : v8 = .value (a.withOffset 80) := by
+      simp [hv8, Pointer.withOffset, simp_sllvm]
+    subst v7Value v8Value
+    clear hv7 hv8
 
     refine (BlockCom.run_bind_denote_call_of_value
         (x := PoisonOr.value (r.withOffset 80)) (s' := u₄) ?_).trans ?_

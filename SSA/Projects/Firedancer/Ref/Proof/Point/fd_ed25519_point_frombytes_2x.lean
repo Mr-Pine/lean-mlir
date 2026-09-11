@@ -44,13 +44,13 @@ theorem run_fail₁ (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ 
   refine run_runFunction' _ ?_
   denote_step_reduce v 3 [LLVM.const?] fold
   peel_call hrun₁
-  denote_step_reduce v 5 [hv0, hret₁]
+  denote_step_reduce v 5 [hv3, hret₁]
   simp only [SLLVM.null_eq_value, SLLVM.ptricmp_value, beq_self_eq_true, if_pos] at hv5
   simp only [hv5, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
   simp_return
-  exact hv1
+  exact hv2
 
 /-- Both calls made, the second returning `NULL`: `-2`. -/
 theorem run_fail₂ (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ = .value r₁)
@@ -66,7 +66,7 @@ theorem run_fail₂ (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ 
   refine run_runFunction' _ ?_
   denote_step_reduce v 3 [LLVM.const?] fold
   peel_call hrun₁
-  denote_step_reduce v 5 [hv0, hret₁]
+  denote_step_reduce v 5 [hv3, hret₁]
   have hrnull : ¬ (r₁ = (⟨SLLVM.nullBlock, 0#64⟩ : Pointer)) := fun h => hnull₁ (by rw [h])
   simp only [SLLVM.null_eq_value, SLLVM.ptricmp_value, beq_iff_eq, hrnull, if_false] at hv5
   simp only [hv5, BlockCom.denote_term, Terminator.denote_condBr_value,
@@ -75,8 +75,8 @@ theorem run_fail₂ (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ 
   peel_call hrun₂
   -- the stepper counts the entry block's four arguments, so `^bb1`'s
   -- `%6 … %8` are `v10 … v12`
-  denote_step_reduce v 11 [hv0, hret₂]
-  denote_step_reduce v 12 [hv11, hv2, hv3]
+  denote_step_reduce v 11 [hv3, hret₂]
+  denote_step_reduce v 12 [hv11, hv1, hv0]
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
   denote_enter_block
   simp_return
@@ -97,7 +97,7 @@ theorem run_ok (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ = .va
   refine run_runFunction' _ ?_
   denote_step_reduce v 3 [LLVM.const?] fold
   peel_call hrun₁
-  denote_step_reduce v 5 [hv0, hret₁]
+  denote_step_reduce v 5 [hv3, hret₁]
   have hrnull₁ : ¬ (r₁ = (⟨SLLVM.nullBlock, 0#64⟩ : Pointer)) := fun h => hnull₁ (by rw [h])
   simp only [SLLVM.null_eq_value, SLLVM.ptricmp_value, beq_iff_eq, hrnull₁, if_false] at hv5
   simp only [hv5, BlockCom.denote_term, Terminator.denote_condBr_value,
@@ -105,9 +105,9 @@ theorem run_ok (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ = .va
   denote_enter_block
   peel_call hrun₂
   have hrnull₂ : ¬ (r₂ = (⟨SLLVM.nullBlock, 0#64⟩ : Pointer)) := fun h => hnull₂ (by rw [h])
-  denote_step_reduce v 11 [hv0, hret₂]
+  denote_step_reduce v 11 [hv3, hret₂]
   simp only [SLLVM.null_eq_value, SLLVM.ptricmp_value, beq_iff_eq, hrnull₂, if_false] at hv11
-  denote_step_reduce v 12 [hv11, hv2, hv3]
+  denote_step_reduce v 12 [hv11, hv1, hv0]
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
   denote_enter_block
   simp_return

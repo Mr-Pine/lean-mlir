@@ -112,7 +112,7 @@ theorem denote_fd_r43x6_unpack (u : Vector (BitVec 64) 4) :
       .value (ub u 26), .value (ub u 27), .value (ub u 28), .value (ub u 29), .value (ub u 30), .value (ub u 31), .value (ub u 63), .value (ub u 63),
       .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63),
       .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63), .value (ub u 63)] := by
-    rw [hv9, hv3]
+    rw [hv9, hv5]
     apply Vector.ext (n := 64)
     intro i hi
     interval_cases i <;> simp [LLVM.Ty.shufflevector, LLVM.Ty.poison, hb, hb63]
@@ -130,7 +130,7 @@ theorem denote_fd_r43x6_unpack (u : Vector (BitVec 64) 4) :
       simp [Vector.getElem_ofFn, BitVec.packLanes_bytes8, v9Value, SLLVM.byteOf, v10lanes]
   -- `%11`/`%12`: the lane-wise shift and the 43-bit mask.
   have v12Value : v12 = (unpackVec u).map PoisonOr.value := by
-    rw [hv12, hv11, v10Value, hv4, hv5]
+    rw [hv12, hv11, v10Value, hv1, hv0]
     apply Vector.ext (n := 8)
     intro j hj
     interval_cases j <;>

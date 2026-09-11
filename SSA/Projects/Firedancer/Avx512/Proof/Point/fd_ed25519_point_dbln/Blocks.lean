@@ -13,7 +13,7 @@ import SSA.Projects.Firedancer.Proof.Tactics
 `^bb1` (block 0) stores the last doubling into `r`, `^bb2` (block 1) returns
 `r`, `^bb3` (block 2) is the loop: one `FD_R43X6_GE_DBL` on the carried vectors
 and the `i8` counter. Each reads `^bb0`'s definitions through `EntryEnv`;
-`%k` is `Γout` variable `245 - k`, `%argN` is `248 - N`.
+`%k` is `Γout` variable `194 - k`, `%argN` is `197 - N`.
 -/
 
 namespace Firedancer.Avx512
@@ -25,7 +25,7 @@ open Ge
 
 /-! ### Branch targets -/
 
-/-- `^bb1(%333, %335, %337)`, threaded by the lifter: the last doubling. -/
+/-- `^bb1(%282, %284, %286)`, threaded by the lifter: the last doubling. -/
 abbrev hdr1 (q : Quad) : SuccArgs fd_ed25519_point_dbln.sigs :=
   ⟨0, by rfl, ([q.v03.map PoisonOr.value, q.v14.map PoisonOr.value, q.v25.map PoisonOr.value]ₕ :
     HVector TyDenote.toType [V8, V8, V8])⟩
@@ -34,7 +34,7 @@ abbrev hdr1 (q : Quad) : SuccArgs fd_ed25519_point_dbln.sigs :=
 abbrev hdr2 : SuccArgs fd_ed25519_point_dbln.sigs :=
   ⟨1, by rfl, (.nil : HVector TyDenote.toType [])⟩
 
-/-- `^bb3(%246, %247, %248, %249)`: the loop header, `25` vector first, and the counter. -/
+/-- `^bb3(%195, %196, %197, %198)`: the loop header, `25` vector first, and the counter. -/
 abbrev hdr3 (q : Quad) (c : BitVec 8) : SuccArgs fd_ed25519_point_dbln.sigs :=
   ⟨2, by rfl, ([q.v25.map PoisonOr.value, q.v14.map PoisonOr.value, q.v03.map PoisonOr.value,
     PoisonOr.value c]ₕ : HVector TyDenote.toType [V8, V8, V8, SLLVM.Ty.bitvec 8])⟩
@@ -45,29 +45,29 @@ abbrev hdr3 (q : Quad) (c : BitVec 8) : SuccArgs fd_ed25519_point_dbln.sigs :=
 slots, `r`'s two field pointers, `r` and `n`. -/
 structure EntryEnv (V : fd_ed25519_point_dbln.Γout.Valuation) (s : GlobalState) (r : Pointer)
     (n : BitVec 32) : Prop where
-  c4 : V (⟨241, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 dblShift
-  c24 : V (⟨221, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c19 : V (⟨175, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 dblShift
+  c32 : V (⟨162, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskG 8796093022189#64 8796093022207#64
-  c41 : V (⟨204, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c41 : V (⟨153, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskG 8796093022207#64 8796093022207#64
-  c59 : V (⟨186, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c50 : V (⟨144, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskG 8796093022207#64 1099511627775#64
-  c76 : V (⟨169, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c59 : V (⟨135, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskE 8796093022189#64 8796093022207#64
-  c93 : V (⟨152, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c68 : V (⟨126, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskE 8796093022207#64 8796093022207#64
-  c110 : V (⟨135, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
+  c77 : V (⟨117, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8)
     = pmaskE 8796093022207#64 1099511627775#64
-  c111 : V (⟨134, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 nbias03
-  c112 : V (⟨133, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 nbias
-  c113 : V (⟨132, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadShift43
-  c114 : V (⟨131, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadShift48
-  c132 : V (⟨113, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = quadMul19
-  c133 : V (⟨112, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadMask43
-  c134 : V (⟨111, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 bias03
-  c135 : V (⟨110, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 bias
-  c136 : V (⟨109, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadMask48
-  c137 : V (⟨108, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var (SLLVM.Ty.bitvec 8)) = .value 1#8
+  c9 : V (⟨185, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 nbias03
+  c8 : V (⟨186, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 nbias
+  c7 : V (⟨187, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadShift43
+  c6 : V (⟨188, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadShift48
+  c86 : V (⟨108, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = quadMul19
+  c4 : V (⟨190, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadMask43
+  c3 : V (⟨191, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 bias03
+  c2 : V (⟨192, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 bias
+  c1 : V (⟨193, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var V8) = toBitVecValue 64 quadMask48
+  c0 : V (⟨194, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var (SLLVM.Ty.bitvec 8)) = .value 1#8
   s6 : V (⟨101, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value (slot s 6)
   s7 : V (⟨100, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value (slot s 7)
   s8 : V (⟨99, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value (slot s 8)
@@ -77,8 +77,8 @@ structure EntryEnv (V : fd_ed25519_point_dbln.Γout.Valuation) (s : GlobalState)
   r64 : V (⟨4, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value (r.withOffset 64)
   r128 : V (⟨1, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr)
     = .value (r.withOffset 128)
-  vr : V (⟨248, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value r
-  vn : V (⟨246, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var (SLLVM.Ty.bitvec 32)) = .value n
+  vr : V (⟨197, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var SLLVM.Ty.ptr) = .value r
+  vn : V (⟨195, by rfl⟩ : fd_ed25519_point_dbln.Γout.Var (SLLVM.Ty.bitvec 32)) = .value n
 
 /-! ### `^bb2` -/
 
@@ -141,12 +141,12 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
           then hdr3 (geDbl x) (c + 1#8) else hdr1 (geDbl x))), u')
       ∧ Frame 12 s m₁ u' := by
   denote_reduce_get
-  denote_number_from 250
-  denote_step_reduce v 258 only [simp_spine]
-  have e03 := denote_addXY hx.1 hv250 hv253 hv254
-  have e14 := denote_addXY hx.2.1 hv251 hv255 hv256
-  have e25 := denote_addXY hx.2.2 hv252 hv257 hv258
-  denote_clear v 250 258
+  denote_number_from 199
+  denote_step_reduce v 207 only [simp_spine]
+  have e03 := denote_addXY hx.1 hv199 hv202 hv203
+  have e14 := denote_addXY hx.2.1 hv200 hv204 hv205
+  have e25 := denote_addXY hx.2.2 hv201 hv206 hv207
+  denote_clear v 199 207
   subst e03 e14 e25
   iterate 3 peel_lifetime
   refine sqr_step hF (dblTa x) (u47_dblTa hx) (i := 6) (j := 7) (k := 8) (by decide) (by decide)
@@ -162,33 +162,33 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
   ge_load_amb (quadSqrResult (dblTa x)).v14, (slot s 7), hp7, hr7, u1 with simp_spine, env.s7
   ge_load_amb (quadSqrResult (dblTa x)).v25, (slot s 8), hp8, hr8, u1 with simp_spine, env.s8
   iterate 3 peel_lifetime
-  denote_step_reduce v 323 only [simp_spine]
-  have p03 := denote_egfh env.c4 env.c24 env.c76 hv262 hv265 hv268 hv271 hv272 hv277 hv278 hv279
-    hv286 hv287 hv292 hv293 hv294
-  have p14 := denote_egfh env.c4 env.c41 env.c93 hv263 hv266 hv269 hv273 hv274 hv280 hv281 hv282
-    hv288 hv289 hv295 hv296 hv297
-  have p25 := denote_egfh env.c4 env.c59 env.c110 hv264 hv267 hv270 hv275 hv276 hv283 hv284 hv285
-    hv290 hv291 hv298 hv299 hv300
-  clear hv262 hv263 hv264 hv265 hv266 hv267 hv268 hv269 hv270 hv271 hv272 hv273 hv274 hv275
-    hv276 hv277 hv278 hv279 hv280 hv281 hv282 hv283 hv284 hv285 hv286 hv287 hv288 hv289 hv290
-    hv291 hv292 hv293 hv294 hv295 hv296 hv297 hv298 hv299 hv300
+  denote_step_reduce v 272 only [simp_spine]
+  have p03 := denote_egfh env.c19 env.c32 env.c59 hv211 hv214 hv217 hv220 hv221 hv226 hv227 hv228
+    hv235 hv236 hv241 hv242 hv243
+  have p14 := denote_egfh env.c19 env.c41 env.c68 hv212 hv215 hv218 hv222 hv223 hv229 hv230 hv231
+    hv237 hv238 hv244 hv245 hv246
+  have p25 := denote_egfh env.c19 env.c50 env.c77 hv213 hv216 hv219 hv224 hv225 hv232 hv233 hv234
+    hv239 hv240 hv247 hv248 hv249
+  clear hv211 hv212 hv213 hv214 hv215 hv216 hv217 hv218 hv219 hv220 hv221 hv222 hv223 hv224
+    hv225 hv226 hv227 hv228 hv229 hv230 hv231 hv232 hv233 hv234 hv235 hv236 hv237 hv238 hv239
+    hv240 hv241 hv242 hv243 hv244 hv245 hv246 hv247 hv248 hv249
   subst p03 p14 p25
-  have r03 := denote_foldSigned03 (P := egfhQuad (quadSqrResult (dblTa x))) env.c111 env.c112
-    env.c114 env.c132 env.c133 env.c134 hv301 hv303 hv306 hv307 hv308 hv309 hv310 hv311
-  have r14 := denote_foldSigned14 (P := egfhQuad (quadSqrResult (dblTa x))) env.c111 env.c112
-    env.c113 env.c133 env.c135 hv301 hv302 hv304 hv312 hv313 hv314
-  have r25 := denote_foldSigned25 (P := egfhQuad (quadSqrResult (dblTa x))) env.c112 env.c113
-    env.c135 env.c136 hv302 hv303 hv305 hv315 hv316 hv317
-  clear hv301 hv302 hv303 hv304 hv305 hv306 hv307 hv308 hv309 hv310 hv311 hv312 hv313 hv314
-    hv315 hv316 hv317
+  have r03 := denote_foldSigned03 (P := egfhQuad (quadSqrResult (dblTa x))) env.c9 env.c8
+    env.c6 env.c86 env.c4 env.c3 hv250 hv252 hv255 hv256 hv257 hv258 hv259 hv260
+  have r14 := denote_foldSigned14 (P := egfhQuad (quadSqrResult (dblTa x))) env.c9 env.c8
+    env.c7 env.c4 env.c2 hv250 hv251 hv253 hv261 hv262 hv263
+  have r25 := denote_foldSigned25 (P := egfhQuad (quadSqrResult (dblTa x))) env.c8 env.c7
+    env.c2 env.c1 hv251 hv252 hv254 hv264 hv265 hv266
+  clear hv250 hv251 hv252 hv253 hv254 hv255 hv256 hv257 hv258 hv259 hv260 hv261 hv262 hv263
+    hv264 hv265 hv266
   subst r03 r14 r25
-  have g03 := denote_permGE hv318
-  have g14 := denote_permGE hv319
-  have g25 := denote_permGE hv320
-  have f03 := denote_permFH hv321
-  have f14 := denote_permFH hv322
-  have f25 := denote_permFH hv323
-  clear hv318 hv319 hv320 hv321 hv322 hv323
+  have g03 := denote_permGE hv267
+  have g14 := denote_permGE hv268
+  have g25 := denote_permGE hv269
+  have f03 := denote_permFH hv270
+  have f14 := denote_permFH hv271
+  have f25 := denote_permFH hv272
+  clear hv267 hv268 hv269 hv270 hv271 hv272
   subst g03 g14 g25 f03 f14 f25
   have hR := u44_dblR hx
   iterate 3 peel_lifetime
@@ -211,19 +211,19 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
   ge_load_amb (quadMulResult (geQuad (dblR x)) (fhQuad (dblR x))).v25, (slot s 11), hp11, hr11,
     u2 with simp_spine, env.s11
   iterate 3 peel_lifetime
-  denote_step_reduce v 340 only [simp_spine]
-  have o03 := denote_foldU03 env.c114 env.c132 env.c133 hv329 hv330 hv331 hv332 hv333
-  have o14 := denote_foldU14 env.c113 env.c133 hv327 hv334 hv335
-  have o25 := denote_foldU25 env.c113 env.c136 hv328 hv336 hv337
-  clear hv327 hv328 hv329 hv330 hv331 hv332 hv333 hv334 hv335 hv336 hv337
+  denote_step_reduce v 289 only [simp_spine]
+  have o03 := denote_foldU03 env.c6 env.c86 env.c4 hv278 hv279 hv280 hv281 hv282
+  have o14 := denote_foldU14 env.c7 env.c4 hv276 hv283 hv284
+  have o25 := denote_foldU25 env.c7 env.c1 hv277 hv285 hv286
+  clear hv276 hv277 hv278 hv279 hv280 hv281 hv282 hv283 hv284 hv285 hv286
   subst o03 o14 o25
-  replace hv338 : v338 = .value (c + 1#8) := by rw [hv338, env.c137]; rfl
-  subst hv338
-  replace hv339 : v339 = .value (BitVec.setWidth 32 (c + 1#8)) := by rw [hv339]; rfl
-  subst hv339
-  replace hv340 : v340 = .value (BitVec.ofBool (BitVec.ult (BitVec.setWidth 32 (c + 1#8)) n)) := by
-    rw [hv340, env.vn]; rfl
-  subst hv340
+  replace hv287 : v287 = .value (c + 1#8) := by rw [hv287, env.c0]; rfl
+  subst hv287
+  replace hv288 : v288 = .value (BitVec.setWidth 32 (c + 1#8)) := by rw [hv288]; rfl
+  subst hv288
+  replace hv289 : v289 = .value (BitVec.ofBool (BitVec.ult (BitVec.setWidth 32 (c + 1#8)) n)) := by
+    rw [hv289, env.vn]; rfl
+  subst hv289
   simp only [BlockCom.denote_term, Terminator.denote_condBr, simp_spine]
   by_cases hb : (BitVec.setWidth 32 (c + 1#8) <ᵤ n) = true
   · refine ⟨?V1, u2, ?e1, hF2⟩

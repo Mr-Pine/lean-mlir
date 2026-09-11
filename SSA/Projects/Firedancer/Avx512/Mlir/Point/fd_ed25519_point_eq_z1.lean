@@ -1,3 +1,4 @@
+-- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_eq_z1.mlir
 import SSA.Projects.SLLVM.Cfg
 
 import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq

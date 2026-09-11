@@ -26,14 +26,14 @@ open Ge
 
 /-! ## The stages -/
 
-/-- `%151`/`%158`/`%159` on one vector: `QUAD_PERMUTE(1,1,2,0)` and the
+/-- `%100`/`%107`/`%108` on one vector: `QUAD_PERMUTE(1,1,2,0)` and the
 lane-0 add, `(X+Y, Y, Z, X)`. -/
 def addXY (x : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   #v[x[1] + x[0], x[1], x[2], x[0], x[5] + x[4], x[5], x[6], x[4]]
 
 def dblTa (q : Quad) : Quad := ⟨addXY q.v03, addXY q.v14, addXY q.v25⟩
 
-/-- `%167`-`%199` on one vector of the square `((X+Y)², B, Z², A)`: `c`/`d`
+/-- `%116`-`%148` on one vector of the square `((X+Y)², B, Z², A)`: `c`/`d`
 are `p`'s limbs in the low/high half. Lanes `(E, G, F, H)`. -/
 def egfh (c d : BitVec 64) (s : Vector (BitVec 64) 8) : Vector (BitVec 64) 8 :=
   #v[s[3] + s[1] - s[0] + c, s[3] - s[1] + c, s[3] - s[1] + c + (s[2] + s[2]), s[3] + s[1],

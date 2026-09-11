@@ -1,17 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+-- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_diagnose.mlir
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
-
-/-!
-# `fd_r43x6_diagnose` (avx512)
-
-Byte-identical (modulo indentation) to
-`build/native/gcc/mlir/avx512/region/fd_r43x6_diagnose.mlir`: the sign of a nearly-reduced r43x6 element.
--/
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
@@ -112,11 +106,6 @@ def fd_r43x6_diagnose :=
     @fd_int_if := fd_int_if_region,
     @fd_long_if := fd_long_if_region]
 
-/-- The kernel as a `Cfg`, for callers that embed it *by reference*: the call
-node then holds `fd_r43x6_diagnose_cfg.entry`/`.blocks` rather than the
-whole body inlined, and `Cfg.denote_mk_self` lets its denotation theorem apply
-syntactically. This is what `peel_call` keys on; a caller binding the region
-instead gets a call node the tactic cannot match. -/
 def fd_r43x6_diagnose_cfg := Cfg.ofCom (fd_r43x6_diagnose.castPureToEff .impure)
 
 end Firedancer.Avx512
