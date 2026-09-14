@@ -30,9 +30,9 @@ block sits under a `bind` (`entry.denote V >>= fun (Vout, r) => …`), so the
 step equation is transported through that as well as through `StateT.run`.
 -/
 
--- Literal index bounds by `decide`: core's `Vector` rule, tried first, runs
--- `rw … at *` and `dsimp +zetaDelta … at *` over a walk's whole context.
-macro_rules | `(tactic| get_elem_tactic_extensible) => `(tactic| decide)
+-- Index bounds before core's `Vector` rule, which runs `rw … at *` and
+-- `dsimp +zetaDelta … at *` over a walk's whole context.
+macro_rules | `(tactic| get_elem_tactic_extensible) => `(tactic| first | decide | exact Fin.isLt _ | omega)
 
 /-- `simp_peephole` without its `funext_iff` prelude, a failed `rw` over the
 whole term unless it is an equation between functions of a valuation. -/

@@ -115,6 +115,88 @@ theorem vec8_add (a0 a1 a2 a3 a4 a5 a6 a7 b0 b1 b2 b3 b4 b5 b6 b7 : ℕ) :
   apply Vector.ext; intro i hi
   interval_cases i <;> simp [InstCombine.binaryDenote, LLVM.add, LLVM.add?, toBitVecValue, BitVec.ofNat_add]
 
+/-- `<<<` by a natural amount, as a multiplication inside `ofNat`. -/
+theorem ofNat_shl_nat (a k : ℕ) : BitVec.ofNat 64 a <<< k = BitVec.ofNat 64 (a * 2 ^ k) := by
+  apply BitVec.eq_of_toNat_eq
+  simp [BitVec.toNat_shiftLeft, Nat.shiftLeft_eq, Nat.mod_mul_mod]
+
+/-- A vector `shl` of a literal `toBitVecValue` by a constant lane `k < 64`, lanewise. -/
+theorem vec8_shl_rep (a0 a1 a2 a3 a4 a5 a6 a7 k : ℕ) (hk : k < 64) :
+    (Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote (InstCombine.MOp.BinaryOp.shl {})
+      (toBitVecValue 64 #v[a0, a1, a2, a3, a4, a5, a6, a7])[i.val]
+      (toBitVecValue 64 (Vector.replicate 8 k))[i.val]) =
+    toBitVecValue 64 #v[a0 * 2 ^ k, a1 * 2 ^ k, a2 * 2 ^ k, a3 * 2 ^ k, a4 * 2 ^ k,
+      a5 * 2 ^ k, a6 * 2 ^ k, a7 * 2 ^ k] := by
+  have hk' : (BitVec.ofNat 64 k).toNat = k := by rw [BitVec.toNat_ofNat]; omega
+  have hkm : k % 18446744073709551616 = k := Nat.mod_eq_of_lt (by omega)
+  have hlt : ¬ 64 ≤ k := by omega
+  apply Vector.ext; intro i hi
+  interval_cases i <;>
+    simp [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, toBitVecValue, ofNat_shl, hk', ofNat_shl_nat, hkm, hlt]
+
+/-- A vector `mul` of a literal `toBitVecValue` by a constant lane, lanewise. -/
+theorem vec8_mul_rep (a0 a1 a2 a3 a4 a5 a6 a7 k : ℕ) :
+    (Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote (InstCombine.MOp.BinaryOp.mul {})
+      (toBitVecValue 64 #v[a0, a1, a2, a3, a4, a5, a6, a7])[i.val]
+      (toBitVecValue 64 (Vector.replicate 8 k))[i.val]) =
+    toBitVecValue 64 #v[a0 * k, a1 * k, a2 * k, a3 * k, a4 * k, a5 * k, a6 * k, a7 * k] := by
+  apply Vector.ext; intro i hi
+  interval_cases i <;> simp [InstCombine.binaryDenote, LLVM.mul, LLVM.mul?, toBitVecValue, BitVec.ofNat_mul]
+
+open Lean Meta in
+/-- The 8 lanes of a literal `toBitVecValue 64 #v[…]`, through `let`s. -/
+private def vec8Lanes? (e : Lean.Expr) : MetaM (Option (Array Lean.Expr)) := do
+  let e ← if e.isFVar then pure ((← e.fvarId!.getDecl).value?.getD e) else pure e
+  let_expr toBitVecValue _w _n v := e | return none
+  let_expr Vector.mk _α _n arr _h := v | return none
+  let_expr List.toArray _α l := arr | return none
+  let some (_, xs) := l.listLit? | return none
+  unless xs.length == 8 do return none
+  return some xs.toArray
+
+open Lean Meta in
+/-- `k` of a `toBitVecValue 64 (Vector.replicate 8 k)`, through `let`s. -/
+private def vec8Rep? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
+  let e ← if e.isFVar then pure ((← e.fvarId!.getDecl).value?.getD e) else pure e
+  let_expr toBitVecValue _w _n v := e | return none
+  let_expr Vector.replicate _α _n k := v | return none
+  return some k
+
+open Lean Meta Elab Tactic in
+/-- Close `Vector.ofFn (binaryDenote op A[·] B[·]) = C` by `vec8_add`, `vec8_shl_rep` or
+`vec8_mul_rep`, chosen by `op` and the operands' shapes, with a capped defeq check. -/
+elab "vec8_lemma" : tactic => withMainContext do
+  let g ← getMainGoal
+  let tgt ← instantiateMVars (← g.getType)
+  let some (_, lhs, _) := tgt.eq? | throwError "vec8_lemma: not an equation"
+  let_expr Vector.ofFn _α _n f := lhs | throwError "vec8_lemma: not ofFn"
+  let .lam _ _ body _ := f | throwError "vec8_lemma: not a lambda"
+  let_expr InstCombine.binaryDenote _w op a b := body | throwError "vec8_lemma: not binaryDenote"
+  unless a.isAppOfArity ``GetElem.getElem 8 && b.isAppOfArity ``GetElem.getElem 8 do
+    throwError "vec8_lemma: operands"
+  let A := a.getAppArgs[5]!
+  let B := b.getAppArgs[5]!
+  let some as ← vec8Lanes? A | throwError "vec8_lemma: first operand"
+  let prf ← match op.getAppFn.constName? with
+    | some ``InstCombine.MOp.BinaryOp.add => do
+      let some bs ← vec8Lanes? B | throwError "vec8_lemma: second operand"
+      pure (mkAppN (mkConst ``vec8_add) (as ++ bs))
+    | some ``InstCombine.MOp.BinaryOp.shl => do
+      let some k ← vec8Rep? B | throwError "vec8_lemma: shift amount"
+      let hk ← mkDecideProof (← mkAppM ``LT.lt #[k, mkNatLit 64])
+      pure (mkAppN (mkConst ``vec8_shl_rep) (as ++ #[k, hk]))
+    | some ``InstCombine.MOp.BinaryOp.mul => do
+      let some k ← vec8Rep? B | throwError "vec8_lemma: multiplier"
+      pure (mkAppN (mkConst ``vec8_mul_rep) (as ++ #[k]))
+    | _ => throwError "vec8_lemma: op"
+  let ok ← withTheReader Core.Context (fun c => { c with maxHeartbeats := 2000000 }) <|
+    withCurrHeartbeats <| (do
+      let ty ← inferType prf
+      controlAt CoreM fun run => Core.tryCatchRuntimeEx (run (isDefEq ty tgt)) fun _ => run (pure false))
+  unless ok do throwError "vec8_lemma: lanes differ"
+  g.assign prf
+  replaceMainGoal []
+
 /-- `denote_dense hv` proves a goal `v = toBitVecValue w #v[…]`, given the
 `denote_step_all` hypothesis `hv : v = (… .constDense …).denoteOp1 V` for a
 `llvm.mlir.constant dense<[…]>` instruction.
@@ -169,8 +251,8 @@ whose `if op2 ≥ w` guard discharges because the shift amounts here are small;
 `ofNat_shl*'` and the `BitVec.ofNat` fusion lemmas then keep the lane in
 `BitVec.ofNat 64 (<ℕ expression>)` form.
 
-Each lane first tries a `simp only` without `ph`/`phRaw`/`add_assoc`, closed by
-`rfl`; the normalizing set is the fallback.
+A whole-vector `add`/`shl`/`mul` of literal lanes closes by `vec8_lemma`. Otherwise each lane
+tries a `simp only` without `ph`/`phRaw`/`add_assoc`, closed by `rfl`, before the normalizing set.
 
 Note `apply Vector.ext` rather than `ext`: the equation's type is
 `⟦SLLVMTy.arith …⟧`, which `ext` will not match syntactically, but `apply`
@@ -179,37 +261,39 @@ macro "denote_vecbin " h:term : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
              simp_denote_only
              simp only [HVector.head]
-             apply Vector.ext
-             intro i hi
-             interval_cases i
-             all_goals first
-               | (simp +zetaDelta +decide only
-                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
-                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
-                   toBitVecValue, and_allOnes_64, and_neg_one_64,
-                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
-                   ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
-                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
-                   Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
-                   Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
-                   Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
-                   List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
-                   Array.getElem_replicate, Vector.getElem_replicate,
-                   PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
-                   PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
-                   PoisonOr.mk_some, PoisonOr.mk_none, toNat_mod_two_pow_64,
-                   Nat.reducePow, Nat.reduceMod, reduceIte,
-                   Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
-                   false_and, and_false, true_and, and_true]
-                  try rfl
-                  done)
-               | simp +zetaDelta
-                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
-                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, toBitVecValue, and_allOnes_64,
-                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
-                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
-                   ph, phRaw, LLVM.Ty.poison, add_assoc]
-             all_goals try rfl))
+             first
+               | vec8_lemma
+               | (apply Vector.ext
+                  intro i hi
+                  interval_cases i
+                  all_goals first
+                    | (simp +zetaDelta +decide only
+                       [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                        LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
+                        toBitVecValue, and_allOnes_64, and_neg_one_64,
+                        ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                        ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
+                        ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
+                        Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
+                        Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
+                        Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
+                        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
+                        Array.getElem_replicate, Vector.getElem_replicate,
+                        PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
+                        PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
+                        PoisonOr.mk_some, PoisonOr.mk_none, toNat_mod_two_pow_64,
+                        Nat.reducePow, Nat.reduceMod, reduceIte,
+                        Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
+                        false_and, and_false, true_and, and_true]
+                       try rfl
+                       done)
+                    | simp +zetaDelta
+                       [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                        LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, toBitVecValue, and_allOnes_64,
+                        ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                        ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
+                        ph, phRaw, LLVM.Ty.poison, add_assoc]
+                  all_goals try rfl)))
 
 /-- `denote_vpmadd52 hv with h…` proves a goal `v = toBitVecValue 64 #v[…]`
 for an AVX-512 IFMA `vpmadd52l`/`vpmadd52h` instruction, lanewise as

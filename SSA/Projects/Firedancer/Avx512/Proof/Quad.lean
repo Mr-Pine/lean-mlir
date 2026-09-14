@@ -83,55 +83,57 @@ macro "quad_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tacti
 
 The shared tactic has no `with` clause, so an instruction whose operand is a
 block argument -- `two_x03 = wwl_shl( x03, 1 )` and friends -- cannot read that
-argument out of the valuation. Lanes try `denote_vecbin`'s fast set first. -/
+argument out of the valuation. Tries `vec8_lemma`, then lanes as `denote_vecbin`. -/
 macro "quad_vecbin " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
              simp_denote_only
              simp only [HVector.head]
-             apply Vector.ext
-             intro i hi
-             interval_cases i
-             all_goals first
-               | (simp +zetaDelta +decide only
-                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
-                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
-                   toBitVecValue, and_allOnes_64, and_neg_one_64,
-                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
-                   ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
-                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
-                   Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
-                   Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
-                   Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
-                   List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
-                   Array.getElem_replicate, Vector.getElem_replicate,
-                   PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
-                   PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
-                   PoisonOr.mk_some, PoisonOr.mk_none, toNat_mod_two_pow_64,
-                   Nat.reducePow, Nat.reduceMod, reduceIte,
-                   Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
-                   false_and, and_false, true_and, and_true,
-                   quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, $hs,*]
-                  try rfl
-                  done)
-               | simp +zetaDelta +decide only
-                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
-                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
-                   toBitVecValue, and_allOnes_64,
-                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
-                   ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
-                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul, ph, phRaw, add_assoc,
-                   Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
-                   Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
-                   Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
-                   List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
-                   Array.getElem_replicate, Vector.getElem_replicate,
-                   PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
-                   PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
-                   PoisonOr.mk_some, PoisonOr.mk_none,
-                   quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, toNat_mod_two_pow_64,
-                   Nat.reducePow, Nat.reduceMod, reduceIte,
-                   Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
-                   false_and, and_false, true_and, and_true, $hs,*]))
+             first
+               | vec8_lemma
+               | (apply Vector.ext
+                  intro i hi
+                  interval_cases i
+                  all_goals first
+                    | (simp +zetaDelta +decide only
+                       [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                        LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
+                        toBitVecValue, and_allOnes_64, and_neg_one_64,
+                        ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                        ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
+                        ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
+                        Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
+                        Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
+                        Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
+                        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
+                        Array.getElem_replicate, Vector.getElem_replicate,
+                        PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
+                        PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
+                        PoisonOr.mk_some, PoisonOr.mk_none, toNat_mod_two_pow_64,
+                        Nat.reducePow, Nat.reduceMod, reduceIte,
+                        Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
+                        false_and, and_false, true_and, and_true,
+                        quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, $hs,*]
+                       try rfl
+                       done)
+                    | simp +zetaDelta +decide only
+                       [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                        LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
+                        toBitVecValue, and_allOnes_64,
+                        ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                        ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
+                        ← BitVec.ofNat_add, ← BitVec.ofNat_mul, ph, phRaw, add_assoc,
+                        Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
+                        Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
+                        Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
+                        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
+                        Array.getElem_replicate, Vector.getElem_replicate,
+                        PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
+                        PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
+                        PoisonOr.mk_some, PoisonOr.mk_none,
+                        quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat, toNat_mod_two_pow_64,
+                        Nat.reducePow, Nat.reduceMod, reduceIte,
+                        Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
+                        false_and, and_false, true_and, and_true, $hs,*])))
 
 /-- `quad_vecbin` followed by `ring_nf`, for the `wwl_shl( ..., 9 )` steps only.
 

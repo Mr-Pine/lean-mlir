@@ -47,169 +47,169 @@ twenty-four-fold re-normalisation of the whole result. -/
 private theorem lane_0 (x : Quad) :
     (((0) + (pl (x.v03[0].toNat) (x.v03[0].toNat))) + ((((ph (2 * x.v03[4].toNat) (x.v25[0].toNat) + ph (2 * x.v14[4].toNat) 0) + (pl (x.v03[4].toNat) (x.v03[4].toNat) + pl (2 * x.v25[4].toNat) (x.v14[0].toNat) + pl (2 * x.v25[0].toNat) (x.v14[4].toNat))) + (ph (2 * x.v03[0].toNat) (x.v25[4].toNat) + ph (2 * x.v14[0].toNat) (x.v14[4].toNat))) * 128)) + ((((ph (2 * x.v03[4].toNat) (x.v25[0].toNat) + ph (2 * x.v14[4].toNat) 0) + (pl (x.v03[4].toNat) (x.v03[4].toNat) + pl (2 * x.v25[4].toNat) (x.v14[0].toNat) + pl (2 * x.v25[0].toNat) (x.v14[4].toNat))) + (ph (2 * x.v03[0].toNat) (x.v25[4].toNat) + ph (2 * x.v14[0].toNat) (x.v14[4].toNat))) * 24)
       = quadSqrLimb x 0 0 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_div, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_1 (x : Quad) :
     (((0) + (pl (x.v03[1].toNat) (x.v03[1].toNat))) + ((((ph (2 * x.v03[5].toNat) (x.v25[1].toNat) + ph (2 * x.v14[5].toNat) 0) + (pl (x.v03[5].toNat) (x.v03[5].toNat) + pl (2 * x.v25[5].toNat) (x.v14[1].toNat) + pl (2 * x.v25[1].toNat) (x.v14[5].toNat))) + (ph (2 * x.v03[1].toNat) (x.v25[5].toNat) + ph (2 * x.v14[1].toNat) (x.v14[5].toNat))) * 128)) + ((((ph (2 * x.v03[5].toNat) (x.v25[1].toNat) + ph (2 * x.v14[5].toNat) 0) + (pl (x.v03[5].toNat) (x.v03[5].toNat) + pl (2 * x.v25[5].toNat) (x.v14[1].toNat) + pl (2 * x.v25[1].toNat) (x.v14[5].toNat))) + (ph (2 * x.v03[1].toNat) (x.v25[5].toNat) + ph (2 * x.v14[1].toNat) (x.v14[5].toNat))) * 24)
       = quadSqrLimb x 1 0 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_div, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_2 (x : Quad) :
     (((0) + (pl (x.v03[2].toNat) (x.v03[2].toNat))) + ((((ph (2 * x.v03[6].toNat) (x.v25[2].toNat) + ph (2 * x.v14[6].toNat) 0) + (pl (x.v03[6].toNat) (x.v03[6].toNat) + pl (2 * x.v25[6].toNat) (x.v14[2].toNat) + pl (2 * x.v25[2].toNat) (x.v14[6].toNat))) + (ph (2 * x.v03[2].toNat) (x.v25[6].toNat) + ph (2 * x.v14[2].toNat) (x.v14[6].toNat))) * 128)) + ((((ph (2 * x.v03[6].toNat) (x.v25[2].toNat) + ph (2 * x.v14[6].toNat) 0) + (pl (x.v03[6].toNat) (x.v03[6].toNat) + pl (2 * x.v25[6].toNat) (x.v14[2].toNat) + pl (2 * x.v25[2].toNat) (x.v14[6].toNat))) + (ph (2 * x.v03[2].toNat) (x.v25[6].toNat) + ph (2 * x.v14[2].toNat) (x.v14[6].toNat))) * 24)
       = quadSqrLimb x 2 0 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_div, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_3 (x : Quad) :
     (((0) + (pl (x.v03[3].toNat) (x.v03[3].toNat))) + ((((ph (2 * x.v03[7].toNat) (x.v25[3].toNat) + ph (2 * x.v14[7].toNat) 0) + (pl (x.v03[7].toNat) (x.v03[7].toNat) + pl (2 * x.v25[7].toNat) (x.v14[3].toNat) + pl (2 * x.v25[3].toNat) (x.v14[7].toNat))) + (ph (2 * x.v03[3].toNat) (x.v25[7].toNat) + ph (2 * x.v14[3].toNat) (x.v14[7].toNat))) * 128)) + ((((ph (2 * x.v03[7].toNat) (x.v25[3].toNat) + ph (2 * x.v14[7].toNat) 0) + (pl (x.v03[7].toNat) (x.v03[7].toNat) + pl (2 * x.v25[7].toNat) (x.v14[3].toNat) + pl (2 * x.v25[3].toNat) (x.v14[7].toNat))) + (ph (2 * x.v03[3].toNat) (x.v25[7].toNat) + ph (2 * x.v14[3].toNat) (x.v14[7].toNat))) * 24)
       = quadSqrLimb x 3 0 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_div, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_4 (x : Quad) :
     (((ph (x.v14[0].toNat) (x.v14[0].toNat) + ph (2 * x.v03[0].toNat) (x.v25[0].toNat)) + (pl (2 * x.v03[0].toNat) (x.v03[4].toNat) + pl (2 * x.v14[0].toNat) (x.v25[0].toNat))) + ((((ph (x.v14[4].toNat) (x.v14[4].toNat) + ph (2 * x.v03[4].toNat) (x.v25[4].toNat)) + (pl (2 * x.v25[4].toNat) (x.v14[4].toNat))) + (0)) * 128)) + ((((ph (x.v14[4].toNat) (x.v14[4].toNat) + ph (2 * x.v03[4].toNat) (x.v25[4].toNat)) + (pl (2 * x.v25[4].toNat) (x.v14[4].toNat))) + (0)) * 24)
       = quadSqrLimb x 0 3 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_5 (x : Quad) :
     (((ph (x.v14[1].toNat) (x.v14[1].toNat) + ph (2 * x.v03[1].toNat) (x.v25[1].toNat)) + (pl (2 * x.v03[1].toNat) (x.v03[5].toNat) + pl (2 * x.v14[1].toNat) (x.v25[1].toNat))) + ((((ph (x.v14[5].toNat) (x.v14[5].toNat) + ph (2 * x.v03[5].toNat) (x.v25[5].toNat)) + (pl (2 * x.v25[5].toNat) (x.v14[5].toNat))) + (0)) * 128)) + ((((ph (x.v14[5].toNat) (x.v14[5].toNat) + ph (2 * x.v03[5].toNat) (x.v25[5].toNat)) + (pl (2 * x.v25[5].toNat) (x.v14[5].toNat))) + (0)) * 24)
       = quadSqrLimb x 1 3 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_6 (x : Quad) :
     (((ph (x.v14[2].toNat) (x.v14[2].toNat) + ph (2 * x.v03[2].toNat) (x.v25[2].toNat)) + (pl (2 * x.v03[2].toNat) (x.v03[6].toNat) + pl (2 * x.v14[2].toNat) (x.v25[2].toNat))) + ((((ph (x.v14[6].toNat) (x.v14[6].toNat) + ph (2 * x.v03[6].toNat) (x.v25[6].toNat)) + (pl (2 * x.v25[6].toNat) (x.v14[6].toNat))) + (0)) * 128)) + ((((ph (x.v14[6].toNat) (x.v14[6].toNat) + ph (2 * x.v03[6].toNat) (x.v25[6].toNat)) + (pl (2 * x.v25[6].toNat) (x.v14[6].toNat))) + (0)) * 24)
       = quadSqrLimb x 2 3 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_7 (x : Quad) :
     (((ph (x.v14[3].toNat) (x.v14[3].toNat) + ph (2 * x.v03[3].toNat) (x.v25[3].toNat)) + (pl (2 * x.v03[3].toNat) (x.v03[7].toNat) + pl (2 * x.v14[3].toNat) (x.v25[3].toNat))) + ((((ph (x.v14[7].toNat) (x.v14[7].toNat) + ph (2 * x.v03[7].toNat) (x.v25[7].toNat)) + (pl (2 * x.v25[7].toNat) (x.v14[7].toNat))) + (0)) * 128)) + ((((ph (x.v14[7].toNat) (x.v14[7].toNat) + ph (2 * x.v03[7].toNat) (x.v25[7].toNat)) + (pl (2 * x.v25[7].toNat) (x.v14[7].toNat))) + (0)) * 24)
       = quadSqrLimb x 3 3 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_8 (x : Quad) :
     (((ph (x.v03[0].toNat) (x.v03[0].toNat)) + (pl (2 * x.v03[0].toNat) (x.v14[0].toNat))) + (((ph (x.v03[4].toNat) (x.v03[4].toNat) + ph (2 * x.v25[4].toNat) (x.v14[0].toNat) + ph (2 * x.v25[0].toNat) (x.v14[4].toNat)) + (pl (2 * x.v03[4].toNat) (x.v14[4].toNat) + pl (2 * x.v25[0].toNat) (x.v25[4].toNat))) * 128)) + (((ph (x.v03[4].toNat) (x.v03[4].toNat) + ph (2 * x.v25[4].toNat) (x.v14[0].toNat) + ph (2 * x.v25[0].toNat) (x.v14[4].toNat)) + (pl (2 * x.v03[4].toNat) (x.v14[4].toNat) + pl (2 * x.v25[0].toNat) (x.v25[4].toNat))) * 24)
       = quadSqrLimb x 0 1 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_9 (x : Quad) :
     (((ph (x.v03[1].toNat) (x.v03[1].toNat)) + (pl (2 * x.v03[1].toNat) (x.v14[1].toNat))) + (((ph (x.v03[5].toNat) (x.v03[5].toNat) + ph (2 * x.v25[5].toNat) (x.v14[1].toNat) + ph (2 * x.v25[1].toNat) (x.v14[5].toNat)) + (pl (2 * x.v03[5].toNat) (x.v14[5].toNat) + pl (2 * x.v25[1].toNat) (x.v25[5].toNat))) * 128)) + (((ph (x.v03[5].toNat) (x.v03[5].toNat) + ph (2 * x.v25[5].toNat) (x.v14[1].toNat) + ph (2 * x.v25[1].toNat) (x.v14[5].toNat)) + (pl (2 * x.v03[5].toNat) (x.v14[5].toNat) + pl (2 * x.v25[1].toNat) (x.v25[5].toNat))) * 24)
       = quadSqrLimb x 1 1 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_10 (x : Quad) :
     (((ph (x.v03[2].toNat) (x.v03[2].toNat)) + (pl (2 * x.v03[2].toNat) (x.v14[2].toNat))) + (((ph (x.v03[6].toNat) (x.v03[6].toNat) + ph (2 * x.v25[6].toNat) (x.v14[2].toNat) + ph (2 * x.v25[2].toNat) (x.v14[6].toNat)) + (pl (2 * x.v03[6].toNat) (x.v14[6].toNat) + pl (2 * x.v25[2].toNat) (x.v25[6].toNat))) * 128)) + (((ph (x.v03[6].toNat) (x.v03[6].toNat) + ph (2 * x.v25[6].toNat) (x.v14[2].toNat) + ph (2 * x.v25[2].toNat) (x.v14[6].toNat)) + (pl (2 * x.v03[6].toNat) (x.v14[6].toNat) + pl (2 * x.v25[2].toNat) (x.v25[6].toNat))) * 24)
       = quadSqrLimb x 2 1 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_11 (x : Quad) :
     (((ph (x.v03[3].toNat) (x.v03[3].toNat)) + (pl (2 * x.v03[3].toNat) (x.v14[3].toNat))) + (((ph (x.v03[7].toNat) (x.v03[7].toNat) + ph (2 * x.v25[7].toNat) (x.v14[3].toNat) + ph (2 * x.v25[3].toNat) (x.v14[7].toNat)) + (pl (2 * x.v03[7].toNat) (x.v14[7].toNat) + pl (2 * x.v25[3].toNat) (x.v25[7].toNat))) * 128)) + (((ph (x.v03[7].toNat) (x.v03[7].toNat) + ph (2 * x.v25[7].toNat) (x.v14[3].toNat) + ph (2 * x.v25[3].toNat) (x.v14[7].toNat)) + (pl (2 * x.v03[7].toNat) (x.v14[7].toNat) + pl (2 * x.v25[3].toNat) (x.v25[7].toNat))) * 24)
       = quadSqrLimb x 3 1 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_12 (x : Quad) :
     (((ph (2 * x.v03[0].toNat) (x.v03[4].toNat) + ph (2 * x.v14[0].toNat) (x.v25[0].toNat)) + (pl (x.v25[0].toNat) (x.v25[0].toNat) + pl (2 * x.v03[0].toNat) (x.v14[4].toNat) + pl (2 * x.v14[0].toNat) (x.v03[4].toNat))) + (((ph (2 * x.v25[4].toNat) (x.v14[4].toNat)) + (pl (x.v25[4].toNat) (x.v25[4].toNat))) * 128)) + (((ph (2 * x.v25[4].toNat) (x.v14[4].toNat)) + (pl (x.v25[4].toNat) (x.v25[4].toNat))) * 24)
       = quadSqrLimb x 0 4 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_13 (x : Quad) :
     (((ph (2 * x.v03[1].toNat) (x.v03[5].toNat) + ph (2 * x.v14[1].toNat) (x.v25[1].toNat)) + (pl (x.v25[1].toNat) (x.v25[1].toNat) + pl (2 * x.v03[1].toNat) (x.v14[5].toNat) + pl (2 * x.v14[1].toNat) (x.v03[5].toNat))) + (((ph (2 * x.v25[5].toNat) (x.v14[5].toNat)) + (pl (x.v25[5].toNat) (x.v25[5].toNat))) * 128)) + (((ph (2 * x.v25[5].toNat) (x.v14[5].toNat)) + (pl (x.v25[5].toNat) (x.v25[5].toNat))) * 24)
       = quadSqrLimb x 1 4 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_14 (x : Quad) :
     (((ph (2 * x.v03[2].toNat) (x.v03[6].toNat) + ph (2 * x.v14[2].toNat) (x.v25[2].toNat)) + (pl (x.v25[2].toNat) (x.v25[2].toNat) + pl (2 * x.v03[2].toNat) (x.v14[6].toNat) + pl (2 * x.v14[2].toNat) (x.v03[6].toNat))) + (((ph (2 * x.v25[6].toNat) (x.v14[6].toNat)) + (pl (x.v25[6].toNat) (x.v25[6].toNat))) * 128)) + (((ph (2 * x.v25[6].toNat) (x.v14[6].toNat)) + (pl (x.v25[6].toNat) (x.v25[6].toNat))) * 24)
       = quadSqrLimb x 2 4 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_15 (x : Quad) :
     (((ph (2 * x.v03[3].toNat) (x.v03[7].toNat) + ph (2 * x.v14[3].toNat) (x.v25[3].toNat)) + (pl (x.v25[3].toNat) (x.v25[3].toNat) + pl (2 * x.v03[3].toNat) (x.v14[7].toNat) + pl (2 * x.v14[3].toNat) (x.v03[7].toNat))) + (((ph (2 * x.v25[7].toNat) (x.v14[7].toNat)) + (pl (x.v25[7].toNat) (x.v25[7].toNat))) * 128)) + (((ph (2 * x.v25[7].toNat) (x.v14[7].toNat)) + (pl (x.v25[7].toNat) (x.v25[7].toNat))) * 24)
       = quadSqrLimb x 3 4 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_16 (x : Quad) :
     ((((0) + (pl (x.v14[0].toNat) (x.v14[0].toNat) + pl (2 * x.v03[0].toNat) (x.v25[0].toNat))) + (((ph (2 * x.v03[4].toNat) (x.v14[4].toNat) + ph (2 * x.v25[0].toNat) (x.v25[4].toNat)) + (pl (x.v14[4].toNat) (x.v14[4].toNat) + pl (2 * x.v03[4].toNat) (x.v25[4].toNat))) * 128)) + (((ph (2 * x.v03[4].toNat) (x.v14[4].toNat) + ph (2 * x.v25[0].toNat) (x.v25[4].toNat)) + (pl (x.v14[4].toNat) (x.v14[4].toNat) + pl (2 * x.v03[4].toNat) (x.v25[4].toNat))) * 24)) + (ph (2 * x.v03[0].toNat) (x.v14[0].toNat))
       = quadSqrLimb x 0 2 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_17 (x : Quad) :
     ((((0) + (pl (x.v14[1].toNat) (x.v14[1].toNat) + pl (2 * x.v03[1].toNat) (x.v25[1].toNat))) + (((ph (2 * x.v03[5].toNat) (x.v14[5].toNat) + ph (2 * x.v25[1].toNat) (x.v25[5].toNat)) + (pl (x.v14[5].toNat) (x.v14[5].toNat) + pl (2 * x.v03[5].toNat) (x.v25[5].toNat))) * 128)) + (((ph (2 * x.v03[5].toNat) (x.v14[5].toNat) + ph (2 * x.v25[1].toNat) (x.v25[5].toNat)) + (pl (x.v14[5].toNat) (x.v14[5].toNat) + pl (2 * x.v03[5].toNat) (x.v25[5].toNat))) * 24)) + (ph (2 * x.v03[1].toNat) (x.v14[1].toNat))
       = quadSqrLimb x 1 2 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_18 (x : Quad) :
     ((((0) + (pl (x.v14[2].toNat) (x.v14[2].toNat) + pl (2 * x.v03[2].toNat) (x.v25[2].toNat))) + (((ph (2 * x.v03[6].toNat) (x.v14[6].toNat) + ph (2 * x.v25[2].toNat) (x.v25[6].toNat)) + (pl (x.v14[6].toNat) (x.v14[6].toNat) + pl (2 * x.v03[6].toNat) (x.v25[6].toNat))) * 128)) + (((ph (2 * x.v03[6].toNat) (x.v14[6].toNat) + ph (2 * x.v25[2].toNat) (x.v25[6].toNat)) + (pl (x.v14[6].toNat) (x.v14[6].toNat) + pl (2 * x.v03[6].toNat) (x.v25[6].toNat))) * 24)) + (ph (2 * x.v03[2].toNat) (x.v14[2].toNat))
       = quadSqrLimb x 2 2 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_19 (x : Quad) :
     ((((0) + (pl (x.v14[3].toNat) (x.v14[3].toNat) + pl (2 * x.v03[3].toNat) (x.v25[3].toNat))) + (((ph (2 * x.v03[7].toNat) (x.v14[7].toNat) + ph (2 * x.v25[3].toNat) (x.v25[7].toNat)) + (pl (x.v14[7].toNat) (x.v14[7].toNat) + pl (2 * x.v03[7].toNat) (x.v25[7].toNat))) * 128)) + (((ph (2 * x.v03[7].toNat) (x.v14[7].toNat) + ph (2 * x.v25[3].toNat) (x.v25[7].toNat)) + (pl (x.v14[7].toNat) (x.v14[7].toNat) + pl (2 * x.v03[7].toNat) (x.v25[7].toNat))) * 24)) + (ph (2 * x.v03[3].toNat) (x.v14[3].toNat))
       = quadSqrLimb x 3 2 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_20 (x : Quad) :
     ((((pl (2 * x.v03[4].toNat) (x.v25[0].toNat) + pl (2 * x.v14[4].toNat) 0) + (pl (2 * x.v03[0].toNat) (x.v25[4].toNat) + pl (2 * x.v14[0].toNat) (x.v14[4].toNat))) + (((ph (x.v25[4].toNat) (x.v25[4].toNat)) + (0)) * 128)) + (((ph (x.v25[4].toNat) (x.v25[4].toNat)) + (0)) * 24)) + (ph (x.v25[0].toNat) (x.v25[0].toNat) + ph (2 * x.v03[0].toNat) (x.v14[4].toNat) + ph (2 * x.v14[0].toNat) (x.v03[4].toNat))
       = quadSqrLimb x 0 5 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_21 (x : Quad) :
     ((((pl (2 * x.v03[5].toNat) (x.v25[1].toNat) + pl (2 * x.v14[5].toNat) 0) + (pl (2 * x.v03[1].toNat) (x.v25[5].toNat) + pl (2 * x.v14[1].toNat) (x.v14[5].toNat))) + (((ph (x.v25[5].toNat) (x.v25[5].toNat)) + (0)) * 128)) + (((ph (x.v25[5].toNat) (x.v25[5].toNat)) + (0)) * 24)) + (ph (x.v25[1].toNat) (x.v25[1].toNat) + ph (2 * x.v03[1].toNat) (x.v14[5].toNat) + ph (2 * x.v14[1].toNat) (x.v03[5].toNat))
       = quadSqrLimb x 1 5 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_22 (x : Quad) :
     ((((pl (2 * x.v03[6].toNat) (x.v25[2].toNat) + pl (2 * x.v14[6].toNat) 0) + (pl (2 * x.v03[2].toNat) (x.v25[6].toNat) + pl (2 * x.v14[2].toNat) (x.v14[6].toNat))) + (((ph (x.v25[6].toNat) (x.v25[6].toNat)) + (0)) * 128)) + (((ph (x.v25[6].toNat) (x.v25[6].toNat)) + (0)) * 24)) + (ph (x.v25[2].toNat) (x.v25[2].toNat) + ph (2 * x.v03[2].toNat) (x.v14[6].toNat) + ph (2 * x.v14[2].toNat) (x.v03[6].toNat))
       = quadSqrLimb x 2 5 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 private theorem lane_23 (x : Quad) :
     ((((pl (2 * x.v03[7].toNat) (x.v25[3].toNat) + pl (2 * x.v14[7].toNat) 0) + (pl (2 * x.v03[3].toNat) (x.v25[7].toNat) + pl (2 * x.v14[3].toNat) (x.v14[7].toNat))) + (((ph (x.v25[7].toNat) (x.v25[7].toNat)) + (0)) * 128)) + (((ph (x.v25[7].toNat) (x.v25[7].toNat)) + (0)) * 24)) + (ph (x.v25[3].toNat) (x.v25[3].toNat) + ph (2 * x.v03[3].toNat) (x.v14[7].toNat) + ph (2 * x.v14[3].toNat) (x.v03[7].toNat))
       = quadSqrLimb x 3 5 := by
-  simp only [quadSqrLimb, sqLimb, sqCol, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm, Nat.mul_left_comm, Nat.zero_mul]
+  simp only [quadSqrLimb, sqLimb, sqCol, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  simp only [ph, pl, Nat.zero_div, Nat.zero_mul, Nat.mul_zero]
   ring_nf
 
 /-! ## The derivation
