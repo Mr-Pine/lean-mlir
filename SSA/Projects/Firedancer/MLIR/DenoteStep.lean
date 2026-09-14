@@ -30,6 +30,10 @@ block sits under a `bind` (`entry.denote V >>= fun (Vout, r) => …`), so the
 step equation is transported through that as well as through `StateT.run`.
 -/
 
+-- Literal index bounds by `decide`: core's `Vector` rule, tried first, runs
+-- `rw … at *` and `dsimp +zetaDelta … at *` over a walk's whole context.
+macro_rules | `(tactic| get_elem_tactic_extensible) => `(tactic| decide)
+
 namespace Firedancer.StepTactic
 -- NOTE: `Expr`/`Com` live in the root namespace, so our helper defs do too;
 -- this namespace only scopes the section variables.
