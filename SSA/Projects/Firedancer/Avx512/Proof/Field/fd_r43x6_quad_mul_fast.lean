@@ -51,142 +51,122 @@ twenty-four-fold re-normalisation of the whole result. -/
 private theorem lane_0 (x y : Quad) :
     (((((ph (x.v25[4].toNat) (y.v03[0].toNat) + ph (x.v14[4].toNat) (y.v14[0].toNat) + ph (x.v03[4].toNat) (y.v25[0].toNat)) + (pl (x.v25[4].toNat) (y.v14[0].toNat) + pl (x.v14[4].toNat) (y.v25[0].toNat))) + ((ph (x.v25[0].toNat) (y.v03[4].toNat) + ph (x.v14[0].toNat) (y.v14[4].toNat) + ph (x.v03[0].toNat) (y.v25[4].toNat)) + (pl (x.v03[4].toNat) (y.v03[4].toNat) + pl (x.v25[0].toNat) (y.v14[4].toNat) + pl (x.v14[0].toNat) (y.v25[4].toNat)))) * 128) + (pl (x.v03[0].toNat) (y.v03[0].toNat))) + ((((ph (x.v25[4].toNat) (y.v03[0].toNat) + ph (x.v14[4].toNat) (y.v14[0].toNat) + ph (x.v03[4].toNat) (y.v25[0].toNat)) + (pl (x.v25[4].toNat) (y.v14[0].toNat) + pl (x.v14[4].toNat) (y.v25[0].toNat))) + ((ph (x.v25[0].toNat) (y.v03[4].toNat) + ph (x.v14[0].toNat) (y.v14[4].toNat) + ph (x.v03[0].toNat) (y.v25[4].toNat)) + (pl (x.v03[4].toNat) (y.v03[4].toNat) + pl (x.v25[0].toNat) (y.v14[4].toNat) + pl (x.v14[0].toNat) (y.v25[4].toNat)))) * 24)
       = quadMulLimb x y 0 0 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_1 (x y : Quad) :
     (((((ph (x.v25[5].toNat) (y.v03[1].toNat) + ph (x.v14[5].toNat) (y.v14[1].toNat) + ph (x.v03[5].toNat) (y.v25[1].toNat)) + (pl (x.v25[5].toNat) (y.v14[1].toNat) + pl (x.v14[5].toNat) (y.v25[1].toNat))) + ((ph (x.v25[1].toNat) (y.v03[5].toNat) + ph (x.v14[1].toNat) (y.v14[5].toNat) + ph (x.v03[1].toNat) (y.v25[5].toNat)) + (pl (x.v03[5].toNat) (y.v03[5].toNat) + pl (x.v25[1].toNat) (y.v14[5].toNat) + pl (x.v14[1].toNat) (y.v25[5].toNat)))) * 128) + (pl (x.v03[1].toNat) (y.v03[1].toNat))) + ((((ph (x.v25[5].toNat) (y.v03[1].toNat) + ph (x.v14[5].toNat) (y.v14[1].toNat) + ph (x.v03[5].toNat) (y.v25[1].toNat)) + (pl (x.v25[5].toNat) (y.v14[1].toNat) + pl (x.v14[5].toNat) (y.v25[1].toNat))) + ((ph (x.v25[1].toNat) (y.v03[5].toNat) + ph (x.v14[1].toNat) (y.v14[5].toNat) + ph (x.v03[1].toNat) (y.v25[5].toNat)) + (pl (x.v03[5].toNat) (y.v03[5].toNat) + pl (x.v25[1].toNat) (y.v14[5].toNat) + pl (x.v14[1].toNat) (y.v25[5].toNat)))) * 24)
       = quadMulLimb x y 1 0 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_2 (x y : Quad) :
     (((((ph (x.v25[6].toNat) (y.v03[2].toNat) + ph (x.v14[6].toNat) (y.v14[2].toNat) + ph (x.v03[6].toNat) (y.v25[2].toNat)) + (pl (x.v25[6].toNat) (y.v14[2].toNat) + pl (x.v14[6].toNat) (y.v25[2].toNat))) + ((ph (x.v25[2].toNat) (y.v03[6].toNat) + ph (x.v14[2].toNat) (y.v14[6].toNat) + ph (x.v03[2].toNat) (y.v25[6].toNat)) + (pl (x.v03[6].toNat) (y.v03[6].toNat) + pl (x.v25[2].toNat) (y.v14[6].toNat) + pl (x.v14[2].toNat) (y.v25[6].toNat)))) * 128) + (pl (x.v03[2].toNat) (y.v03[2].toNat))) + ((((ph (x.v25[6].toNat) (y.v03[2].toNat) + ph (x.v14[6].toNat) (y.v14[2].toNat) + ph (x.v03[6].toNat) (y.v25[2].toNat)) + (pl (x.v25[6].toNat) (y.v14[2].toNat) + pl (x.v14[6].toNat) (y.v25[2].toNat))) + ((ph (x.v25[2].toNat) (y.v03[6].toNat) + ph (x.v14[2].toNat) (y.v14[6].toNat) + ph (x.v03[2].toNat) (y.v25[6].toNat)) + (pl (x.v03[6].toNat) (y.v03[6].toNat) + pl (x.v25[2].toNat) (y.v14[6].toNat) + pl (x.v14[2].toNat) (y.v25[6].toNat)))) * 24)
       = quadMulLimb x y 2 0 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_3 (x y : Quad) :
     (((((ph (x.v25[7].toNat) (y.v03[3].toNat) + ph (x.v14[7].toNat) (y.v14[3].toNat) + ph (x.v03[7].toNat) (y.v25[3].toNat)) + (pl (x.v25[7].toNat) (y.v14[3].toNat) + pl (x.v14[7].toNat) (y.v25[3].toNat))) + ((ph (x.v25[3].toNat) (y.v03[7].toNat) + ph (x.v14[3].toNat) (y.v14[7].toNat) + ph (x.v03[3].toNat) (y.v25[7].toNat)) + (pl (x.v03[7].toNat) (y.v03[7].toNat) + pl (x.v25[3].toNat) (y.v14[7].toNat) + pl (x.v14[3].toNat) (y.v25[7].toNat)))) * 128) + (pl (x.v03[3].toNat) (y.v03[3].toNat))) + ((((ph (x.v25[7].toNat) (y.v03[3].toNat) + ph (x.v14[7].toNat) (y.v14[3].toNat) + ph (x.v03[7].toNat) (y.v25[3].toNat)) + (pl (x.v25[7].toNat) (y.v14[3].toNat) + pl (x.v14[7].toNat) (y.v25[3].toNat))) + ((ph (x.v25[3].toNat) (y.v03[7].toNat) + ph (x.v14[3].toNat) (y.v14[7].toNat) + ph (x.v03[3].toNat) (y.v25[7].toNat)) + (pl (x.v03[7].toNat) (y.v03[7].toNat) + pl (x.v25[3].toNat) (y.v14[7].toNat) + pl (x.v14[3].toNat) (y.v25[7].toNat)))) * 24)
       = quadMulLimb x y 3 0 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_4 (x y : Quad) :
     ((((ph (x.v25[4].toNat) (y.v03[4].toNat) + ph (x.v14[4].toNat) (y.v14[4].toNat) + ph (x.v03[4].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v14[4].toNat) + pl (x.v14[4].toNat) (y.v25[4].toNat))) * 128) + (((ph (x.v25[0].toNat) (y.v03[0].toNat) + ph (x.v14[0].toNat) (y.v14[0].toNat) + ph (x.v03[0].toNat) (y.v25[0].toNat)) + (pl (x.v03[4].toNat) (y.v03[0].toNat) + pl (x.v25[0].toNat) (y.v14[0].toNat) + pl (x.v14[0].toNat) (y.v25[0].toNat))) + (pl (x.v03[0].toNat) (y.v03[4].toNat)))) + (((ph (x.v25[4].toNat) (y.v03[4].toNat) + ph (x.v14[4].toNat) (y.v14[4].toNat) + ph (x.v03[4].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v14[4].toNat) + pl (x.v14[4].toNat) (y.v25[4].toNat))) * 24)
       = quadMulLimb x y 0 3 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_5 (x y : Quad) :
     ((((ph (x.v25[5].toNat) (y.v03[5].toNat) + ph (x.v14[5].toNat) (y.v14[5].toNat) + ph (x.v03[5].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v14[5].toNat) + pl (x.v14[5].toNat) (y.v25[5].toNat))) * 128) + (((ph (x.v25[1].toNat) (y.v03[1].toNat) + ph (x.v14[1].toNat) (y.v14[1].toNat) + ph (x.v03[1].toNat) (y.v25[1].toNat)) + (pl (x.v03[5].toNat) (y.v03[1].toNat) + pl (x.v25[1].toNat) (y.v14[1].toNat) + pl (x.v14[1].toNat) (y.v25[1].toNat))) + (pl (x.v03[1].toNat) (y.v03[5].toNat)))) + (((ph (x.v25[5].toNat) (y.v03[5].toNat) + ph (x.v14[5].toNat) (y.v14[5].toNat) + ph (x.v03[5].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v14[5].toNat) + pl (x.v14[5].toNat) (y.v25[5].toNat))) * 24)
       = quadMulLimb x y 1 3 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_6 (x y : Quad) :
     ((((ph (x.v25[6].toNat) (y.v03[6].toNat) + ph (x.v14[6].toNat) (y.v14[6].toNat) + ph (x.v03[6].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v14[6].toNat) + pl (x.v14[6].toNat) (y.v25[6].toNat))) * 128) + (((ph (x.v25[2].toNat) (y.v03[2].toNat) + ph (x.v14[2].toNat) (y.v14[2].toNat) + ph (x.v03[2].toNat) (y.v25[2].toNat)) + (pl (x.v03[6].toNat) (y.v03[2].toNat) + pl (x.v25[2].toNat) (y.v14[2].toNat) + pl (x.v14[2].toNat) (y.v25[2].toNat))) + (pl (x.v03[2].toNat) (y.v03[6].toNat)))) + (((ph (x.v25[6].toNat) (y.v03[6].toNat) + ph (x.v14[6].toNat) (y.v14[6].toNat) + ph (x.v03[6].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v14[6].toNat) + pl (x.v14[6].toNat) (y.v25[6].toNat))) * 24)
       = quadMulLimb x y 2 3 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_7 (x y : Quad) :
     ((((ph (x.v25[7].toNat) (y.v03[7].toNat) + ph (x.v14[7].toNat) (y.v14[7].toNat) + ph (x.v03[7].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v14[7].toNat) + pl (x.v14[7].toNat) (y.v25[7].toNat))) * 128) + (((ph (x.v25[3].toNat) (y.v03[3].toNat) + ph (x.v14[3].toNat) (y.v14[3].toNat) + ph (x.v03[3].toNat) (y.v25[3].toNat)) + (pl (x.v03[7].toNat) (y.v03[3].toNat) + pl (x.v25[3].toNat) (y.v14[3].toNat) + pl (x.v14[3].toNat) (y.v25[3].toNat))) + (pl (x.v03[3].toNat) (y.v03[7].toNat)))) + (((ph (x.v25[7].toNat) (y.v03[7].toNat) + ph (x.v14[7].toNat) (y.v14[7].toNat) + ph (x.v03[7].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v14[7].toNat) + pl (x.v14[7].toNat) (y.v25[7].toNat))) * 24)
       = quadMulLimb x y 3 3 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_8 (x y : Quad) :
     (((((ph (x.v25[4].toNat) (y.v14[0].toNat) + ph (x.v14[4].toNat) (y.v25[0].toNat)) + (pl (x.v25[4].toNat) (y.v25[0].toNat))) + ((ph (x.v03[4].toNat) (y.v03[4].toNat) + ph (x.v25[0].toNat) (y.v14[4].toNat) + ph (x.v14[0].toNat) (y.v25[4].toNat)) + (pl (x.v14[4].toNat) (y.v03[4].toNat) + pl (x.v03[4].toNat) (y.v14[4].toNat) + pl (x.v25[0].toNat) (y.v25[4].toNat)))) * 128) + ((ph (x.v03[0].toNat) (y.v03[0].toNat)) + (pl (x.v14[0].toNat) (y.v03[0].toNat) + pl (x.v03[0].toNat) (y.v14[0].toNat)))) + ((((ph (x.v25[4].toNat) (y.v14[0].toNat) + ph (x.v14[4].toNat) (y.v25[0].toNat)) + (pl (x.v25[4].toNat) (y.v25[0].toNat))) + ((ph (x.v03[4].toNat) (y.v03[4].toNat) + ph (x.v25[0].toNat) (y.v14[4].toNat) + ph (x.v14[0].toNat) (y.v25[4].toNat)) + (pl (x.v14[4].toNat) (y.v03[4].toNat) + pl (x.v03[4].toNat) (y.v14[4].toNat) + pl (x.v25[0].toNat) (y.v25[4].toNat)))) * 24)
       = quadMulLimb x y 0 1 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_9 (x y : Quad) :
     (((((ph (x.v25[5].toNat) (y.v14[1].toNat) + ph (x.v14[5].toNat) (y.v25[1].toNat)) + (pl (x.v25[5].toNat) (y.v25[1].toNat))) + ((ph (x.v03[5].toNat) (y.v03[5].toNat) + ph (x.v25[1].toNat) (y.v14[5].toNat) + ph (x.v14[1].toNat) (y.v25[5].toNat)) + (pl (x.v14[5].toNat) (y.v03[5].toNat) + pl (x.v03[5].toNat) (y.v14[5].toNat) + pl (x.v25[1].toNat) (y.v25[5].toNat)))) * 128) + ((ph (x.v03[1].toNat) (y.v03[1].toNat)) + (pl (x.v14[1].toNat) (y.v03[1].toNat) + pl (x.v03[1].toNat) (y.v14[1].toNat)))) + ((((ph (x.v25[5].toNat) (y.v14[1].toNat) + ph (x.v14[5].toNat) (y.v25[1].toNat)) + (pl (x.v25[5].toNat) (y.v25[1].toNat))) + ((ph (x.v03[5].toNat) (y.v03[5].toNat) + ph (x.v25[1].toNat) (y.v14[5].toNat) + ph (x.v14[1].toNat) (y.v25[5].toNat)) + (pl (x.v14[5].toNat) (y.v03[5].toNat) + pl (x.v03[5].toNat) (y.v14[5].toNat) + pl (x.v25[1].toNat) (y.v25[5].toNat)))) * 24)
       = quadMulLimb x y 1 1 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_10 (x y : Quad) :
     (((((ph (x.v25[6].toNat) (y.v14[2].toNat) + ph (x.v14[6].toNat) (y.v25[2].toNat)) + (pl (x.v25[6].toNat) (y.v25[2].toNat))) + ((ph (x.v03[6].toNat) (y.v03[6].toNat) + ph (x.v25[2].toNat) (y.v14[6].toNat) + ph (x.v14[2].toNat) (y.v25[6].toNat)) + (pl (x.v14[6].toNat) (y.v03[6].toNat) + pl (x.v03[6].toNat) (y.v14[6].toNat) + pl (x.v25[2].toNat) (y.v25[6].toNat)))) * 128) + ((ph (x.v03[2].toNat) (y.v03[2].toNat)) + (pl (x.v14[2].toNat) (y.v03[2].toNat) + pl (x.v03[2].toNat) (y.v14[2].toNat)))) + ((((ph (x.v25[6].toNat) (y.v14[2].toNat) + ph (x.v14[6].toNat) (y.v25[2].toNat)) + (pl (x.v25[6].toNat) (y.v25[2].toNat))) + ((ph (x.v03[6].toNat) (y.v03[6].toNat) + ph (x.v25[2].toNat) (y.v14[6].toNat) + ph (x.v14[2].toNat) (y.v25[6].toNat)) + (pl (x.v14[6].toNat) (y.v03[6].toNat) + pl (x.v03[6].toNat) (y.v14[6].toNat) + pl (x.v25[2].toNat) (y.v25[6].toNat)))) * 24)
       = quadMulLimb x y 2 1 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_11 (x y : Quad) :
     (((((ph (x.v25[7].toNat) (y.v14[3].toNat) + ph (x.v14[7].toNat) (y.v25[3].toNat)) + (pl (x.v25[7].toNat) (y.v25[3].toNat))) + ((ph (x.v03[7].toNat) (y.v03[7].toNat) + ph (x.v25[3].toNat) (y.v14[7].toNat) + ph (x.v14[3].toNat) (y.v25[7].toNat)) + (pl (x.v14[7].toNat) (y.v03[7].toNat) + pl (x.v03[7].toNat) (y.v14[7].toNat) + pl (x.v25[3].toNat) (y.v25[7].toNat)))) * 128) + ((ph (x.v03[3].toNat) (y.v03[3].toNat)) + (pl (x.v14[3].toNat) (y.v03[3].toNat) + pl (x.v03[3].toNat) (y.v14[3].toNat)))) + ((((ph (x.v25[7].toNat) (y.v14[3].toNat) + ph (x.v14[7].toNat) (y.v25[3].toNat)) + (pl (x.v25[7].toNat) (y.v25[3].toNat))) + ((ph (x.v03[7].toNat) (y.v03[7].toNat) + ph (x.v25[3].toNat) (y.v14[7].toNat) + ph (x.v14[3].toNat) (y.v25[7].toNat)) + (pl (x.v14[7].toNat) (y.v03[7].toNat) + pl (x.v03[7].toNat) (y.v14[7].toNat) + pl (x.v25[3].toNat) (y.v25[7].toNat)))) * 24)
       = quadMulLimb x y 3 1 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_12 (x y : Quad) :
     ((((ph (x.v25[4].toNat) (y.v14[4].toNat) + ph (x.v14[4].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v25[4].toNat))) * 128) + (((ph (x.v03[4].toNat) (y.v03[0].toNat) + ph (x.v25[0].toNat) (y.v14[0].toNat) + ph (x.v14[0].toNat) (y.v25[0].toNat)) + (pl (x.v14[4].toNat) (y.v03[0].toNat) + pl (x.v03[4].toNat) (y.v14[0].toNat) + pl (x.v25[0].toNat) (y.v25[0].toNat))) + ((ph (x.v03[0].toNat) (y.v03[4].toNat)) + (pl (x.v14[0].toNat) (y.v03[4].toNat) + pl (x.v03[0].toNat) (y.v14[4].toNat))))) + (((ph (x.v25[4].toNat) (y.v14[4].toNat) + ph (x.v14[4].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v25[4].toNat))) * 24)
       = quadMulLimb x y 0 4 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_13 (x y : Quad) :
     ((((ph (x.v25[5].toNat) (y.v14[5].toNat) + ph (x.v14[5].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v25[5].toNat))) * 128) + (((ph (x.v03[5].toNat) (y.v03[1].toNat) + ph (x.v25[1].toNat) (y.v14[1].toNat) + ph (x.v14[1].toNat) (y.v25[1].toNat)) + (pl (x.v14[5].toNat) (y.v03[1].toNat) + pl (x.v03[5].toNat) (y.v14[1].toNat) + pl (x.v25[1].toNat) (y.v25[1].toNat))) + ((ph (x.v03[1].toNat) (y.v03[5].toNat)) + (pl (x.v14[1].toNat) (y.v03[5].toNat) + pl (x.v03[1].toNat) (y.v14[5].toNat))))) + (((ph (x.v25[5].toNat) (y.v14[5].toNat) + ph (x.v14[5].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v25[5].toNat))) * 24)
       = quadMulLimb x y 1 4 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_14 (x y : Quad) :
     ((((ph (x.v25[6].toNat) (y.v14[6].toNat) + ph (x.v14[6].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v25[6].toNat))) * 128) + (((ph (x.v03[6].toNat) (y.v03[2].toNat) + ph (x.v25[2].toNat) (y.v14[2].toNat) + ph (x.v14[2].toNat) (y.v25[2].toNat)) + (pl (x.v14[6].toNat) (y.v03[2].toNat) + pl (x.v03[6].toNat) (y.v14[2].toNat) + pl (x.v25[2].toNat) (y.v25[2].toNat))) + ((ph (x.v03[2].toNat) (y.v03[6].toNat)) + (pl (x.v14[2].toNat) (y.v03[6].toNat) + pl (x.v03[2].toNat) (y.v14[6].toNat))))) + (((ph (x.v25[6].toNat) (y.v14[6].toNat) + ph (x.v14[6].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v25[6].toNat))) * 24)
       = quadMulLimb x y 2 4 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_15 (x y : Quad) :
     ((((ph (x.v25[7].toNat) (y.v14[7].toNat) + ph (x.v14[7].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v25[7].toNat))) * 128) + (((ph (x.v03[7].toNat) (y.v03[3].toNat) + ph (x.v25[3].toNat) (y.v14[3].toNat) + ph (x.v14[3].toNat) (y.v25[3].toNat)) + (pl (x.v14[7].toNat) (y.v03[3].toNat) + pl (x.v03[7].toNat) (y.v14[3].toNat) + pl (x.v25[3].toNat) (y.v25[3].toNat))) + ((ph (x.v03[3].toNat) (y.v03[7].toNat)) + (pl (x.v14[3].toNat) (y.v03[7].toNat) + pl (x.v03[3].toNat) (y.v14[7].toNat))))) + (((ph (x.v25[7].toNat) (y.v14[7].toNat) + ph (x.v14[7].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v25[7].toNat))) * 24)
       = quadMulLimb x y 3 4 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_16 (x y : Quad) :
     ((((ph (x.v25[4].toNat) (y.v25[0].toNat)) + ((ph (x.v14[4].toNat) (y.v03[4].toNat) + ph (x.v03[4].toNat) (y.v14[4].toNat) + ph (x.v25[0].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v03[4].toNat) + pl (x.v14[4].toNat) (y.v14[4].toNat) + pl (x.v03[4].toNat) (y.v25[4].toNat)))) * 128) + ((ph (x.v14[0].toNat) (y.v03[0].toNat) + ph (x.v03[0].toNat) (y.v14[0].toNat)) + (pl (x.v25[0].toNat) (y.v03[0].toNat) + pl (x.v14[0].toNat) (y.v14[0].toNat) + pl (x.v03[0].toNat) (y.v25[0].toNat)))) + (((ph (x.v25[4].toNat) (y.v25[0].toNat)) + ((ph (x.v14[4].toNat) (y.v03[4].toNat) + ph (x.v03[4].toNat) (y.v14[4].toNat) + ph (x.v25[0].toNat) (y.v25[4].toNat)) + (pl (x.v25[4].toNat) (y.v03[4].toNat) + pl (x.v14[4].toNat) (y.v14[4].toNat) + pl (x.v03[4].toNat) (y.v25[4].toNat)))) * 24)
       = quadMulLimb x y 0 2 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_17 (x y : Quad) :
     ((((ph (x.v25[5].toNat) (y.v25[1].toNat)) + ((ph (x.v14[5].toNat) (y.v03[5].toNat) + ph (x.v03[5].toNat) (y.v14[5].toNat) + ph (x.v25[1].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v03[5].toNat) + pl (x.v14[5].toNat) (y.v14[5].toNat) + pl (x.v03[5].toNat) (y.v25[5].toNat)))) * 128) + ((ph (x.v14[1].toNat) (y.v03[1].toNat) + ph (x.v03[1].toNat) (y.v14[1].toNat)) + (pl (x.v25[1].toNat) (y.v03[1].toNat) + pl (x.v14[1].toNat) (y.v14[1].toNat) + pl (x.v03[1].toNat) (y.v25[1].toNat)))) + (((ph (x.v25[5].toNat) (y.v25[1].toNat)) + ((ph (x.v14[5].toNat) (y.v03[5].toNat) + ph (x.v03[5].toNat) (y.v14[5].toNat) + ph (x.v25[1].toNat) (y.v25[5].toNat)) + (pl (x.v25[5].toNat) (y.v03[5].toNat) + pl (x.v14[5].toNat) (y.v14[5].toNat) + pl (x.v03[5].toNat) (y.v25[5].toNat)))) * 24)
       = quadMulLimb x y 1 2 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_18 (x y : Quad) :
     ((((ph (x.v25[6].toNat) (y.v25[2].toNat)) + ((ph (x.v14[6].toNat) (y.v03[6].toNat) + ph (x.v03[6].toNat) (y.v14[6].toNat) + ph (x.v25[2].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v03[6].toNat) + pl (x.v14[6].toNat) (y.v14[6].toNat) + pl (x.v03[6].toNat) (y.v25[6].toNat)))) * 128) + ((ph (x.v14[2].toNat) (y.v03[2].toNat) + ph (x.v03[2].toNat) (y.v14[2].toNat)) + (pl (x.v25[2].toNat) (y.v03[2].toNat) + pl (x.v14[2].toNat) (y.v14[2].toNat) + pl (x.v03[2].toNat) (y.v25[2].toNat)))) + (((ph (x.v25[6].toNat) (y.v25[2].toNat)) + ((ph (x.v14[6].toNat) (y.v03[6].toNat) + ph (x.v03[6].toNat) (y.v14[6].toNat) + ph (x.v25[2].toNat) (y.v25[6].toNat)) + (pl (x.v25[6].toNat) (y.v03[6].toNat) + pl (x.v14[6].toNat) (y.v14[6].toNat) + pl (x.v03[6].toNat) (y.v25[6].toNat)))) * 24)
       = quadMulLimb x y 2 2 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_19 (x y : Quad) :
     ((((ph (x.v25[7].toNat) (y.v25[3].toNat)) + ((ph (x.v14[7].toNat) (y.v03[7].toNat) + ph (x.v03[7].toNat) (y.v14[7].toNat) + ph (x.v25[3].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v03[7].toNat) + pl (x.v14[7].toNat) (y.v14[7].toNat) + pl (x.v03[7].toNat) (y.v25[7].toNat)))) * 128) + ((ph (x.v14[3].toNat) (y.v03[3].toNat) + ph (x.v03[3].toNat) (y.v14[3].toNat)) + (pl (x.v25[3].toNat) (y.v03[3].toNat) + pl (x.v14[3].toNat) (y.v14[3].toNat) + pl (x.v03[3].toNat) (y.v25[3].toNat)))) + (((ph (x.v25[7].toNat) (y.v25[3].toNat)) + ((ph (x.v14[7].toNat) (y.v03[7].toNat) + ph (x.v03[7].toNat) (y.v14[7].toNat) + ph (x.v25[3].toNat) (y.v25[7].toNat)) + (pl (x.v25[7].toNat) (y.v03[7].toNat) + pl (x.v14[7].toNat) (y.v14[7].toNat) + pl (x.v03[7].toNat) (y.v25[7].toNat)))) * 24)
       = quadMulLimb x y 3 2 := by
-  simp only [quadMulLimb, limb, col, ph, pl, quadLimb, vlane,
-    Fin.reduceCastAdd, Fin.reduceAddNat, Nat.mul_comm]
-  ring_nf
+  simp only [quadMulLimb, limb, col, quadLimb, vlane, Fin.reduceCastAdd, Fin.reduceAddNat]
+  ring
 
 private theorem lane_20 (x y : Quad) :
     (((ph (x.v25[4].toNat) (y.v25[4].toNat)) * 128) + (((ph (x.v14[4].toNat) (y.v03[0].toNat) + ph (x.v03[4].toNat) (y.v14[0].toNat) + ph (x.v25[0].toNat) (y.v25[0].toNat)) + (pl (x.v25[4].toNat) (y.v03[0].toNat) + pl (x.v14[4].toNat) (y.v14[0].toNat) + pl (x.v03[4].toNat) (y.v25[0].toNat))) + ((ph (x.v14[0].toNat) (y.v03[4].toNat) + ph (x.v03[0].toNat) (y.v14[4].toNat)) + (pl (x.v25[0].toNat) (y.v03[4].toNat) + pl (x.v14[0].toNat) (y.v14[4].toNat) + pl (x.v03[0].toNat) (y.v25[4].toNat))))) + ((ph (x.v25[4].toNat) (y.v25[4].toNat)) * 24)
