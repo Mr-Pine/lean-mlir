@@ -91,6 +91,20 @@ theorem and_allOnes_64 (v : BitVec 64) : v &&& 18446744073709551615#64 = v := by
   rw [show (18446744073709551615#64 : BitVec 64) = BitVec.allOnes 64 from rfl,
       BitVec.and_allOnes]
 
+/-- `BitVec.toNat_ofNat` reintroduces a `% 2^64` that is always vacuous on a
+lane read back out of a 64-bit vector. The default simp set cancels it; under
+`simp only` it has to be named. -/
+@[simp] theorem toNat_mod_two_pow_64 (v : BitVec 64) :
+    v.toNat % 18446744073709551616 = v.toNat :=
+  Nat.mod_eq_of_lt v.isLt
+
+/-- `x &&& -1 = x`, for the `-1` a mask lane keeps under `simp only`. -/
+theorem and_neg_one_64 (x : BitVec 64) : x &&& -1 = x := by
+  rw [show (-1 : BitVec 64) = BitVec.allOnes 64 from rfl, BitVec.and_allOnes]
+
+/-- `(0 : BitVec 64).toNat = 0`, for a zero lane read back under `simp only`. -/
+theorem toNat_zero_64 : (0 : BitVec 64).toNat = 0 := rfl
+
 /-- `denote_dense hv` proves a goal `v = toBitVecValue w #v[…]`, given the
 `denote_step_all` hypothesis `hv : v = (… .constDense …).denoteOp1 V` for a
 `llvm.mlir.constant dense<[…]>` instruction.
@@ -145,6 +159,9 @@ whose `if op2 ≥ w` guard discharges because the shift amounts here are small;
 `ofNat_shl*'` and the `BitVec.ofNat` fusion lemmas then keep the lane in
 `BitVec.ofNat 64 (<ℕ expression>)` form.
 
+Each lane first tries a `simp only` without `ph`/`phRaw`/`add_assoc`, closed by
+`rfl`; the normalizing set is the fallback.
+
 Note `apply Vector.ext` rather than `ext`: the equation's type is
 `⟦SLLVMTy.arith …⟧`, which `ext` will not match syntactically, but `apply`
 unifies with `Vector.ext` up to defeq. -/
@@ -155,12 +172,33 @@ macro "denote_vecbin " h:term : tactic =>
              apply Vector.ext
              intro i hi
              interval_cases i
-             all_goals simp +zetaDelta
-               [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
-                LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, toBitVecValue, and_allOnes_64,
-                ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
-                ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
-                ph, phRaw, LLVM.Ty.poison, add_assoc]
+             all_goals first
+               | (simp +zetaDelta +decide only
+                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, LLVM.Ty.poison,
+                   toBitVecValue, and_allOnes_64, and_neg_one_64,
+                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                   ofNat_shl, ofNat_shl7, BitVec.toNat_ofNat,
+                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
+                   Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
+                   Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
+                   Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
+                   List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
+                   Array.getElem_replicate, Vector.getElem_replicate,
+                   PoisonOr.value_bind, PoisonOr.poison_bind, PoisonOr.map_value,
+                   PoisonOr.map_poison, PoisonOr.bind₂_value, PoisonOr.pure_def,
+                   PoisonOr.mk_some, PoisonOr.mk_none, toNat_mod_two_pow_64,
+                   Nat.reducePow, Nat.reduceMod, reduceIte,
+                   Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
+                   false_and, and_false, true_and, and_true]
+                  try rfl
+                  done)
+               | simp +zetaDelta
+                  [InstCombine.binaryDenote, LLVM.shl, LLVM.shl?, LLVM.and, LLVM.and?,
+                   LLVM.add, LLVM.add?, LLVM.mul, LLVM.mul?, toBitVecValue, and_allOnes_64,
+                   ofNat_shl1', ofNat_shl9', ofNat_shl7', ofNat_mul24,
+                   ← BitVec.ofNat_add, ← BitVec.ofNat_mul,
+                   ph, phRaw, LLVM.Ty.poison, add_assoc]
              all_goals try rfl))
 
 /-- `denote_vpmadd52 hv with h…` proves a goal `v = toBitVecValue 64 #v[…]`
@@ -172,7 +210,8 @@ The lane truncates each operand mod `2^52`; the `with` list supplies the
 operand bounds that make that truncation the identity, in the form
 `Nat.mod_eq_of_lt h` for each bound `h`. `← BitVec.ofNat_add` folds the
 addend — itself a `BitVec.ofNat` from the preceding instruction — into the
-lane's single `ofNat`. -/
+lane's single `ofNat`. As in `denote_vecbin`, each lane tries `quad_vpmadd52`'s
+explicit set before the default one. -/
 macro "denote_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
              simp_denote_only
@@ -180,11 +219,29 @@ macro "denote_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tac
              apply Vector.ext
              intro i hi
              interval_cases i
-             all_goals simp +zetaDelta
-               [LLVM.Ty.vpmadd52, LLVM.Ty.vpmadd52Lane, toBitVecValue,
-                Ctxt.Valuation.singleton, Ctxt.Valuation.ofPair,
-                Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-                pl, phRaw, limbNat, Nat.mod_mod_of_dvd _ dvd52_64,
-                ← BitVec.ofNat_add, Nat.mul_mod, Nat.mod_mod_of_dvd, $hs,*]))
+             all_goals first
+               | (simp +zetaDelta only
+                  [LLVM.Ty.vpmadd52, LLVM.Ty.vpmadd52Lane, toBitVecValue,
+                   Ctxt.Valuation.singleton, Ctxt.Valuation.ofPair,
+                   Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
+                   Ctxt.Valuation.cons_zero, Ctxt.Valuation.cons_eval,
+                   Ctxt.Valuation.cons_last, Ctxt.Valuation.cons_toCons,
+                   Vector.getElem_ofFn, Vector.getElem_map, Vector.getElem_mk,
+                   List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ,
+                   Array.getElem_replicate, Vector.getElem_replicate,
+                   pl, phRaw, limbNat, toNat_zero_64, Nat.zero_mod, Nat.mul_zero,
+                   Nat.zero_div, Nat.add_zero, ← BitVec.ofNat_add, BitVec.toNat_ofNat,
+                   Nat.mod_mod_of_dvd _ dvd52_64, toNat_mod_two_pow_64,
+                   Nat.reducePow, Nat.reduceMod, reduceIte,
+                   Bool.false_eq_true, ite_false, ite_true, Nat.zero_add,
+                   false_and, and_false, true_and, and_true, $hs,*]
+                  try rfl
+                  done)
+               | simp +zetaDelta
+                  [LLVM.Ty.vpmadd52, LLVM.Ty.vpmadd52Lane, toBitVecValue,
+                   Ctxt.Valuation.singleton, Ctxt.Valuation.ofPair,
+                   Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
+                   pl, phRaw, limbNat, Nat.mod_mod_of_dvd _ dvd52_64,
+                   ← BitVec.ofNat_add, Nat.mul_mod, Nat.mod_mod_of_dvd, $hs,*]))
 
 end Firedancer.Avx512
