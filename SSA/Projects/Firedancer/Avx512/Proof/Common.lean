@@ -105,6 +105,16 @@ theorem and_neg_one_64 (x : BitVec 64) : x &&& -1 = x := by
 /-- `(0 : BitVec 64).toNat = 0`, for a zero lane read back under `simp only`. -/
 theorem toNat_zero_64 : (0 : BitVec 64).toNat = 0 := rfl
 
+/-- `add` of two literal `toBitVecValue` vectors, lanewise. Applied by `exact`, it
+reads the lanes off the operands' `let`s without normalizing them. -/
+theorem vec8_add (a0 a1 a2 a3 a4 a5 a6 a7 b0 b1 b2 b3 b4 b5 b6 b7 : ℕ) :
+    (Vector.ofFn fun i : Fin 8 => InstCombine.binaryDenote (InstCombine.MOp.BinaryOp.add {})
+      (toBitVecValue 64 #v[a0, a1, a2, a3, a4, a5, a6, a7])[i.val]
+      (toBitVecValue 64 #v[b0, b1, b2, b3, b4, b5, b6, b7])[i.val]) =
+    toBitVecValue 64 #v[a0 + b0, a1 + b1, a2 + b2, a3 + b3, a4 + b4, a5 + b5, a6 + b6, a7 + b7] := by
+  apply Vector.ext; intro i hi
+  interval_cases i <;> simp [InstCombine.binaryDenote, LLVM.add, LLVM.add?, toBitVecValue, BitVec.ofNat_add]
+
 /-- `denote_dense hv` proves a goal `v = toBitVecValue w #v[…]`, given the
 `denote_step_all` hypothesis `hv : v = (… .constDense …).denoteOp1 V` for a
 `llvm.mlir.constant dense<[…]>` instruction.

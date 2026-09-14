@@ -337,16 +337,23 @@ theorem denote_fd_r43x6_sqr_fast (x : Vector (BitVec 64) 8)
   have v77Value : v117 = zbShl7Za := by denote_vecbin hv117
   have v78Value : v118 = zbMul24 := by denote_vecbin hv118
   subst v77Value v78Value
-  -- `%119`: the final add, against `sqrVec` directly; the lane sums are
-  -- already ℕ-level, so only `sqLimb` unfolding and `ring` remain.
+  -- `%119`: the final add, against `sqrVec`: `vec8_add`, then per lane
+  -- `sqLimb` and `ring` over folded `ph`/`pl`.
   have v79Value : v119 = (sqrVec x).map PoisonOr.value := by
-    simp only [sqrVec, limbVec]
-    denote_vecbin hv119
-    all_goals try congr 1
-    all_goals try simp [sqLimb, sqCol, limbNat, ph, pl]
-    all_goals try ring_nf
+    simp only [hv119, Expr.denoteOp1, Expr.denoteOpPure]
+    simp_denote_only
+    simp only [HVector.head]
+    refine (vec8_add _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _).trans ?_
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;>
+      simp only [toBitVecValue, sqrVec, limbVec, Vector.getElem_map, Vector.getElem_mk,
+        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ] <;>
+      (try congr 2) <;>
+      (try simp +zetaDelta only [sqLimb, sqCol, Fin.reduceCastAdd, Fin.reduceAddNat]) <;>
+      ring
   subst v79Value
-  simp_peephole
+  simp_denote_only
 
 abbrev sqrValue (x: Vector (BitVec 64) 8) := (fd_r43x6_sqr_fast.denote
           (Ctxt.Valuation.singleton (x.map PoisonOr.value))).head.getValues

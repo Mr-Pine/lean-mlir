@@ -330,17 +330,23 @@ theorem denote_fd_r43x6_mul_fast (x y : Vector (BitVec 64) 8)
   let zbMul24 := toBitVecValue 64 #v[(((((((ph (x_0) (y_5) + pl (x_1) (y_5)) + 0) + (ph (x_1) (y_4) + pl (x_2) (y_4))) + (ph (x_2) (y_3) + pl (x_3) (y_3))) + (ph (x_3) (y_2) + pl (x_4) (y_2))) + (ph (x_4) (y_1) + pl (x_5) (y_1))) + ph (x_5) (y_0)) * 24, ((((((0 + 0) + (ph (x_1) (y_5) + pl (x_2) (y_5))) + (ph (x_2) (y_4) + pl (x_3) (y_4))) + (ph (x_3) (y_3) + pl (x_4) (y_3))) + (ph (x_4) (y_2) + pl (x_5) (y_2))) + ph (x_5) (y_1)) * 24, ((((ph (x_3) (y_4) + pl (x_4) (y_4)) + (ph (x_2) (y_5) + pl (x_3) (y_5))) + (ph (x_4) (y_3) + pl (x_5) (y_3))) + ph (x_5) (y_2)) * 24, ((((ph (x_3) (y_5) + pl (x_4) (y_5)) + 0) + (ph (x_4) (y_4) + pl (x_5) (y_4))) + ph (x_5) (y_3)) * 24, (((0 + 0) + (ph (x_4) (y_5) + pl (x_5) (y_5))) + ph (x_5) (y_4)) * 24, (((0 + 0) + 0) + ph (x_5) (y_5)) * 24, (((0 + 0) + 0) + 0) * 24, (((0 + 0) + 0) + 0) * 24]
   have v144Value : v144 = zbMul24 := by denote_vecbin hv144
   subst v143Value v144Value
-  -- `%145`: the final add, against the specified limbs directly. The lane
-  -- sums are already N-level, so only `limb`/`col` unfolding and `ring`
-  -- remain (`152 = 128 + 24` is where the two fold terms meet).
+  -- `%145`: the final add, against the specified limbs: `vec8_add`, then per
+  -- lane `limb`/`col` and `ring` over folded `ph`/`pl` (`152 = 128 + 24`).
   have v145Value : v145 = (mulVec x y).map PoisonOr.value := by
-    simp only [mulVec, limbVec]
-    denote_vecbin hv145
-    all_goals try congr 1
-    all_goals try simp [limb, col, limbNat, ph, pl]
-    all_goals try ring_nf
+    simp only [hv145, Expr.denoteOp1, Expr.denoteOpPure]
+    simp_denote_only
+    simp only [HVector.head]
+    refine (vec8_add _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _).trans ?_
+    apply Vector.ext
+    intro i hi
+    interval_cases i <;>
+      simp only [toBitVecValue, mulVec, limbVec, Vector.getElem_map, Vector.getElem_mk,
+        List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ] <;>
+      (try congr 2) <;>
+      (try simp +zetaDelta only [limb, col, Fin.reduceCastAdd, Fin.reduceAddNat]) <;>
+      ring
   subst v145Value
-  simp_peephole
+  simp_denote_only
 
 abbrev mulValue (x y : Vector (BitVec 64) 8) := (fd_r43x6_mul_fast.denote
           (Ctxt.Valuation.ofPair (y.map PoisonOr.value) (x.map PoisonOr.value))).head.getValues
