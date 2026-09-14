@@ -196,9 +196,7 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
     rw [if_pos hzero]
     rcases hiff.mpr hzero with hv | hv
     · simp [hc0z.mpr hv]
-      simp only [Ctxt.Var.last, Ctxt.Valuation.cons_zero]
     · simp [hc1z.mpr hv]
-      simp only [Ctxt.Var.last, Ctxt.Valuation.cons_zero]
   · -- neither pattern matches
     rw [if_neg hzero]
     have hn0 : (c0 == 0#8) = false := by
@@ -206,6 +204,5 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
     have hn1 : (c1 == 0#8) = false := by
       simpa using fun h => hzero (hiff.mp (Or.inr (hc1z.mp h)))
     simp [hn0, hn1]
-    simp only [Ctxt.Var.last, Ctxt.Valuation.cons_zero]
 
 end Firedancer.Avx512

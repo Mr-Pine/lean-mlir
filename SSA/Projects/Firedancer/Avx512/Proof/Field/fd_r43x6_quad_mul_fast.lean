@@ -752,7 +752,7 @@ theorem denote_fd_r43x6_quad_mul_fast (x y : Quad)
   simp only [Com.denote_var, Expr.denote_unfold, Expr.denoteOp,
     EffectKind.liftEffect_rfl, simp_denote, storeVec, quadDualValMem,
     Function.comp_def, Ctxt.Valuation.nil_append, map_eq_pure_bind,
-    bind_assoc, pure_bind, Ctxt.Valuation.cons_last, ez03, ez14, ez25]
+    bind_assoc, pure_bind, ez03, ez14, ez25]
 
 /-! ## What the kernel writes
 

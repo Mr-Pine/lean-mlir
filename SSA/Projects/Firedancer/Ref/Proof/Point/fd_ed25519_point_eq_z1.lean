@@ -202,7 +202,6 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
 
   -- `%10 = and %9, %7`, the two lifetime ends, and the return
   denote_step_all v 10
-  eval_llvm 10
   peel_lifetime
   peel_lifetime
   simp_return

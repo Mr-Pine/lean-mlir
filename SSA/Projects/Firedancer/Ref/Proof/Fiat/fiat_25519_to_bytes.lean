@@ -1015,11 +1015,9 @@ elab "clear_subscript " lo:num hi:num ps:(ppSpace colGt ident)+ : tactic => do
 
 open Lean Elab Tactic in
 /-- The byte gep's `denote_eval`, spelled out. `denote_eval` runs the whole
-`simp_denote` set in three passes over a hypothesis whose right-hand side
-carries the walk's entire valuation spine -- about 170 `Valuation.cons` nodes
-by the last store.
-Every one of the thirty-one byte geps fires the *same* twenty-one lemmas, so
-naming them makes it one pass over a small simp set. -/
+`simp_denote` set in three passes over the hypothesis. Every one of the
+thirty-one byte geps fires the *same* twenty-one lemmas, so naming them makes
+it one pass over a small simp set. -/
 elab "gep_eval " n:num : tactic => do
   let hv := mkIdent (Name.mkSimple ("hv" ++ toString n.getNat))
   evalTactic (← `(tactic| simp only [Expr.denoteOp1, Expr.denoteOpPure, Expr.denoteOp,

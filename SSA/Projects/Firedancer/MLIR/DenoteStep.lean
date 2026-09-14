@@ -460,6 +460,10 @@ attribute [simp_spine]
   Ctxt.Valuation.cons_append Ctxt.Valuation.nil_append
   Ctxt.Valuation.cons_succ Ctxt.Var.last Ctxt.Valuation.cons_zero
 
+-- Lookups by index in one step, before `cons_succ` walks the spine a `cons` at a
+-- time. Named in a simp list the simproc would run post, after `cons_succ`.
+attribute [simp_spine ↓] SSA.simpValuationApply
+
 /-! ### Entering a block
 
 With back-edges, the walk through the tail blocks is `Blocks.run`, and
@@ -588,6 +592,95 @@ theorem _root_.LeanMLIR.SLLVM.Blocks.run_of_variant {Γamb : Ctxt SLLVM.Ty}
 end LeanMLIR.SLLVM
 
 open Lean Meta in
+/-- `x ::ᵥ V` typed by `e`'s context. Inferred from `V` it is a `Ctxt.cons` chain
+as deep as the walk, which every defeq against the program's context unfolds. -/
+private def consAt (e x V : Lean.Expr) : MetaM Lean.Expr := do
+  let args := (← whnfR (← inferType e)).getAppArgs
+  unless args.size ≥ 5 do return ← mkAppM ``Ctxt.Valuation.cons #[x, V]
+  mkAppOptM ``Ctxt.Valuation.cons #[none, none, some args[2]!, none, some x, some V]
+
+open Lean Meta in
+/-- The value `V` gives `var`: a spine element, or the valuation under the spine
+at the shifted index (as `SSA.simpValuationApply`). -/
+private def operandValue (V var t : Lean.Expr) : MetaM (Option Lean.Expr) := do
+  let_expr Subtype.mk _α _p i h := var | return none
+  let some n := (← instantiateMVars i).nat? <|> i.rawNatLit? | return none
+  let mut W := V
+  let mut k := 0
+  while k < n do
+    match_expr W with
+    | Ctxt.Valuation.cons _ _ _ _ _ W' => W := W'; k := k + 1
+    | _ => break
+  if k == n then
+    if let some x := (match_expr W with
+        | Ctxt.Valuation.cons _ _ _ _ x _ => some x
+        | _ => none) then
+      return some x
+  let .forallE _ _ body _ ← whnfD (← inferType W) | return none
+  let varTy ← whnfD (body.instantiate1 t).bindingDomain!
+  let_expr Subtype α p := varTy | return none
+  let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p (mkNatLit (n - k)) h
+  return some (mkApp2 W t v')
+
+open Lean Meta in
+/-- `tVal` (`e.denoteOp1 V`, possibly via `toPure`) restated over a context of just
+`e`'s operands, valued as `V` values them: definitionally equal, but its size does
+not grow with the walk. `none` unless `e` is a literal `Expr.mk`. -/
+private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V : Lean.Expr) :
+    MetaM (Option Lean.Expr) := do
+  try
+    let eArgs := e.getAppArgs
+    unless e.isAppOf ``Expr.mk && eArgs.size == 10 do return none
+    let mut ops : Array (Lean.Expr × Lean.Expr) := #[]
+    let mut nodes : Array Lean.Expr := #[]
+    let mut cur := eArgs[8]!
+    while cur.isAppOf ``HVector.cons do
+      let cs := cur.getAppArgs
+      nodes := nodes.push cur
+      ops := ops.push (cs[3]!, cs[4]!)
+      cur := cs[5]!
+    unless cur.isAppOf ``HVector.nil do return none
+    let nilNode := cur
+    let mut vals : Array Lean.Expr := #[]
+    for (t, var) in ops do
+      let some x ← operandValue V var t | return none
+      vals := vals.push x
+    let VT ← whnfR (← inferType V)
+    unless VT.getAppNumArgs ≥ 2 do return none
+    let Ty := VT.getAppArgs[0]!
+    let inst := VT.getAppArgs[1]!
+    let m := ops.size
+    -- `Γ_j = t_j :: … :: t_{m-1} :: ∅`, valued by `x_j ::ᵥ … ::ᵥ nil`
+    let empty ← mkAppOptM ``EmptyCollection.emptyCollection #[mkApp (mkConst ``Ctxt) Ty, none]
+    let mut ctxs := Array.replicate (m + 1) empty
+    let mut Vs := Array.replicate (m + 1) (← mkAppOptM ``Ctxt.Valuation.nil #[some Ty, some inst])
+    for j in (List.range m).reverse do
+      ctxs := ctxs.set! j (← mkAppM ``Ctxt.cons #[ops[j]!.1, ctxs[j + 1]!])
+      Vs := Vs.set! j (← mkAppOptM ``Ctxt.Valuation.cons
+        #[some Ty, some inst, some ctxs[j + 1]!, some ops[j]!.1, some vals[j]!, some Vs[j + 1]!])
+    let Γs := ctxs[0]!
+    let fNew := mkApp2 (mkConst ``Ctxt.Var) Ty Γs
+    let mut args := mkAppN nilNode.getAppFn #[nilNode.getAppArgs[0]!, fNew]
+    for j in (List.range m).reverse do
+      let mut v ← mkAppM ``Ctxt.Var.last #[ctxs[j + 1]!, ops[j]!.1]
+      for i in (List.range j).reverse do
+        v ← mkAppOptM ``Ctxt.Var.toCons #[none, none, none, some ops[i]!.1, some v]
+      let cs := nodes[j]!.getAppArgs
+      args := mkAppN nodes[j]!.getAppFn #[cs[0]!, fNew, cs[2]!, cs[3]!, v, args]
+    let pureK := mkConst ``EffectKind.pure
+    let effLe ← match hProof? with
+      | some h => do
+        let ek := mkApp3 (mkConst ``DialectSignature.effectKind) eArgs[0]! eArgs[1]! eArgs[5]!
+        pure (mkApp3 (mkConst ``EffectKind.le_of_eq) ek pureK (← mkExpectedTypeHint h (← mkEq ek pureK)))
+      | none => pure eArgs[7]!
+    let e' := mkAppN e.getAppFn
+      #[eArgs[0]!, eArgs[1]!, pureK, Γs, eArgs[4]!, eArgs[5]!, eArgs[6]!, effLe, args, eArgs[9]!]
+    let tArgs := tVal.getAppArgs.map fun a => if a == eArgs[3]! then Γs else a
+    let tArgs := (tArgs.set! (tArgs.size - 2) e').set! (tArgs.size - 1) Vs[0]!
+    return some (mkAppN tVal.getAppFn tArgs)
+  catch _ => return none
+
+open Lean Meta in
 /-- Peel the wrappers that can sit between the goal's left-hand side and the
 denotation being stepped, returning the core denotation, a function rebuilding
 the wrappers around a new core, and whether anything was peeled at all.
@@ -660,6 +753,14 @@ impure instruction (a load, a store) instead of stepping it and producing a
 proof the kernel rejects at the end of the declaration. -/
 private def mkPurityProof? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
   try
+    -- decided on `op` alone: checking an instance for `e.HasPureOp` walks `e`'s context
+    let e' ← whnfR e
+    if e'.isAppOf ``Expr.mk && e'.getAppNumArgs == 10 then
+      let xs := e'.getAppArgs
+      let ek := mkApp3 (mkConst ``DialectSignature.effectKind) xs[0]! xs[1]! xs[5]!
+      let p ← mkEq ek (mkConst ``EffectKind.pure)
+      unless (← whnf (← mkDecide p)).isConstOf ``Bool.true do return none
+      return some (← mkExpectedTypeHint (← mkDecideProof p) (← mkAppM ``Expr.HasPureOp #[e]))
     let hasPure ← mkAppM ``Expr.HasPureOp #[e]
     unless (← whnf (← mkDecide hasPure)).isConstOf ``Bool.true do return none
     return some (← mkDecideProof hasPure)
@@ -682,9 +783,10 @@ open Lean Meta Elab Tactic in
 /-- One step of `denote_step_all`: if the main goal has the shape
 `(Com.var e body).denote V = rhs` (or the `BlockCom.var` counterpart, under
 any of the wrappers `peelWrappers` handles), introduce `v<i> : _` together
-with `hv<i> : v<i> = e.denoteOp1 V` and return the goal
-`body.denote (v<i> ::ᵥ V) = rhs`. Returns `none` if the goal is not of that
-shape (i.e. the program is exhausted). -/
+with `hv<i> : v<i> = e.denoteOp1 V` -- restated by `compactDenote` over just
+`e`'s operands where that applies, so the hypothesis does not grow with the
+walk -- and return the goal `body.denote (v<i> ::ᵥ V) = rhs`. Returns `none`
+if the goal is not of that shape (i.e. the program is exhausted). -/
 private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
     (inline : Bool := false) : MetaM (Option MVarId) :=
   goal.withContext do
@@ -736,8 +838,9 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
         let some hProof ← mkPurityProof? e | return none
         try
           let stepEq ← mkAppM ``Com.denote_var_pureOp_single #[e, hProof, body, V]
-          -- The `hv<i>` this leaves behind reads `(e.toPure h).denoteOp1 V`
-          -- rather than the pure path's `e.denoteOp1 V`. `simp_denote` carries
+          -- This path's value reads `(e.toPure h).denoteOp1 V` rather than the
+          -- pure path's `e.denoteOp1 V`. `compactDenote` restates it without the
+          -- `toPure`; where it does not apply, `simp_denote` carries
           -- `Expr.op_toPure` and friends so that the projections still reduce to
           -- those of the underlying `Expr.mk`, which is what keeps every
           -- downstream tactic working unchanged.
@@ -745,6 +848,14 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
           return some (stepEq, tVal)
         catch _ => return none
     let some (stepEq, tVal) ← mkStep | return none
+    let tVal' ← do
+      let inner := tVal.getAppArgs
+      let pe := inner[inner.size - 2]!
+      let c? ← if pe.isAppOf ``Expr.toPure then
+          let ps := pe.getAppArgs
+          compactDenote tVal (← whnfR ps[ps.size - 2]!) (some ps[ps.size - 1]!) V
+        else compactDenote tVal (← whnfR pe) none V
+      pure (c?.getD tVal)
     -- Transport the denote-level step equation through whatever wrappers the
     -- goal has around the denotation: `congrArg (fun X => <wrappers> X)`.
     let stepEq ←
@@ -770,7 +881,7 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
         let motive := Lean.Expr.lam `X (← inferType lhs) (← kabstract tgt lhs) .default
         mkEqMPR (← mkCongrArg motive stepEq) contPrf
     if inline then
-      let consV ← mkAppM ``Ctxt.Valuation.cons #[tVal, V]
+      let consV ← consAt e tVal V
       let newLhs ← mkAppM
         (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
       let newLhs := if wrapped then rebuild newLhs else newLhs
@@ -779,12 +890,12 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
       return some newGoal.mvarId!
     let vName := baseName.appendAfter (toString i)
     let hName := Name.mkSimple ("h" ++ vName.toString)
-    -- newType : ∀ v, v = e.denoteOp1 V → body.denote (v ::ᵥ V) = rhs
+    -- newType : ∀ v, v = tVal' → body.denote (v ::ᵥ V) = rhs
     -- (oriented `v = def` so `simp only [*]` expands uses of `v` on demand);
     -- the conclusion's left-hand side keeps whatever wrappers it had.
     let newType ← withLocalDeclD vName (← inferType tVal) fun v => do
-      let defEq ← mkEq v tVal
-      let consV ← mkAppM ``Ctxt.Valuation.cons #[v, V]
+      let defEq ← mkEq v tVal'
+      let consV ← consAt e v V
       let newLhs ← mkAppM
         (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
       let newLhs := if wrapped then rebuild newLhs else newLhs
@@ -792,8 +903,9 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
       withLocalDeclD hName defEq fun h =>
         mkForallFVars #[v, h] concl
     let newGoal ← mkFreshExprSyntheticOpaqueMVar newType
-    -- oldGoal := (goal at the stepped denotation) (e.denoteOp1 V) rfl, cast back
-    let rflPrf ← mkEqRefl tVal
+    -- oldGoal := (goal at the stepped denotation) tVal rfl, cast back; the `rfl`
+    -- is hinted at `tVal = tVal'`, which holds by construction of `tVal'`.
+    let rflPrf ← mkExpectedTypeHint (← mkEqRefl tVal) (← mkEq tVal tVal')
     let contPrf := mkApp2 newGoal tVal rflPrf
     goal.assign (← close contPrf)
     let (_, goal2) ← newGoal.mvarId!.introN 2 [vName, hName]
@@ -1013,7 +1125,8 @@ open Lean Meta Elab Tactic in
 /-- `denote_step_all v` symbolically executes a pure, single-result-per-op
 `Com` denotation: as long as the goal has the shape
 `(Com.var e body).denote V = rhs`, it introduces a fresh variable `v<i>` with
-defining hypothesis `hv<i> : v<i> = e.denoteOp1 V` and changes the goal to
+defining hypothesis `hv<i> : v<i> = e.denoteOp1 V` (over `e`'s operands alone,
+see `compactDenote`) and changes the goal to
 `body.denote (v<i> ::ᵥ V) = rhs` (via `Com.denote_var_pure_single`). Sharing
 between use sites is preserved — every use of an intermediate value is just a
 variable — and each `hv<i>` can be simplified in isolation.
@@ -1101,8 +1214,9 @@ private def denoteHyps (base : Name) (lo hi : Nat) : TacticM (Array Ident) := do
 
 open Lean Elab Tactic in
 /-- `denote_eval v 4 27` evaluates the stepping hypotheses `hv4 … hv27` in
-place, turning each `hv<i> : v<i> = (Expr.mk …).denoteOp1 V` into the dialect
-value it denotes, e.g. `hv13 : v13 = LLVM.Ty.insertelement v11 v10 v12`.
+place, turning each `hv<i> : v<i> = (Expr.mk …).denoteOp1 (x₀ ::ᵥ … ::ᵥ nil)`
+into the dialect value it denotes, e.g.
+`hv13 : v13 = LLVM.Ty.insertelement v11 v10 v12`.
 
 Each hypothesis is evaluated *on its own*, which is the cheap direction:
 inlining a chain of instructions first and evaluating the result afterwards
