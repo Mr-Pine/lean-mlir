@@ -139,7 +139,7 @@ theorem denote_fd_r43x6_unpack (u : Vector (BitVec 64) 4) :
        simp only [v10lanes, unpackVec, wvBV, ub, Vector.getElem_mk]
        bv_decide)
   subst v12Value
-  simp_peephole
+  simp_denote_only
 
 /-! ## From the limbs to the header's contract
 

@@ -203,7 +203,7 @@ theorem bb0_run (r a : Pointer) (n : BitVec 32) (s : GlobalState) (hs : s.WF)
     rw [hu5, hu4, hu3]; exact hF5
   denote_step_all v 194
   replace hv194 : v194 = .value (BitVec.ofBool (n >ₛ 1#32)) := by
-    simp only [hv194, Expr.denoteOp1, Expr.denoteOpPure]; simp_peephole; rfl
+    simp only [hv194, Expr.denoteOp1, Expr.denoteOpPure]; simp_denote_only; rfl
   subst hv194
   simp only [BlockCom.denote_term, Terminator.denote_condBr, simp_spine]
   by_cases hb : (n >ₛ 1#32) = true

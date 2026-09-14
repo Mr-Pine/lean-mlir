@@ -495,7 +495,7 @@ theorem bb1_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   denote_step_all v 195
   replace hv195 : v195 = (addVec x184 x90).map PoisonOr.value := by
     simp only [hv195, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, h184, h90]
     apply Vector.ext
     intro i hi
@@ -505,13 +505,13 @@ theorem bb1_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   denote_step_all v 198
   replace hv197 : v197 = .value (nonzeroBit (addVec x184 x90) &&& t1nzb) := by
     simp only [hv197, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, h191]
     simp [LLVM.and, LLVM.and?, nonzeroBit]
   replace hv198 : v198
       = .value (if nonzeroBit (addVec x184 x90) &&& t1nzb = 0 then 1 else 0) := by
     simp only [hv198, hv197, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, env.c17]
     simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     split <;> rename_i hc
@@ -914,7 +914,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv202 : v202 = t3a.map PoisonOr.value := by
     rw [ht3a]
     simp only [hv202, hv201, hv200, hv199, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, inp.n190, env.c14, env.c19, env.c13]
     rcases ht1nza with rfl | rfl <;>
       (apply Vector.ext; intro i hi; interval_cases i <;> rfl)
@@ -927,7 +927,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv206 : v206 = t3b.map PoisonOr.value := by
     rw [ht3b]
     simp only [hv206, hv205, hv204, hv203, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, inp.n191, env.c14, env.c19, env.c13]
     rcases ht1nzb with rfl | rfl <;>
       (apply Vector.ext; intro i hi; interval_cases i <;> rfl)
@@ -985,7 +985,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv219 : v219 = .value (if diagnose
       (R43x6.extractLimbs (foldVec (mulVec xa t3a))) = sgnA then 1 else 0) := by
     simp only [hv219, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, inp.s54]
     simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     split <;> rename_i hc
@@ -994,7 +994,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv220 : v220 = .value (if diagnose
       (R43x6.extractLimbs (foldVec (mulVec xa t3a))) = sgnA then 255#8 else 0#8) := by
     simp only [hv220, hv219, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine]
     split <;> rfl
 
@@ -1016,7 +1016,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv231 : v231 = xa'.map PoisonOr.value := by
     rw [hxa']
     simp only [hv231, hv230, hv229, hv211, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, hv220]
     -- `exact`, not `simp`: the `Decidable` instance the block carries is not
     -- the one `simp` would synthesise, and `exact` unifies through it
@@ -1029,7 +1029,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv232 : v232 = .value (if diagnose
       (R43x6.extractLimbs (foldVec (mulVec xb t3b))) = sgnB then 1 else 0) := by
     simp only [hv232, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, inp.s56]
     simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     split <;> rename_i hc
@@ -1038,7 +1038,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv233 : v233 = .value (if diagnose
       (R43x6.extractLimbs (foldVec (mulVec xb t3b))) = sgnB then 255#8 else 0#8) := by
     simp only [hv233, hv232, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine]
     split <;> rfl
   denote_step_reduce v 242 only [simp_spine, env.c18, hv216, env.c32, env.c33, env.c25,
@@ -1053,7 +1053,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   replace hv244 : v244 = xb'.map PoisonOr.value := by
     rw [hxb']
     simp only [hv244, hv243, hv242, hv216, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head, simp_spine, hv233]
     exact vselect_mask8 _ _ _
   denote_clear v 243 243

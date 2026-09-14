@@ -101,7 +101,7 @@ are not definitionally equal and have to be compared lanewise. The right-hand
 side may be a local `let` (e.g. `x0Shifts`); `+zetaDelta` unfolds it. -/
 macro "denote_dense " h:term : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp +zetaDelta only [HVector.head, toBitVecValue, LLVM.Ty.dense]
              ext i hi
              simp only [Vector.getElem_ofFn, Vector.getElem_map]
@@ -122,7 +122,7 @@ the `with` list rewrites that lane to `0` as it is read out of the valuation,
 so the products it would feed are never formed. -/
 macro "denote_shuffle " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp [$h:term, Expr.denoteOp1, Expr.denoteOp, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp +zetaDelta only [HVector.head, LLVM.Ty.shufflevector]
              ext i hi
              simp only [Vector.getElem_ofFn]
@@ -150,7 +150,7 @@ Note `apply Vector.ext` rather than `ext`: the equation's type is
 unifies with `Vector.ext` up to defeq. -/
 macro "denote_vecbin " h:term : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp only [HVector.head]
              apply Vector.ext
              intro i hi
@@ -175,7 +175,7 @@ addend — itself a `BitVec.ofNat` from the preceding instruction — into the
 lane's single `ofNat`. -/
 macro "denote_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp only [HVector.head]
              apply Vector.ext
              intro i hi

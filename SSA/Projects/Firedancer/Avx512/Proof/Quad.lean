@@ -67,7 +67,7 @@ operand carries in under the `% 2^52`. -/
 /-- As `denote_vpmadd52`, but with an explicit simp set. See above. -/
 macro "quad_vpmadd52 " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp only [HVector.head]
              apply Vector.ext
              intro i hi
@@ -93,7 +93,7 @@ block argument -- `two_x03 = wwl_shl( x03, 1 )` and friends -- cannot read that
 argument out of the valuation. -/
 macro "quad_vecbin " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp only [HVector.head]
              apply Vector.ext
              intro i hi

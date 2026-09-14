@@ -34,6 +34,12 @@ step equation is transported through that as well as through `StateT.run`.
 -- `rw … at *` and `dsimp +zetaDelta … at *` over a walk's whole context.
 macro_rules | `(tactic| get_elem_tactic_extensible) => `(tactic| decide)
 
+/-- `simp_peephole` without its `funext_iff` prelude, a failed `rw` over the
+whole term unless it is an equation between functions of a valuation. -/
+macro "simp_denote_only" loc:(Lean.Parser.Tactic.location)? : tactic =>
+  `(tactic| simp (config := {failIfUnchanged := false}) only
+      [Expr.denote_castPureToEff, simp_denote] $[$loc]?)
+
 namespace Firedancer.StepTactic
 -- NOTE: `Expr`/`Com` live in the root namespace, so our helper defs do too;
 -- this namespace only scopes the section variables.
@@ -1104,7 +1110,7 @@ does not scale. -/
 elab "denote_eval " base:ident lo:num hi:num : tactic => do
   let hyps ← denoteHyps base.getId lo.getNat hi.getNat
   evalTactic (← `(tactic| simp only [Expr.denoteOp1, Expr.denoteOpPure] at $hyps*))
-  evalTactic (← `(tactic| simp_peephole at $hyps*))
+  evalTactic (← `(tactic| simp_denote_only at $hyps*))
   evalTactic (← `(tactic| simp only [HVector.head] at $hyps*))
 
 open Lean Elab Tactic in

@@ -89,7 +89,7 @@ theorem entry_run_ex (r a b : Pointer) (s : GlobalState) (hs : s.WF) :
   rw [← hsA]
   denote_step_all v 103
   replace hv103 : v103 = .value 0#1 := by
-    simp only [hv103, Expr.denoteOp1, Expr.denoteOpPure]; simp_peephole; rfl
+    simp only [hv103, Expr.denoteOp1, Expr.denoteOpPure]; simp_denote_only; rfl
   subst hv103
   simp only [BlockCom.denote_term, Terminator.denote_condBr, simp_spine]
   refine ⟨?W, sA, ?env, hF0, ?run⟩

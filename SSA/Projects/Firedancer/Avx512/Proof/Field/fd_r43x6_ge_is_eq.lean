@@ -74,7 +74,7 @@ private theorem frame_lookup (m : Std.HashMap BlockId Block) (n : ℕ) (B : Bloc
 /-- As `denote_shuffle`/`denote_vecbin`, for a `vpermi2var`. -/
 local macro "ge_permi " h:term " with " hs:Lean.Parser.Tactic.simpLemma,* : tactic =>
   `(tactic| (simp only [$h:term, Expr.denoteOp1, Expr.denoteOpPure]
-             simp_peephole
+             simp_denote_only
              simp only [HVector.head]
              apply Vector.ext
              intro i hi
@@ -563,7 +563,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   denote_step_all v 54
   have v54Value : v54 = xDiff.map PoisonOr.value := by
     simp only [hv53, hv54, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head]
     apply Vector.ext
     intro i hi
@@ -590,7 +590,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   let xDiffZero := PoisonOr.value (if ((R43x6.decode' xDiff : ℤ) : ZMod p) = 0 then (-1#32) else (-2#32))
   have v56Value : v56 = xDiffZero := by
     simp only [hv56, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
-    simp_peephole
+    simp_denote_only
     -- `0 ^^^ -1 = -1`, `1 ^^^ -1 = -2`, one branch each
     simp [LLVM.xor, LLVM.xor?, xDiffNonzero, xDiffZero, neg1]
     split <;> rfl
@@ -600,7 +600,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   denote_step_all v 58
   have v58Value : v58 = yDiff.map PoisonOr.value := by
     simp only [hv57, hv58, Expr.denoteOp1, Expr.denoteOpPure]
-    simp_peephole
+    simp_denote_only
     simp only [HVector.head]
     apply Vector.ext
     intro i hi
@@ -626,7 +626,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   let yDiffZero := PoisonOr.value (if ((R43x6.decode' yDiff : ℤ) : ZMod p) = 0 then (1#32) else (0#32))
   have v60Value : v60 = yDiffZero := by
     simp only [hv60, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
-    simp_peephole
+    simp_denote_only
     simp [LLVM.xor, LLVM.xor?, yDiffNonzero, yDiffZero]
     split <;> rfl
   subst v60Value
@@ -635,7 +635,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   denote_step_all v
   simp only [Com.denote_rets]
   simp only [hv61, Expr.denoteOp1, Expr.denoteOpPure, HVector.head]
-  simp_peephole
+  simp_denote_only
 
   simp
   constructor
