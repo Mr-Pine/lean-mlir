@@ -163,49 +163,49 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
 
   -- `%47`/`%48`: `in + 8`
   peel_gep 8 with inp, hin₀, t₀ as in8
-  refine fd_ulong_load_8_conforms_cont in8 t₀ hwf₀ (Fits.mono hin8 (by bv_omega)) fun t₁ hcall₁ he₁ => ?_
+  refine fd_ulong_load_8_conforms_cont in8 t₀ hwf₀ (Fits.mono hin8 (by decide)) fun t₁ hcall₁ he₁ => ?_
   peel_call hcall₁
   have hwf₁ : t₁.WF := hwf₀.of_equiv he₁
   have hin₁ : Fits t₁.mem inp (64 * 8) := fits_of_live?_eq (he₁.live inp.id).symm hin₀
 
   -- `%49`/`%50`: `in + 16`
   peel_gep 16 with inp, hin₁, t₁ as in16
-  refine fd_ulong_load_8_conforms_cont in16 t₁ hwf₁ (Fits.mono hin16 (by bv_omega)) fun t₂ hcall₂ he₂ => ?_
+  refine fd_ulong_load_8_conforms_cont in16 t₁ hwf₁ (Fits.mono hin16 (by decide)) fun t₂ hcall₂ he₂ => ?_
   peel_call hcall₂
   have hwf₂ : t₂.WF := hwf₁.of_equiv he₂
   have hin₂ : Fits t₂.mem inp (64 * 8) := fits_of_live?_eq (he₂.live inp.id).symm hin₁
 
   -- `%51`/`%52`: `in + 24`
   peel_gep 24 with inp, hin₂, t₂ as in24
-  refine fd_ulong_load_8_conforms_cont in24 t₂ hwf₂ (Fits.mono hin24 (by bv_omega)) fun t₃ hcall₃ he₃ => ?_
+  refine fd_ulong_load_8_conforms_cont in24 t₂ hwf₂ (Fits.mono hin24 (by decide)) fun t₃ hcall₃ he₃ => ?_
   peel_call hcall₃
   have hwf₃ : t₃.WF := hwf₂.of_equiv he₃
   have hin₃ : Fits t₃.mem inp (64 * 8) := fits_of_live?_eq (he₃.live inp.id).symm hin₂
 
   -- `%53`/`%54`: `in + 32`
   peel_gep 32 with inp, hin₃, t₃ as in32
-  refine fd_ulong_load_8_conforms_cont in32 t₃ hwf₃ (Fits.mono hin32 (by bv_omega)) fun t₄ hcall₄ he₄ => ?_
+  refine fd_ulong_load_8_conforms_cont in32 t₃ hwf₃ (Fits.mono hin32 (by decide)) fun t₄ hcall₄ he₄ => ?_
   peel_call hcall₄
   have hwf₄ : t₄.WF := hwf₃.of_equiv he₄
   have hin₄ : Fits t₄.mem inp (64 * 8) := fits_of_live?_eq (he₄.live inp.id).symm hin₃
 
   -- `%55`/`%56`: `in + 40`
   peel_gep 40 with inp, hin₄, t₄ as in40
-  refine fd_ulong_load_8_conforms_cont in40 t₄ hwf₄ (Fits.mono hin40 (by bv_omega)) fun t₅ hcall₅ he₅ => ?_
+  refine fd_ulong_load_8_conforms_cont in40 t₄ hwf₄ (Fits.mono hin40 (by decide)) fun t₅ hcall₅ he₅ => ?_
   peel_call hcall₅
   have hwf₅ : t₅.WF := hwf₄.of_equiv he₅
   have hin₅ : Fits t₅.mem inp (64 * 8) := fits_of_live?_eq (he₅.live inp.id).symm hin₄
 
   -- `%57`/`%58`: `in + 48`
   peel_gep 48 with inp, hin₅, t₅ as in48
-  refine fd_ulong_load_8_conforms_cont in48 t₅ hwf₅ (Fits.mono hin48 (by bv_omega)) fun t₆ hcall₆ he₆ => ?_
+  refine fd_ulong_load_8_conforms_cont in48 t₅ hwf₅ (Fits.mono hin48 (by decide)) fun t₆ hcall₆ he₆ => ?_
   peel_call hcall₆
   have hwf₆ : t₆.WF := hwf₅.of_equiv he₆
   have hin₆ : Fits t₆.mem inp (64 * 8) := fits_of_live?_eq (he₆.live inp.id).symm hin₅
 
   -- `%59`/`%60`: `in + 56`
   peel_gep 56 with inp, hin₆, t₆ as in56
-  refine fd_ulong_load_8_conforms_cont in56 t₆ hwf₆ (Fits.mono hin56 (by bv_omega)) fun t₇ hcall₇ he₇ => ?_
+  refine fd_ulong_load_8_conforms_cont in56 t₆ hwf₆ (Fits.mono hin56 (by decide)) fun t₇ hcall₇ he₇ => ?_
   peel_call hcall₇
   have hwf₇ : t₇.WF := hwf₆.of_equiv he₇
 
@@ -234,7 +234,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   peel_gep 8 with out, hout₀, u₀ as out8
   -- `peel_store`'s own `omega` needs a literal width, and `peel_gep` leaves
   -- `256 - BitVec.toNat 8 * 8`; normalise it once.
-  have hout8N : Fits u₀.mem out8 64 := Fits.mono hout8 (by bv_omega)
+  have hout8N : Fits u₀.mem out8 64 := Fits.mono hout8 (by decide)
   refine poison_cases (v := v464) (fun hb1 => ?_) (fun b1 hb1 => ?_)
   · store_poison hb1
   refine name_of ({ u₀ with mem := u₀.mem.splice out8 b1 } : GlobalState) fun u₁ hu₁ => ?_
@@ -247,7 +247,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   peel_gep 16 with out, hout₁, u₁ as out16
   -- `peel_store`'s own `omega` needs a literal width, and `peel_gep` leaves
   -- `256 - BitVec.toNat 16 * 8`; normalise it once.
-  have hout16N : Fits u₁.mem out16 64 := Fits.mono hout16 (by bv_omega)
+  have hout16N : Fits u₁.mem out16 64 := Fits.mono hout16 (by decide)
   refine poison_cases (v := v475) (fun hb2 => ?_) (fun b2 hb2 => ?_)
   · store_poison hb2
   refine name_of ({ u₁ with mem := u₁.mem.splice out16 b2 } : GlobalState) fun u₂ hu₂ => ?_
@@ -260,7 +260,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   peel_gep 24 with out, hout₂, u₂ as out24
   -- `peel_store`'s own `omega` needs a literal width, and `peel_gep` leaves
   -- `256 - BitVec.toNat 24 * 8`; normalise it once.
-  have hout24N : Fits u₂.mem out24 64 := Fits.mono hout24 (by bv_omega)
+  have hout24N : Fits u₂.mem out24 64 := Fits.mono hout24 (by decide)
   refine poison_cases (v := v483) (fun hb3 => ?_) (fun b3 hb3 => ?_)
   · store_poison hb3
   refine name_of ({ u₂ with mem := u₂.mem.splice out24 b3 } : GlobalState) fun u₃ hu₃ => ?_

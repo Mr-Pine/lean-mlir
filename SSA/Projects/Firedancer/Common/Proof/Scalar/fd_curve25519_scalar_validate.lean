@@ -96,27 +96,26 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
   -- `^bb2`: the four `fd_ulong_load_8` calls; the stepper restarts at the entry's depth, MLIR at `%13`.
   denote_number_from 13
   have hfit0 : Fits s.mem p 64 := Fits.mono hp.left (by omega)
-  obtain ⟨t0, hcall0, he0⟩ := fd_ulong_load_8_conforms p s hs hfit0
+  refine fd_ulong_load_8_conforms_cont p s hs hfit0 fun t0 hcall0 he0 => ?_
   peel_call hcall0
   -- the scalar still fits, at each state the calls leave behind
   have hfit0' : Fits t0.mem p (32 * 8) := fits_of_live?_eq (he0.live p.id).symm hp.left
   -- `%14`/`%15`: `s + 8`
   peel_gep 8 with p, hfit0', t0 as p8
-  obtain ⟨t1, hcall1, he1⟩ :=
-    fd_ulong_load_8_conforms p8 t0 (hs.of_equiv he0) (Fits.mono hp8 (by bv_omega))
+  refine fd_ulong_load_8_conforms_cont p8 t0 (hs.of_equiv he0) (Fits.mono hp8 (by decide))
+    fun t1 hcall1 he1 => ?_
   peel_call hcall1
   have hfit1' : Fits t1.mem p (32 * 8) := fits_of_live?_eq (he1.live p.id).symm hfit0'
   -- `%16`/`%17`: `s + 16`
   peel_gep 16 with p, hfit1', t1 as p16
-  obtain ⟨t2, hcall2, he2⟩ :=
-    fd_ulong_load_8_conforms p16 t1 ((hs.of_equiv he0).of_equiv he1) (Fits.mono hp16 (by bv_omega))
+  refine fd_ulong_load_8_conforms_cont p16 t1 ((hs.of_equiv he0).of_equiv he1)
+    (Fits.mono hp16 (by decide)) fun t2 hcall2 he2 => ?_
   peel_call hcall2
   have hfit2' : Fits t2.mem p (32 * 8) := fits_of_live?_eq (he2.live p.id).symm hfit1'
   -- `%18`/`%19`: `s + 24`
   peel_gep 24 with p, hfit2', t2 as p24
-  obtain ⟨t3, hcall3, he3⟩ :=
-    fd_ulong_load_8_conforms p24 t2 (((hs.of_equiv he0).of_equiv he1).of_equiv he2)
-      (Fits.mono hp24 (by bv_omega))
+  refine fd_ulong_load_8_conforms_cont p24 t2 (((hs.of_equiv he0).of_equiv he1).of_equiv he2)
+    (Fits.mono hp24 (by decide)) fun t3 hcall3 he3 => ?_
   peel_call hcall3
 
   denote_step_reduce v 27 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.and, LLVM.and?, htop, hv8, hv2, hv5, hv4, hv3, hv1, hv0, Ctxt.Valuation.singleton, ptrselect, Ptr.null] fold
