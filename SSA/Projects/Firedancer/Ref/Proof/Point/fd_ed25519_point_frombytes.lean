@@ -609,7 +609,17 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
       · exact hqr
       all_goals exact Ne.symm (fieldLocal_ne_below hbq)
   have hm₀ : sLocals.RefWF [r, px, py, pt, pu, pv] :=
-    ⟨hwf, widen hm.gd, widen hm.gone, widen hm.gm1, widen hm.gy0, widen hm.gy1, widen hm.gk⟩
+    ⟨hwf, widen hm.gd, widen hm.gone, widen hm.gm1, widen hm.gy0, widen hm.gy1, widen hm.gk,
+      widen hm.gzero, by
+        obtain ⟨q, hg, hq⟩ := hm.gtbl
+        have hbq : q.id.id < s.alloc.nextFreeBlock := hg.below hm.wf
+        refine ⟨q, hg.carry (by simp only [GlobalPtr, hsLocals]; exact hg.addr) (fb q.id hbq), ?_⟩
+        have hqr : q.id ≠ r.id := hq r (by simp)
+        intro pp hpp
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hpp
+        rcases hpp with rfl | rfl | rfl | rfl | rfl | rfl
+        · exact hqr
+        all_goals exact Ne.symm (fieldLocal_ne_below hbq)⟩
 
 
   -- the frame is sealed in `F₀` now; the raw chain facts are spent
