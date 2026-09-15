@@ -95,9 +95,9 @@ elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
             $putBack:tactic)])))
 
 /-- `peel_lifetime` runs the next `llvm.lifetime` marker, which moves neither
-the state nor the valuation. -/
+the state nor the valuation; the block's last instruction included. -/
 macro "peel_lifetime" : tactic =>
-  `(tactic| rw [BlockCom.run_bind_denote_lifetime])
+  `(tactic| first | rw [BlockCom.run_bind_denote_lifetime] | rw [BlockCom.run_denote_lifetime])
 
 open Lean Elab Tactic Meta in
 /-- `peel_load t, blk, p, hblk, s` runs the next `llvm.load` of type `t`,
@@ -226,12 +226,17 @@ symbol table, so the state does not move.
 `hg : GlobalPtr s name p` -- or `h.ptr` from a `HoldsGlobal`. What the global
 *holds* is spent later, by the `peel_load`s that read through the pointer. -/
 macro "peel_addressof " hg:term : tactic =>
-  `(tactic|
-    rw [BlockCom.run_bind_denote_var_of_value
-      (x := PoisonOr.value _)
-      (by simp only [denoteOp_addressof, EffectM.run_map]
-          rw [run_addressof $hg]
-          rfl)])
+  `(tactic| first
+    | rw [BlockCom.run_bind_denote_var_of_value
+        (x := PoisonOr.value _)
+        (by simp only [denoteOp_addressof, EffectM.run_map]
+            rw [run_addressof $hg]
+            rfl)]
+    | rw [BlockCom.run_denote_var_of_value
+        (x := PoisonOr.value _)
+        (by simp only [denoteOp_addressof, EffectM.run_map]
+            rw [run_addressof $hg]
+            rfl)])
 
 /-- `peel_alloca from s as t with ht` runs the next `llvm.alloca` instruction,
 binding the fresh pointer `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩` and advancing the state
@@ -242,16 +247,20 @@ to `t`. `t` and `ht` are the first two facts
 `t : GlobalState`
 `ht : t = s.afterAlloca w` -/
 macro "peel_alloca" " from " st:term " as " t:term " with " ht:term : tactic =>
-  `(tactic|
-    rw [BlockCom.run_bind_denote_var_of_value
-      (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
-      (by simp only [denoteOp_alloca, EffectM.run_map]
-          rw [run_alloca, $ht:term]
-          rfl)])
+  `(tactic| first
+    | rw [BlockCom.run_bind_denote_var_of_value
+        (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
+        (by simp only [denoteOp_alloca, EffectM.run_map]
+            rw [run_alloca, $ht:term]
+            rfl)]
+    | rw [BlockCom.run_denote_var_of_value
+        (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
+        (by simp only [denoteOp_alloca, EffectM.run_map]
+            rw [run_alloca, $ht:term]
+            rfl)])
 
 open Lean Elab Tactic in
-/-- `peel_alloca_chain s, cw, 21` runs the 21 `alloca`s of `s.allocaChain cw`.
-Staged here; belongs beside `peel_alloca`. -/
+/-- `peel_alloca_chain s, cw, 21` runs the 21 `alloca`s of `s.allocaChain cw`. -/
 elab "peel_alloca_chain " st:term ", " w:term ", " n:num : tactic => do
   for k in [0 : n.getNat] do
     let ki := Syntax.mkNumLit (toString k)

@@ -244,6 +244,19 @@ theorem BlockCom.run_bind_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs
       = StateT.run (body.denote V >>= k) s :=
   BlockCom.run_bind_denote_var_of_nil (by simp only [denoteOp_lifetime, EffectM.run_pure])
 
+/-- `run_bind_denote_lifetime` without a continuation: a marker in a tail block. -/
+theorem BlockCom.run_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
+    {start : Bool} {p : Ctxt.Var Γ .ptr}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s : GlobalState} :
+    StateT.run ((BlockCom.var
+        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
+          (SLLVMOp.lifetime start) rfl (EffectKind.le_refl _)
+          (p ::ₕ .nil) Regions.nil) body).denote V) s
+      = StateT.run (body.denote V) s := by
+  simpa only [bind_pure] using
+    (BlockCom.run_bind_denote_lifetime (k := pure) (body := body) (p := p) (V := V) (s := s))
+
 /-- One `call` that returns nothing, given that the callee -- run as a function
 on the call's arguments -- succeeds and leaves the state at `s'`. The callee is
 a `Cfg` in `h`, which is the form its own conformance theorem is stated in, so
@@ -588,6 +601,33 @@ theorem _root_.LeanMLIR.SLLVM.Blocks.run_of_variant {Γamb : Ctxt SLLVM.Ty}
           refine ⟨rs, s'', ?_, hQ⟩
           rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
           exact heq
+
+/-- From `t` in `s` the block walk returns with `Q`. -/
+def Blocks.Runs {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} (bs : Blocks Γamb rets all all) (Vamb : Γamb.Valuation)
+    (Q : HVector toType rets → GlobalState → Prop) (t : SuccArgs all) (s : GlobalState) : Prop :=
+  ∃ rs s', StateT.run (bs.run Vamb t) s = .value (rs, s') ∧ Q rs s'
+
+/-- Run block `t`, then run on from its successor. -/
+theorem Blocks.Runs.step {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+    {Q : HVector toType rets → GlobalState → Prop} {t : SuccArgs all} {s : GlobalState}
+    (h : ∃ p s', StateT.run ((bs.get t.idx t.hidx).2.denote
+      (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s = .value (p, s')
+      ∧ (∀ rs, p.2 = .inl rs → Q rs s')
+      ∧ (∀ t', p.2 = .inr t' → bs.Runs Vamb Q t' s')) :
+    bs.Runs Vamb Q t s := by
+  obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := h
+  cases r with
+  | inl rs =>
+    refine ⟨rs, s', ?_, hinl rs rfl⟩
+    rw [Blocks.run_step (t := t), EffectM.run_bind, hrun, PoisonOr.value_bind]
+    rfl
+  | inr t' =>
+    obtain ⟨rs, s'', h, hQ⟩ := hinr t' rfl
+    refine ⟨rs, s'', ?_, hQ⟩
+    rw [Blocks.run_step (t := t), EffectM.run_bind, hrun, PoisonOr.value_bind]
+    exact h
 
 end LeanMLIR.SLLVM
 
