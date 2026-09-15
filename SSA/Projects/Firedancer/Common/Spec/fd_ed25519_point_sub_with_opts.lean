@@ -16,4 +16,8 @@ namespace Ed25519
 def PrecomputedPoint.neg (Q : PrecomputedPoint) : PrecomputedPoint :=
   ⟨Q.YplusX, Q.YminusX, Q.Z, -Q.T2d⟩
 
+/-- `-P` in extended coordinates. -/
+def Point.neg (P : Point) : Point :=
+  ⟨-P.X, P.Y, P.Z, -P.T⟩
+
 end Ed25519
