@@ -337,6 +337,25 @@ theorem live?_splice_congr {m₁ m₂ : MemoryState} {p : Pointer} {w : Nat} {x 
   | none => rw [splicedDead (h.trans hb), splicedDead hb]
   | some blk => rw [splicedLive _ _ _ (h.trans hb), splicedLive _ _ _ hb]
 
+/-- Writing a block's own bits back changes nothing. -/
+theorem live?_splice_extract {m : MemoryState} {p : Pointer} {blk : LiveBlock} (w : Nat)
+    (hl : m.live? p.id = some blk) (q : BlockId) :
+    (m.splice p (blk.bytes.extractLsb' p.offsetInBits w)).live? q = m.live? q := by
+  by_cases hq : p.id = q
+  · subst hq
+    rw [splicedLive m p blk hl, hl]
+    cases blk with
+    | mk len bytes =>
+      congr 2
+      apply BitVec.eq_of_getLsbD_eq
+      intro i hi
+      simp only [getLsbD_spliceBits, BitVec.getLsbD_extractLsb']
+      split_ifs with h1
+      · simp only [show i - p.offsetInBits < w by omega, decide_true, Bool.true_and]
+        congr 1; omega
+      · rfl
+  · exact live?_splice_ne hq
+
 /-- The `popFrame` ending of a region that wrote exactly one caller block `o`
 (through an out-parameter) and otherwise kept its frame: the result is the
 entry state with one splice. `hoval` says `m` holds at `o` what the splice
