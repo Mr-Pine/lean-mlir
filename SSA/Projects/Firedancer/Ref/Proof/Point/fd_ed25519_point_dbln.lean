@@ -309,9 +309,8 @@ end Dbln
 
 theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : GlobalState)
     (hs : s.WF) (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
-    (haX : ∀ (i : Fin 5) (l : ℕ), readLimb? a i s.mem = some l → l ≤ 0x8000000000000)
-    (haY : ∀ (i : Fin 5) (l : ℕ), readLimb? (a.withOffset 40) i s.mem = some l → l ≤ 0x8000000000000)
-    (haZ : ∀ (i : Fin 5) (l : ℕ), readLimb? (a.withOffset 120) i s.mem = some l → l ≤ 0x18000000000000)
+    (haX : LimbBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
+    (haZ : LimbBounds.Loose (isCoordPtr ha 3))
     (hn : n.toInt < 256) :
     fd_ed25519_point_dbln_spec r a n s hr ha := by
   simp only [fd_ed25519_point_dbln_spec]
@@ -346,9 +345,10 @@ theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : Glob
 
   -- `partial_dbl(t, a)`
   obtain ⟨u₀, hrun₀, hu₀, hfr₀, ht₀, hv₀, bX₀, bY₀, bZ₀, bT₀⟩ :=
-    Dbln.partialDbl_step hs₁ ht₁ ha₁ (limbBounds_of_live?_eq (p := a) hla haX)
-      (limbBounds_of_live?_eq (p := a.withOffset 40) hla haY)
-      (limbBounds_of_live?_eq (p := a.withOffset 120) hla haZ)
+    Dbln.partialDbl_step hs₁ ht₁ ha₁
+      (limbBounds_of_live?_eq (p := a) hla (Dbln.coordBounds ha 0 a (coordPtr_zero a) haX))
+      (limbBounds_of_live?_eq (p := a.withOffset 40) hla (Dbln.coordBounds ha 1 _ rfl haY))
+      (limbBounds_of_live?_eq (p := a.withOffset 120) hla (Dbln.coordBounds ha 3 _ rfl haZ))
   have hlr₀ : u₀.mem.live? r.id = s.mem.live? r.id := (hfr₀ r.id (Ne.symm hrt)).trans hlr
   have inv₀ : Dbln.Inv s r t (Point.dbl^[0] (readPoint ha)) u₀ := {
     wf := hu₀
