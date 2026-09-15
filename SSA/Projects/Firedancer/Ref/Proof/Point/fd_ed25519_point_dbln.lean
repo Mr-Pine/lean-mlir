@@ -5,7 +5,7 @@ import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_dbln
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Spec.Dbl
+import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_partial_dbl
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul_projective

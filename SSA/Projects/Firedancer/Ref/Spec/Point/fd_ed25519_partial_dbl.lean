@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
 import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Spec.Dbl
+import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
