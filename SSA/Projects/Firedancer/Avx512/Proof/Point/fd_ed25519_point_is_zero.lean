@@ -25,7 +25,11 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
 
     obtain ⟨q, sAlloc, hqdef, hsAlloc, -, -, -, -, -, -⟩ :=
       GlobalState.exists_afterAlloca_facts s hs (3 * 8 * 64)
-    obtain ⟨zquad, hzquadU46, hzquad, hzzUnit, ⟨zstate, hzstate, hzstate_eq⟩⟩ := fd_ed25519_point_set_zero_conforms _ _ (hs.afterAlloca _) ⟨fits_afterAlloca s _, by simp⟩
+    obtain ⟨zquad, hzquadU44, hzquad, hzzUnit, ⟨zstate, hzstate, hzstate_eq⟩⟩ := fd_ed25519_point_set_zero_conforms _ _ (hs.afterAlloca _) ⟨fits_afterAlloca s _, by simp⟩
+    have hzquadU46 : zquad.U46 :=
+      have u46 {v : Vector (BitVec 64) 8} (h : R43x6.U44 v) : R43x6.U46 v :=
+        ⟨fun i => (h.1 i).trans (by norm_num), h.2⟩
+      ⟨u46 hzquadU44.1, u46 hzquadU44.2.1, u46 hzquadU44.2.2⟩
     rw [← hsAlloc] at hzstate
     let pQuad := readQuad hp
     obtain ⟨eqstate, heqstate, heqstate_eq⟩ := spec_run_fd_r43x6_ge_is_eq pQuad zquad hpU46 hzquadU46 hpzUnit hzzUnit zstate

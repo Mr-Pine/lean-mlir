@@ -17,7 +17,7 @@ abbrev fd_ed25519_point_set_zero_spec (p: Pointer) (s: GlobalState) : Prop :=
 
   ∃ q : Quad ,
     let output_state := { s with mem := s.mem.splice p q.BV }
-    q.U46 ∧ q.toPoint.SamePoint .zero ∧ IsUnit q.toPoint.Z ∧
+    (R43x6.U44 q.v03 ∧ R43x6.U44 q.v14 ∧ R43x6.U44 q.v25) ∧ q.toPoint.SamePoint .zero ∧ IsUnit q.toPoint.Z ∧
     ∃ s' : GlobalState , result = .value ([.value p]ₕ, s') ∧ output_state ≈ s'
 
 end Firedancer.Avx512

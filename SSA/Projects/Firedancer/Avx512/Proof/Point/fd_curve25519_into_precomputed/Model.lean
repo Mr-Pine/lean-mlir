@@ -314,6 +314,10 @@ theorem quadElem_c1112d :
       ∧ quadElem c1112d 3 = 2 * d := by
   refine ⟨?_, ?_, ?_, ?_⟩ <;> decide
 
+/-- `u44` is `u62`. -/
+theorem u62_of_u44 {v : Vector (BitVec 64) 8} (h : R43x6.U44 v) : R43x6.U62 v :=
+  ⟨fun i => (h.1 i).trans (by norm_num), h.2⟩
+
 theorem u47s {q : Quad} (h : QuadU44 q) :
     R43x6.U47 q.v03 ∧ R43x6.U47 q.v14 ∧ R43x6.U47 q.v25 :=
   ⟨u47_of_u44 h.1, u47_of_u44 h.2.1, u47_of_u44 h.2.2⟩

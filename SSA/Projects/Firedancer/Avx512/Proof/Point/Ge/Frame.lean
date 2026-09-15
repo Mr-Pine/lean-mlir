@@ -372,6 +372,140 @@ theorem popFrame_equiv {s u : GlobalState} (hs : s.WF) {r : Pointer}
     (fun _ hne => live?_writeQuad_ne (Ne.symm hne))
     ((hF.below r.id hrlt).trans hmr))
 
+/-! ## Reading and rewriting a QUAD -/
+
+/-- A whole-QUAD store, as one splice of `p`'s block. -/
+theorem live?_writeQuad {m : MemoryState} {p : Pointer} (hp : p.offset.toNat + 3 * 8 * 8 ≤ 2 ^ 64)
+    (q : Quad) :
+    (m.writeQuad p q).live? p.id = (m.live? p.id).map fun blk =>
+        ({ length := blk.length,
+           bytes := spliceBits blk.bytes p.offsetInBits
+             (vecBV q.v25 ++ (vecBV q.v14 ++ vecBV q.v03)) } : LiveBlock) := by
+  have h64 : (p.withOffset 64).offsetInBits = p.offsetInBits + 512 := by
+    simp only [Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add,
+      show (64 : BitVec 64).toNat = 64 from rfl]; omega
+  have h128 : (p.withOffset 128).offsetInBits = p.offsetInBits + 1024 := by
+    simp only [Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add,
+      show (128 : BitVec 64).toNat = 128 from rfl]; omega
+  cases hb : m.live? p.id with
+  | none =>
+    simp only [MemoryState.writeQuad, Option.map_none]
+    exact splicedDead (p := p.withOffset 128) (splicedDead (p := p.withOffset 64)
+      (splicedDead hb))
+  | some blk =>
+    have e1 := splicedLive m p blk hb (vecBV q.v03)
+    have e2 := splicedLive _ (p.withOffset 64) _ e1 (vecBV q.v14)
+    have e3 := splicedLive _ (p.withOffset 128) _ e2 (vecBV q.v25)
+    simp only [MemoryState.writeQuad, Option.map_some]
+    refine e3.trans ?_
+    simp only [h64, h128, spliceBits_append]
+
+theorem wf_writeQuad {t : GlobalState} {p : Pointer} {q : Quad} (ht : t.WF) :
+    ({ t with mem := t.mem.writeQuad p q } : GlobalState).WF :=
+  fun b hb => live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none (ht b hb)))
+
+theorem isQuadPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) (hp : IsQuadPtr m p) : IsQuadPtr m' p :=
+  ⟨fits_of_live?_eq h hp.1, hp.2⟩
+
+/-- Two memories reading the same QUAD at `p` read the same `readQuad`. -/
+theorem readQuad_congr {m m' : MemoryState} {p : Pointer} (e : readQuad? p m' = readQuad? p m)
+    (h : IsQuadPtr m p) (h' : IsQuadPtr m' p) : readQuad h' = readQuad h :=
+    by
+  simp only [readQuad, e]
+
+/-- A store at or past `p`'s end leaves the QUAD at `p`. -/
+theorem readQuad?_splice_of_le {m : MemoryState} {p q : Pointer} {w : ℕ} {x : BitVec w}
+    (h : p.offsetInBits + 3 * 8 * 64 ≤ q.offsetInBits) :
+    readQuad? p (m.splice q x) = readQuad? p m := by
+  by_cases hid : q.id = p.id
+  · rcases hb : m.live? q.id with _ | blk
+    · have e := splicedDead (x := x) hb
+      rw [hid] at e hb
+      simp [readQuad?, e, hb]
+    · have e := splicedLive m q blk hb x
+      rw [hid] at e hb
+      simp only [readQuad?, e, hb, Option.bind_eq_bind, Option.bind_some, Option.pure_def]
+      refine congrArg some (Quad.ext ?_ ?_ ?_) <;> refine Vector.ext fun j hj => ?_ <;>
+        simp only [Vector.getElem_ofFn, Fin.toNat_eq_val, Fin.val_zero, Fin.val_one,
+          Fin.val_two] <;>
+        exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (Or.inl (by omega))
+  · simp only [readQuad?, live?_splice_ne hid]
+
+/-- A `writeQuad` at or past `p`'s end leaves the QUAD at `p`. -/
+theorem readQuad?_writeQuad_of_le {m : MemoryState} {p q : Pointer} {v : Quad}
+    (hq : q.offset.toNat + 3 * 8 * 8 ≤ 2 ^ 64) (h : p.offsetInBits + 3 * 8 * 64 ≤ q.offsetInBits) :
+    readQuad? p (m.writeQuad q v) = readQuad? p m := by
+  have h64 := Ge.offsetInBits_withOffset (p := q) hq (o := 64) (by omega)
+  have h128 := Ge.offsetInBits_withOffset (p := q) hq (o := 128) (by omega)
+  simp only [MemoryState.writeQuad]
+  rw [readQuad?_splice_of_le (q := q.withOffset 128) (by
+      rw [show (128 : BitVec 64) = BitVec.ofNat 64 128 from rfl, h128]; omega),
+    readQuad?_splice_of_le (q := q.withOffset 64) (by
+      rw [show (64 : BitVec 64) = BitVec.ofNat 64 64 from rfl, h64]; omega),
+    readQuad?_splice_of_le h]
+
+/-- A splice depends only on the bits spliced. -/
+theorem spliceBits_congr_getLsbD {n w w' : ℕ} (bytes : BitVec n) (o : ℕ) {x : BitVec w}
+    {y : BitVec w'} (hw : w = w') (h : ∀ i, x.getLsbD i = y.getLsbD i) :
+    spliceBits bytes o x = spliceBits bytes o y := by
+  subst hw; rw [BitVec.eq_of_getLsbD_eq fun i _ => h i]
+
+theorem getLsbD_BV (q : Quad) (i : ℕ) :
+    q.BV.getLsbD i = (vecBV q.v25 ++ (vecBV q.v14 ++ vecBV q.v03)).getLsbD i := by
+  rw [Quad.BV_append]
+  simp only [BitVec.getLsbD_append]
+  split_ifs <;> first | omega | with_reducible rfl |
+    rw [BitVec.getLsbD_of_ge _ _ (by omega), BitVec.getLsbD_of_ge _ _ (by omega)] | rw [Nat.sub_sub]
+
+/-- `set_zero`'s single store is a `writeQuad`. -/
+theorem live?_splice_BV {m : MemoryState} {p : Pointer} (hp : p.offset.toNat + 3 * 8 * 8 ≤ 2 ^ 64)
+    (q : Quad) (b : BlockId) : (m.splice p q.BV).live? b = (m.writeQuad p q).live? b := by
+  by_cases hb : p.id = b
+  · subst hb
+    rw [live?_writeQuad hp q]
+    rcases h : m.live? p.id with _ | blk
+    · exact splicedDead h
+    · refine (splicedLive m p blk h q.BV).trans (congrArg some ?_)
+      show ({ length := blk.length, bytes := spliceBits blk.bytes p.offsetInBits q.BV } : LiveBlock)
+        = { length := blk.length,
+            bytes := spliceBits blk.bytes p.offsetInBits (vecBV q.v25 ++ (vecBV q.v14 ++ vecBV q.v03)) }
+      rw [spliceBits_congr_getLsbD _ _ rfl (getLsbD_BV q)]
+  · rw [live?_splice_ne hb, live?_writeQuad_ne hb]
+
+/-- A lane of a flattened vector, bit by bit. -/
+theorem getLsbD_vecBV (v : Vector (BitVec 64) 8) {k : ℕ} (hk : k < 512) :
+    (vecBV v).getLsbD k = (v[k / 64]'(by omega)).getLsbD (k % 64) := by
+  have := congrArg (fun z : BitVec 64 => z.getLsbD (k % 64)) (extractLsb'_vecBV v (k / 64) (by omega))
+  simp only [BitVec.getLsbD_extractLsb', Nat.div_add_mod' k 64,
+    decide_eq_true (Nat.mod_lt k (show 64 > 0 by omega)), Bool.true_and] at this
+  exact this
+
+/-- Storing a QUAD's own vectors back changes nothing. -/
+theorem live?_writeQuad_readQuad {m : MemoryState} {r : Pointer} (hr : IsQuadPtr m r) :
+    (m.writeQuad r (readQuad hr)).live? r.id = m.live? r.id := by
+  have ⟨⟨blk, hblk, hlen⟩, hoff⟩ := hr
+  have hl : m.live? r.id = some blk := by simp only [MemoryState.live?, hblk]
+  have hq : readQuad hr =
+      ⟨Vector.ofFn fun j => blk.bytes.extractLsb' (r.offsetInBits + 64 * j.val) 64,
+      Vector.ofFn fun j => blk.bytes.extractLsb' (r.offsetInBits + 512 + 64 * j.val) 64,
+      Vector.ofFn fun j => blk.bytes.extractLsb' (r.offsetInBits + 1024 + 64 * j.val) 64⟩ := by
+    simp [readQuad, readQuad?, hl]
+  rw [live?_writeQuad hoff, hl, Option.map_some, hq]
+  congr 1
+  show _ = ({ length := blk.length, bytes := blk.bytes } : LiveBlock)
+  congr 1
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [getLsbD_spliceBits]
+  split_ifs with h
+  · simp only [BitVec.getLsbD_append]
+    split_ifs <;>
+      rw [getLsbD_vecBV _ (by omega), Vector.getElem_ofFn, BitVec.getLsbD_extractLsb'] <;>
+      simp only [decide_eq_true (Nat.mod_lt _ (show 64 > 0 by omega)), Bool.true_and] <;>
+      exact congrArg _ (by omega)
+  · rfl
+
 end Ge
 
 end Firedancer.Avx512

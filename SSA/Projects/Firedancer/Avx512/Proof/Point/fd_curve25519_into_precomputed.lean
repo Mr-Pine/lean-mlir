@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_curve25519_into_precomputed
 import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_curve25519_into_precomputed.Model
 import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg
 
 /-!
 # `fd_curve25519_into_precomputed` conforms (AVX-512)
@@ -166,4 +167,5 @@ theorem fd_curve25519_into_precomputed_conforms (r : Pointer) (s : GlobalState) 
   exact popFrame_equiv hs hrlt hF4 (fun _ hne => live?_writeQuad_ne (Ne.symm hne)) rfl
 
   /- The region has returned: the point and the bounds. -/
-  exact ⟨ofSlots_intoPre ⟨h03, h14, h25⟩, u44_intoPre ⟨h03, h14, h25⟩⟩
+  have hu := u44_intoPre ⟨h03, h14, h25⟩
+  exact ⟨ofSlots_intoPre ⟨h03, h14, h25⟩, hu.1, hu.2.1, hu.2.2, PointNeg.foldQuad_negBounds _ 3⟩

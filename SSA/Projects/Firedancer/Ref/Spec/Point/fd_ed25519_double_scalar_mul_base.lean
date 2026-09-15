@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_double_scalar_mul_base
 import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Common.Spec.Group
+import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
 import SSA.Projects.Firedancer.Proof.Globals
 
 namespace Firedancer.Ref
@@ -18,11 +18,6 @@ def BaseTableHolds (s : GlobalState) (Bt : ℕ → Ed25519.PrecomputedPoint) : P
     ∃ h : IsPointPtr s.mem (q.withOffset (BitVec.ofNat 64 (160 * k))),
       (∀ i, LimbBounds.Loose (isCoordPtr h i))
       ∧ Ed25519.PrecomputedPoint.ofSlots (readPoint h) = Bt k
-
-/-- Base-point table entries: `B k` is `(2k+1)·G`, precomputed from `Z = 1`. -/
-def BaseVals (B : ℕ → Ed25519.PrecomputedPoint) (G : Ed25519.Point) (hG : G.WellFormed) : Prop :=
-  ∀ k < 128, ∃ (Q : Ed25519.Point) (hQ : Q.WellFormed), Q.Z = 1 ∧ B k = Q.toPrecomputed
-    ∧ Q.toAffine hQ = (2 * k + 1) • G.toAffine hG
 
 /-- With `a` a well-formed point at `Z = 1` and the base-point table holding `(2k+1)·B`: returns
 `r`, writes nothing but `r`, stored `X, Y, Z, T` (byte offsets 0, 40, 120, 80), and `r` then

@@ -402,19 +402,6 @@ lemma byteFits {m : MemoryState} {p : Pointer} (hp : Fits m p (32 * 8))
   simpa [hoff] using remainingFits m p hp off (by rw [hoff]; omega)
 
 open Lean Elab Tactic in
-/-- `fold_cells s, cw, cellPtr, n` folds the `n` chain pointers an `alloca`
-prologue leaves in the valuation back to `cellPtr s k`, the form facts about
-them are stated over and the form `peel_load` matches against. -/
-elab "fold_cells " st:term ", " w:term ", " cp:term ", " n:num : tactic => do
-  let mut lems : Array Term := #[]
-  for k in [0 : n.getNat] do
-    let kn := Syntax.mkNumLit (toString k)
-    lems := lems.push (← `(show
-      (⟨⟨(GlobalState.allocaChain $st $w $kn).alloc.nextFreeBlock⟩, 0⟩ : Pointer)
-        = $cp $st $kn from rfl))
-  evalTactic (← `(tactic| simp only [$[$lems:term],*]))
-
-open Lean Elab Tactic in
 /-- `peel_gep_byte i, p, hp, s, x` is `peel_gep_limb` at byte granularity: the
 gep is off `p` by the constant `i` with `elem_type = i8`, and the pointer it
 yields becomes `x<i> := p.withOffset i`.

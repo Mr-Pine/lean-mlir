@@ -112,38 +112,12 @@ theorem live?_splice2 {m : MemoryState} {p : Pointer} (hp : p.offset.toNat + 3 *
     refine e2.trans ?_
     simp only [h64, spliceBits_append]
 
-/-- ... and a whole-QUAD store likewise. -/
-theorem live?_writeQuad {m : MemoryState} {p : Pointer} (hp : p.offset.toNat + 3 * 8 * 8 ≤ 2 ^ 64)
-    (q : Quad) :
-    (m.writeQuad p q).live? p.id = (m.live? p.id).map fun blk =>
-        ({ length := blk.length,
-           bytes := spliceBits blk.bytes p.offsetInBits
-             (vecBV q.v25 ++ (vecBV q.v14 ++ vecBV q.v03)) } : LiveBlock) := by
-  have h64 : (p.withOffset 64).offsetInBits = p.offsetInBits + 512 := by
-    simp only [Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add,
-      show (64 : BitVec 64).toNat = 64 from rfl]; omega
-  have h128 : (p.withOffset 128).offsetInBits = p.offsetInBits + 1024 := by
-    simp only [Pointer.withOffset, Pointer.offsetInBits, BitVec.toNat_add,
-      show (128 : BitVec 64).toNat = 128 from rfl]; omega
-  cases hb : m.live? p.id with
-  | none =>
-    simp only [MemoryState.writeQuad, Option.map_none]
-    exact splicedDead (p := p.withOffset 128) (splicedDead (p := p.withOffset 64)
-      (splicedDead hb))
-  | some blk =>
-    have e1 := splicedLive m p blk hb (vecBV q.v03)
-    have e2 := splicedLive _ (p.withOffset 64) _ e1 (vecBV q.v14)
-    have e3 := splicedLive _ (p.withOffset 128) _ e2 (vecBV q.v25)
-    simp only [MemoryState.writeQuad, Option.map_some]
-    refine e3.trans ?_
-    simp only [h64, h128, spliceBits_append]
-
 /-- The first two stores, then a `writeQuad` over them: the `writeQuad` alone. -/
 theorem live?_splice2_writeQuad {m : MemoryState} {p : Pointer}
     (hp : p.offset.toNat + 3 * 8 * 8 ≤ 2 ^ 64) (a b : Vector (BitVec 64) 8) (q : Quad) :
     (((m.splice p (vecBV a)).splice (p.withOffset 64) (vecBV b)).writeQuad p q).live? p.id
       = (m.writeQuad p q).live? p.id := by
-  rw [live?_writeQuad hp, live?_writeQuad hp, live?_splice2 hp]
+  rw [Ge.live?_writeQuad hp, Ge.live?_writeQuad hp, live?_splice2 hp]
   cases m.live? p.id with
   | none => rfl
   | some blk =>

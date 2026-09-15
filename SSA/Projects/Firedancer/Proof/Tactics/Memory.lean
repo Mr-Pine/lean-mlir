@@ -270,4 +270,17 @@ elab "peel_alloca_chain " st:term ", " w:term ", " n:num : tactic => do
         as (GlobalState.allocaChain $st $w $ki1)
         with (allocaChain_step $st $w $ki $ki1 rfl)))
 
+open Lean Elab Tactic in
+/-- `fold_cells s, cw, cellPtr, n` folds the `n` chain pointers an `alloca`
+prologue leaves in the valuation back to `cellPtr s k`, the form facts about
+them are stated over and the form `peel_load` matches against. -/
+elab "fold_cells " st:term ", " w:term ", " cp:term ", " n:num : tactic => do
+  let mut lems : Array Term := #[]
+  for k in [0 : n.getNat] do
+    let kn := Syntax.mkNumLit (toString k)
+    lems := lems.push (← `(show
+      (⟨⟨(GlobalState.allocaChain $st $w $kn).alloc.nextFreeBlock⟩, 0⟩ : Pointer)
+        = $cp $st $kn from rfl))
+  evalTactic (← `(tactic| simp only [$[$lems:term],*]))
+
 end Firedancer

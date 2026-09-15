@@ -30,6 +30,7 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 namespace DoubleScalarMulBase
+open Common.DoubleScalarMulBase
 
 -- Valuation lookups at literal variables (`Var.last` included) in one step, whatever the
 -- context's spelling; a dsimproc, so it also rewrites under dependent fields.
@@ -150,23 +151,6 @@ theorem PointAt.mono {m : MemoryState} {p : Pointer} {P : Ed25519.Point} {B B' :
     (hp : PointAt m p P B) (hB : ∀ i, B i ≤ B' i) : PointAt m p P B' :=
   ⟨hp.ptr, hp.val, fun i j => (hp.bnd i j).trans (hB i)⟩
 
-/-- The 256 entries at `p` are `w`. -/
-def SlidesAt (m : MemoryState) (p : Pointer) (w : BitVec 4096) : Prop :=
-  p.offset.toNat + 512 ≤ 2 ^ 64 ∧ ∃ blk : LiveBlock, m.live? p.id = some blk ∧
-    p.offsetInBits + 4096 ≤ blk.lengthInBits ∧ blk.bytes.extractLsb' p.offsetInBits 4096 = w
-
-theorem SlidesAt.of_live?_eq {m m' : MemoryState} {p : Pointer} {w : BitVec 4096}
-    (h : m'.live? p.id = m.live? p.id) (hs : SlidesAt m p w) : SlidesAt m' p w :=
-  ⟨hs.1, hs.2.elim fun blk ⟨hb, hl, hw⟩ => ⟨blk, h.trans hb, hl, hw⟩⟩
-
-/-- Splicing `w` at `p` leaves `w` there. -/
-theorem SlidesAt.splice {m : MemoryState} {p : Pointer} (h : Common.IsSlidesPtr m p)
-    (w : BitVec 4096) : SlidesAt (m.splice p w) p w :=
-  h.1.elim fun blk ⟨hblk, hlen⟩ => by
-    simp only [LiveBlock.lengthInBits] at hlen
-    exact ⟨h.2, _, splicedLive m p blk (by simp [MemoryState.live?, hblk]) w,
-      by simp only [LiveBlock.lengthInBits]; omega, extractLsb'_spliceBits _ _ _ (by omega)⟩
-
 /-- The values `^bb0` fixes: the digits and `a`'s point. -/
 structure Vals where
   w₁ : BitVec 4096
@@ -174,13 +158,7 @@ structure Vals where
   A : Ed25519.Point
 
 /-- `ai + 160k`, entry `k` of the table. -/
-def aiPtr (ai : Pointer) (k : ℕ) : Pointer :=
-  { ai with offset := ai.offset + BitVec.ofNat 64 (160 * k) }
-
-@[simp] theorem aiPtr_id (ai : Pointer) (k : ℕ) : (aiPtr ai k).id = ai.id := rfl
-
-@[simp] theorem aiPtr_zero (ai : Pointer) : aiPtr ai 0 = ai := by
-  simp [aiPtr]
+abbrev aiPtr (ai : Pointer) (k : ℕ) : Pointer := entryPtr 160 ai k
 
 /-- `ai[0 .. n)` hold `aiVal A`, loose. -/
 def Table (m : MemoryState) (ai : Pointer) (A : Ed25519.Point) (n : ℕ) : Prop :=
@@ -197,9 +175,8 @@ theorem Table.of_equiv {w u : GlobalState} {m : MemoryState} {ai : Pointer} {A :
 
 /-- Entry `k < 8`'s byte offset in a table that does not wrap. -/
 theorem aiPtr_offset_toNat {ai : Pointer} (hoff : ai.offset.toNat + 8 * (4 * 5 * 8) ≤ 2 ^ 64)
-    {k : ℕ} (hk : k < 8) : (aiPtr ai k).offset.toNat = ai.offset.toNat + 160 * k := by
-  simp only [aiPtr, BitVec.toNat_add, BitVec.toNat_ofNat]
-  rw [Nat.mod_eq_of_lt (a := 160 * k) (by omega), Nat.mod_eq_of_lt (by omega)]
+    {k : ℕ} (hk : k < 8) : (aiPtr ai k).offset.toNat = ai.offset.toNat + 160 * k :=
+  entryPtr_offset_toNat (K := 8) hoff hk
 
 /-- Entry `k < 8` of a table whose block fits is a point pointer. -/
 theorem isPointPtr_aiPtr {m : MemoryState} {ai : Pointer}
@@ -519,66 +496,6 @@ theorem Frame.storeT {s u u' : GlobalState} {r : Pointer} {L : Locals} {W : Vals
       (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hu.tptr)))))
     (live?_store4 he)
 
-/-- The digits `^bb0`'s wnaf leaves at `w`: every entry in `[-B, B]`. -/
-def Digits (w : BitVec 4096) (B : BitVec 16) : Prop :=
-  ∀ j < 256, (-B).sle (Common.Wnaf.slot w j) ∧ (Common.Wnaf.slot w j).sle B
-
-/-- `w`'s digits as the ladder's value needs them: zero or odd, of absolute value at most `B`. -/
-def DigitVals (w : BitVec 4096) (B : ℤ) : Prop :=
-  ∀ j < 256, (Common.Wnaf.slot w j = 0 ∨ (Common.Wnaf.slot w j).toInt % 2 = 1)
-    ∧ |(Common.Wnaf.slot w j).toInt| ≤ B
-
-theorem DigitVals.digits15 {w : BitVec 4096} (h : DigitVals w 15) : Digits w 15#16 := fun j hj => by
-  have hb := abs_le.mp (h j hj).2
-  simp only [BitVec.sle, decide_eq_true_eq]
-  exact ⟨by rw [show (-15#16).toInt = -15 by decide]; omega,
-    by rw [show (15#16).toInt = 15 by decide]; omega⟩
-
-theorem DigitVals.digits255 {w : BitVec 4096} (h : DigitVals w 255) : Digits w 255#16 :=
-  fun j hj => by
-  have hb := abs_le.mp (h j hj).2
-  simp only [BitVec.sle, decide_eq_true_eq]
-  exact ⟨by rw [show (-255#16).toInt = -255 by decide]; omega,
-    by rw [show (255#16).toInt = 255 by decide]; omega⟩
-
-/-- A positive digit in `[-15, 15]` halves into the table. -/
-theorem idx_pos {d : BitVec 16} (hlo : (-15#16).sle d) (hhi : d.sle 15#16)
-    (h : (0#16 <ₛ d) = true) :
-    (BitVec.setWidth 64 d >>> 1).toNat < 8 := by
-  have : BitVec.setWidth 64 d >>> 1 < 8#64 := by bv_decide
-  exact this
-
-/-- A nonpositive digit in `[-15, 15]`, negated, halves into the table. -/
-theorem idx_neg {d : BitVec 16} (hlo : (-15#16).sle d) (hhi : d.sle 15#16)
-    (h : ¬(0#16 <ₛ d) = true) :
-    (BitVec.setWidth 64 (-d) >>> 1).toNat < 8 := by
-  have : BitVec.setWidth 64 (-d) >>> 1 < 8#64 := by bv_decide
-  exact this
-
-/-- A positive digit in `[-255, 255]` halves into the base-point table. -/
-theorem idx_pos_tbl {d : BitVec 16} (hlo : (-255#16).sle d) (hhi : d.sle 255#16)
-    (h : (0#16 <ₛ d) = true) :
-    (BitVec.setWidth 64 d >>> 1).toNat < 128 := by
-  have : BitVec.setWidth 64 d >>> 1 < 128#64 := by bv_decide
-  exact this
-
-/-- A negative digit in `[-255, 255]`, negated, halves into the base-point table. -/
-theorem idx_neg_tbl {d : BitVec 16} (hlo : (-255#16).sle d) (hhi : d.sle 255#16)
-    (h : (d <ₛ 0#16) = true) :
-    (BitVec.setWidth 64 (-d) >>> 1).toNat < 128 := by
-  have : BitVec.setWidth 64 (-d) >>> 1 < 128#64 := by bv_decide
-  exact this
-
-/-- `^bb8`'s branch bit as the sign test. -/
-theorem ofBool_sgt_zero {d : BitVec 16} :
-    BitVec.ofBool (LLVM.icmp' LLVM.IntPred.sgt d 0#16) = 1 ↔ (0#16 <ₛ d) = true := by
-  cases h : 0#16 <ₛ d <;> simp [LLVM.icmp', h]
-
-/-- `^bb10`'s and `^bb14`'s branch bit as the sign test. -/
-theorem ofBool_slt_zero {d : BitVec 16} :
-    BitVec.ofBool (LLVM.icmp' LLVM.IntPred.slt d 0#16) = 1 ↔ (d <ₛ 0#16) = true := by
-  cases h : d <ₛ 0#16 <;> simp [LLVM.icmp', h]
-
 /-- The `Z := 1` flag of `add_with_opts`/`sub_with_opts`, `zext (d == c)`, is nonzero exactly at
 `d = c`. -/
 theorem zext_icmp_eq_zero (d c : BitVec 16) :
@@ -651,39 +568,6 @@ theorem subOpts_t (hV : EntryEnv V r L) {u : GlobalState} {R P : Ed25519.Point} 
     ⟨u₂, h₂.1, hu.storeT hV h₃.1, live?_store4 h₃.1,
       PointAt.of_equiv h₃.1.symm ⟨_, h₃.2.1.trans (by rw [hR.val, hb.val]), h₃.2.2⟩⟩
 
-/-- `j + -1` under `nsw`, for `1 ≤ j`. -/
-theorem add_neg_one64 {j : Nat} (h1 : 1 ≤ j) (h : j < 2 ^ 63) :
-    LLVM.add (PoisonOr.value (BitVec.ofNat 64 j)) (PoisonOr.value (BitVec.ofInt 64 (-1)))
-      { nsw := true } = PoisonOr.value (BitVec.ofNat 64 (j - 1)) := by
-  simp only [LLVM.add, LLVM.add?, PoisonOr.value_bind, Bool.false_eq_true, false_and, if_false]
-  rw [if_neg (by simp [BitVec.saddOverflow, BitVec.toInt_eq_toNat_cond]; omega)]
-  exact congrArg PoisonOr.value (BitVec.eq_of_toNat_eq (by
-    rw [BitVec.toNat_add, show BitVec.ofInt 64 (-1) = BitVec.ofNat 64 18446744073709551615 from rfl,
-      BitVec.toNat_ofNat, BitVec.toNat_ofNat, BitVec.toNat_ofNat]
-    omega))
-
-/-- `j >s 0` for `1 ≤ j < 2^63`. -/
-theorem icmp_sgt_zero64 {j : Nat} (h1 : 1 ≤ j) (h : j < 2 ^ 63) :
-    LLVM.icmp .sgt (PoisonOr.value (BitVec.ofNat 64 j)) (PoisonOr.value 0#64)
-      = PoisonOr.value 1#1 := by
-  simp only [LLVM.icmp, LLVM.icmp?, LLVM.icmp', PoisonOr.value_bind]
-  congr 2
-  have : (0#64 <ₛ BitVec.ofNat 64 j) = true := by
-    simp only [BitVec.slt, BitVec.toInt_eq_toNat_cond, BitVec.toNat_ofNat, decide_eq_true_eq]
-    rw [Nat.mod_eq_of_lt (by omega)]
-    split_ifs <;> omega
-  simp [this]
-
-/-- `k + 1` under `nsw nuw`, for `k < 2^63`. -/
-theorem add_one64 {k : Nat} (h : k + 1 < 2 ^ 63) :
-    LLVM.add (PoisonOr.value (BitVec.ofNat 64 k)) (PoisonOr.value 1#64) { nsw := true, nuw := true }
-      = PoisonOr.value (BitVec.ofNat 64 (k + 1)) := by
-  simp only [LLVM.add, LLVM.add?, PoisonOr.value_bind]
-  rw [if_neg (by simp [BitVec.saddOverflow, BitVec.toInt_eq_toNat_cond]; omega),
-    if_neg (by simp [BitVec.uaddOverflow]; omega)]
-  exact congrArg PoisonOr.value (BitVec.eq_of_toNat_eq (by
-    simp only [BitVec.toNat_add, BitVec.toNat_ofNat]; omega))
-
 /-- `^bb1`: `set_zero(r)`, then `br ^bb3(255)`. `P` at the target, `r` zero there. -/
 theorem step_bb1 (hV : EntryEnv V r L) {u : GlobalState} (hu : Frame s r L W u)
     (htb : Table u.mem L.ai W.A 8)
@@ -707,18 +591,6 @@ theorem step_bb1 (hV : EntryEnv V r L) {u : GlobalState} (hu : Frame s r L W u)
   exact k3 _ (hu.store4 hV he) (htb.of_live?_eq (live?_store4 he _ (Ne.symm hV.ai_r)))
     (PointAt.of_equiv he.symm ⟨_, hval, hbnd⟩)
 
-/-- `getelementptr` into the table: entry `x`. -/
-theorem gep_ai (p : Pointer) (x : BitVec 64) :
-    gep (PoisonOr.value p) 160 0 (PoisonOr.value x) = PoisonOr.value (aiPtr p x.toNat) := by
-  simp only [gep, ptradd, LLVM.mul, LLVM.add, LLVM.const?, LLVM.mul?, LLVM.add?, aiPtr,
-    PoisonOr.value_bind, Bool.false_eq_true, false_and, if_false]
-  rw [show (BitVec.ofInt 64 ((160 : Nat) : Int)) = 160#64 from rfl,
-    show (BitVec.ofInt 64 ((0 : Nat) : Int)) = 0#64 from rfl]
-  congr 2
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat]
-  omega
-
 /-- `^bb2`: `add_with_opts(t, a2, ai[k-1], k == 1, 1, 1); add_final_mul(ai[k], t);
 into_precomputed(ai[k])`; `k + 1 = 8` exits to `^bb1`, else `^bb2(k + 1)`, with `ai[k]` filled. -/
 theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
@@ -735,7 +607,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
   -- `ai[k - 1]`, `k == 1`
   denote_step_reduce v 4 [LLVM.const?] fold
   rw [hV.c5, add_neg_one64 hk1 (by omega)] at hv1
-  rw [hV.ai, hV.c5, add_neg_one64 hk1 (by omega), gep_ai, BitVec.toNat_ofNat,
+  rw [hV.ai, hV.c5, add_neg_one64 hk1 (by omega), gep_entryPtr, BitVec.toNat_ofNat,
     Nat.mod_eq_of_lt (show k - 1 < 2 ^ 64 by omega)] at hv2
   rw [hV.c4, Common.Wnaf.icmp_eq_ofNat (show k < 2 ^ 64 by omega) (show 1 < 2 ^ 64 by omega)]
     at hv3 hv4
@@ -757,7 +629,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
   have hai₁ : IsPointPtr u₁.mem (aiPtr L.ai k) := isPointPtr_aiPtr hu₁.aifits (by omega)
   -- `add_final_mul(ai[k], t)`
   denote_step_reduce v 6 [LLVM.const?] fold
-  rw [hV.ai, gep_ai, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show k < 2 ^ 64 by omega)] at hv6
+  rw [hV.ai, gep_entryPtr, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show k < 2 ^ 64 by omega)] at hv6
   refine (fd_ed25519_point_add_final_mul_conforms (aiPtr L.ai k) L.t u₁ hu₁.refwf.wf hV.ai_t hai₁
     hT₁.ptr (Dbln.coordBounds hT₁.ptr 0 L.t (coordPtr_zero _) (hT₁.bnd 0))
     (Dbln.coordBounds hT₁.ptr 1 _ rfl (hT₁.bnd 1)) (Dbln.coordBounds hT₁.ptr 3 _ rfl (hT₁.bnd 3))
@@ -773,7 +645,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
     hu₁.writeAi hV ((wf_splice4 hu₁.refwf.wf).of_equiv hc₂.2) hc₂.2.globals.symm
       (fits_of_live?_eq (live?_of_equiv_mem hc₂.2.symm _)
         (fits_splice (fits_splice (fits_splice (fits_splice hu₁.aifits.1)))))
-      fun b hb => live?_store4 hc₂.2 b (by rw [aiPtr_id]; exact hb)
+      fun b hb => live?_store4 hc₂.2 b (by rw [entryPtr_id]; exact hb)
   have hk8 : k < 8 := by omega
   have ge40 := aiPtr_withOffset_ge hoff hk8 (off := 40) (by decide)
   have ge80 := aiPtr_withOffset_ge hoff hk8 (off := 80) (by decide)
@@ -785,7 +657,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
   -- `into_precomputed(ai[k])`
   have hrefwf₂ : u₂.RefWF [aiPtr L.ai k] :=
     hu₂.refwf.of_ids fun p hp => by
-      simp only [List.mem_singleton] at hp; subst hp; exact ⟨L.ai, by simp, aiPtr_id _ _⟩
+      simp only [List.mem_singleton] at hp; subst hp; exact ⟨L.ai, by simp, entryPtr_id _ _ _⟩
   refine (fd_curve25519_into_precomputed_conforms (aiPtr L.ai k) u₂ hK₂.ptr hrefwf₂
     (limbBounds_congr_bound (coordPtr_zero _) (hK₂.bnd 0))
     (limbBounds_congr_bound (coordPtr_one _) (hK₂.bnd 1))
@@ -801,7 +673,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
       (fits_of_live?_eq (live?_of_equiv_mem h₅.1.symm _)
         (fits_splice (fits_splice (fits_splice hu₂.aifits.1))))
       fun b hb =>
-        have hb' : (aiPtr L.ai k).id ≠ b := by rw [aiPtr_id]; exact hb
+        have hb' : (aiPtr L.ai k).id ≠ b := by rw [entryPtr_id]; exact hb
         (live?_of_equiv_mem h₅.1.symm b).trans
           ((live?_splice_ne (p := (aiPtr L.ai k).withOffset 80) hb').trans
             ((live?_splice_ne (p := (aiPtr L.ai k).withOffset 40) hb').trans
@@ -843,53 +715,6 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
   · rw [if_neg (mt Common.Wnaf.ofBool_eq_one.mp hk7)]
     simp only [Target.denote_mk, HVector.map, simp_spine, hv8]
     exact k2 (by omega) u₃ hu₃ htb₃
-
-/-- Entry `k` of the 4096 bits at `off`. -/
-theorem extract_slot {n : Nat} (b : BitVec n) (off : Nat) {k : Nat} (hk : k < 256) :
-    b.extractLsb' (off + 16 * k) 16 = Common.Wnaf.slot (b.extractLsb' off 4096) k := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [Common.Wnaf.slot, BitVec.getLsbD_extractLsb', hi, decide_true, Bool.true_and,
-    show 16 * k + i < 4096 by omega]
-  congr 1; omega
-
-/-- Loading entry `k` of `SlidesAt … w` reads `slot w k`. -/
-theorem run_load_slides {m : MemoryState} {p : Pointer} {w : BitVec 4096} (hs : SlidesAt m p w)
-    {k : Nat} (hk : k < 256) :
-    (load (.value (Common.Wnaf.slotPtr p k)) (.bitvec (.concrete 16))).run m
-      = .value (.value (Common.Wnaf.slot w k), m) :=
-  hs.2.elim fun blk ⟨hb, hl, hw⟩ => by
-    rw [run_load (p := Common.Wnaf.slotPtr p k) (getElem?_of_live? hb) (by
-      simp only [LLVM.Ty.width]; rw [Common.Wnaf.slotPtr_offsetInBits hs.1 hk]; omega)]
-    simp only [LLVM.Ty.unflatten, LLVM.Ty.width]
-    rw [Common.Wnaf.slotPtr_offsetInBits hs.1 hk, extract_slot _ _ hk, hw]
-
-/-- `peel_load_slides hs, hk, hp` runs the `load` of slide entry `k`: `hs : SlidesAt …`,
-`hk : k < 256`, `hp` the pointer operand's `hv`. -/
-macro "peel_load_slides " hs:term ", " hk:term ", " hp:term : tactic =>
-  `(tactic| rw [BlockCom.run_denote_var_of_value (by
-      simp only [Expr.denoteOp, simp_denote, simp_sllvm]
-      simp only [simp_spine, $hp:term]
-      rw [run_liftM (run_load_slides $hs $hk)]; rfl)])
-
-/-- `zext` of a 32-bit natural to 64 bits. -/
-theorem setWidth_ofNat {i : Nat} (h : i < 2 ^ 32) :
-    BitVec.setWidth 64 (BitVec.ofNat 32 i) = BitVec.ofNat 64 i := by
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.toNat_setWidth, BitVec.toNat_ofNat]
-  omega
-
-/-- `i + -1` under `nsw`, for `1 ≤ i`. -/
-theorem add_neg_one32 {i : Nat} (h1 : 1 ≤ i) (h : i < 2 ^ 31) :
-    LLVM.add (PoisonOr.value (BitVec.ofNat 32 i)) (PoisonOr.value (BitVec.ofInt 32 (-1)))
-      { nsw := true } = PoisonOr.value (BitVec.ofNat 32 (i - 1)) := by
-  simp only [LLVM.add, LLVM.add?, PoisonOr.value_bind, Bool.false_eq_true, false_and, if_false]
-  rw [if_neg (by simp [BitVec.saddOverflow, BitVec.toInt_eq_toNat_cond]; omega)]
-  -- `congr`/`simp` on `ofInt (-1)` hit the kernel's recursion limit
-  exact congrArg PoisonOr.value (BitVec.eq_of_toNat_eq (by
-    rw [BitVec.toNat_add, show BitVec.ofInt 32 (-1) = BitVec.ofNat 32 4294967295 from rfl,
-      BitVec.toNat_ofNat, BitVec.toNat_ofNat, BitVec.toNat_ofNat]
-    omega))
 
 section Loop1
 
@@ -1015,14 +840,7 @@ theorem step_bb6 (hV : EntryEnv V r L) {u : GlobalState} (i : Nat) (hi : i ≤ 2
     StepThen s r L W Xf V P ⟨5, rfl, [v32 i]ₕ⟩ u := by
   simp only [StepThen]
   denote_step_reduce v 1 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hV.c10]
-  -- `i >s -1` for `i ≤ 255`
-  have h : (4294967295#32 <ₛ BitVec.ofNat 32 i) = true := by
-    have h1 : (4294967295#32).toInt = -1 := by decide
-    have h2 : (BitVec.ofNat 32 i).toInt = i := by
-      rw [BitVec.toInt_eq_toNat_cond]; simp; split_ifs <;> omega
-    simp only [BitVec.slt, decide_eq_true_eq, h1, h2]
-    omega
-  simp [h, hv1, BlockCom.denote_term, Target.denote]
+  simp [slt_neg_one32 hi, hv1, BlockCom.denote_term, Target.denote]
   exact k7
 
 /-- `^bb7`: `br ^bb8(zext i)`. `P` at the target. -/
@@ -1115,7 +933,7 @@ theorem step_bb9 (hV : EntryEnv V r L) (hW : Digits W.w₁ 15#16) {u : GlobalSta
   denote_step_reduce v 7 [LLVM.const?] fold
   simp [hV.c11, hV.ai, LLVM.lshr, LLVM.lshr?, LLVM.zext, LLVM.zext?, LLVM.icmp, LLVM.icmp?]
     at hv5 hv7
-  replace hv5 := hv5.trans (gep_ai L.ai _)
+  replace hv5 := hv5.trans (gep_entryPtr 160 L.ai _)
   have htb₁ := htb.of_live?_eq (h₁.2.2.1 _ (Ne.symm hV.ai_r))
   refine (htb₁ _ hk).elim fun P hP => ?_
   -- `add_with_opts(t, r, ai[d >> 1], d == 1, 1, 1)`
@@ -1167,7 +985,7 @@ theorem step_bb11 (hV : EntryEnv V r L) (hW : Digits W.w₁ 15#16) {u : GlobalSt
   denote_step_reduce v 8 [LLVM.const?] fold
   simp [hV.c9, hV.c11, hV.c12, hV.ai, LLVM.sub, LLVM.sub?, LLVM.lshr, LLVM.lshr?, LLVM.zext,
     LLVM.zext?, LLVM.icmp, LLVM.icmp?] at hv6 hv8
-  replace hv6 := hv6.trans (gep_ai L.ai _)
+  replace hv6 := hv6.trans (gep_entryPtr 160 L.ai _)
   have htb₁ := htb.of_live?_eq (h₁.2.2.1 _ (Ne.symm hV.ai_r))
   refine (htb₁ _ hk).elim fun P hP => ?_
   -- `sub_with_opts(t, r, ai[-d >> 1], d == -1, 1, 1)`
@@ -1245,7 +1063,7 @@ theorem step_bb13 {Bt : ℕ → Ed25519.PrecomputedPoint} (hV : EntryEnv V r L)
   -- `tbl[d >> 1]`
   denote_step_reduce v 5 [LLVM.const?] fold
   simp [hV.c11, hV.tbl, LLVM.lshr, LLVM.lshr?, LLVM.zext, LLVM.zext?] at hv5
-  replace hv5 := hv5.trans (gep_ai L.tbl _)
+  replace hv5 := hv5.trans (gep_entryPtr 160 L.tbl _)
   refine (hBT.pts _ hk).elim fun Q hQ => ?_
   -- `add_with_opts(t, r, tbl[d >> 1], 1, 1, 1)`
   refine (addOpts_t hV 1#32 h₁.2.1 h₁.2.2.2
@@ -1308,7 +1126,7 @@ theorem step_bb15 {Bt : ℕ → Ed25519.PrecomputedPoint} (hV : EntryEnv V r L)
   denote_step_reduce v 6 [LLVM.const?] fold
   simp [hV.c9, hV.c11, hV.tbl, LLVM.sub, LLVM.sub?, LLVM.lshr, LLVM.lshr?, LLVM.zext,
     LLVM.zext?] at hv6
-  replace hv6 := hv6.trans (gep_ai L.tbl _)
+  replace hv6 := hv6.trans (gep_entryPtr 160 L.tbl _)
   refine (hBT.pts _ hk).elim fun Q hQ => ?_
   -- `sub_with_opts(t, r, tbl[-d >> 1], 1, 1, 1)`
   refine (subOpts_t hV 1#32 h₁.2.1 h₁.2.2.2
@@ -1622,36 +1440,6 @@ def allocW : Nat → Nat
 /-- The `k`-th `alloca` of `^bb0`. -/
 abbrev slot (s : GlobalState) (k : Nat) : Pointer := s.chainPtr allocW k
 
-theorem readScalar_eq_readBuf {m : MemoryState} {p : Pointer} (h : IsByteBufPtr m p) :
-    Common.readScalar h = readBuf h := rfl
-
-/-- `fd_curve25519_scalar_wnaf` returns, writing some `w` at `slides` whose digits are zero or odd,
-within `±(2 ^ bits - 1)`, and sum to `n`'s low 255 bits. -/
-theorem wnaf_run (slides n : Pointer) (bits : BitVec 32) (B : ℤ) (s : GlobalState) (hs : s.WF)
-    (hsl : Common.IsSlidesPtr s.mem slides) (hn : IsByteBufPtr s.mem n)
-    (hbits : bits = 4#32 ∧ B = 15 ∨ bits = 8#32 ∧ B = 255) :
-    ∃ s' : GlobalState, StateT.run (runFunction (Common.fd_curve25519_scalar_wnaf.denote
-        (Ctxt.Valuation.ofHVector [.value bits, .value n, .value slides]ₕ))) s = .value ([]ₕ, s')
-      ∧ ∃ w : BitVec (256 * 16), ({ s with mem := s.mem.splice slides w } : GlobalState) ≈ s'
-        ∧ DigitVals w B
-        ∧ (slides.id ≠ n.id → Common.digitSum w 256 = ((readBuf hn).toNat % 2 ^ 255 : ℕ)) :=
-  (Common.fd_curve25519_scalar_wnaf_conforms slides n bits s hs hsl hn
-    (by rcases hbits with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide)).elim
-    fun s' h => h.elim fun hrun h => h.elim fun w h =>
-    have hw := h.1; have hd := h.2.1; have hsum := h.2.2
-    ⟨s', hrun, w, hw.symm, fun j hj => by
-      obtain ⟨h1, h2⟩ := hd j hj
-      refine ⟨h1, ?_⟩
-      have hx : Common.Wnaf.slot w j = 0 → (Common.Wnaf.slot w j).toInt = 0 := fun h => h ▸ rfl
-      change (Common.Wnaf.slot w j = 0 ∨ (Common.Wnaf.slot w j).toInt % 2 = 1) at h1
-      change (Common.Wnaf.slot w j).toInt.natAbs ≤ 2 ^ bits.toNat at h2
-      rw [abs_le]
-      rcases hbits with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
-        simp only [show (4#32).toNat = 4 from rfl, show (8#32).toNat = 8 from rfl] at h2 <;>
-        rcases h1 with h1 | h1 <;> [have := hx h1; skip; have := hx h1; skip] <;> omega,
-      fun hne => (hsum (by rcases hbits with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide) hne).trans
-        (congrArg (fun x : BitVec 256 => ((x.toNat % 2 ^ 255 : ℕ) : ℤ)) (readScalar_eq_readBuf hn))⟩
-
 /-- `^bb0`: `wnaf(n1slide, n1, 4); wnaf(n2slide, n2, 8); set(ai[0], a); dbln(a2, a, 1);
 into_precomputed(ai[0])`, then `br ^bb2(1)`. -/
 theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
@@ -1702,7 +1490,9 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
   obtain ⟨w₁, he₁, hd₁, hsum₁⟩ := he₁
   have hS₁ := (hsum₁ (hslot_below (lt_nextFreeBlock_of_fits hs.wf hn1.1))).trans
     (congrArg (fun x : BitVec 256 => ((x.toNat % 2 ^ 255 : ℕ) : ℤ))
-      (readBuf_of_live?_eq (hp := hn1) (fb n1.id (lt_nextFreeBlock_of_fits hs.wf hn1.1))))
+      (readBuf_of_live?_eq (hp := hn1)
+        (hp' := isByteBufPtr_of_live?_eq (fb n1.id (lt_nextFreeBlock_of_fits hs.wf hn1.1)) hn1)
+        (fb n1.id (lt_nextFreeBlock_of_fits hs.wf hn1.1))))
   have hl₁ : ∀ b : BlockId, (slot s 0).id ≠ b →
       u₁.mem.live? b = (s.allocaChain allocW 5).mem.live? b := fun b hb =>
     (live?_of_equiv_mem he₁.symm b).trans (live?_splice_ne (p := slot s 0) hb)
@@ -1721,6 +1511,8 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
   have hS₂ := (hsum₂ (hslot_below (lt_nextFreeBlock_of_fits hs.wf hn2.1))).trans
     (congrArg (fun x : BitVec 256 => ((x.toNat % 2 ^ 255 : ℕ) : ℤ))
       (readBuf_of_live?_eq (hp := hn2)
+        (hp' := isByteBufPtr_of_live?_eq ((hl₁ _ (hslot_below (lt_nextFreeBlock_of_fits hs.wf hn2.1))).trans
+          (fb n2.id (lt_nextFreeBlock_of_fits hs.wf hn2.1))) hn2)
         ((hl₁ _ (hslot_below (lt_nextFreeBlock_of_fits hs.wf hn2.1))).trans
           (fb n2.id (lt_nextFreeBlock_of_fits hs.wf hn2.1)))))
   have hl₂ : ∀ b : BlockId, (slot s 1).id ≠ b → u₂.mem.live? b = u₁.mem.live? b := fun b hb =>
@@ -1862,7 +1654,7 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
         (limbBounds_of_live?_eq (p := a.withOffset 120) hla₂ (Dbln.coordBounds ha 3 _ rfl haZ)) _
     have htb : Table u₅.mem (slot s 2) (readPoint ha) 1 := fun k hk => by
       obtain rfl : k = 0 := by omega
-      rw [aiPtr_zero]
+      rw [aiPtr, entryPtr_zero]
       refine ⟨_, PointAt.of_equiv h₅.1.symm
         ⟨isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hai₄)), rfl, fun i => ?_⟩,
         h₅.2.1.trans (congrArg _ hai₄A)⟩
@@ -1920,7 +1712,7 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
 
 end DoubleScalarMulBase
 
-open DoubleScalarMulBase in
+open DoubleScalarMulBase Common.DoubleScalarMulBase in
 theorem fd_ed25519_double_scalar_mul_base_conforms (r n1 a n2 : Pointer) (s : GlobalState)
     (hs : s.RefWF [r]) (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
     (hn1 : IsByteBufPtr s.mem n1) (hn2 : IsByteBufPtr s.mem n2)
