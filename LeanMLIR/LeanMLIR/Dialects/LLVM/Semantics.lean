@@ -24,7 +24,8 @@ namespace LLVM
 open InstCombine
 open PoisonOr (value poison)
 
-def IntW w := PoisonOr <| BitVec w
+-- v4.34 checks applications at `implicit` transparency, so this has to unfold to `PoisonOr`.
+@[implicit_reducible] def IntW w := PoisonOr <| BitVec w
 
 namespace IntW
 
@@ -49,12 +50,13 @@ having to duplicate that API for `LLVM.IntW`.
 @[simp, simp_llvm]
 theorem isRefinedBy_iff (x y : LLVM.IntW w) :
     x ⊑ y ↔ @HRefinement.IsRefinedBy (PoisonOr _) (PoisonOr _) _ x y := by
-  simp [instRefinement]
+  -- v4.34: `simp` no longer unfolds the instance; the `dite` branch is all this needs
+  exact iff_of_eq (dif_pos rfl)
 
 @[simp, simp_llvm]
 theorem isRefinedBy_iff_of_width_neq {x : LLVM.IntW w} {y : LLVM.IntW v} (h : w ≠ v) :
     x ⊑ y ↔ False := by
-  simp [instRefinement, h]
+  simp [HRefinement.IsRefinedBy, h]
 
 
 end IntW
@@ -275,7 +277,7 @@ theorem sdiv?_eq_div_if {w : Nat} {x y : BitVec w} :
       then .poison
     else .value <| BitVec.sdiv x y
     := by
-  simp [sdiv?]; split_ifs <;> try tauto
+  simp [sdiv?]; split_ifs <;> tauto
 
 /--
 This instruction returns the unsigned integer remainder of a division. This instruction always performs an unsigned division to get the remainder.
