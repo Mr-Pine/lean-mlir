@@ -36,14 +36,15 @@ def getValues (v : Vector (PoisonOr α) n) : PoisonOr (Vector α n) :=
 exactly those values, and in particular is not poison. This is the shape every
 `Avx512/Proof/` theorem produces, so it is what connects a denotation theorem
 to a specification stated over `BitVec`s. -/
-@[simp] theorem getValues_map_value (v : Vector α n) :
+@[simp]
+theorem getValues_map_value (v : Vector α n) :
     (@Vector.map α (no_index _) n PoisonOr.value v).getValues = .value v := by
---               ^^^^^^^^^^^^^^
--- NOTE: in a denotation goal the element type is not the syntactic
--- `PoisonOr α` but the dialect's `LLVM.Ty.denote (.bitvec 64)`, which is
--- definitionally equal but is what the discr_tree would key on. Leaving it
--- unindexed is what lets this fire on `(… .denote V).head.getValues`; cf.
--- `bind_if_then_poison_eq_ite_bind` in `LeanMLIR/Util/Poison.lean`.
+  --               ^^^^^^^^^^^^^^
+  -- NOTE: in a denotation goal the element type is not the syntactic
+  -- `PoisonOr α` but the dialect's `LLVM.Ty.denote (.bitvec 64)`, which is
+  -- definitionally equal but is what the discr_tree would key on. Leaving it
+  -- unindexed is what lets this fire on `(… .denote V).head.getValues`; cf.
+  -- `bind_if_then_poison_eq_ite_bind` in `LeanMLIR/Util/Poison.lean`.
   unfold getValues
   rw [Vector.mapM_map]
   show Vector.mapM (fun x => (pure (id x) : PoisonOr α)) v = _

@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.Firedancer.Ref.Spec.F25519
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 
 /-- The 40-byte field elements at `p` and `q` do not overlap. -/

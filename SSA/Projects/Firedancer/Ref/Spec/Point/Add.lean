@@ -24,6 +24,7 @@ def Point.addPrecomputedPartial (P : Point) (Q : PrecomputedPoint) : Point :=
   ⟨B - A, D - C, D + C, B + A⟩
 
 theorem Point.finalMul_addPrecomputedPartial (P : Point) (Q : PrecomputedPoint) :
-    (P.addPrecomputedPartial Q).finalMul = P.addPrecomputed Q := rfl
+    (P.addPrecomputedPartial Q).finalMul = P.addPrecomputed Q :=
+  rfl
 
 end Ed25519

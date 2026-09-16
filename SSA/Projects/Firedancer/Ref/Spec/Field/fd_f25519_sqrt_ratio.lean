@@ -6,6 +6,7 @@ import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqrt_ratio
 import SSA.Projects.Firedancer.Ref.Spec.Bias
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -37,33 +38,30 @@ from what the region computes -- `c = (u v⁷)^((p-5)/8) · u v³` and three
 comparisons of `c² · v` against `u`, `-u`, `-u · i` -- to the claims above
 needs the `p ≡ 5 mod 8` square-root theory, namely that `c² · v` lands in
 `{u, -u, i·u, -i·u}` and that which of the four it is decides squareness. -/
-abbrev fd_f25519_sqrt_ratio_spec (o u v : Pointer) (s : GlobalState)
-    (ho : IsFieldElemPtr s.mem o)
-    (hu : IsFieldElemPtr s.mem u)
-    (hv : IsFieldElemPtr s.mem v) : Prop :=
-  let invocation := runFunction (fd_f25519_sqrt_ratio.denote
-    (Ctxt.Valuation.ofHVector [.value v, .value u, .value o]ₕ))
+abbrev fd_f25519_sqrt_ratio_spec (o u v : Pointer) (s : GlobalState) (ho : IsFieldElemPtr s.mem o)
+    (hu : IsFieldElemPtr s.mem u) (hv : IsFieldElemPtr s.mem v) : Prop :=
+  let invocation :=
+    runFunction
+      (fd_f25519_sqrt_ratio.denote (Ctxt.Valuation.ofHVector [.value v, .value u, .value o]ₕ))
   let result := StateT.run invocation s
   let uIn := readFieldElem hu
   let vIn := readFieldElem hv
   let isSquare := ∃ x : ZMod p, x ^ 2 * vIn = uIn
-
   ∃ out : Fin 5 → BitVec 64,
     let output_state : GlobalState := { s with mem := s.mem.splice o (packLimbs out) }
     let root := readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho)
-
     -- `fd_f25519_abs` leaves the non-negative representative
-    root.val % 2 = 0
-    ∧ (isSquare → root ^ 2 * vIn = uIn)
-    -- ∧ (¬ isSquare → vIn ≠ 0 → root ^ 2 * vIn = sqrtm1 * uIn) -- I don't think this is a relevant part of the spec
-    ∧ (vIn = 0 → root = 0)
-    ∧ BiasBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
-    ∧ limbSum (m := output_state.mem) (isFieldElemPtr_splice ho) < 2 ^ 256 - 38
-    ∧ (∃ s' : GlobalState,
-        result = .value
-          ([(.value (if isSquare then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, s')
-        ∧ output_state ≈ s')
-    -- all-zero limbs come only from an all-zero input
-    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem)
+    root.val % 2 = 0 ∧
+      (isSquare → root ^ 2 * vIn = uIn)
+      -- ∧ (¬ isSquare → vIn ≠ 0 → root ^ 2 * vIn = sqrtm1 * uIn) -- I don't think this is a relevant part of the spec
+      ∧
+      (vIn = 0 → root = 0) ∧
+      BiasBounds (m := output_state.mem) (isFieldElemPtr_splice ho) ∧
+      limbSum (m := output_state.mem) (isFieldElemPtr_splice ho) < 2 ^ 256 - 38 ∧
+      (∃ s' : GlobalState,
+        result = .value ([(.value (if isSquare then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, s') ∧
+          output_state ≈ s')
+      -- all-zero limbs come only from an all-zero input
+      ∧ (ZeroLimbs o output_state.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem)
 
 end Firedancer.Ref

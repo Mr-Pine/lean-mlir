@@ -15,23 +15,23 @@ hatch, because a total operation on a value cannot produce one.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 /-- `fd_ulong_bswap x` is the byte reversal of `x`, and touches nothing. -/
 abbrev fd_ulong_bswap_spec (x : BitVec 64) (s : GlobalState) : Prop :=
   let invocation := runFunction (fd_ulong_bswap.denote (Ctxt.Valuation.singleton (.value x)))
-  ∃ s' : GlobalState,
-    StateT.run invocation s = .value ([.value (SLLVM.bswapBV x)]ₕ, s') ∧ s ≈ s'
+  ∃ s' : GlobalState, StateT.run invocation s = .value ([.value (SLLVM.bswapBV x)]ₕ, s') ∧ s ≈ s'
 
 /-- `fd_ulong_rotate_right x n` is `fshr x x n`, the rotation, and touches
 nothing. The shift amount arrives as an `i32` and is zero-extended, so the
 rotation is by `n.toNat % 64` -- `fshr`'s own reduction of the amount. -/
 abbrev fd_ulong_rotate_right_spec (x : BitVec 64) (n : BitVec 32) (s : GlobalState) : Prop :=
-  let invocation := runFunction
-    (fd_ulong_rotate_right.denote (Ctxt.Valuation.ofHVector [.value n, .value x]ₕ))
+  let invocation :=
+    runFunction (fd_ulong_rotate_right.denote (Ctxt.Valuation.ofHVector [.value n, .value x]ₕ))
   ∃ s' : GlobalState,
-    StateT.run invocation s
-        = .value ([.value (SLLVM.fshrBV x x (BitVec.setWidth 64 n))]ₕ, s') ∧ s ≈ s'
+    StateT.run invocation s = .value ([.value (SLLVM.fshrBV x x (BitVec.setWidth 64 n))]ₕ, s') ∧
+      s ≈ s'
 
 end Firedancer.Common

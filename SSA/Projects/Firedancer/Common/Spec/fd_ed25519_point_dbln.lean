@@ -27,19 +27,20 @@ def Point.dbl (P : Point) : Point :=
 
 /-- How many doublings `fd_ed25519_point_dbln(r, a, n)` performs: the first is
 unconditional, and the loop adds `n - 1` more when `n > 1` (signed). -/
-def dblnCount (n : BitVec 32) : ℕ := if n.toInt ≤ 1 then 1 else n.toNat
+def dblnCount (n : BitVec 32) : ℕ :=
+  if n.toInt ≤ 1 then 1 else n.toNat
 
 /-- `2^n · P` as `fd_ed25519_point_dbln` computes it. -/
-def Point.dbln (n : BitVec 32) (P : Point) : Point := Point.dbl^[dblnCount n] P
+def Point.dbln (n : BitVec 32) (P : Point) : Point :=
+  Point.dbl^[dblnCount n] P
 
 /-- `dbl` depends on `X`, `Y`, `Z` only. -/
 theorem Point.dbl_congr {P Q : Point} (hX : P.X = Q.X) (hY : P.Y = Q.Y) (hZ : P.Z = Q.Z) :
-    P.dbl = Q.dbl := by
-  simp only [Point.dbl, hX, hY, hZ]
+    P.dbl = Q.dbl := by simp only [Point.dbl, hX, hY, hZ]
 
 /-- ... so `dbln` does too. -/
-theorem Point.dbln_congr {P Q : Point} (n : BitVec 32)
-    (hX : P.X = Q.X) (hY : P.Y = Q.Y) (hZ : P.Z = Q.Z) : P.dbln n = Q.dbln n := by
+theorem Point.dbln_congr {P Q : Point} (n : BitVec 32) (hX : P.X = Q.X) (hY : P.Y = Q.Y)
+    (hZ : P.Z = Q.Z) : P.dbln n = Q.dbln n := by
   obtain ⟨k, hk⟩ : ∃ k, dblnCount n = k + 1 := by
     refine ⟨dblnCount n - 1, ?_⟩
     have := BitVec.toInt_eq_toNat_cond n

@@ -11,6 +11,7 @@ and scalars.
 -/
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 
 /-- A 32-byte buffer at `p`: the block holds 256 bits from `p`'s offset, and byte offsets into
@@ -26,8 +27,7 @@ def readBuf? (p : Pointer) (m : MemoryState) : Option (BitVec 256) := do
 theorem readBuf?_isSome {m : MemoryState} {p : Pointer} (h : IsByteBufPtr m p) :
     (readBuf? p m).isSome := by
   obtain ⟨⟨block, hblk, -⟩, -⟩ := h
-  have hlive : m.live? p.id = some block := by
-    simp only [MemoryState.live?, hblk]
+  have hlive : m.live? p.id = some block := by simp only [MemoryState.live?, hblk]
   simp [readBuf?, hlive]
 
 def readBuf {p : Pointer} {m : MemoryState} (h : IsByteBufPtr m p) : BitVec 256 :=
@@ -41,9 +41,8 @@ theorem isByteBufPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : Bit
 
 /-- A buffer read looks only at the block the pointer addresses, so it survives any step that
 left that block alone. -/
-theorem readBuf_of_live?_eq {m m' : MemoryState} {p : Pointer}
-    (h : m'.live? p.id = m.live? p.id) {hp : IsByteBufPtr m p} {hp' : IsByteBufPtr m' p} :
-    readBuf hp' = readBuf hp := by
+theorem readBuf_of_live?_eq {m m' : MemoryState} {p : Pointer} (h : m'.live? p.id = m.live? p.id)
+    {hp : IsByteBufPtr m p} {hp' : IsByteBufPtr m' p} : readBuf hp' = readBuf hp := by
   simp only [readBuf, readBuf?, h]
 
 end Firedancer

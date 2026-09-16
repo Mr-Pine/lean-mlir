@@ -40,19 +40,23 @@ and `fd_f25519_eq`'s first operand tight `y`. `Z` and `T` need no bound.
 -/
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
 
 abbrev fd_ed25519_affine_is_small_order_spec (a : Pointer) (s : GlobalState)
     (ha : IsPointPtr s.mem a) : Prop :=
-  let invocation := runFunction
-    (fd_ed25519_affine_is_small_order.denote (Ctxt.Valuation.singleton (.value a)))
+  let invocation :=
+    runFunction (fd_ed25519_affine_is_small_order.denote (Ctxt.Valuation.singleton (.value a)))
   let result := StateT.run invocation s
   let P := readPoint ha
   let output_value : LLVM.IntW _ := .value (if (P.X, P.Y) ∈ lowOrder then 1#32 else 0#32)
-
-  s.RefWF [] → P.Z = 1 → OnCurve P.x P.y → ZeroRep a s.mem → LimbBounds (isCoordPtr ha 1) →
+  s.RefWF [] →
+    P.Z = 1 →
+    OnCurve P.x P.y →
+    ZeroRep a s.mem →
+    LimbBounds (isCoordPtr ha 1) →
     ∃ s' : GlobalState, result = .value ([output_value]ₕ, s') ∧ s ≈ s'
 
 end Firedancer.Ref

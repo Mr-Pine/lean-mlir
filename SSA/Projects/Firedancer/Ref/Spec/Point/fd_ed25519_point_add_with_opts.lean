@@ -7,6 +7,7 @@ import SSA.Projects.Firedancer.Ref.Spec.Point
 import SSA.Projects.Firedancer.Ref.Spec.Point.Add
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -23,28 +24,36 @@ for `fd_f25519_mul{3,4}`. -/
 abbrev fd_ed25519_point_add_with_opts_spec (r a b : Pointer) (bZ1 bPre skip : BitVec 32)
     (s : GlobalState) (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
     (hb : IsPointPtr s.mem b) : Prop :=
-  let invocation := runFunction (fd_ed25519_point_add_with_opts.denote
-    (Ctxt.Valuation.ofHVector
-      [.value skip, .value bPre, .value bZ1, .value b, .value a, .value r]ₕ))
+  let invocation :=
+    runFunction
+      (fd_ed25519_point_add_with_opts.denote
+        (Ctxt.Valuation.ofHVector
+          [.value skip, .value bPre, .value bZ1, .value b, .value a, .value r]ₕ))
   let result := StateT.run invocation s
   let Q := PrecomputedPoint.ofSlots (readPoint hb)
-
-  bPre = 1 → skip = 1 → s.RefWF [] →
-  LimbBounds (isCoordPtr ha 0) → LimbBounds (isCoordPtr ha 1) →
-  LimbBounds.Loose (isCoordPtr ha 2) → LimbBounds (isCoordPtr ha 3) →
-  (∀ i, LimbBounds.Loose (isCoordPtr hb i)) →
-  ∃ s' : GlobalState, result = .value ([.value r]ₕ, s') ∧
-  ∃ oX oY oZ oT : BitVec (5 * 64),
-    let outMem := (((s.mem.splice r oX).splice (r.withOffset 40) oY).splice
-      (r.withOffset 120) oZ).splice (r.withOffset 80) oT
-    let output_state : GlobalState := { s with mem := outMem }
-
-    have hpt : IsPointPtr outMem r :=
-      isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hr)))
-
-    output_state ≈ s'
-    ∧ readPoint hpt
-      = (readPoint ha).addPrecomputedPartial (if bZ1 = 0 then Q else { Q with Z := 1 })
-    ∧ ∀ i, LimbBounds.Loose (isCoordPtr hpt i)
+  bPre = 1 →
+    skip = 1 →
+      s.RefWF [] →
+        LimbBounds (isCoordPtr ha 0) →
+          LimbBounds (isCoordPtr ha 1) →
+            LimbBounds.Loose (isCoordPtr ha 2) →
+              LimbBounds (isCoordPtr ha 3) →
+                (∀ i, LimbBounds.Loose (isCoordPtr hb i)) →
+                  ∃ s' : GlobalState,
+                    result = .value ([.value r]ₕ, s') ∧
+                      ∃ oX oY oZ oT : BitVec (5 * 64),
+                        let outMem :=
+                          (((s.mem.splice r oX).splice (r.withOffset 40) oY).splice
+                                (r.withOffset 120) oZ).splice
+                            (r.withOffset 80) oT
+                        let output_state : GlobalState := { s with mem := outMem }
+                        have hpt : IsPointPtr outMem r :=
+                          isPointPtr_splice
+                            (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hr)))
+                        output_state ≈ s' ∧
+                          readPoint hpt =
+                            (readPoint ha).addPrecomputedPartial
+                              (if bZ1 = 0 then Q else { Q with Z := 1 }) ∧
+                          ∀ i, LimbBounds.Loose (isCoordPtr hpt i)
 
 end Firedancer.Ref

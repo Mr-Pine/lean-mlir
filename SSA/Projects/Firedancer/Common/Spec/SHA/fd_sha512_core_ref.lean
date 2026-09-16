@@ -25,6 +25,7 @@ stated here.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -33,11 +34,14 @@ the state is well formed, the allocation counter and symbol table are as on
 entry, and every block other than `st`'s reads as it did. -/
 abbrev fd_sha512_core_ref_frame_spec (st : Pointer) (blk : SLLVM.Ptr) (cnt : LLVM.IntW 64)
     (s : GlobalState) : Prop :=
-  let invocation := runFunction (fd_sha512_core_ref.denote
-    (Ctxt.Valuation.ofHVector [cnt, blk, .value st]ₕ))
-  ∃ res, StateT.run invocation s = res
-    ∧ ∀ r s', res = .value (r, s') →
-        s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
-          ∧ ∀ b : BlockId, b ≠ st.id → s'.mem.live? b = s.mem.live? b
+  let invocation :=
+    runFunction (fd_sha512_core_ref.denote (Ctxt.Valuation.ofHVector [cnt, blk, .value st]ₕ))
+  ∃ res,
+    StateT.run invocation s = res ∧
+      ∀ r s',
+        res = .value (r, s') →
+          s'.WF ∧
+            s'.alloc = s.alloc ∧
+            s'.globals = s.globals ∧ ∀ b : BlockId, b ≠ st.id → s'.mem.live? b = s.mem.live? b
 
 end Firedancer.Common

@@ -3,6 +3,7 @@ import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_subborrowx_u51
 import SSA.Projects.Firedancer.Ref.Spec.F25519
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -19,17 +20,20 @@ keeps the unwrapped difference inside a limb, and `≤ 2 ^ 51` keeps the wrapped
 one within one borrow. It also admits `a = 2 ^ 51`, which `LimbBounds` allows. -/
 abbrev fiat_25519_subborrowx_u51_spec (o₁ o₂ : Pointer) (c : BitVec 8) (a b : BitVec 64)
     (s : GlobalState) : Prop :=
-  let invocation := runFunction (fiat_25519_subborrowx_u51.denote
-    (Ctxt.Valuation.ofHVector [.value b, .value a, .value c, .value o₂, .value o₁]ₕ))
+  let invocation :=
+    runFunction
+      (fiat_25519_subborrowx_u51.denote
+        (Ctxt.Valuation.ofHVector [.value b, .value a, .value c, .value o₂, .value o₁]ₕ))
   let result := StateT.run invocation s
-
-  a.toNat < 2 ^ 51 + (c.toNat + b.toNat) → 1 ≤ c.toNat + b.toNat →
-  c.toNat + b.toNat ≤ 2 ^ 51 →
-  ∃ (low : BitVec 64) (borrow : BitVec 8),
-    low.toNat < 2 ^ 51
-    ∧ low.toNat + c.toNat + b.toNat = a.toNat + 2 ^ 51 * borrow.toNat
-    ∧ ∃ s' : GlobalState, result = .value ([]ₕ, s')
-      ∧ ({ s with mem := (s.mem.splice o₁ low).splice o₂ borrow } : GlobalState) ≈ s'
+  a.toNat < 2 ^ 51 + (c.toNat + b.toNat) →
+    1 ≤ c.toNat + b.toNat →
+    c.toNat + b.toNat ≤ 2 ^ 51 →
+    ∃ (low : BitVec 64) (borrow : BitVec 8),
+      low.toNat < 2 ^ 51 ∧
+        low.toNat + c.toNat + b.toNat = a.toNat + 2 ^ 51 * borrow.toNat ∧
+        ∃ s' : GlobalState,
+          result = .value ([]ₕ, s') ∧
+            ({ s with mem := (s.mem.splice o₁ low).splice o₂ borrow } : GlobalState) ≈ s'
 
 /-! The spec states the result as `lo + (c + b) = a + n * bo`, the form limb
 arithmetic composes in, mirroring `fiat_25519_addcarryx_u51_spec`. These read
@@ -44,7 +48,7 @@ theorem borrow_eq_of_split {lo d a n bo : ℕ} (hlo : lo < n) (hbo : bo ≤ 1)
   · rw [Nat.mul_one] at h; split <;> omega
 
 /-- ... and the limb is the difference, brought back up by `n` when it did. -/
-theorem limb_eq_of_split {lo d a n bo : ℕ} (h : lo + d = a + n * bo) :
-    lo = a + n * bo - d := by omega
+theorem limb_eq_of_split {lo d a n bo : ℕ} (h : lo + d = a + n * bo) : lo = a + n * bo - d := by
+  omega
 
 end Firedancer.Ref

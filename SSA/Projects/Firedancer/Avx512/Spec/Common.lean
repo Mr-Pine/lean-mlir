@@ -27,6 +27,7 @@ live in the respective `Avx512/Spec/fd_r43x6_*.lean` files.
 -/
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -41,25 +42,28 @@ thing standing between the two. -/
 def decodeNat {R : Type*} [CommSemiring R] (l : Fin 6 → R) : R :=
   R43x6.decodeLimbs (fun i : Fin R43x6.limbCount => l i)
 
-@[simp] theorem decodeNat_eq {R : Type*} [CommSemiring R] (l : Fin 6 → R) :
-    decodeNat l = l 0 + 2^43 * l 1 + 2^86 * l 2 + 2^129 * l 3 + 2^172 * l 4
-      + 2^215 * l 5 := by
+@[simp]
+theorem decodeNat_eq {R : Type*} [CommSemiring R] (l : Fin 6 → R) :
+    decodeNat l =
+      l 0 + 2 ^ 43 * l 1 + 2 ^ 86 * l 2 + 2 ^ 129 * l 3 + 2 ^ 172 * l 4 + 2 ^ 215 * l 5 := by
   simp [decodeNat, R43x6.limbCount]
 
 /-! ## The `pl`/`ph` split -/
 
 /-- Low 52 bits of a limb product, as `vpmadd52luq` computes them. -/
-def pl (a b : ℕ) : ℕ := a * b % 2^52
+def pl (a b : ℕ) : ℕ :=
+  a * b % 2 ^ 52
 
 /-- High bits of a limb product, prescaled by `2^9` (the `wwl_shl(…, 9)`
 applied to every `vpmadd52huq` result), so that `pl a b + 2^43 * ph a b = a*b`. -/
-def ph (a b : ℕ) : ℕ := a * b / 2^52 * 2^9
+def ph (a b : ℕ) : ℕ :=
+  a * b / 2 ^ 52 * 2 ^ 9
 
-theorem pl_add_shift_ph (a b : ℕ) : pl a b + 2^43 * ph a b = a * b := by
+theorem pl_add_shift_ph (a b : ℕ) : pl a b + 2 ^ 43 * ph a b = a * b := by
   simp only [pl, ph]
   omega
 
-theorem pl_lt (a b : ℕ) : pl a b < 2^52 :=
+theorem pl_lt (a b : ℕ) : pl a b < 2 ^ 52 :=
   Nat.mod_lt _ (by norm_num)
 
 /-! ## Bounds on `ph`
@@ -68,18 +72,18 @@ Every `pl` is `< 2^52` unconditionally; a `ph` bound depends on the width of
 its operands. -/
 
 /-- `ph a b < B * 2^9` whenever `a * b < B * 2^52`. -/
-theorem ph_lt_of_mul_lt {a b B : ℕ} (h : a * b < B * 2^52) :
-    ph a b < B * 2^9 := by
-  have hdiv : a * b / 2^52 < B := Nat.div_lt_of_lt_mul (by omega)
+theorem ph_lt_of_mul_lt {a b B : ℕ} (h : a * b < B * 2 ^ 52) : ph a b < B * 2 ^ 9 := by
+  have hdiv : a * b / 2 ^ 52 < B := Nat.div_lt_of_lt_mul (by omega)
   simp only [ph]
   omega
 
 /-- `ph_lt_of_mul_lt` in the form the operand bounds supply it. -/
-theorem ph_lt_bound {a b u v B : ℕ} (ha : a < u) (hb : b < v)
-    (h : u * v ≤ B * 2^52) : ph a b < B * 2^9 :=
-  ph_lt_of_mul_lt (by
-    have hm : a * b < u * v := Nat.mul_lt_mul_of_lt_of_lt ha hb
-    omega)
+theorem ph_lt_bound {a b u v B : ℕ} (ha : a < u) (hb : b < v) (h : u * v ≤ B * 2 ^ 52) :
+    ph a b < B * 2 ^ 9 :=
+  ph_lt_of_mul_lt
+    (by
+      have hm : a * b < u * v := Nat.mul_lt_mul_of_lt_of_lt ha hb
+      omega)
 
 /-! ## `BitVec`/ℕ transfer
 
@@ -106,48 +110,52 @@ theorem ofNat_mul24 (a : Nat) :
   rw [show (24 : BitVec 64) = BitVec.ofNat 64 24 from rfl, ← BitVec.ofNat_mul]
 
 /-- A lane below `2^63` reads back as itself, rather than as a negative. -/
-theorem ofNat_toInt {n : Nat} (h : n < 2^63) :
-    (BitVec.ofNat 64 n).toInt = (n : Int) := by
-  have h64 : n < 2^64 := by omega
-  have ht : (BitVec.ofNat 64 n).toNat = n := by rw [BitVec.toNat_ofNat]; omega
-  rw [BitVec.toInt_eq_toNat_of_lt (by rw [ht]; omega), ht]
+theorem ofNat_toInt {n : Nat} (h : n < 2 ^ 63) : (BitVec.ofNat 64 n).toInt = (n : Int) := by
+  have h64 : n < 2 ^ 64 := by omega
+  have ht : (BitVec.ofNat 64 n).toNat = n := by
+    rw [BitVec.toNat_ofNat]; omega
+  rw [BitVec.toInt_eq_toNat_of_lt
+      (by
+        rw [ht]; omega),
+    ht]
 
 /-! `R43x6.UNN` bounds `BitVec.toInt` on both sides; the lane arithmetic works
 in `toNat`. These convert in each direction. The two-sided bound is essential:
 an upper bound on `toInt` alone admits negative lanes, on which the
 specifications are false. -/
 
-theorem toNat_lt_of_bounds {a : BitVec 64} {N : ℕ} (hN : N ≤ 2^62)
-    (hu : a.toInt ≤ (N : Int) - 1) (hl : (0:Int) ≤ a.toInt) : a.toNat < N := by
-  have hlt : a.toNat < 2^64 := a.isLt
+theorem toNat_lt_of_bounds {a : BitVec 64} {N : ℕ} (hN : N ≤ 2 ^ 62) (hu : a.toInt ≤ (N : Int) - 1)
+    (hl : (0 : Int) ≤ a.toInt) : a.toNat < N := by
+  have hlt : a.toNat < 2 ^ 64 := a.isLt
   have hb := BitVec.toInt_eq_toNat_bmod a
   rw [Int.bmod] at hb
   split at hb <;> omega
 
 /-- An input limb of a `UNN n` vector, as a natural. -/
-theorem unn_toNat (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
-    (hx : R43x6.UNN n x) (i : Fin 8) : (x[i]).toNat < 2^n :=
+theorem unn_toNat (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62) (hx : R43x6.UNN n x)
+    (i : Fin 8) : (x[i]).toNat < 2 ^ n :=
   toNat_lt_of_bounds (Nat.pow_le_pow_right (by omega) hn)
-    (by have := hx.1 i; simp only [LimbRepresentations.toInts] at this
-        push_cast; omega)
+    (by
+      have := hx.1 i; simp only [LimbRepresentations.toInts] at this
+      push_cast; omega)
     (hx.2 i)
 
 /-- An output lane, back in `toInt` form. -/
-theorem lane_toInt_bound {n N : ℕ} (hN : N ≤ 2^63) (h : n < N) :
-    (0:Int) ≤ (BitVec.ofNat 64 n).toInt ∧ (BitVec.ofNat 64 n).toInt ≤ (N:Int) - 1 := by
-  have h63 : n < 2^63 := by omega
+theorem lane_toInt_bound {n N : ℕ} (hN : N ≤ 2 ^ 63) (h : n < N) :
+    (0 : Int) ≤ (BitVec.ofNat 64 n).toInt ∧ (BitVec.ofNat 64 n).toInt ≤ (N : Int) - 1 := by
+  have h63 : n < 2 ^ 63 := by omega
   rw [ofNat_toInt h63]
   omega
 
 /-- An input limb is below `2^63`, so it too reads back as a natural. -/
-theorem toInt_of_lt {a : BitVec 64} (h : a.toNat < 2^47) :
-    a.toInt = (a.toNat : Int) :=
+theorem toInt_of_lt {a : BitVec 64} (h : a.toNat < 2 ^ 47) : a.toInt = (a.toNat : Int) :=
   BitVec.toInt_eq_toNat_of_lt (by omega)
 
 /-- `decode'` on a literal vector: the low six lanes with radix-`2^43` weights. -/
 theorem decode'_lit (a b c d e f g h : BitVec 64) :
-    R43x6.decode' #v[a,b,c,d,e,f,g,h] = a.toInt + 2^43 * b.toInt + 2^86 * c.toInt
-      + 2^129 * d.toInt + 2^172 * e.toInt + 2^215 * f.toInt := by
+    R43x6.decode' #v[a, b, c, d, e, f, g, h] =
+      a.toInt + 2 ^ 43 * b.toInt + 2 ^ 86 * c.toInt + 2 ^ 129 * d.toInt + 2 ^ 172 * e.toInt +
+        2 ^ 215 * f.toInt := by
   rw [R43x6.decode'_eq]
   simp
 
@@ -163,8 +171,8 @@ def limbNat (x : Vector (BitVec 64) 8) : Fin 6 → ℕ
 
 /-- The limb bound a `UNN n` vector gives `limbNat`. Stated over `limbNat`
 rather than lanes because that is the form the column-sum bounds consume. -/
-theorem limbNat_lt (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62)
-    (hx : R43x6.UNN n x) : ∀ i : Fin 6, limbNat x i < 2 ^ n := by
+theorem limbNat_lt (x : Vector (BitVec 64) 8) (n : ℕ) (hn : n ≤ 62) (hx : R43x6.UNN n x) :
+    ∀ i : Fin 6, limbNat x i < 2 ^ n := by
   intro i
   fin_cases i
   · simpa [limbNat] using unn_toNat x n hn hx 0
@@ -181,32 +189,29 @@ in lanes 0-5 and zero in lanes 6 and 7. -/
 
 /-- Six ℕ-level limbs as an 8-lane result vector, lanes 6 and 7 zero. -/
 def limbVec (l : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
-  #v[BitVec.ofNat 64 (l 0), BitVec.ofNat 64 (l 1), BitVec.ofNat 64 (l 2),
-     BitVec.ofNat 64 (l 3), BitVec.ofNat 64 (l 4), BitVec.ofNat 64 (l 5), 0, 0]
+  #v[BitVec.ofNat 64 (l 0), BitVec.ofNat 64 (l 1), BitVec.ofNat 64 (l 2), BitVec.ofNat 64 (l 3),
+    BitVec.ofNat 64 (l 4), BitVec.ofNat 64 (l 5), 0, 0]
 
 /-- Decoding `limbVec` is `decodeNat`, provided no lane reads back negative. -/
-theorem decode'_limbVec (l : Fin 6 → ℕ) (hb : ∀ k, l k < 2^63) :
+theorem decode'_limbVec (l : Fin 6 → ℕ) (hb : ∀ k, l k < 2 ^ 63) :
     R43x6.decode' (limbVec l) = ((decodeNat l : ℕ) : Int) := by
-  rw [limbVec, decode'_lit,
-    ofNat_toInt (hb 0), ofNat_toInt (hb 1), ofNat_toInt (hb 2),
+  rw [limbVec, decode'_lit, ofNat_toInt (hb 0), ofNat_toInt (hb 1), ofNat_toInt (hb 2),
     ofNat_toInt (hb 3), ofNat_toInt (hb 4), ofNat_toInt (hb 5)]
   push_cast [decodeNat_eq]
   try ring
 
 /-- Two-sided lane bounds on `limbVec` from a ceiling `N` on the ℕ-level
 limbs: lanes 0-5 are the limbs, lanes 6 and 7 the zero literal. -/
-theorem limbVec_bounds (l : Fin 6 → ℕ) (N : ℕ) (hN : N ≤ 2^63)
-    (hb : ∀ k, l k < N) :
-    R43x6.BoundedUpper ((N : Int) - 1) (limbVec l)
-      ∧ R43x6.BoundedLower 0 (limbVec l) := by
-  have key : ∀ k : Fin 6,
-      (0:Int) ≤ (BitVec.ofNat 64 (l k)).toInt
-      ∧ (BitVec.ofNat 64 (l k)).toInt ≤ (N:Int) - 1 :=
+theorem limbVec_bounds (l : Fin 6 → ℕ) (N : ℕ) (hN : N ≤ 2 ^ 63) (hb : ∀ k, l k < N) :
+    R43x6.BoundedUpper ((N : Int) - 1) (limbVec l) ∧ R43x6.BoundedLower 0 (limbVec l) := by
+  have key :
+    ∀ k : Fin 6,
+      (0 : Int) ≤ (BitVec.ofNat 64 (l k)).toInt ∧ (BitVec.ofNat 64 (l k)).toInt ≤ (N : Int) - 1 :=
     fun k => lane_toInt_bound hN (hb k)
-  have hN1 : 1 ≤ N := by have := hb 0; omega
+  have hN1 : 1 ≤ N := by
+    have := hb 0; omega
   have hz : ((0 : BitVec 64)).toInt = 0 := rfl
-  refine ⟨fun i => ?_, fun i => ?_⟩ <;>
-    simp only [LimbRepresentations.toInts, limbVec] <;>
+  refine ⟨fun i => ?_, fun i => ?_⟩ <;> simp only [LimbRepresentations.toInts, limbVec] <;>
     fin_cases i
   · exact (key 0).2
   · exact (key 1).2

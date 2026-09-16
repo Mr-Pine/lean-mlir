@@ -25,6 +25,7 @@ check while `j - i > 14`, and the digit absorbs a bit at the wrong weight. The C
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -44,16 +45,20 @@ the allocation counter, the symbol table and every other block -- the scalar `n`
 are untouched. Each entry of `w`, as a signed `short`, is zero or odd and at most `2 ^ bits` in
 absolute value. For `bits ≤ 13` and `slides`, `n` in different blocks, the entries weighted by
 `2 ^ k` sum to `n`'s low 255 bits. -/
-abbrev fd_curve25519_scalar_wnaf_spec (slides n : Pointer) (bits : BitVec 32)
-    (s : GlobalState) (hn : IsByteBufPtr s.mem n) : Prop :=
-  let invocation := runFunction (fd_curve25519_scalar_wnaf.denote
-    (Ctxt.Valuation.ofHVector [.value bits, .value n, .value slides]ₕ))
-
-  ∃ s' : GlobalState, StateT.run invocation s = .value ([]ₕ, s')
-    ∧ ∃ w : BitVec (256 * 16), s' ≈ ({ s with mem := s.mem.splice slides w } : GlobalState)
-      ∧ (∀ k < 256, (w.extractLsb' (16 * k) 16 = 0 ∨ (w.extractLsb' (16 * k) 16).toInt % 2 = 1)
-        ∧ (w.extractLsb' (16 * k) 16).toInt.natAbs ≤ 2 ^ bits.toNat)
-      ∧ (bits.toNat ≤ 13 → slides.id ≠ n.id →
-        digitSum w 256 = ((readBuf hn).toNat % 2 ^ 255 : Nat))
+abbrev fd_curve25519_scalar_wnaf_spec (slides n : Pointer) (bits : BitVec 32) (s : GlobalState)
+    (hn : IsByteBufPtr s.mem n) : Prop :=
+  let invocation :=
+    runFunction
+      (fd_curve25519_scalar_wnaf.denote
+        (Ctxt.Valuation.ofHVector [.value bits, .value n, .value slides]ₕ))
+  ∃ s' : GlobalState,
+    StateT.run invocation s = .value ([]ₕ, s') ∧
+      ∃ w : BitVec (256 * 16),
+        s' ≈ ({ s with mem := s.mem.splice slides w } : GlobalState) ∧
+          (∀ k < 256,
+            (w.extractLsb' (16 * k) 16 = 0 ∨ (w.extractLsb' (16 * k) 16).toInt % 2 = 1) ∧
+              (w.extractLsb' (16 * k) 16).toInt.natAbs ≤ 2 ^ bits.toNat) ∧
+          (bits.toNat ≤ 13 →
+            slides.id ≠ n.id → digitSum w 256 = ((readBuf hn).toNat % 2 ^ 255 : Nat))
 
 end Firedancer.Common

@@ -28,19 +28,22 @@ def PrecomputedPoint.toPoint (Q : PrecomputedPoint) : Point :=
 
 /-- The C holds a precomputed point in an `fd_ed25519_point_t`: `Y - X` in `X`,
 `Y + X` in `Y`, `2d·T` in `T`. -/
-def PrecomputedPoint.ofSlots (P : Point) : PrecomputedPoint := ⟨P.X, P.Y, P.Z, P.T⟩
+def PrecomputedPoint.ofSlots (P : Point) : PrecomputedPoint :=
+  ⟨P.X, P.Y, P.Z, P.T⟩
 
 theorem two_ne_zero_zmod : (2 : ZMod p) ≠ 0 := by decide
 
 theorem d_ne_zero : d ≠ 0 := by decide
 
-@[simp] theorem Point.toPoint_toPrecomputed (P : Point) : P.toPrecomputed.toPoint = P := by
+@[simp]
+theorem Point.toPoint_toPrecomputed (P : Point) : P.toPrecomputed.toPoint = P := by
   have := two_ne_zero_zmod
   have := d_ne_zero
   simp only [Point.toPrecomputed, PrecomputedPoint.toPoint]
   congr 1 <;> field_simp <;> ring
 
-@[simp] theorem PrecomputedPoint.toPrecomputed_toPoint (Q : PrecomputedPoint) :
+@[simp]
+theorem PrecomputedPoint.toPrecomputed_toPoint (Q : PrecomputedPoint) :
     Q.toPoint.toPrecomputed = Q := by
   have := two_ne_zero_zmod
   have := d_ne_zero

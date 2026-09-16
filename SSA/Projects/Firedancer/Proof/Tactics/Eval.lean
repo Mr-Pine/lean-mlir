@@ -12,11 +12,13 @@ instruction's `PoisonOr` bind to reduce.
 -/
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 /-- The optional clauses of `eval_llvm`. -/
 syntax evalExtra := " [" term,* "]"
+
 syntax evalName := " as " ident
 
 open Lean Elab Tactic Meta in

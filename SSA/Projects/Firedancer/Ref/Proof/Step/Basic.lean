@@ -15,6 +15,7 @@ conformance lemma each into these shapes, so that a walk only ever handles
 -/
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 
 /-- The part of a peeled call the frame invariant needs: the state is still
@@ -48,9 +49,8 @@ theorem StepFacts.wrote {dst : Pointer} {v : ZMod _root_.p} {u u' : GlobalState}
   ⟨st.wf, st.globals, st.live, st.ptr, st.splice⟩
 
 /-- `readFieldElem` back into the proof-free `readFieldElem?` form. -/
-theorem readFieldElem?_eq_some {m : MemoryState} {q : Pointer}
-    (h : IsFieldElemPtr m q) {v : ZMod _root_.p}
-    (hv : readFieldElem h = v) : readFieldElem? q m = some v := by
+theorem readFieldElem?_eq_some {m : MemoryState} {q : Pointer} (h : IsFieldElemPtr m q)
+    {v : ZMod _root_.p} (hv : readFieldElem h = v) : readFieldElem? q m = some v := by
   rw [← hv]; exact (Option.some_get _).symm
 
 /-! ## Building a step from a conformance lemma
@@ -65,7 +65,8 @@ variable {dst : Pointer} {u u' : GlobalState} {x : BitVec (5 * 64)}
 
 /-- The state half, common to every kernel. -/
 theorem Wrote.of_splice (hu : u.WF) (hd : IsFieldElemPtr u.mem dst)
-    (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u') : Wrote dst u u' where
+    (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u') : Wrote dst u u'
+    where
   wf := GlobalState.WF.of_equiv hu.splice heq
   globals := heq.globals.symm
   live := fun b hb => (heq.live b).symm.trans (live?_splice_ne hb)
@@ -77,8 +78,8 @@ splice holds -- the form the kernels' conformance lemmas state their output
 in. -/
 theorem readFieldElem_of_splice {v : ZMod _root_.p}
     (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u')
-    (hval : readFieldElem? dst (u.mem.splice dst x) = some v)
-    {h' : IsFieldElemPtr u'.mem dst} : readFieldElem h' = v :=
+    (hval : readFieldElem? dst (u.mem.splice dst x) = some v) {h' : IsFieldElemPtr u'.mem dst} :
+    readFieldElem h' = v :=
   readFieldElem_eq_of ((readFieldElem?_of_equiv heq dst).symm.trans hval)
 
 /-- ... and the same with the value left as the read at the splice, for a
@@ -97,10 +98,8 @@ theorem limbBounds_of_splice {n : ℕ}
   limbBounds_of_readLimb? _ fun i l hl => hbnd i l ((readLimb?_of_equiv heq dst i).trans hl)
 
 /-- ... per limb, for a `fiat_25519_opp` result. -/
-theorem biasBounds_of_splice
-    (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u')
-    (hbnd : ∀ (i : Fin 5) (l : ℕ), readLimb? dst i (u.mem.splice dst x) = some l →
-      l ≤ biasLimb i)
+theorem biasBounds_of_splice (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u')
+    (hbnd : ∀ (i : Fin 5) (l : ℕ), readLimb? dst i (u.mem.splice dst x) = some l → l ≤ biasLimb i)
     {h' : IsFieldElemPtr u'.mem dst} : BiasBounds h' :=
   biasBounds_of_readLimb? _ fun i l hl => hbnd i l ((readLimb?_of_equiv heq dst i).trans hl)
 
@@ -115,8 +114,8 @@ theorem limbSum_of_splice (hd : IsFieldElemPtr u.mem dst)
 theorem StepFacts.of_splice {v : ZMod _root_.p} (hu : u.WF) (hd : IsFieldElemPtr u.mem dst)
     (heq : ({ u with mem := u.mem.splice dst x } : GlobalState) ≈ u')
     (hval : readFieldElem? dst (u.mem.splice dst x) = some v)
-    (hbnd : ∀ (i : Fin 5) (l : ℕ), readLimb? dst i (u.mem.splice dst x) = some l →
-      l ≤ 0x8000000000000) :
+    (hbnd :
+      ∀ (i : Fin 5) (l : ℕ), readLimb? dst i (u.mem.splice dst x) = some l → l ≤ 0x8000000000000) :
     StepFacts dst v u u' :=
   let w := Wrote.of_splice hu hd heq
   { wf := w.wf, globals := w.globals, live := w.live, splice := w.splice, ptr := w.ptr
@@ -132,27 +131,28 @@ because `readLimb?` looks only at `m.live? q.id`. -/
 
 /-- `m'` holds `q`'s block exactly as `m` did -- the whole of what a field
 element at `q` is read out of, so every fact about it carries across. -/
-abbrev Untouched (q : Pointer) (m m' : MemoryState) : Prop := m'.live? q.id = m.live? q.id
+abbrev Untouched (q : Pointer) (m m' : MemoryState) : Prop :=
+  m'.live? q.id = m.live? q.id
 
 section Carry
 
-variable {m m' : MemoryState} {q : Pointer} {bound : ℕ} {v : ZMod _root_.p}
-  (h : Untouched q m m')
+variable {m m' : MemoryState} {q : Pointer} {bound : ℕ} {v : ZMod _root_.p} (h : Untouched q m m')
+
 include h
 
 /-- A block the step left alone keeps its value ... -/
-theorem carryVal {hq : IsFieldElemPtr m q} (hv : readFieldElem hq = v)
-    {hq' : IsFieldElemPtr m' q} : readFieldElem hq' = v :=
+theorem carryVal {hq : IsFieldElemPtr m q} (hv : readFieldElem hq = v) {hq' : IsFieldElemPtr m' q} :
+    readFieldElem hq' = v :=
   readFieldElem_eq_of ((readFieldElem?_of_live?_eq h).trans (readFieldElem?_eq_some hq hv))
 
 /-- ... its limb bound ... -/
-theorem carryBnd {hq : IsFieldElemPtr m q} (hb : LimbBounds hq bound)
-    {hq' : IsFieldElemPtr m' q} : LimbBounds hq' bound :=
+theorem carryBnd {hq : IsFieldElemPtr m q} (hb : LimbBounds hq bound) {hq' : IsFieldElemPtr m' q} :
+    LimbBounds hq' bound :=
   limbBounds_of_readLimb? _ (limbBounds_of_live?_eq h (limbBounds_readLimb? hq hb))
 
 /-- ... and the per-limb bias bound a `fd_f25519_neg` result comes at. -/
-theorem carryBias {hq : IsFieldElemPtr m q} (hb : BiasBounds hq)
-    {hq' : IsFieldElemPtr m' q} : BiasBounds hq' :=
+theorem carryBias {hq : IsFieldElemPtr m q} (hb : BiasBounds hq) {hq' : IsFieldElemPtr m' q} :
+    BiasBounds hq' :=
   biasBounds_of_readLimb? _ fun i l hl =>
     biasBounds_readLimb? hq hb i l ((readLimb?_of_live?_eq h i).symm.trans hl)
 
@@ -163,14 +163,12 @@ theorem carry (hq : IsFieldElemPtr m q) (hb : LimbBounds hq bound) :
   ⟨isFieldElemPtr_of_live?_eq h hq, carryVal h rfl, carryBnd h hb⟩
 
 /-- ... with the value pinned to whatever it was already known to be. -/
-theorem survive (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = v)
-    (hb : LimbBounds hq bound) :
+theorem survive (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = v) (hb : LimbBounds hq bound) :
     ∃ hq' : IsFieldElemPtr m' q, readFieldElem hq' = v ∧ LimbBounds hq' bound :=
   ⟨isFieldElemPtr_of_live?_eq h hq, carryVal h hv, carryBnd h hb⟩
 
 /-- ... and the bias-bounded counterpart. -/
-theorem surviveBias (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = v)
-    (hb : BiasBounds hq) :
+theorem surviveBias (hq : IsFieldElemPtr m q) (hv : readFieldElem hq = v) (hb : BiasBounds hq) :
     ∃ hq' : IsFieldElemPtr m' q, readFieldElem hq' = v ∧ BiasBounds hq' :=
   ⟨isFieldElemPtr_of_live?_eq h hq, carryVal h hv, carryBias h hb⟩
 

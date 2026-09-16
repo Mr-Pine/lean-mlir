@@ -20,6 +20,7 @@ unproved an `nsw` operation may be poison, and `SLLVM.store` takes `getOrUB` of 
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -28,11 +29,12 @@ open InstCombine (LLVM)
 A `def`, not an `abbrev`, for the reason `pointOutMem` is one: reducible, every
 unifier that meets it walks four splices. -/
 def scalarOutMem (m : MemoryState) (r : Pointer) (w : Fin 4 → BitVec 64) : MemoryState :=
-  (((m.splice r (w 0)).splice (r.withOffset 8) (w 1)).splice
-    (r.withOffset 16) (w 2)).splice (r.withOffset 24) (w 3)
+  (((m.splice r (w 0)).splice (r.withOffset 8) (w 1)).splice (r.withOffset 16) (w 2)).splice
+    (r.withOffset 24) (w 3)
 
 /-- The four words as one 256-bit little-endian value, `w 3` most significant. -/
-def packWords (w : Fin 4 → BitVec 64) : BitVec 256 := w 3 ++ w 2 ++ w 1 ++ w 0
+def packWords (w : Fin 4 → BitVec 64) : BitVec 256 :=
+  w 3 ++ w 2 ++ w 1 ++ w 0
 
 /-- **The call is decided by the 512 bits at `in`.**
 
@@ -43,17 +45,25 @@ What those words are is left open, and `in` and `out` may alias.
 `in`'s offset may not wrap: `Fits` alone allows a block so long that `in + 8` comes back round
 to its start, and the eight loads would then read bytes these 512 bits do not cover. -/
 def ScalarReduceBy (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) : Prop :=
-  ∀ (out inp : Pointer) (s : GlobalState), s.WF → IsByteBufPtr s.mem out →
-    inp.offset.toNat + 64 ≤ 2 ^ 64 → ∀ hin : Fits s.mem inp (64 * 8),
-      let invocation := runFunction (fd_curve25519_scalar_reduce.denote
-        (Ctxt.Valuation.ofHVector [.value inp, .value out]ₕ))
-      (∀ w, f (readWord hin) = some w →
-          ∃ s' : GlobalState, StateT.run invocation s = .value ([.value out]ₕ, s')
-            ∧ s' ≈ ({ s with mem := scalarOutMem s.mem out w } : GlobalState))
-        ∧ (f (readWord hin) = none → StateT.run invocation s = .poison)
+  ∀ (out inp : Pointer) (s : GlobalState),
+    s.WF →
+      IsByteBufPtr s.mem out →
+        inp.offset.toNat + 64 ≤ 2 ^ 64 →
+          ∀ hin : Fits s.mem inp (64 * 8),
+            let invocation :=
+              runFunction
+                (fd_curve25519_scalar_reduce.denote
+                  (Ctxt.Valuation.ofHVector [.value inp, .value out]ₕ))
+            (∀ w,
+                f (readWord hin) = some w →
+                  ∃ s' : GlobalState,
+                    StateT.run invocation s = .value ([.value out]ₕ, s') ∧
+                      s' ≈ ({ s with mem := scalarOutMem s.mem out w } : GlobalState)) ∧
+              (f (readWord hin) = none → StateT.run invocation s = .poison)
 
 /-- ... for some such `f`, which the caller then names. -/
-def ScalarReduceDetermined : Prop := ∃ f, ScalarReduceBy f
+def ScalarReduceDetermined : Prop :=
+  ∃ f, ScalarReduceBy f
 
 /-- **The region writes nowhere but `out`.**
 
@@ -79,12 +89,13 @@ footprint is as stated.
 as fine, and nothing here forbids it. The eight loads all precede the first
 store, which is why that is sound. -/
 abbrev fd_curve25519_scalar_reduce_frame_spec (out inp : Pointer) (s : GlobalState) : Prop :=
-  let invocation := runFunction (fd_curve25519_scalar_reduce.denote
-    (Ctxt.Valuation.ofHVector [.value inp, .value out]ₕ))
-
-  ∃ res, StateT.run invocation s = res
-    ∧ ∀ s' : GlobalState, res = .value ([.value out]ₕ, s') →
-        ∃ w : Fin 4 → BitVec 64,
-          s' ≈ ({ s with mem := scalarOutMem s.mem out w } : GlobalState)
+  let invocation :=
+    runFunction
+      (fd_curve25519_scalar_reduce.denote (Ctxt.Valuation.ofHVector [.value inp, .value out]ₕ))
+  ∃ res,
+    StateT.run invocation s = res ∧
+      ∀ s' : GlobalState,
+        res = .value ([.value out]ₕ, s') →
+          ∃ w : Fin 4 → BitVec 64, s' ≈ ({ s with mem := scalarOutMem s.mem out w } : GlobalState)
 
 end Firedancer.Common

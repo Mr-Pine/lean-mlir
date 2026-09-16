@@ -24,15 +24,18 @@ def decodeFn {R : Type*} [CommSemiring R] (baseBits : ℕ) {n : ℕ} (l : Fin n 
   ∑ i : Fin n, l i * 2 ^ (baseBits * (i : ℕ))
 
 /-- Every limb is at most `u`. -/
-def BoundedUpper {n : ℕ} (u : ℤ) (l : Fin n → ℤ) : Prop := ∀ i, l i ≤ u
+def BoundedUpper {n : ℕ} (u : ℤ) (l : Fin n → ℤ) : Prop :=
+  ∀ i, l i ≤ u
 
 /-- Every limb is at least `lo`. -/
-def BoundedLower {n : ℕ} (lo : ℤ) (l : Fin n → ℤ) : Prop := ∀ i, lo ≤ l i
+def BoundedLower {n : ℕ} (lo : ℤ) (l : Fin n → ℤ) : Prop :=
+  ∀ i, lo ≤ l i
 
 /-! ## Limbs in a vector -/
 
 /-- `vecLength` limbs of `limbWidth` bits each, as a machine holds them. -/
-abbrev Limbs (limbWidth vecLength : Nat) := Vector (BitVec limbWidth) vecLength
+abbrev Limbs (limbWidth vecLength : Nat) :=
+  Vector (BitVec limbWidth) vecLength
 
 /-- The limbs of a vector, read as two's complement integers. -/
 def toInts {w n : ℕ} (x : Limbs w n) : Fin n → ℤ := fun i => (x[(i : ℕ)]'i.isLt).toInt

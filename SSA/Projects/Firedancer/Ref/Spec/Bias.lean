@@ -21,16 +21,31 @@ then the limb really would wrap. Hence a per-limb bound.
 -/
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 
 def biasLimb : Fin 5 → ℕ :=
   ![0xfffffffffffda, 0xffffffffffffe, 0xffffffffffffe, 0xffffffffffffe, 0xffffffffffffe]
 
-@[simp] theorem biasLimb_zero : biasLimb 0 = 0xfffffffffffda := rfl
-@[simp] theorem biasLimb_one : biasLimb 1 = 0xffffffffffffe := rfl
-@[simp] theorem biasLimb_two : biasLimb 2 = 0xffffffffffffe := rfl
-@[simp] theorem biasLimb_three : biasLimb 3 = 0xffffffffffffe := rfl
-@[simp] theorem biasLimb_four : biasLimb 4 = 0xffffffffffffe := rfl
+@[simp]
+theorem biasLimb_zero : biasLimb 0 = 0xfffffffffffda :=
+  rfl
+
+@[simp]
+theorem biasLimb_one : biasLimb 1 = 0xffffffffffffe :=
+  rfl
+
+@[simp]
+theorem biasLimb_two : biasLimb 2 = 0xffffffffffffe :=
+  rfl
+
+@[simp]
+theorem biasLimb_three : biasLimb 3 = 0xffffffffffffe :=
+  rfl
+
+@[simp]
+theorem biasLimb_four : biasLimb 4 = 0xffffffffffffe :=
+  rfl
 
 /-- The tight bound is below every bias limb, so a carried element is one. -/
 theorem tight_le_biasLimb (i : Fin 5) : (0x8000000000000 : ℕ) ≤ biasLimb i := by
@@ -48,13 +63,15 @@ Kept as a *definition* rather than written out: it is a hypothesis of
 walk, and spelled out it would hand every later `omega` a constraint with
 `2 ^ 204` coefficients. Folded, `omega` sees one atom and ignores it. -/
 def limbSum {m : MemoryState} {q : Pointer} (h : IsFieldElemPtr m q) : ℕ :=
-  readLimb 0 h + 2 ^ 51 * readLimb 1 h + 2 ^ 102 * readLimb 2 h + 2 ^ 153 * readLimb 3 h
-    + 2 ^ 204 * readLimb 4 h
+  readLimb 0 h + 2 ^ 51 * readLimb 1 h + 2 ^ 102 * readLimb 2 h + 2 ^ 153 * readLimb 3 h +
+    2 ^ 204 * readLimb 4 h
 
 /-- ... unfolded where the canonicalisation actually needs the digits. -/
 theorem limbSum_eq {m : MemoryState} {q : Pointer} (h : IsFieldElemPtr m q) :
-    limbSum h = readLimb 0 h + 2 ^ 51 * readLimb 1 h + 2 ^ 102 * readLimb 2 h
-      + 2 ^ 153 * readLimb 3 h + 2 ^ 204 * readLimb 4 h := rfl
+    limbSum h =
+      readLimb 0 h + 2 ^ 51 * readLimb 1 h + 2 ^ 102 * readLimb 2 h + 2 ^ 153 * readLimb 3 h +
+        2 ^ 204 * readLimb 4 h :=
+  rfl
 
 /-- A carried element is below `2 · p`, so the tight bound implies the sum
 bound `fiat_25519_to_bytes` needs. -/
@@ -66,9 +83,8 @@ theorem limbSum_lt_of_limbBounds {m : MemoryState} {q : Pointer} {h : IsFieldEle
 
 /-- Both halves of `fiat_25519_to_bytes`'s precondition look only at the block
 the pointer addresses, so both survive a step that left it alone. -/
-theorem limbSum_of_live?_eq {m m' : MemoryState} {q : Pointer}
-    (hl : m'.live? q.id = m.live? q.id) {h : IsFieldElemPtr m q} {h' : IsFieldElemPtr m' q} :
-    limbSum h' = limbSum h := by
+theorem limbSum_of_live?_eq {m m' : MemoryState} {q : Pointer} (hl : m'.live? q.id = m.live? q.id)
+    {h : IsFieldElemPtr m q} {h' : IsFieldElemPtr m' q} : limbSum h' = limbSum h := by
   simp only [limbSum, readLimb, readLimb?, hl]
 
 /-- Limb `i` at most `biasLimb i`: what `fiat_25519_opp` leaves, and the most
@@ -83,29 +99,25 @@ abbrev BiasBounds? (q : Pointer) (m : MemoryState) : Prop :=
 theorem biasBounds_readLimb? {m : MemoryState} {q : Pointer} (h : IsFieldElemPtr m q)
     (hb : BiasBounds h) : BiasBounds? q m := by
   intro i l hl
-  have : l = readLimb i h := by
-    simp only [readLimb, Option.get_of_eq_some _ hl]
+  have : l = readLimb i h := by simp only [readLimb, Option.get_of_eq_some _ hl]
   exact this ▸ hb i
 
 theorem biasBounds_of_readLimb? {m : MemoryState} {q : Pointer} (h : IsFieldElemPtr m q)
-    (hb : BiasBounds? q m) : BiasBounds h :=
-  fun i => hb i _ (Option.some_get _).symm
+    (hb : BiasBounds? q m) : BiasBounds h := fun i => hb i _ (Option.some_get _).symm
 
 /-- A carried element meets the bias bound. -/
 theorem LimbBounds.bias {m : MemoryState} {q : Pointer} {h : IsFieldElemPtr m q}
-    (hb : LimbBounds h) : BiasBounds h :=
-  fun i => (hb i).trans (tight_le_biasLimb i)
+    (hb : LimbBounds h) : BiasBounds h := fun i => (hb i).trans (tight_le_biasLimb i)
 
 /-- ... in the `readLimb?` form. -/
 theorem biasBounds?_of_limbBounds {m : MemoryState} {q : Pointer}
     (hb : ∀ (i : Fin 5) (l : ℕ), readLimb? q i m = some l → l ≤ 0x8000000000000) :
-    BiasBounds? q m :=
-  fun i l hl => (hb i l hl).trans (tight_le_biasLimb i)
+    BiasBounds? q m := fun i l hl => (hb i l hl).trans (tight_le_biasLimb i)
 
 /-- The bias bound implies the uniform one the `opp`/`neg` specs used. -/
 theorem biasBounds?_le {m : MemoryState} {q : Pointer} (hb : BiasBounds? q m) :
-    ∀ (i : Fin 5) (l : ℕ), readLimb? q i m = some l → l ≤ 0xffffffffffffe :=
-  fun i l hl => (hb i l hl).trans (biasLimb_le i)
+    ∀ (i : Fin 5) (l : ℕ), readLimb? q i m = some l → l ≤ 0xffffffffffffe := fun i l hl =>
+  (hb i l hl).trans (biasLimb_le i)
 
 /-- ... and the per-limb bound likewise. -/
 theorem biasBounds_of_live?_eq {m m' : MemoryState} {q : Pointer}
@@ -143,13 +155,16 @@ theorem limbSum_lt_of_biasBounds {m : MemoryState} {q : Pointer} {h : IsFieldEle
     (hb : BiasBounds h) (hne : readFieldElem h ≠ 0) : limbSum h < 2 ^ 256 - 38 := by
   rcases lt_or_eq_of_le (limbSum_le_of_biasBounds hb) with h' | h'
   · exact h'
-  · exact absurd (by rw [readFieldElem_eq_limbSum, h']; decide) hne
-
+  · exact
+      absurd
+        (by
+          rw [readFieldElem_eq_limbSum, h']; decide)
+        hne
 
 /-- ... and a bias-bounded element is a loose one, which is the bound
 `fiat_25519_carry_mul` / `carry_square` take. -/
 theorem BiasBounds.loose {m : MemoryState} {q : Pointer} {h : IsFieldElemPtr m q}
-    (hb : BiasBounds h) : LimbBounds.Loose h :=
-  fun i => le_trans (hb i) (le_trans (biasLimb_le i) (by norm_num))
+    (hb : BiasBounds h) : LimbBounds.Loose h := fun i =>
+  le_trans (hb i) (le_trans (biasLimb_le i) (by norm_num))
 
 end Firedancer.Ref

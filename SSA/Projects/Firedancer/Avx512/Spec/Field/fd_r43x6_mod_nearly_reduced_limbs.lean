@@ -51,39 +51,38 @@ def mnrA (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ :=
 /-- `q = y >> 255`, the carry out of bit 255 of `x + 19`: `0` when `x < p` and
 `1` when `p ≤ x < 2p`. Limb 5 holds bits 215 and up, so bit 255 is its bit
 40. -/
-def mnrQ (x : Fin R43x6.limbCount → ℤ) : ℤ := mnrA x 5 >>> 40
+def mnrQ (x : Fin R43x6.limbCount → ℤ) : ℤ :=
+  mnrA x 5 >>> 40
 
 /-- The second half, `_y0 -= fd_long_if( !_c, 19L, 0L )` propagated. `mnrE x i`
 is the macro's `_y i` on its second pass, after the borrow into limb `i` and
 before masking; limb 5 takes no borrow of its own, so only limbs 0-4 are formed
 here. Primed, since these are the macro's `_y i` a second time. -/
 def mnrE (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ :=
-  let y0' := mnrA x 0 % 2^43 - (if mnrQ x = 0 then 19 else 0)
+  let y0' := mnrA x 0 % 2 ^ 43 - (if mnrQ x = 0 then 19 else 0)
   let c0' := y0' >>> 43
-  let y1' := mnrA x 1 % 2^43 + c0'
+  let y1' := mnrA x 1 % 2 ^ 43 + c0'
   let c1' := y1' >>> 43
-  let y2' := mnrA x 2 % 2^43 + c1'
+  let y2' := mnrA x 2 % 2 ^ 43 + c1'
   let c2' := y2' >>> 43
-  let y3' := mnrA x 3 % 2^43 + c2'
+  let y3' := mnrA x 3 % 2 ^ 43 + c2'
   let c3' := y3' >>> 43
-  let y4' := mnrA x 4 % 2^43 + c3'
+  let y4' := mnrA x 4 % 2 ^ 43 + c3'
   R43x6.limbs6 y0' y1' y2' y3' y4' 0
 
 /-- **`fd_r43x6_mod_nearly_reduced_limbs`**: the reduced limbs. Limb 5 is the
 40-bit remainder of the first half plus the last borrow of the second. -/
 def mnr (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ :=
   let c4' := mnrE x 4 >>> 43
-  R43x6.limbs6 (mnrE x 0 % 2^43) (mnrE x 1 % 2^43) (mnrE x 2 % 2^43)
-    (mnrE x 3 % 2^43) (mnrE x 4 % 2^43)
-    (mnrA x 5 % 2^40 + c4')
+  R43x6.limbs6 (mnrE x 0 % 2 ^ 43) (mnrE x 1 % 2 ^ 43) (mnrE x 2 % 2 ^ 43) (mnrE x 3 % 2 ^ 43)
+    (mnrE x 4 % 2 ^ 43) (mnrA x 5 % 2 ^ 40 + c4')
 
 /-- The values the two chains form, in program order. All of these are
 non-negative as well as in range -- the emitted code marks them `nuw` on top
 of `nsw` -- with the single exception of `mnrE y 0`, the one subtraction,
 which is exactly where a borrow is intended. -/
 def mnrChain (x : Fin R43x6.limbCount → ℤ) : List ℤ :=
-  [mnrA x 0, mnrA x 1, mnrA x 2, mnrA x 3, mnrA x 4, mnrA x 5,
-   mnrE x 0, mnrE x 1, mnrE x 2, mnrE x 3, mnrE x 4,
-   mnrA x 5 % 2^40 + (mnrE x 4 >>> 43)]
+  [mnrA x 0, mnrA x 1, mnrA x 2, mnrA x 3, mnrA x 4, mnrA x 5, mnrE x 0, mnrE x 1, mnrE x 2,
+    mnrE x 3, mnrE x 4, mnrA x 5 % 2 ^ 40 + (mnrE x 4 >>> 43)]
 
 end Firedancer.Avx512

@@ -13,12 +13,12 @@ register value, poison included -- `smin` passes poison through.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 abbrev fd_int_min_spec (x : LLVM.IntW 32) (s : GlobalState) : Prop :=
   let invocation := runFunction (fd_int_min.denote (Ctxt.Valuation.singleton x))
-  ∃ s' : GlobalState,
-    StateT.run invocation s = .value ([SLLVM.smin x (.value 14#32)]ₕ, s') ∧ s ≈ s'
+  ∃ s' : GlobalState, StateT.run invocation s = .value ([SLLVM.smin x (.value 14#32)]ₕ, s') ∧ s ≈ s'
 
 end Firedancer.Common

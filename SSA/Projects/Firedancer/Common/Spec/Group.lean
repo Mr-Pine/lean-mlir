@@ -18,7 +18,8 @@ namespace Ed25519
 theorem two_ne_zero : (2 : ZMod p) ≠ 0 := by decide
 
 /-- edwards25519 as a complete twisted Edwards curve. -/
-def curve : Edwards.Curve (ZMod p) := ⟨d, sqrtm1, sqrtm1_sq, d_not_isSquare, two_ne_zero⟩
+def curve : Edwards.Curve (ZMod p) :=
+  ⟨d, sqrtm1, sqrtm1_sq, d_not_isSquare, two_ne_zero⟩
 
 /-- The base point `B = (x, 4/5)` of RFC 8032 §5.1, `x` even. -/
 def basePoint : Point :=
@@ -30,7 +31,8 @@ theorem wellFormed_basePoint : basePoint.WellFormed where
   onCurve := onCurve_decodedPoint (by decide)
   t_spec := by simp [basePoint, decodedPoint]
 
-theorem basePoint_Z : basePoint.Z = 1 := rfl
+theorem basePoint_Z : basePoint.Z = 1 :=
+  rfl
 
 namespace Point
 
@@ -43,10 +45,13 @@ theorem Y_eq (h : P.WellFormed) : P.Y = P.y * P.Z := by
   rw [y, mul_assoc, inv_mul_cancel₀ h.isUnit_Z.ne_zero, mul_one]
 
 theorem T_eq (h : P.WellFormed) : P.T = P.x * P.y * P.Z :=
-  mul_right_cancel₀ h.isUnit_Z.ne_zero (by rw [← h.t_spec, X_eq h, Y_eq h]; ring)
+  mul_right_cancel₀ h.isUnit_Z.ne_zero
+    (by
+      rw [← h.t_spec, X_eq h, Y_eq h]; ring)
 
 /-- The affine point a well-formed representation stands for. -/
-def toAffine (P : Point) (h : P.WellFormed) : Edwards.Point curve := ⟨P.x, P.y, h.onCurve⟩
+def toAffine (P : Point) (h : P.WellFormed) : Edwards.Point curve :=
+  ⟨P.x, P.y, h.onCurve⟩
 
 theorem toAffine_eq_iff {Q : Point} (hP : P.WellFormed) (hQ : Q.WellFormed) :
     P.toAffine hP = Q.toAffine hQ ↔ P.SamePoint Q := by
@@ -56,14 +61,15 @@ theorem toAffine_eq_iff {Q : Point} (hP : P.WellFormed) (hQ : Q.WellFormed) :
 
 /-- `dbl`'s `F` and `G`, in affine terms: `Z²·(1 ∓ d·x²·y²)`, so never `0`. -/
 theorem dbl_FG_ne_zero (h : P.WellFormed) :
-    2 * P.Z ^ 2 + ((P.x * P.Z) ^ 2 - (P.y * P.Z) ^ 2) ≠ 0
-      ∧ (P.x * P.Z) ^ 2 - (P.y * P.Z) ^ 2 ≠ 0 := by
+    2 * P.Z ^ 2 + ((P.x * P.Z) ^ 2 - (P.y * P.Z) ^ 2) ≠ 0 ∧
+      (P.x * P.Z) ^ 2 - (P.y * P.Z) ^ 2 ≠ 0 := by
   have hZ := pow_ne_zero 2 h.isUnit_Z.ne_zero
   have hc : -P.x ^ 2 + P.y ^ 2 = 1 + d * P.x ^ 2 * P.y ^ 2 := h.onCurve
   have hp : 1 + d * P.x * P.x * P.y * P.y ≠ 0 := curve.den_add_ne_zero h.onCurve h.onCurve
   have hm : 1 - d * P.x * P.x * P.y * P.y ≠ 0 := curve.den_sub_ne_zero h.onCurve h.onCurve
-  exact ⟨fun h0 => mul_ne_zero hZ hm (by linear_combination h0 + P.Z ^ 2 * hc),
-    fun h0 => mul_ne_zero hZ hp (by linear_combination -h0 - P.Z ^ 2 * hc)⟩
+  exact
+    ⟨fun h0 => mul_ne_zero hZ hm (by linear_combination h0 + P.Z ^ 2 * hc), fun h0 =>
+      mul_ne_zero hZ hp (by linear_combination -h0 - P.Z ^ 2 * hc)⟩
 
 theorem dbl_x (h : P.WellFormed) : P.dbl.x = (P.toAffine h + P.toAffine h).x := by
   have hc : -P.x ^ 2 + P.y ^ 2 = 1 + d * P.x ^ 2 * P.y ^ 2 := h.onCurve
@@ -99,8 +105,10 @@ theorem wellFormed_dbl (h : P.WellFormed) : P.dbl.WellFormed where
     simp only [dbl]
     rw [X_eq h, Y_eq h]
     exact (mul_ne_zero hF hG).isUnit
-  onCurve := by rw [dbl_x h, dbl_y h]; exact (P.toAffine h + P.toAffine h).on
-  t_spec := by simp only [dbl]; ring
+  onCurve := by
+    rw [dbl_x h, dbl_y h]; exact (P.toAffine h + P.toAffine h).on
+  t_spec := by
+    simp only [dbl]; ring
 
 theorem wellFormed_iterate_dbl (h : P.WellFormed) : ∀ k, (dbl^[k] P).WellFormed
   | 0 => h
@@ -123,11 +131,13 @@ theorem toAffine_congr {Q Q' : Point} (e : Q = Q') (hQ : Q.WellFormed) (hQ' : Q'
 /-- **`dbln` doubles `dblnCount n` times.** -/
 theorem toAffine_iterate_dbl (h : P.WellFormed) :
     ∀ k, (dbl^[k] P).toAffine (wellFormed_iterate_dbl h k) = 2 ^ k • P.toAffine h
-  | 0 => by rw [pow_zero, one_nsmul]; rfl
+  | 0 => by
+    rw [pow_zero, one_nsmul]; rfl
   | k + 1 => by
-    rw [toAffine_congr (Function.iterate_succ_apply' dbl k P) _ (wellFormed_dbl
-        (wellFormed_iterate_dbl h k)), toAffine_dbl (wellFormed_iterate_dbl h k),
-      toAffine_iterate_dbl h k, pow_succ, mul_nsmul, two_nsmul]
+    rw [toAffine_congr (Function.iterate_succ_apply' dbl k P) _
+        (wellFormed_dbl (wellFormed_iterate_dbl h k)),
+      toAffine_dbl (wellFormed_iterate_dbl h k), toAffine_iterate_dbl h k, pow_succ, mul_nsmul,
+      two_nsmul]
 
 theorem toAffine_dbln (h : P.WellFormed) (n : BitVec 32) :
     (P.dbln n).toAffine (wellFormed_dbln n h) = 2 ^ dblnCount n • P.toAffine h :=
@@ -172,7 +182,8 @@ theorem addPrecomputed_y (hP : P.WellFormed) (hR : R.WellFormed) :
   · exact fun h0 => mul_ne_zero h2 hp (by linear_combination h0)
 
 theorem wellFormed_addPrecomputed (hP : P.WellFormed) (hR : R.WellFormed) :
-    (P.addPrecomputed R.toPrecomputed).WellFormed where
+    (P.addPrecomputed R.toPrecomputed).WellFormed
+    where
   isUnit_Z := by
     have hp : 1 + d * P.x * R.x * P.y * R.y ≠ 0 := curve.den_add_ne_zero hP.onCurve hR.onCurve
     have hm : 1 - d * P.x * R.x * P.y * R.y ≠ 0 := curve.den_sub_ne_zero hP.onCurve hR.onCurve
@@ -180,16 +191,18 @@ theorem wellFormed_addPrecomputed (hP : P.WellFormed) (hR : R.WellFormed) :
       mul_ne_zero (mul_ne_zero two_ne_zero hP.isUnit_Z.ne_zero) hR.isUnit_Z.ne_zero
     simp only [addPrecomputed, toPrecomputed]
     rw [T_eq hP, T_eq hR]
-    exact (mul_ne_zero (fun h0 => mul_ne_zero h2 hm (by linear_combination h0))
-      (fun h0 => mul_ne_zero h2 hp (by linear_combination h0))).isUnit
+    exact
+      (mul_ne_zero (fun h0 => mul_ne_zero h2 hm (by linear_combination h0))
+          (fun h0 => mul_ne_zero h2 hp (by linear_combination h0))).isUnit
   onCurve := by
     rw [addPrecomputed_x hP hR, addPrecomputed_y hP hR]; exact (P.toAffine hP + R.toAffine hR).on
-  t_spec := by simp only [addPrecomputed]; ring
+  t_spec := by
+    simp only [addPrecomputed]; ring
 
 /-- **`addPrecomputed` adds**, against a well-formed point's precomputed form. -/
 theorem toAffine_addPrecomputed (hP : P.WellFormed) (hR : R.WellFormed) :
-    (P.addPrecomputed R.toPrecomputed).toAffine (wellFormed_addPrecomputed hP hR)
-      = P.toAffine hP + R.toAffine hR :=
+    (P.addPrecomputed R.toPrecomputed).toAffine (wellFormed_addPrecomputed hP hR) =
+      P.toAffine hP + R.toAffine hR :=
   Edwards.Point.ext (addPrecomputed_x hP hR) (addPrecomputed_y hP hR)
 
 theorem wellFormed_neg (h : P.WellFormed) : P.neg.WellFormed where
@@ -198,11 +211,15 @@ theorem wellFormed_neg (h : P.WellFormed) : P.neg.WellFormed where
     have hc := h.onCurve
     simp only [OnCurve, x, y, neg] at hc ⊢
     linear_combination hc
-  t_spec := by simp only [neg]; linear_combination -h.t_spec
+  t_spec := by
+    simp only [neg]; linear_combination -h.t_spec
 
 /-- **`neg` negates.** -/
 theorem toAffine_neg (h : P.WellFormed) : P.neg.toAffine (wellFormed_neg h) = -P.toAffine h :=
-  Edwards.Point.ext (by simp only [toAffine, Edwards.Point.neg_x, x, neg]; ring) rfl
+  Edwards.Point.ext
+    (by
+      simp only [toAffine, Edwards.Point.neg_x, x, neg]; ring)
+    rfl
 
 theorem toPrecomputed_neg (P : Point) : P.neg.toPrecomputed = P.toPrecomputed.neg := by
   simp only [neg, toPrecomputed, PrecomputedPoint.neg, PrecomputedPoint.mk.injEq]
@@ -215,8 +232,8 @@ theorem wellFormed_addPrecomputed_neg (hP : P.WellFormed) (hR : R.WellFormed) :
 
 /-- **`addPrecomputed` of a negated precomputed point subtracts.** -/
 theorem toAffine_addPrecomputed_neg (hP : P.WellFormed) (hR : R.WellFormed) :
-    (P.addPrecomputed R.toPrecomputed.neg).toAffine (wellFormed_addPrecomputed_neg hP hR)
-      = P.toAffine hP - R.toAffine hR := by
+    (P.addPrecomputed R.toPrecomputed.neg).toAffine (wellFormed_addPrecomputed_neg hP hR) =
+      P.toAffine hP - R.toAffine hR := by
   rw [toAffine_congr (congrArg P.addPrecomputed (toPrecomputed_neg R)).symm _
       (wellFormed_addPrecomputed hP (wellFormed_neg hR)),
     toAffine_addPrecomputed hP (wellFormed_neg hR), toAffine_neg hR, sub_eq_add_neg]
@@ -233,7 +250,8 @@ theorem represents_toAffine (h : P.WellFormed) : P.Represents (P.toAffine h) :=
   ⟨h.isUnit_Z, rfl, rfl⟩
 
 /-- `P` with `T` recomputed from `X, Y, Z`. -/
-def fixT (P : Point) : Point := ⟨P.X, P.Y, P.Z, P.x * P.y * P.Z⟩
+def fixT (P : Point) : Point :=
+  ⟨P.X, P.Y, P.Z, P.x * P.y * P.Z⟩
 
 variable {V : Edwards.Point curve}
 

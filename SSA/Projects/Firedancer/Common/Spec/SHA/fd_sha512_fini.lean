@@ -18,6 +18,7 @@ range, say -- has no resulting state, and the implication is vacuous.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -25,11 +26,15 @@ open InstCombine (LLVM)
 state is well formed, the allocation counter and symbol table are as on entry,
 and every block other than those two reads as it did. -/
 abbrev fd_sha512_fini_frame_spec (sha hash : Pointer) (s : GlobalState) : Prop :=
-  let invocation := runFunction (fd_sha512_fini.denote
-    (Ctxt.Valuation.ofHVector [.value hash, .value sha]ₕ))
-  ∃ res, StateT.run invocation s = res
-    ∧ ∀ r s', res = .value (r, s') →
-        s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
-          ∧ ∀ b : BlockId, ¬ (b = sha.id ∨ b = hash.id) → s'.mem.live? b = s.mem.live? b
+  let invocation :=
+    runFunction (fd_sha512_fini.denote (Ctxt.Valuation.ofHVector [.value hash, .value sha]ₕ))
+  ∃ res,
+    StateT.run invocation s = res ∧
+      ∀ r s',
+        res = .value (r, s') →
+          s'.WF ∧
+            s'.alloc = s.alloc ∧
+            s'.globals = s.globals ∧
+            ∀ b : BlockId, ¬(b = sha.id ∨ b = hash.id) → s'.mem.live? b = s.mem.live? b
 
 end Firedancer.Common

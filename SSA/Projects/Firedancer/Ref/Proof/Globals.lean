@@ -19,12 +19,14 @@ field element is checked rather than asserted.
 -/
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 
 /-- `@fd_f25519_sqrtm1` is the field's `√-1`. -/
 theorem decodeFieldElem_sqrtm1 :
-    decodeFieldElem ![1718705420411056, 234908883556509, 2233514472574048,
-                      2117202627021982, 765476049583133] = sqrtm1 := by
+    decodeFieldElem
+        ![1718705420411056, 234908883556509, 2233514472574048, 2117202627021982, 765476049583133] =
+      sqrtm1 := by
   decide +kernel
 
 end Firedancer.Ref

@@ -20,6 +20,7 @@ the source's own content and for `memset` a fill of zeroes.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -31,19 +32,18 @@ even when the two ranges overlap, a case LLVM leaves undefined and the model
 resolves by reading first. -/
 abbrev fd_memcpy_spec (d src : Pointer) (sz : BitVec 64) (s : GlobalState)
     (hsrc : Fits s.mem src (8 * sz.toNat)) : Prop :=
-  let invocation := runFunction
-    (fd_memcpy.denote (Ctxt.Valuation.ofHVector [.value sz, .value src, .value d]ₕ))
+  let invocation :=
+    runFunction (fd_memcpy.denote (Ctxt.Valuation.ofHVector [.value sz, .value src, .value d]ₕ))
   ∃ s' : GlobalState,
-    StateT.run invocation s = .value ([.value d]ₕ, s')
-      ∧ s' ≈ ({ s with mem := s.mem.splice d (readWord hsrc) } : GlobalState)
+    StateT.run invocation s = .value ([.value d]ₕ, s') ∧
+      s' ≈ ({ s with mem := s.mem.splice d (readWord hsrc) } : GlobalState)
 
 /-- `fd_memset(d, sz)` fills `sz` bytes with zero and returns `d`. The fill byte
 is a constant in the region: SHA-512 only ever zeroes. -/
 abbrev fd_memset_spec (d : Pointer) (sz : BitVec 64) (s : GlobalState) : Prop :=
-  let invocation := runFunction
-    (fd_memset.denote (Ctxt.Valuation.ofHVector [.value sz, .value d]ₕ))
+  let invocation := runFunction (fd_memset.denote (Ctxt.Valuation.ofHVector [.value sz, .value d]ₕ))
   ∃ s' : GlobalState,
-    StateT.run invocation s = .value ([.value d]ₕ, s')
-      ∧ s' ≈ ({ s with mem := s.mem.splice d (BitVec.replicate sz.toNat (0#8)) } : GlobalState)
+    StateT.run invocation s = .value ([.value d]ₕ, s') ∧
+      s' ≈ ({ s with mem := s.mem.splice d (BitVec.replicate sz.toNat (0#8)) } : GlobalState)
 
 end Firedancer.Common

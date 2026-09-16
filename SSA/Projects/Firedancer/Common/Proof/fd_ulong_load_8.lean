@@ -14,14 +14,16 @@ comes back equivalent.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 theorem fd_ulong_load_8_conforms (p : Pointer) (s : GlobalState) (hs : s.WF)
     (hp : Fits s.mem p 64) :
     ∃ s' : GlobalState,
-      StateT.run (runFunction (fd_ulong_load_8.denote (Ctxt.Valuation.singleton (.value p)))) s
-        = .value ([.value (readWord hp)]ₕ, s') ∧ s ≈ s' := by
+      StateT.run (runFunction (fd_ulong_load_8.denote (Ctxt.Valuation.singleton (.value p)))) s =
+          .value ([.value (readWord hp)]ₕ, s') ∧
+        s ≈ s' := by
   simp only [Cfg.denote]
   refine ⟨s.popFrame s.mem, run_runFunction (s' := s) ?_, hs.popFrame_equiv⟩
   obtain ⟨blk, hblk, hlen⟩ := hp
@@ -40,10 +42,12 @@ program is the whole rest of the region, and `fd_curve25519_scalar_reduce` pays
 it eight times over. -/
 theorem fd_ulong_load_8_conforms_cont {P : Prop} (p : Pointer) (s : GlobalState) (hs : s.WF)
     (hp : Fits s.mem p 64)
-    (k : ∀ t : GlobalState,
-      StateT.run (runFunction (fd_ulong_load_8.denote (Ctxt.Valuation.singleton (.value p)))) s
-          = .value ([.value (readWord hp)]ₕ, t) →
-        s ≈ t → P) : P :=
+    (k :
+      ∀ t : GlobalState,
+        StateT.run (runFunction (fd_ulong_load_8.denote (Ctxt.Valuation.singleton (.value p)))) s =
+            .value ([.value (readWord hp)]ₕ, t) →
+          s ≈ t → P) :
+    P :=
   let ⟨t, hrun, he⟩ := fd_ulong_load_8_conforms p s hs hp
   k t hrun he
 

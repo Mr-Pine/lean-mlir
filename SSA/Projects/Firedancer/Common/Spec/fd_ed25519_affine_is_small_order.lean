@@ -78,14 +78,11 @@ theorem order8_x_sq : order8_x ^ 2 * (d * order8_y0 ^ 2 + 1) = order8_y0 ^ 2 - 1
 /-- The eight points of order dividing 8, as affine `(x, y)` pairs, in the
 order `fd_curve25519.h:105` lists them: `P0`, `P1`, `±P2`, `±P3`, `±P4`. -/
 def lowOrder : List (ZMod p × ZMod p) :=
-  [(0, 1), (0, -1),
-   (sqrtm1, 0), (-sqrtm1, 0),
-   (order8_x, order8_y0), (-order8_x, order8_y0),
-   (order8_x, order8_y1), (-order8_x, order8_y1)]
+  [(0, 1), (0, -1), (sqrtm1, 0), (-sqrtm1, 0), (order8_x, order8_y0), (-order8_x, order8_y0),
+    (order8_x, order8_y1), (-order8_x, order8_y1)]
 
 /-- All eight are on the curve. -/
-theorem onCurve_of_mem_lowOrder {q : ZMod p × ZMod p} (hq : q ∈ lowOrder) :
-    OnCurve q.1 q.2 := by
+theorem onCurve_of_mem_lowOrder {q : ZMod p × ZMod p} (hq : q ∈ lowOrder) : OnCurve q.1 q.2 := by
   fin_cases hq <;> simp only [OnCurve] <;> decide +kernel
 
 /-! ## The test
@@ -122,12 +119,12 @@ theorem sq_eq_sq_iff' {a b : ZMod p} : a ^ 2 = b ^ 2 ↔ a = b ∨ a = -b := by
 /-- On an affine representation the projective `X` *is* the affine `x`. This is
 where `Z = 1` is spent: the regions test `X` and `Y`, the curve equation
 constrains `x` and `y`. -/
-@[simp] theorem x_of_Z_eq_one {P : Point} (hZ : P.Z = 1) : P.x = P.X := by
-  simp [Point.x, hZ]
+@[simp]
+theorem x_of_Z_eq_one {P : Point} (hZ : P.Z = 1) : P.x = P.X := by simp [Point.x, hZ]
 
 /-- ... and likewise for `Y`. -/
-@[simp] theorem y_of_Z_eq_one {P : Point} (hZ : P.Z = 1) : P.y = P.Y := by
-  simp [Point.y, hZ]
+@[simp]
+theorem y_of_Z_eq_one {P : Point} (hZ : P.Z = 1) : P.y = P.Y := by simp [Point.y, hZ]
 
 /-- **The test decides membership in `lowOrder`**, for a point on the curve
 given in affine form (`Z = 1`).
@@ -136,15 +133,15 @@ Forward, branch by branch: `X = 0` leaves `Y² = 1`; `Y = 0` leaves
 `X² = -1 = sqrtm1²`; `Y = y0` (and `Y = y1 = -y0`, which has the same square)
 leaves `X²·(d·y0² + 1) = y0² - 1 = order8_x²·(d·y0² + 1)`, and the denominator
 `d·y0² + 1` is non-zero because `d` is not a square (`denom_ne_zero`). -/
-theorem isSmallOrderTest_iff_mem {P : Point} (hZ : P.Z = 1)
-    (hc : OnCurve P.x P.y) : IsSmallOrderTest P ↔ (P.X, P.Y) ∈ lowOrder := by
+theorem isSmallOrderTest_iff_mem {P : Point} (hZ : P.Z = 1) (hc : OnCurve P.x P.y) :
+    IsSmallOrderTest P ↔ (P.X, P.Y) ∈ lowOrder := by
   rw [x_of_Z_eq_one hZ, y_of_Z_eq_one hZ] at hc
-  simp only [IsSmallOrderTest, lowOrder, List.mem_cons, List.not_mem_nil, or_false,
-    Prod.mk.injEq]
+  simp only [IsSmallOrderTest, lowOrder, List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq]
   constructor
   · rintro (hX | hY | hY | hY)
     · -- `X = 0`: the curve equation is `Y² = 1`.
-      have h : P.Y ^ 2 = 1 ^ 2 := by rw [OnCurve, hX] at hc; linear_combination hc
+      have h : P.Y ^ 2 = 1 ^ 2 := by
+        rw [OnCurve, hX] at hc; linear_combination hc
       rcases sq_eq_sq_iff'.mp h with h' | h'
       · exact Or.inl ⟨hX, h'⟩
       · exact Or.inr (Or.inl ⟨hX, by simpa using h'⟩)
@@ -165,7 +162,8 @@ theorem isSmallOrderTest_iff_mem {P : Point} (hZ : P.Z = 1)
       · exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨h', hY⟩)))))
     · -- `Y = y1 = -y0`: same square, so the same two roots.
       have hden : d * order8_y0 ^ 2 + 1 ≠ 0 := denom_ne_zero order8_y0
-      have hsq : P.Y ^ 2 = order8_y0 ^ 2 := by rw [hY, order8_y1_eq_neg]; ring
+      have hsq : P.Y ^ 2 = order8_y0 ^ 2 := by
+        rw [hY, order8_y1_eq_neg]; ring
       have h : P.X ^ 2 = order8_x ^ 2 := by
         rw [OnCurve] at hc
         refine mul_right_cancel₀ hden ?_
@@ -191,8 +189,8 @@ the flag of the disjunction. -/
 
 /-- Two `0`/`1` flags `or`ed is the flag of their disjunction. -/
 theorem or_ite_or {b c : Prop} [Decidable b] [Decidable c] :
-    ((if b then 1#32 else 0#32) ||| (if c then 1#32 else 0#32) : BitVec 32)
-      = if b ∨ c then 1#32 else 0#32 := by
+    ((if b then 1#32 else 0#32) ||| (if c then 1#32 else 0#32) : BitVec 32) =
+      if b ∨ c then 1#32 else 0#32 := by
   by_cases hb : b <;> by_cases hc : c <;> simp [hb, hc]
 
 end Ed25519

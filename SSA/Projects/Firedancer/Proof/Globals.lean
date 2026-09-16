@@ -28,6 +28,7 @@ case: one block per symbol, pairwise distinct by `chainPtr_id`.
 -/
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -36,22 +37,23 @@ def GlobalPtr (s : GlobalState) (name : String) (p : Pointer) : Prop :=
   s.globals[name]? = some p
 
 /-- ... and the `w`-bit value `v` is what lives there. -/
-def HoldsGlobal (s : GlobalState) (name : String) (p : Pointer) {w : Nat} (v : BitVec w) :
-    Prop :=
+def HoldsGlobal (s : GlobalState) (name : String) (p : Pointer) {w : Nat} (v : BitVec w) : Prop :=
   GlobalPtr s name p ∧ ∃ h : Fits s.mem p w, readWord h = v
 
 namespace GlobalPtr
 
 /-- The table is write-once, so `≈` carries the address unchanged -- which is
 what lets a global survive a callee. -/
-theorem of_equiv {s s' : GlobalState} {name : String} {p : Pointer}
-    (h : GlobalPtr s name p) (he : s ≈ s') : GlobalPtr s' name p := by
+theorem of_equiv {s s' : GlobalState} {name : String} {p : Pointer} (h : GlobalPtr s name p)
+    (he : s ≈ s') : GlobalPtr s' name p := by
   simp only [GlobalPtr, ← he.globals]; exact h
 
 /-- A `GlobalState` differing only in memory keeps the address: the shape every
 store leaves behind. -/
-@[simp] theorem splice {s : GlobalState} {name : String} {p : Pointer} {m : MemoryState} :
-    GlobalPtr { s with mem := m } name p ↔ GlobalPtr s name p := Iff.rfl
+@[simp]
+theorem splice {s : GlobalState} {name : String} {p : Pointer} {m : MemoryState} :
+    GlobalPtr { s with mem := m } name p ↔ GlobalPtr s name p :=
+  Iff.rfl
 
 end GlobalPtr
 
@@ -60,33 +62,32 @@ namespace HoldsGlobal
 /-- The global's address, forgetting what it holds. A mutable global keeps
 exactly this much across a write. -/
 theorem ptr {s : GlobalState} {name : String} {p : Pointer} {w : Nat} {v : BitVec w}
-    (h : HoldsGlobal s name p v) : GlobalPtr s name p := h.1
+    (h : HoldsGlobal s name p v) : GlobalPtr s name p :=
+  h.1
 
 /-- The global's block predates every `alloca` the region will do, exactly as a
 caller's out-parameter does -- so `chainPtr_id` separates it from the locals
 with no further hypothesis. -/
-theorem lt_nextFreeBlock {s : GlobalState} {name : String} {p : Pointer} {w : Nat}
-    {v : BitVec w} (hs : s.WF) (h : HoldsGlobal s name p v) :
-    p.id.id < s.alloc.nextFreeBlock :=
+theorem lt_nextFreeBlock {s : GlobalState} {name : String} {p : Pointer} {w : Nat} {v : BitVec w}
+    (hs : s.WF) (h : HoldsGlobal s name p v) : p.id.id < s.alloc.nextFreeBlock :=
   lt_nextFreeBlock_of_fits hs h.2.1
 
 /-- A store to another block leaves the global alone. This is where a spec's
 `p.id ≠ o.id` is spent: nothing else establishes that a region's writes miss
 its globals. -/
-theorem splice_ne {s : GlobalState} {name : String} {p q : Pointer} {w w' : Nat}
-    {v : BitVec w} {x : BitVec w'} (h : HoldsGlobal s name p v) (hq : q.id ≠ p.id) :
+theorem splice_ne {s : GlobalState} {name : String} {p q : Pointer} {w w' : Nat} {v : BitVec w}
+    {x : BitVec w'} (h : HoldsGlobal s name p v) (hq : q.id ≠ p.id) :
     HoldsGlobal { s with mem := s.mem.splice q x } name p v := by
   obtain ⟨hp, hfit, hval⟩ := h
   exact ⟨hp, (readWord_splice_ne hq hfit).imp fun _ hv => hv.trans hval⟩
 
 /-- Transport across a state that agrees on the global's block: the shape a
 callee's `≈` hands back. -/
-theorem of_equiv {s s' : GlobalState} {name : String} {p : Pointer} {w : Nat}
-    {v : BitVec w} (h : HoldsGlobal s name p v) (he : s ≈ s') :
-    HoldsGlobal s' name p v := by
+theorem of_equiv {s s' : GlobalState} {name : String} {p : Pointer} {w : Nat} {v : BitVec w}
+    (h : HoldsGlobal s name p v) (he : s ≈ s') : HoldsGlobal s' name p v := by
   obtain ⟨hp, hfit, hval⟩ := h
-  exact ⟨hp.of_equiv he, (readWord_of_live?_eq (he.live p.id).symm hfit).imp
-    fun _ hv => hv.trans hval⟩
+  exact
+    ⟨hp.of_equiv he, (readWord_of_live?_eq (he.live p.id).symm hfit).imp fun _ hv => hv.trans hval⟩
 
 end HoldsGlobal
 
@@ -98,30 +99,35 @@ from. No region's proof mentions it -- a global whose address came from
 somewhere else is equally admissible. -/
 
 /-- Install one global: a fresh block holding `v`, recorded under `name`. -/
-def _root_.LeanMLIR.GlobalState.withGlobal (s : GlobalState) (name : String) {w : Nat} (v : BitVec w) :
-    GlobalState :=
+def _root_.LeanMLIR.GlobalState.withGlobal (s : GlobalState) (name : String) {w : Nat}
+    (v : BitVec w) : GlobalState :=
   let p : Pointer := ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩
   let s' := s.afterAlloca w
-  { s' with mem := s'.mem.splice p v, globals := s'.globals.insert name p }
+  { s' with
+    mem := s'.mem.splice p v, globals := s'.globals.insert name p }
 
 /-- The address `withGlobal` chose: the block at the counter, as `alloca`'s. -/
-@[simp] theorem _root_.LeanMLIR.GlobalState.withGlobal_ptr (s : GlobalState) (name : String) {w : Nat}
+@[simp]
+theorem _root_.LeanMLIR.GlobalState.withGlobal_ptr (s : GlobalState) (name : String) {w : Nat}
     (v : BitVec w) : (s.withGlobal name v).globals[name]? = some ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ := by
   simp [GlobalState.withGlobal]
 
-@[simp] theorem _root_.LeanMLIR.GlobalState.withGlobal_nextFreeBlock (s : GlobalState) (name : String)
+@[simp]
+theorem _root_.LeanMLIR.GlobalState.withGlobal_nextFreeBlock (s : GlobalState) (name : String)
     {w : Nat} (v : BitVec w) :
-    (s.withGlobal name v).alloc.nextFreeBlock = s.alloc.nextFreeBlock + 1 := rfl
+    (s.withGlobal name v).alloc.nextFreeBlock = s.alloc.nextFreeBlock + 1 :=
+  rfl
 
 /-- An earlier global keeps its entry: distinct names, distinct blocks, and the
 new block is above every old one. -/
-@[simp] theorem _root_.LeanMLIR.GlobalState.withGlobal_ptr_ne (s : GlobalState) {name name' : String}
+@[simp]
+theorem _root_.LeanMLIR.GlobalState.withGlobal_ptr_ne (s : GlobalState) {name name' : String}
     {w : Nat} (v : BitVec w) (h : name' ≠ name) :
     (s.withGlobal name v).globals[name']? = s.globals[name']? := by
   simp [GlobalState.withGlobal, Std.HashMap.getElem?_insert, Ne.symm h]
 
-theorem _root_.LeanMLIR.GlobalState.WF.withGlobal {s : GlobalState} (hs : s.WF) (name : String) {w : Nat}
-    (v : BitVec w) : (s.withGlobal name v).WF := by
+theorem _root_.LeanMLIR.GlobalState.WF.withGlobal {s : GlobalState} (hs : s.WF) (name : String)
+    {w : Nat} (v : BitVec w) : (s.withGlobal name v).WF := by
   intro q hq
   -- the global's own block is the one at the entry counter, strictly below `q`
   have hne : (⟨⟨s.alloc.nextFreeBlock⟩, 0⟩ : Pointer).id ≠ q := by

@@ -30,6 +30,7 @@ select only lanes 0-5 of `x`.
 -/
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -50,32 +51,46 @@ coefficient of `2^43k` before any folding. This is the `z0`,…,`z11` diagram in
 the comments of `fd_r43x6_mul_fast`. -/
 def col (x y : Fin 6 → ℕ) : Fin 12 → ℕ
   | 0 => pl (x 0) (y 0)
-  | 1 => pl (x 0) (y 1) + pl (x 1) (y 0)
-      + ph (x 0) (y 0)
-  | 2 => pl (x 0) (y 2) + pl (x 1) (y 1) + pl (x 2) (y 0)
-      + ph (x 0) (y 1) + ph (x 1) (y 0)
-  | 3 => pl (x 0) (y 3) + pl (x 1) (y 2) + pl (x 2) (y 1) + pl (x 3) (y 0)
-      + ph (x 0) (y 2) + ph (x 1) (y 1) + ph (x 2) (y 0)
-  | 4 => pl (x 0) (y 4) + pl (x 1) (y 3) + pl (x 2) (y 2) + pl (x 3) (y 1)
-      + pl (x 4) (y 0)
-      + ph (x 0) (y 3) + ph (x 1) (y 2) + ph (x 2) (y 1) + ph (x 3) (y 0)
-  | 5 => pl (x 0) (y 5) + pl (x 1) (y 4) + pl (x 2) (y 3) + pl (x 3) (y 2)
-      + pl (x 4) (y 1) + pl (x 5) (y 0)
-      + ph (x 0) (y 4) + ph (x 1) (y 3) + ph (x 2) (y 2) + ph (x 3) (y 1)
-      + ph (x 4) (y 0)
-  | 6 => pl (x 1) (y 5) + pl (x 2) (y 4) + pl (x 3) (y 3) + pl (x 4) (y 2)
-      + pl (x 5) (y 1)
-      + ph (x 0) (y 5) + ph (x 1) (y 4) + ph (x 2) (y 3) + ph (x 3) (y 2)
-      + ph (x 4) (y 1) + ph (x 5) (y 0)
-  | 7 => pl (x 2) (y 5) + pl (x 3) (y 4) + pl (x 4) (y 3) + pl (x 5) (y 2)
-      + ph (x 1) (y 5) + ph (x 2) (y 4) + ph (x 3) (y 3) + ph (x 4) (y 2)
-      + ph (x 5) (y 1)
-  | 8 => pl (x 3) (y 5) + pl (x 4) (y 4) + pl (x 5) (y 3)
-      + ph (x 2) (y 5) + ph (x 3) (y 4) + ph (x 4) (y 3) + ph (x 5) (y 2)
-  | 9 => pl (x 4) (y 5) + pl (x 5) (y 4)
-      + ph (x 3) (y 5) + ph (x 4) (y 4) + ph (x 5) (y 3)
-  | 10 => pl (x 5) (y 5)
-      + ph (x 4) (y 5) + ph (x 5) (y 4)
+  | 1 => pl (x 0) (y 1) + pl (x 1) (y 0) + ph (x 0) (y 0)
+  | 2 => pl (x 0) (y 2) + pl (x 1) (y 1) + pl (x 2) (y 0) + ph (x 0) (y 1) + ph (x 1) (y 0)
+  | 3 =>
+    pl (x 0) (y 3) + pl (x 1) (y 2) + pl (x 2) (y 1) + pl (x 3) (y 0) + ph (x 0) (y 2) +
+      ph (x 1) (y 1) +
+      ph (x 2) (y 0)
+  | 4 =>
+    pl (x 0) (y 4) + pl (x 1) (y 3) + pl (x 2) (y 2) + pl (x 3) (y 1) + pl (x 4) (y 0) +
+      ph (x 0) (y 3) +
+      ph (x 1) (y 2) +
+      ph (x 2) (y 1) +
+      ph (x 3) (y 0)
+  | 5 =>
+    pl (x 0) (y 5) + pl (x 1) (y 4) + pl (x 2) (y 3) + pl (x 3) (y 2) + pl (x 4) (y 1) +
+      pl (x 5) (y 0) +
+      ph (x 0) (y 4) +
+      ph (x 1) (y 3) +
+      ph (x 2) (y 2) +
+      ph (x 3) (y 1) +
+      ph (x 4) (y 0)
+  | 6 =>
+    pl (x 1) (y 5) + pl (x 2) (y 4) + pl (x 3) (y 3) + pl (x 4) (y 2) + pl (x 5) (y 1) +
+      ph (x 0) (y 5) +
+      ph (x 1) (y 4) +
+      ph (x 2) (y 3) +
+      ph (x 3) (y 2) +
+      ph (x 4) (y 1) +
+      ph (x 5) (y 0)
+  | 7 =>
+    pl (x 2) (y 5) + pl (x 3) (y 4) + pl (x 4) (y 3) + pl (x 5) (y 2) + ph (x 1) (y 5) +
+      ph (x 2) (y 4) +
+      ph (x 3) (y 3) +
+      ph (x 4) (y 2) +
+      ph (x 5) (y 1)
+  | 8 =>
+    pl (x 3) (y 5) + pl (x 4) (y 4) + pl (x 5) (y 3) + ph (x 2) (y 5) + ph (x 3) (y 4) +
+      ph (x 4) (y 3) +
+      ph (x 5) (y 2)
+  | 9 => pl (x 4) (y 5) + pl (x 5) (y 4) + ph (x 3) (y 5) + ph (x 4) (y 4) + ph (x 5) (y 3)
+  | 10 => pl (x 5) (y 5) + ph (x 4) (y 5) + ph (x 5) (y 4)
   | 11 => ph (x 5) (y 5)
 
 /-- The output limbs of `fd_r43x6_mul_fast`: the low six columns, plus the
@@ -90,10 +105,15 @@ set_option exponentiation.threshold 600 in
 products appears exactly once, at the weight `2^(43(i+j))` of its column. -/
 theorem cols_mul (x y : Fin 6 → ℕ) :
     (decodeNat x) * (decodeNat y) =
-      col x y 0 + 2^43 * col x y 1 + 2^86 * col x y 2 + 2^129 * col x y 3
-      + 2^172 * col x y 4 + 2^215 * col x y 5 + 2^258 * col x y 6
-      + 2^301 * col x y 7 + 2^344 * col x y 8 + 2^387 * col x y 9
-      + 2^430 * col x y 10 + 2^473 * col x y 11 := by
+      col x y 0 + 2 ^ 43 * col x y 1 + 2 ^ 86 * col x y 2 + 2 ^ 129 * col x y 3 +
+        2 ^ 172 * col x y 4 +
+        2 ^ 215 * col x y 5 +
+        2 ^ 258 * col x y 6 +
+        2 ^ 301 * col x y 7 +
+        2 ^ 344 * col x y 8 +
+        2 ^ 387 * col x y 9 +
+        2 ^ 430 * col x y 10 +
+        2 ^ 473 * col x y 11 := by
   simp only [decodeNat_eq, col]
   -- The thirty-six products formed by the implementation.
   have h00 := pl_add_shift_ph (x 0) (y 0)
@@ -132,36 +152,39 @@ theorem cols_mul (x y : Fin 6 → ℕ) :
   have h53 := pl_add_shift_ph (x 5) (y 3)
   have h54 := pl_add_shift_ph (x 5) (y 4)
   have h55 := pl_add_shift_ph (x 5) (y 5)
-  calc (x 0 + 2^43 * x 1 + 2^86 * x 2 + 2^129 * x 3 + 2^172 * x 4 + 2^215 * x 5)
-        * (y 0 + 2^43 * y 1 + 2^86 * y 2 + 2^129 * y 3 + 2^172 * y 4 + 2^215 * y 5)
-      = (x 0 * y 0) + 2^43 * (x 0 * y 1 + x 1 * y 0)
-        + 2^86 * (x 0 * y 2 + x 1 * y 1 + x 2 * y 0)
-        + 2^129 * (x 0 * y 3 + x 1 * y 2 + x 2 * y 1 + x 3 * y 0)
-        + 2^172 * (x 0 * y 4 + x 1 * y 3 + x 2 * y 2 + x 3 * y 1 + x 4 * y 0)
-        + 2^215 * (x 0 * y 5 + x 1 * y 4 + x 2 * y 3 + x 3 * y 2 + x 4 * y 1 + x 5 * y 0)
-        + 2^258 * (x 1 * y 5 + x 2 * y 4 + x 3 * y 3 + x 4 * y 2 + x 5 * y 1)
-        + 2^301 * (x 2 * y 5 + x 3 * y 4 + x 4 * y 3 + x 5 * y 2)
-        + 2^344 * (x 3 * y 5 + x 4 * y 4 + x 5 * y 3)
-        + 2^387 * (x 4 * y 5 + x 5 * y 4)
-        + 2^430 * (x 5 * y 5) := by ring
+  calc
+    (x 0 + 2 ^ 43 * x 1 + 2 ^ 86 * x 2 + 2 ^ 129 * x 3 + 2 ^ 172 * x 4 + 2 ^ 215 * x 5) *
+          (y 0 + 2 ^ 43 * y 1 + 2 ^ 86 * y 2 + 2 ^ 129 * y 3 + 2 ^ 172 * y 4 + 2 ^ 215 * y 5) =
+        (x 0 * y 0) + 2 ^ 43 * (x 0 * y 1 + x 1 * y 0) +
+          2 ^ 86 * (x 0 * y 2 + x 1 * y 1 + x 2 * y 0) +
+          2 ^ 129 * (x 0 * y 3 + x 1 * y 2 + x 2 * y 1 + x 3 * y 0) +
+          2 ^ 172 * (x 0 * y 4 + x 1 * y 3 + x 2 * y 2 + x 3 * y 1 + x 4 * y 0) +
+          2 ^ 215 * (x 0 * y 5 + x 1 * y 4 + x 2 * y 3 + x 3 * y 2 + x 4 * y 1 + x 5 * y 0) +
+          2 ^ 258 * (x 1 * y 5 + x 2 * y 4 + x 3 * y 3 + x 4 * y 2 + x 5 * y 1) +
+          2 ^ 301 * (x 2 * y 5 + x 3 * y 4 + x 4 * y 3 + x 5 * y 2) +
+          2 ^ 344 * (x 3 * y 5 + x 4 * y 4 + x 5 * y 3) +
+          2 ^ 387 * (x 4 * y 5 + x 5 * y 4) +
+          2 ^ 430 * (x 5 * y 5) :=
+      by ring
     _ = _ := by
-        rw [← h00, ← h01, ← h02, ← h03, ← h04, ← h05,
-            ← h10, ← h11, ← h12, ← h13, ← h14, ← h15,
-            ← h20, ← h21, ← h22, ← h23, ← h24, ← h25,
-            ← h30, ← h31, ← h32, ← h33, ← h34, ← h35,
-            ← h40, ← h41, ← h42, ← h43, ← h44, ← h45,
-            ← h50, ← h51, ← h52, ← h53, ← h54, ← h55]
-        ring
+      rw [← h00, ← h01, ← h02, ← h03, ← h04, ← h05, ← h10, ← h11, ← h12, ← h13, ← h14, ← h15, ← h20,
+        ← h21, ← h22, ← h23, ← h24, ← h25, ← h30, ← h31, ← h32, ← h33, ← h34, ← h35, ← h40, ← h41, ←
+        h42, ← h43, ← h44, ← h45, ← h50, ← h51, ← h52, ← h53, ← h54, ← h55]
+      ring
 
 /-- **Ring correctness**: decoding the output limbs of `fd_r43x6_mul_fast`
 yields the product of the decoded inputs modulo `p = 2^255 - 19`. -/
 theorem decodeLimbs_limb_modEq (x y : Fin 6 → ℕ) :
     decodeNat (limb x y) ≡ (decodeNat x) * (decodeNat y) [MOD p] := by
   -- The high columns contribute a multiple of `p`, since `2^258 - 152 = 8·p`.
-  have hsplit : decodeNat (limb x y)
-      + p * (8 * (col x y 6 + 2^43 * col x y 7 + 2^86 * col x y 8
-          + 2^129 * col x y 9 + 2^172 * col x y 10 + 2^215 * col x y 11))
-      = (decodeNat x) * (decodeNat y) := by
+  have hsplit :
+    decodeNat (limb x y) +
+        p *
+          (8 *
+            (col x y 6 + 2 ^ 43 * col x y 7 + 2 ^ 86 * col x y 8 + 2 ^ 129 * col x y 9 +
+              2 ^ 172 * col x y 10 +
+              2 ^ 215 * col x y 11)) =
+      (decodeNat x) * (decodeNat y) := by
     rw [cols_mul]
     simp only [decodeNat_eq, limb, p, Fin.reduceCastAdd, Fin.reduceAddNat]
     generalize col x y 0 = c0; generalize col x y 1 = c1
@@ -177,8 +200,8 @@ theorem decodeLimbs_limb_modEq (x y : Fin 6 → ℕ) :
 
 /-- Ring correctness, stated in `ZMod p`. -/
 theorem decodeLimbs_limb_zmod (x y : Fin 6 → ℕ) :
-    ((decodeNat (limb x y) : ℕ) : ZMod p)
-      = ((decodeNat x : ℕ) : ZMod p) * ((decodeNat y : ℕ) : ZMod p) := by
+    ((decodeNat (limb x y) : ℕ) : ZMod p) =
+      ((decodeNat x : ℕ) : ZMod p) * ((decodeNat y : ℕ) : ZMod p) := by
   have h := decodeLimbs_limb_modEq x y
   have := (ZMod.natCast_eq_natCast_iff _ _ _).mpr h
   simpa [Nat.cast_mul] using this
@@ -195,95 +218,81 @@ source comments. -/
 
 set_option maxHeartbeats 1000000 in
 /-- Every output limb, in terms of a `ph` bound `Bo`. -/
-private theorem limb_lt_of_bounds (x y : Fin 6 → ℕ) (Bo L : ℕ)
-    (hph : ∀ i j, ph (x i) (y j) < Bo)
-    (hL : 761 * 2^52 + 912 * Bo ≤ L)
-    (k : Fin 6) :
-    limb x y k < L := by
-  have hpl : ∀ a b : ℕ, pl a b < 2^52 := fun a b => pl_lt a b
+private theorem limb_lt_of_bounds (x y : Fin 6 → ℕ) (Bo L : ℕ) (hph : ∀ i j, ph (x i) (y j) < Bo)
+    (hL : 761 * 2 ^ 52 + 912 * Bo ≤ L) (k : Fin 6) : limb x y k < L := by
+  have hpl : ∀ a b : ℕ, pl a b < 2 ^ 52 := fun a b => pl_lt a b
   fin_cases k <;>
-  · simp [limb, col]
-    have := hpl (x 0) (y 0); have := hpl (x 0) (y 1); have := hpl (x 0) (y 2)
-    have := hpl (x 0) (y 3); have := hpl (x 0) (y 4); have := hpl (x 0) (y 5)
-    have := hpl (x 1) (y 0); have := hpl (x 1) (y 1); have := hpl (x 1) (y 2)
-    have := hpl (x 1) (y 3); have := hpl (x 1) (y 4); have := hpl (x 1) (y 5)
-    have := hpl (x 2) (y 0); have := hpl (x 2) (y 1); have := hpl (x 2) (y 2)
-    have := hpl (x 2) (y 3); have := hpl (x 2) (y 4); have := hpl (x 2) (y 5)
-    have := hpl (x 3) (y 0); have := hpl (x 3) (y 1); have := hpl (x 3) (y 2)
-    have := hpl (x 3) (y 3); have := hpl (x 3) (y 4); have := hpl (x 3) (y 5)
-    have := hpl (x 4) (y 0); have := hpl (x 4) (y 1); have := hpl (x 4) (y 2)
-    have := hpl (x 4) (y 3); have := hpl (x 4) (y 4); have := hpl (x 4) (y 5)
-    have := hpl (x 5) (y 0); have := hpl (x 5) (y 1); have := hpl (x 5) (y 2)
-    have := hpl (x 5) (y 3); have := hpl (x 5) (y 4); have := hpl (x 5) (y 5)
-    have := hph 0 0; have := hph 0 1
-    have := hph 0 2; have := hph 0 3
-    have := hph 0 4; have := hph 0 5
-    have := hph 1 0; have := hph 1 1
-    have := hph 1 2; have := hph 1 3
-    have := hph 1 4; have := hph 1 5
-    have := hph 2 0; have := hph 2 1
-    have := hph 2 2; have := hph 2 3
-    have := hph 2 4; have := hph 2 5
-    have := hph 3 0; have := hph 3 1
-    have := hph 3 2; have := hph 3 3
-    have := hph 3 4; have := hph 3 5
-    have := hph 4 0; have := hph 4 1
-    have := hph 4 2; have := hph 4 3
-    have := hph 4 4; have := hph 4 5
-    have := hph 5 0; have := hph 5 1
-    have := hph 5 2; have := hph 5 3
-    have := hph 5 4; have := hph 5 5
-    omega
+    · simp [limb, col]
+      have := hpl (x 0) (y 0); have := hpl (x 0) (y 1); have := hpl (x 0) (y 2)
+      have := hpl (x 0) (y 3); have := hpl (x 0) (y 4); have := hpl (x 0) (y 5)
+      have := hpl (x 1) (y 0); have := hpl (x 1) (y 1); have := hpl (x 1) (y 2)
+      have := hpl (x 1) (y 3); have := hpl (x 1) (y 4); have := hpl (x 1) (y 5)
+      have := hpl (x 2) (y 0); have := hpl (x 2) (y 1); have := hpl (x 2) (y 2)
+      have := hpl (x 2) (y 3); have := hpl (x 2) (y 4); have := hpl (x 2) (y 5)
+      have := hpl (x 3) (y 0); have := hpl (x 3) (y 1); have := hpl (x 3) (y 2)
+      have := hpl (x 3) (y 3); have := hpl (x 3) (y 4); have := hpl (x 3) (y 5)
+      have := hpl (x 4) (y 0); have := hpl (x 4) (y 1); have := hpl (x 4) (y 2)
+      have := hpl (x 4) (y 3); have := hpl (x 4) (y 4); have := hpl (x 4) (y 5)
+      have := hpl (x 5) (y 0); have := hpl (x 5) (y 1); have := hpl (x 5) (y 2)
+      have := hpl (x 5) (y 3); have := hpl (x 5) (y 4); have := hpl (x 5) (y 5)
+      have := hph 0 0; have := hph 0 1
+      have := hph 0 2; have := hph 0 3
+      have := hph 0 4; have := hph 0 5
+      have := hph 1 0; have := hph 1 1
+      have := hph 1 2; have := hph 1 3
+      have := hph 1 4; have := hph 1 5
+      have := hph 2 0; have := hph 2 1
+      have := hph 2 2; have := hph 2 3
+      have := hph 2 4; have := hph 2 5
+      have := hph 3 0; have := hph 3 1
+      have := hph 3 2; have := hph 3 3
+      have := hph 3 4; have := hph 3 5
+      have := hph 4 0; have := hph 4 1
+      have := hph 4 2; have := hph 4 3
+      have := hph 4 4; have := hph 4 5
+      have := hph 5 0; have := hph 5 1
+      have := hph 5 2; have := hph 5 3
+      have := hph 5 4; have := hph 5 5
+      omega
 
 /-- **`u44` in, `u62` out.** -/
-theorem limb_lt_u44 (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^44) (hy : ∀ i, y i < 2^44) (k : Fin 6) :
-    limb x y k < 2^62 :=
-  limb_lt_of_bounds x y (2^36 * 2^9) (2^62)
-    (fun i j => ph_lt_bound (u := 2^44) (v := 2^44) (hx i) (hy j) (by omega))
-    (by omega) k
+theorem limb_lt_u44 (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 44) (hy : ∀ i, y i < 2 ^ 44)
+    (k : Fin 6) : limb x y k < 2 ^ 62 :=
+  limb_lt_of_bounds x y (2 ^ 36 * 2 ^ 9) (2 ^ 62)
+    (fun i j => ph_lt_bound (u := 2 ^ 44) (v := 2 ^ 44) (hx i) (hy j) (by omega)) (by omega) k
 
 /-- **`u45` in, `u62` out.** -/
-theorem limb_lt_u45 (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^45) (hy : ∀ i, y i < 2^45) (k : Fin 6) :
-    limb x y k < 2^62 :=
-  limb_lt_of_bounds x y (2^38 * 2^9) (2^62)
-    (fun i j => ph_lt_bound (u := 2^45) (v := 2^45) (hx i) (hy j) (by omega))
-    (by omega) k
+theorem limb_lt_u45 (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 45) (hy : ∀ i, y i < 2 ^ 45)
+    (k : Fin 6) : limb x y k < 2 ^ 62 :=
+  limb_lt_of_bounds x y (2 ^ 38 * 2 ^ 9) (2 ^ 62)
+    (fun i j => ph_lt_bound (u := 2 ^ 45) (v := 2 ^ 45) (hx i) (hy j) (by omega)) (by omega) k
 
 /-- **`u46` in, `u62` out.** -/
-theorem limb_lt_u46 (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^46) (hy : ∀ i, y i < 2^46) (k : Fin 6) :
-    limb x y k < 2^62 :=
-  limb_lt_of_bounds x y (2^40 * 2^9) (2^62)
-    (fun i j => ph_lt_bound (u := 2^46) (v := 2^46) (hx i) (hy j) (by omega))
-    (by omega) k
+theorem limb_lt_u46 (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 46) (hy : ∀ i, y i < 2 ^ 46)
+    (k : Fin 6) : limb x y k < 2 ^ 62 :=
+  limb_lt_of_bounds x y (2 ^ 40 * 2 ^ 9) (2 ^ 62)
+    (fun i j => ph_lt_bound (u := 2 ^ 46) (v := 2 ^ 46) (hx i) (hy j) (by omega)) (by omega) k
 
 /-- **`u46` in, the count exactly**: `761·2^52 + 912·2^49 = 7000·2^49`, about
 `0.85·2^62`. The `u62` row rounds this up; `fd_r43x6_ge_is_eq` cannot afford
 the rounding -- its `fd_r43x6_sub_fast` results are differences of `u46`
 products *plus `p`*, and only this margin keeps them inside `s62`. -/
-theorem limb_lt_u46_tight (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^46) (hy : ∀ i, y i < 2^46) (k : Fin 6) :
-    limb x y k < 7000 * 2^49 :=
-  limb_lt_of_bounds x y (2^40 * 2^9) (7000 * 2^49)
-    (fun i j => ph_lt_bound (u := 2^46) (v := 2^46) (hx i) (hy j) (by omega))
-    (by omega) k
+theorem limb_lt_u46_tight (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 46) (hy : ∀ i, y i < 2 ^ 46)
+    (k : Fin 6) : limb x y k < 7000 * 2 ^ 49 :=
+  limb_lt_of_bounds x y (2 ^ 40 * 2 ^ 9) (7000 * 2 ^ 49)
+    (fun i j => ph_lt_bound (u := 2 ^ 46) (v := 2 ^ 46) (hx i) (hy j) (by omega)) (by omega) k
 
 /-- **`u47` in, `u63` out.** The count reproduces the source's
 `2434·2^51 < 2^63`. -/
-theorem limb_lt_u47 (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^47) (hy : ∀ i, y i < 2^47) (k : Fin 6) :
-    limb x y k < 2^63 :=
-  limb_lt_of_bounds x y (2^42 * 2^9) (2^63)
-    (fun i j => ph_lt_bound (u := 2^47) (v := 2^47) (hx i) (hy j) (by omega))
-    (by omega) k
+theorem limb_lt_u47 (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 47) (hy : ∀ i, y i < 2 ^ 47)
+    (k : Fin 6) : limb x y k < 2 ^ 63 :=
+  limb_lt_of_bounds x y (2 ^ 42 * 2 ^ 9) (2 ^ 63)
+    (fun i j => ph_lt_bound (u := 2 ^ 47) (v := 2 ^ 47) (hx i) (hy j) (by omega)) (by omega) k
 
 /-- The bound the `BitVec.toInt` transfer needs: below `2^63`, a lane is not
 read back as negative. -/
-theorem limb_lt_two_pow_63 (x y : Fin 6 → ℕ)
-    (hx : ∀ i, x i < 2^47) (hy : ∀ i, y i < 2^47) (k : Fin 6) :
-    limb x y k < 2^63 :=
+theorem limb_lt_two_pow_63 (x y : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 47) (hy : ∀ i, y i < 2 ^ 47)
+    (k : Fin 6) : limb x y k < 2 ^ 63 :=
   limb_lt_u47 x y hx hy k
 
 /-! ## The lanes -/

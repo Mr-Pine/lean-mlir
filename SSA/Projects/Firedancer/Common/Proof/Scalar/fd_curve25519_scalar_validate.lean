@@ -18,6 +18,7 @@ comes back through four `fd_ulong_load_8` equivalences at most.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -51,34 +52,44 @@ private theorem not_lt_groupOrder_of_top (x : BitVec 256)
 
 /-- `^bb2`'s limb comparison is `x < ℓ`. -/
 private theorem limbs_iff (x : BitVec 256) :
-    BitVec.ofBool ((x.extractLsb' 192 64).ult
-        (if BitVec.ofBool (x.extractLsb' 128 64 == 0#64 && (x.extractLsb' 64 64).ult
-            (if BitVec.ofBool ((x.extractLsb' 0 64).ult 6346243789798364141#64) = 1#1
-            then 1503914060200516823#64 else 1503914060200516822#64)) = 1#1
-        then 1152921504606846977#64 else 1152921504606846976#64)) = 1#1
-      ↔ x.toNat < groupOrder := by
+    BitVec.ofBool
+          ((x.extractLsb' 192 64).ult
+            (if
+                BitVec.ofBool
+                    (x.extractLsb' 128 64 == 0#64 &&
+                      (x.extractLsb' 64 64).ult
+                        (if
+                            BitVec.ofBool ((x.extractLsb' 0 64).ult 6346243789798364141#64) =
+                              1#1 then
+                          1503914060200516823#64
+                        else 1503914060200516822#64)) =
+                  1#1 then
+              1152921504606846977#64
+            else 1152921504606846976#64)) =
+        1#1 ↔
+      x.toNat < groupOrder := by
   rw [lt_groupOrder_iff, groupOrder]; bv_decide
 
 /-- Bits `j` to `j + w` of the scalar, read from its block. -/
 private theorem extractLsb'_eq_readBuf {m : MemoryState} {p : Pointer} (hp : IsByteBufPtr m p)
     {blk : LiveBlock} (hblk : m.live? p.id = some blk) {j w : Nat} (hj : j + w ≤ 256) :
     blk.bytes.extractLsb' (p.offsetInBits + j) w = (readBuf hp).extractLsb' j w := by
-  simp only [readBuf, readBuf?, hblk, Option.bind_eq_bind, Option.bind_some,
-    Option.pure_def, Option.get_some]
+  simp only [readBuf, readBuf?, hblk, Option.bind_eq_bind, Option.bind_some, Option.pure_def,
+    Option.get_some]
   ext k hk
   simp only [BitVec.getElem_extractLsb', Nat.add_assoc]
   rw [BitVec.getLsbD_extractLsb', decide_eq_true (by omega : j + k < 256), Bool.true_and]
 
 /-- A word read inside the scalar, at a state agreeing with `m` on its block. -/
-private theorem readWord_eq_readBuf {m m' : MemoryState} {p q : Pointer}
-    (hp : IsByteBufPtr m p) {w : Nat} (h : Fits m' q w) (hid : q.id = p.id)
-    (hl : m'.live? p.id = m.live? p.id) {j : Nat} (ho : q.offsetInBits = p.offsetInBits + j)
-    (hj : j + w ≤ 256) : readWord h = (readBuf hp).extractLsb' j w := by
+private theorem readWord_eq_readBuf {m m' : MemoryState} {p q : Pointer} (hp : IsByteBufPtr m p)
+    {w : Nat} (h : Fits m' q w) (hid : q.id = p.id) (hl : m'.live? p.id = m.live? p.id) {j : Nat}
+    (ho : q.offsetInBits = p.offsetInBits + j) (hj : j + w ≤ 256) :
+    readWord h = (readBuf hp).extractLsb' j w := by
   obtain ⟨blk, hblk, -⟩ := hp.1
   have hlive : m.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
   apply readWord_eq_of
-  simp only [readWord?, hid, hl, hlive, ho, Option.bind_eq_bind, Option.bind_some,
-    Option.pure_def, extractLsb'_eq_readBuf hp hlive hj]
+  simp only [readWord?, hid, hl, hlive, ho, Option.bind_eq_bind, Option.bind_some, Option.pure_def,
+    extractLsb'_eq_readBuf hp hlive hj]
 
 /-- `p + o` in bits, when the sum does not wrap. -/
 private theorem offsetInBits_withOffset (p : Pointer) (o : BitVec 64)
@@ -88,13 +99,10 @@ private theorem offsetInBits_withOffset (p : Pointer) (o : BitVec 64)
   omega
 
 set_option maxHeartbeats 1000000 in
-theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
-    (hs : s.WF) (hp : IsByteBufPtr s.mem p) :
-    fd_curve25519_scalar_validate_spec p s hp := by
+theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState) (hs : s.WF)
+    (hp : IsByteBufPtr s.mem p) : fd_curve25519_scalar_validate_spec p s hp := by
   simp only [fd_curve25519_scalar_validate_spec, Cfg.denote]
-
   refine wrap hs ?_
-
   denote_step_reduce v 8 [LLVM.const?]
   obtain ⟨blk, hblk, hlen⟩ := hp.left
   have hlive : s.mem.live? p.id = some blk := by simp only [MemoryState.live?, hblk]
@@ -102,15 +110,16 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
   -- `%9`: `s + 31`
   peel_gep 31 with p, hp.left, s as p31
   have hoff31 : p31.offsetInBits = p.offsetInBits + 248 :=
-    offsetInBits_withOffset p 31 (by simp; omega)
+    offsetInBits_withOffset p 31
+      (by
+        simp; omega)
   have hblk31 : s.mem[p31.id]? = some (.live blk) := hblk
   -- `%10`: the top byte
   peel_load (.bitvec (.concrete 8)), blk, p31, hblk31, s
   denote_step_reduce v 11 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv6]
   simp only [BlockCom.denote_term, Terminator.denote_condBr, hv11, simp_denote, simp_sllvm]
   -- the top byte, named once
-  obtain ⟨top, htop⟩ : ∃ top : BitVec 8, blk.bytes.extractLsb' p31.offsetInBits 8 = top :=
-    ⟨_, rfl⟩
+  obtain ⟨top, htop⟩ : ∃ top : BitVec 8, blk.bytes.extractLsb' p31.offsetInBits 8 = top := ⟨_, rfl⟩
   have htopx : top = (readBuf hp).extractLsb' 248 8 := by
     rw [← htop, hoff31, extractLsb'_eq_readBuf hp hlive (by decide)]
   rw [htop] at hv11
@@ -123,7 +132,6 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
     denote_enter_block
     simp_return
     rfl
-
   simp [hlt16, htop]
   denote_enter_block
   -- `^bb1`: `%12 = top <u 32`
@@ -132,15 +140,14 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
   case neg =>
     -- `^bb3(NULL)`: at or above `0x20`, reject
     rw [if_neg (not_lt_groupOrder_of_top _ (htopx ▸ hlt32))]
-    simp [hv12, hlt32, BitVec.ofBool_false, BlockCom.denote_term,
-      Terminator.denote_condBr_value, simp_denote, simp_sllvm]
+    simp [hv12, hlt32, BitVec.ofBool_false, BlockCom.denote_term, Terminator.denote_condBr_value,
+      simp_denote, simp_sllvm]
     denote_enter_block
     simp_return
     simp [hv8, Ptr.null]
     rfl
-
-  simp only [hv12, hlt32, BitVec.ofBool_true, BlockCom.denote_term,
-    Terminator.denote_condBr_value, simp_denote, simp_sllvm]
+  simp only [hv12, hlt32, BitVec.ofBool_true, BlockCom.denote_term, Terminator.denote_condBr_value,
+    simp_denote, simp_sllvm]
   denote_enter_block
   -- `^bb2`: the four `fd_ulong_load_8` calls; the stepper restarts at the entry's depth, MLIR at `%13`.
   denote_number_from 13
@@ -151,24 +158,26 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
   have hfit0' : Fits t0.mem p (32 * 8) := fits_of_live?_eq (he0.live p.id).symm hp.left
   -- `%14`/`%15`: `s + 8`
   peel_gep 8 with p, hfit0', t0 as p8
-  refine fd_ulong_load_8_conforms_cont p8 t0 (hs.of_equiv he0) (Fits.mono hp8 (by decide))
-    fun t1 hcall1 he1 => ?_
+  refine
+    fd_ulong_load_8_conforms_cont p8 t0 (hs.of_equiv he0) (Fits.mono hp8 (by decide))
+      fun t1 hcall1 he1 => ?_
   peel_call hcall1
   have hfit1' : Fits t1.mem p (32 * 8) := fits_of_live?_eq (he1.live p.id).symm hfit0'
   -- `%16`/`%17`: `s + 16`
   peel_gep 16 with p, hfit1', t1 as p16
-  refine fd_ulong_load_8_conforms_cont p16 t1 ((hs.of_equiv he0).of_equiv he1)
-    (Fits.mono hp16 (by decide)) fun t2 hcall2 he2 => ?_
+  refine
+    fd_ulong_load_8_conforms_cont p16 t1 ((hs.of_equiv he0).of_equiv he1)
+      (Fits.mono hp16 (by decide)) fun t2 hcall2 he2 => ?_
   peel_call hcall2
   have hfit2' : Fits t2.mem p (32 * 8) := fits_of_live?_eq (he2.live p.id).symm hfit1'
   -- `%18`/`%19`: `s + 24`
   peel_gep 24 with p, hfit2', t2 as p24
-  refine fd_ulong_load_8_conforms_cont p24 t2 (((hs.of_equiv he0).of_equiv he1).of_equiv he2)
-    (Fits.mono hp24 (by decide)) fun t3 hcall3 he3 => ?_
+  refine
+    fd_ulong_load_8_conforms_cont p24 t2 (((hs.of_equiv he0).of_equiv he1).of_equiv he2)
+      (Fits.mono hp24 (by decide)) fun t3 hcall3 he3 => ?_
   peel_call hcall3
-
-  denote_step_reduce v 27 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.and, LLVM.and?, htop, hv8, hv2, hv5, hv4, hv3, hv1, hv0, Ctxt.Valuation.singleton, ptrselect, Ptr.null] fold
-
+  denote_step_reduce v 27 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.and, LLVM.and?,
+    htop, hv8, hv2, hv5, hv4, hv3, hv1, hv0, Ctxt.Valuation.singleton, ptrselect, Ptr.null] fold
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
   denote_enter_block
   simp_return
@@ -177,11 +186,26 @@ theorem fd_curve25519_scalar_validate_conforms (p : Pointer) (s : GlobalState)
   have hl2 : t2.mem.live? p.id = s.mem.live? p.id := (he2.live p.id).symm.trans hl1
   rw [readWord_eq_readBuf hp hfit0 rfl rfl (j := 0) rfl (by decide),
     readWord_eq_readBuf (q := p8) (j := 64) hp _ rfl hl0
-      (by rw [offsetInBits_withOffset _ _ (by simp; omega)]; rfl) (by decide),
+      (by
+        rw [offsetInBits_withOffset _ _
+            (by
+              simp; omega)];
+        rfl)
+      (by decide),
     readWord_eq_readBuf (q := p16) (j := 128) hp _ rfl hl1
-      (by rw [offsetInBits_withOffset _ _ (by simp; omega)]; rfl) (by decide),
+      (by
+        rw [offsetInBits_withOffset _ _
+            (by
+              simp; omega)];
+        rfl)
+      (by decide),
     readWord_eq_readBuf (q := p24) (j := 192) hp _ rfl hl2
-      (by rw [offsetInBits_withOffset _ _ (by simp; omega)]; rfl) (by decide)] at hv27
+      (by
+        rw [offsetInBits_withOffset _ _
+            (by
+              simp; omega)];
+        rfl)
+      (by decide)] at hv27
   simp only [limbs_iff] at hv27
   exact ⟨hv27, ((he0.trans he1).trans he2).trans he3⟩
 

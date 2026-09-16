@@ -5,24 +5,24 @@ import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 import SSA.Projects.Firedancer.Ref.Proof.Limb
 
-
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 def carry_repr (input : Fin 5 → Nat) :=
   let x1 := input 0
-  let x2 := (x1 / 2^51) + input 1
-  let x3 := (x2 / 2^51) + input 2
-  let x4 := (x3 / 2^51) + input 3
-  let x5 := (x4 / 2^51) + input 4
-  let x6 := (x1 % 2^51) + (x5 / 2^51) * 0x13
-  let x7 := (x6 / 2^51 % 2^8) + (x2 % 2^51)
-  let x8 := x6 % 2^51
-  let x9 := x7 % 2^51
-  let x10 := (x7 / 2^51 % 2^8) + (x3 % 2^51)
-  let x11 := x4 % 2^51
-  let x12 := x5 % 2^51
+  let x2 := (x1 / 2 ^ 51) + input 1
+  let x3 := (x2 / 2 ^ 51) + input 2
+  let x4 := (x3 / 2 ^ 51) + input 3
+  let x5 := (x4 / 2 ^ 51) + input 4
+  let x6 := (x1 % 2 ^ 51) + (x5 / 2 ^ 51) * 0x13
+  let x7 := (x6 / 2 ^ 51 % 2 ^ 8) + (x2 % 2 ^ 51)
+  let x8 := x6 % 2 ^ 51
+  let x9 := x7 % 2 ^ 51
+  let x10 := (x7 / 2 ^ 51 % 2 ^ 8) + (x3 % 2 ^ 51)
+  let x11 := x4 % 2 ^ 51
+  let x12 := x5 % 2 ^ 51
   ![x8, x9, x10, x11, x12]
 
 /-- Every carry the chain produces, given loose limbs: at most 3 out of each of
@@ -30,11 +30,9 @@ the five base carries, at most 1 out of the two that the `% 2^8` truncations sit
 on. Stated over named atoms because omega cannot find these through five nested
 divisions on its own. -/
 private lemma carry_chain_bounds (a0 a1 a2 a3 a4 c1 c2 c3 c4 c5 c6 c7 : ℕ)
-    (h0 : a0 ≤ 0x18000000000000) (h1 : a1 ≤ 0x18000000000000)
-    (h2 : a2 ≤ 0x18000000000000) (h3 : a3 ≤ 0x18000000000000)
-    (h4 : a4 ≤ 0x18000000000000)
-    (e1 : c1 = a0 / 2 ^ 51) (e2 : c2 = (c1 + a1) / 2 ^ 51)
-    (e3 : c3 = (c2 + a2) / 2 ^ 51) (e4 : c4 = (c3 + a3) / 2 ^ 51)
+    (h0 : a0 ≤ 0x18000000000000) (h1 : a1 ≤ 0x18000000000000) (h2 : a2 ≤ 0x18000000000000)
+    (h3 : a3 ≤ 0x18000000000000) (h4 : a4 ≤ 0x18000000000000) (e1 : c1 = a0 / 2 ^ 51)
+    (e2 : c2 = (c1 + a1) / 2 ^ 51) (e3 : c3 = (c2 + a2) / 2 ^ 51) (e4 : c4 = (c3 + a3) / 2 ^ 51)
     (e5 : c5 = (c4 + a4) / 2 ^ 51) (e6 : c6 = (a0 % 2 ^ 51 + c5 * 19) / 2 ^ 51)
     (e7 : c7 = (c6 % 2 ^ 8 + (c1 + a1) % 2 ^ 51) / 2 ^ 51) :
     c1 ≤ 3 ∧ c2 ≤ 3 ∧ c3 ≤ 3 ∧ c4 ≤ 3 ∧ c5 ≤ 3 ∧ c6 ≤ 1 ∧ c7 ≤ 1 := by
@@ -68,21 +66,25 @@ local elab "carry_setup" : tactic => do
   evalTactic (← `(tactic| set $(c 3):ident := ($(c 2) + $inp 2) / 2 ^ 51 with $(e 3):ident))
   evalTactic (← `(tactic| set $(c 4):ident := ($(c 3) + $inp 3) / 2 ^ 51 with $(e 4):ident))
   evalTactic (← `(tactic| set $(c 5):ident := ($(c 4) + $inp 4) / 2 ^ 51 with $(e 5):ident))
-  evalTactic (← `(tactic|
-    set $(c 6):ident := (($inp 0) % 2 ^ 51 + $(c 5) * 19) / 2 ^ 51 with $(e 6):ident))
-  evalTactic (← `(tactic|
-    set $(c 7):ident := ($(c 6) % 2 ^ 8 + ($(c 1) + $inp 1) % 2 ^ 51) / 2 ^ 51 with $(e 7):ident))
-  evalTactic (← `(tactic|
-    obtain ⟨$(b 1):ident, $(b 2):ident, $(b 3):ident, $(b 4):ident, $(b 5):ident, $(b 6):ident,
-        $(b 7):ident⟩ :=
-      carry_chain_bounds ($inp 0) ($inp 1) ($inp 2) ($inp 3) ($inp 4)
-        $(c 1) $(c 2) $(c 3) $(c 4) $(c 5) $(c 6) $(c 7)
-        $(h 0) $(h 1) $(h 2) $(h 3) $(h 4)
-        $(e 1) $(e 2) $(e 3) $(e 4) $(e 5) $(e 6) $(e 7)))
-  evalTactic (← `(tactic|
-    have $t6:ident : $(c 6) % 2 ^ 8 = $(c 6) := Nat.mod_eq_of_lt (by omega)))
-  evalTactic (← `(tactic|
-    have $t7:ident : $(c 7) % 2 ^ 8 = $(c 7) := Nat.mod_eq_of_lt (by omega)))
+  evalTactic
+      (←
+        `(tactic| set $(c 6):ident := (($inp 0) % 2 ^ 51 + $(c 5) * 19) / 2 ^ 51 with $(e 6):ident))
+  evalTactic
+      (←
+        `(tactic|
+            set $(c 7):ident := ($(c 6) % 2 ^ 8 + ($(c 1) + $inp 1) % 2 ^ 51) / 2 ^ 51 with
+              $(e 7):ident))
+  evalTactic
+      (←
+        `(tactic|
+            obtain
+              ⟨$(b 1):ident, $(b 2):ident, $(b 3):ident, $(b 4):ident, $(b 5):ident, $(b 6):ident,
+                $(b 7):ident⟩ :=
+              carry_chain_bounds ($inp 0) ($inp 1) ($inp 2) ($inp 3) ($inp 4) $(c 1) $(c 2) $(c 3)
+                $(c 4) $(c 5) $(c 6) $(c 7) $(h 0) $(h 1) $(h 2) $(h 3) $(h 4) $(e 1) $(e 2) $(e 3)
+                $(e 4) $(e 5) $(e 6) $(e 7)))
+  evalTactic (← `(tactic| have $t6:ident : $(c 6) % 2 ^ 8 = $(c 6) := Nat.mod_eq_of_lt (by omega)))
+  evalTactic (← `(tactic| have $t7:ident : $(c 7) % 2 ^ 8 = $(c 7) := Nat.mod_eq_of_lt (by omega)))
   evalTactic (← `(tactic| rw [$t6:term] at $(e 7):ident))
   evalTactic (← `(tactic| rw [$t6:term, $t7:term]))
 
@@ -93,21 +95,24 @@ lemma carry_eq_value (input : Fin 5 → Nat) (hi : ∀ i : Fin 5, input i ≤ 0x
     decodeFieldElem input = decodeFieldElem (carry_repr input) := by
   have h0 := hi 0; have h1 := hi 1; have h2 := hi 2; have h3 := hi 3; have h4 := hi 4
   obtain ⟨x8, x9, x10, x11, x12, c5, hrepr, key⟩ :
-      ∃ x8 x9 x10 x11 x12 c5 : ℕ,
-        carry_repr input = ![x8, x9, x10, x11, x12] ∧
-        input 0 + input 1 * 2 ^ 51 + input 2 * 2 ^ 102 + input 3 * 2 ^ 153
-              + input 4 * 2 ^ 204 + 19 * c5
-          = x8 + x9 * 2 ^ 51 + x10 * 2 ^ 102 + x11 * 2 ^ 153 + x12 * 2 ^ 204
-              + c5 * 2 ^ 255 := by
-    refine ⟨_, _, _, _, _,
-      ((((input 0 / 2 ^ 51 + input 1) / 2 ^ 51 + input 2) / 2 ^ 51 + input 3) / 2 ^ 51
-        + input 4) / 2 ^ 51, rfl, ?_⟩
+    ∃ x8 x9 x10 x11 x12 c5 : ℕ,
+      carry_repr input = ![x8, x9, x10, x11, x12] ∧
+        input 0 + input 1 * 2 ^ 51 + input 2 * 2 ^ 102 + input 3 * 2 ^ 153 + input 4 * 2 ^ 204 +
+            19 * c5 =
+          x8 + x9 * 2 ^ 51 + x10 * 2 ^ 102 + x11 * 2 ^ 153 + x12 * 2 ^ 204 + c5 * 2 ^ 255 :=
+    by
+    refine
+      ⟨_, _, _, _, _,
+        ((((input 0 / 2 ^ 51 + input 1) / 2 ^ 51 + input 2) / 2 ^ 51 + input 3) / 2 ^ 51 +
+            input 4) /
+          2 ^ 51,
+        rfl, ?_⟩
     carry_setup
     omega
   have h255 : (2 : ZMod _root_.p) ^ 255 = 19 := by
     have hp : (2 : ℕ) ^ 255 = _root_.p + 19 := by norm_num [_root_.p]
-    simpa only [Nat.cast_pow, Nat.cast_add, Nat.cast_ofNat, ZMod.natCast_self, zero_add]
-      using congrArg (fun n : ℕ => (n : ZMod _root_.p)) hp
+    simpa only [Nat.cast_pow, Nat.cast_add, Nat.cast_ofNat, ZMod.natCast_self, zero_add] using
+      congrArg (fun n : ℕ => (n : ZMod _root_.p)) hp
   have hcast := congrArg (fun n : ℕ => (n : ZMod _root_.p)) key
   simp only [Nat.cast_add, Nat.cast_mul, Nat.cast_pow, Nat.cast_ofNat] at hcast
   rw [hrepr]
@@ -179,16 +184,16 @@ theorem shr51_toNat (x : BitVec 64) : (x >>> (51 : ℕ)).toNat = x.toNat / 2 ^ 5
   rw [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
 
 /-- One `lshr 51; add limb` step, over `toNat`. -/
-theorem carry_step_toNat {prev : BitVec 64} {n : ℕ}
-    (hprev : prev.toNat ≤ 0x18000000000003) (hn : n ≤ 0x18000000000000) :
+theorem carry_step_toNat {prev : BitVec 64} {n : ℕ} (hprev : prev.toNat ≤ 0x18000000000003)
+    (hn : n ≤ 0x18000000000000) :
     ((prev >>> (51 : ℕ)) + BitVec.ofNat 64 n).toNat = prev.toNat / 2 ^ 51 + n := by
   rw [BitVec.toNat_add, shr51_toNat, BitVec.toNat_ofNat,
     Nat.mod_eq_of_lt (show n < 2 ^ 64 by omega)]
   exact Nat.mod_eq_of_lt (by omega)
 
 /-- ... and the same step preserves the invariant. -/
-theorem carry_step_le {prev : BitVec 64} {n : ℕ}
-    (hprev : prev.toNat ≤ 0x18000000000003) (hn : n ≤ 0x18000000000000) :
+theorem carry_step_le {prev : BitVec 64} {n : ℕ} (hprev : prev.toNat ≤ 0x18000000000003)
+    (hn : n ≤ 0x18000000000000) :
     ((prev >>> (51 : ℕ)) + BitVec.ofNat 64 n).toNat ≤ 0x18000000000003 := by
   rw [carry_step_toNat hprev hn]; omega
 
@@ -204,25 +209,27 @@ theorem carry_registers {x2 x3 x4 x5 x6 x7 x10 : BitVec 64} (input : Fin 5 → �
     (hx7 : x7 = (x6 >>> (51 : ℕ)) + (x2 &&& 2251799813685247#64))
     (hx10 : x10 = (x7 >>> (51 : ℕ)) + (x3 &&& 2251799813685247#64)) :
     ((x5 >>> (51 : ℕ)).smulOverflow 19#64 = false ∧ (x5 >>> (51 : ℕ)).umulOverflow 19#64 = false) ∧
-    (((x5 >>> (51 : ℕ)) * 19#64).saddOverflow (BitVec.ofNat 64 (input 0) &&& 2251799813685247#64)
-        = false ∧
-      ((x5 >>> (51 : ℕ)) * 19#64).uaddOverflow (BitVec.ofNat 64 (input 0) &&& 2251799813685247#64)
-        = false) ∧
-    ((x6 >>> (51 : ℕ)).saddOverflow (x2 &&& 2251799813685247#64) = false ∧
-      (x6 >>> (51 : ℕ)).uaddOverflow (x2 &&& 2251799813685247#64) = false) ∧
-    ((x7 >>> (51 : ℕ)).saddOverflow (x3 &&& 2251799813685247#64) = false ∧
-      (x7 >>> (51 : ℕ)).uaddOverflow (x3 &&& 2251799813685247#64) = false) ∧
-    x6 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 0 ∧
-    x7 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 1 ∧
-    x10 = (BitVec.ofNat 64 ∘ carry_repr input) 2 ∧
-    x4 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 3 ∧
-    x5 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 4 := by
+      (((x5 >>> (51 : ℕ)) * 19#64).saddOverflow
+            (BitVec.ofNat 64 (input 0) &&& 2251799813685247#64) =
+          false ∧
+        ((x5 >>> (51 : ℕ)) * 19#64).uaddOverflow
+            (BitVec.ofNat 64 (input 0) &&& 2251799813685247#64) =
+          false) ∧
+      ((x6 >>> (51 : ℕ)).saddOverflow (x2 &&& 2251799813685247#64) = false ∧
+        (x6 >>> (51 : ℕ)).uaddOverflow (x2 &&& 2251799813685247#64) = false) ∧
+      ((x7 >>> (51 : ℕ)).saddOverflow (x3 &&& 2251799813685247#64) = false ∧
+        (x7 >>> (51 : ℕ)).uaddOverflow (x3 &&& 2251799813685247#64) = false) ∧
+      x6 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 0 ∧
+      x7 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 1 ∧
+      x10 = (BitVec.ofNat 64 ∘ carry_repr input) 2 ∧
+      x4 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 3 ∧
+      x5 &&& 2251799813685247#64 = (BitVec.ofNat 64 ∘ carry_repr input) 4 := by
   -- first pass: every register is at most `0x18000000000003`
   have ha0 : (BitVec.ofNat 64 (input 0)).toNat = input 0 := by
     rw [BitVec.toNat_ofNat]; have := hb 0; omega
-  have b1 : (BitVec.ofNat 64 (input 0)).toNat ≤ 0x18000000000003 := by rw [ha0]; have := hb 0; omega
-  have c1 : x2.toNat = input 0 / 2 ^ 51 + input 1 := by
-    rw [hx2, carry_step_toNat b1 (hb 1), ha0]
+  have b1 : (BitVec.ofNat 64 (input 0)).toNat ≤ 0x18000000000003 := by
+    rw [ha0]; have := hb 0; omega
+  have c1 : x2.toNat = input 0 / 2 ^ 51 + input 1 := by rw [hx2, carry_step_toNat b1 (hb 1), ha0]
   have b2 : x2.toNat ≤ 0x18000000000003 := hx2 ▸ carry_step_le b1 (hb 1)
   have n3 : x3.toNat = x2.toNat / 2 ^ 51 + input 2 := hx3 ▸ carry_step_toNat b2 (hb 2)
   have b3 : x3.toNat ≤ 0x18000000000003 := hx3 ▸ carry_step_le b2 (hb 2)
@@ -231,11 +238,14 @@ theorem carry_registers {x2 x3 x4 x5 x6 x7 x10 : BitVec 64} (input : Fin 5 → �
   have n5 : x5.toNat = x4.toNat / 2 ^ 51 + input 4 := hx5 ▸ carry_step_toNat b4 (hb 4)
   have b5 : x5.toNat ≤ 0x18000000000003 := hx5 ▸ carry_step_le b4 (hb 4)
   -- second pass: the top carry is at most 3, the two after it at most 1
-  have s5 : (x5 >>> (51 : ℕ)).toNat ≤ 3 := by rw [shr51_toNat]; omega
+  have s5 : (x5 >>> (51 : ℕ)).toNat ≤ 3 := by
+    rw [shr51_toNat]; omega
   have b6 : x6.toNat ≤ 2 ^ 51 + 56 := hx6 ▸ mul19_add_toNat_le s5 (mask_toNat_lt _)
-  have s6 : (x6 >>> (51 : ℕ)).toNat ≤ 3 := by rw [shr51_toNat]; omega
+  have s6 : (x6 >>> (51 : ℕ)).toNat ≤ 3 := by
+    rw [shr51_toNat]; omega
   have b7 : x7.toNat ≤ 2 ^ 51 + 2 := hx7 ▸ add_toNat_le s6 (mask_toNat_lt _)
-  have s7 : (x7 >>> (51 : ℕ)).toNat ≤ 3 := by rw [shr51_toNat]; omega
+  have s7 : (x7 >>> (51 : ℕ)).toNat ≤ 3 := by
+    rw [shr51_toNat]; omega
   have n6 : x6.toNat = input 0 % 2 ^ 51 + x5.toNat / 2 ^ 51 * 19 := by
     rw [hx6, mul19_add_toNat s5 (mask_toNat_lt _), shr51_toNat, mask_toNat, ha0]
     omega
@@ -244,18 +254,32 @@ theorem carry_registers {x2 x3 x4 x5 x6 x7 x10 : BitVec 64} (input : Fin 5 → �
   have n10 : x10.toNat = x7.toNat / 2 ^ 51 + x3.toNat % 2 ^ 51 := by
     rw [hx10, add_toNat s7 (mask_toNat_lt _), shr51_toNat, mask_toNat]
   -- `carry_repr`'s two `% 2 ^ 8` truncations are identities: both carries are at most 1
-  have hchain : carry_repr input = ![(x6 &&& 2251799813685247#64).toNat,
-      (x7 &&& 2251799813685247#64).toNat, x10.toNat, (x4 &&& 2251799813685247#64).toNat,
-      (x5 &&& 2251799813685247#64).toNat] := by
+  have hchain :
+    carry_repr input =
+      ![(x6 &&& 2251799813685247#64).toNat, (x7 &&& 2251799813685247#64).toNat, x10.toNat,
+        (x4 &&& 2251799813685247#64).toNat, (x5 &&& 2251799813685247#64).toNat] := by
     have t6 : x6.toNat / 2 ^ 51 % 2 ^ 8 = x6.toNat / 2 ^ 51 := Nat.mod_eq_of_lt (by omega)
     have t7 : x7.toNat / 2 ^ 51 % 2 ^ 8 = x7.toNat / 2 ^ 51 := Nat.mod_eq_of_lt (by omega)
     simp only [carry_repr]
     rw [← c1, ← n3, ← n4, ← n5, ← n6, t6, ← n7, t7, ← n10, mask_toNat, mask_toNat, mask_toNat,
       mask_toNat]
-  refine ⟨mul19_no_overflow s5, add_no_overflow ?_, add_no_overflow ?_, add_no_overflow ?_,
-    eq_ofNat_of_toNat (by rw [hchain]; rfl), eq_ofNat_of_toNat (by rw [hchain]; rfl),
-    eq_ofNat_of_toNat (by rw [hchain]; rfl), eq_ofNat_of_toNat (by rw [hchain]; rfl),
-    eq_ofNat_of_toNat (by rw [hchain]; rfl)⟩
+  refine
+    ⟨mul19_no_overflow s5, add_no_overflow ?_, add_no_overflow ?_, add_no_overflow ?_,
+      eq_ofNat_of_toNat
+        (by
+          rw [hchain]; rfl),
+      eq_ofNat_of_toNat
+        (by
+          rw [hchain]; rfl),
+      eq_ofNat_of_toNat
+        (by
+          rw [hchain]; rfl),
+      eq_ofNat_of_toNat
+        (by
+          rw [hchain]; rfl),
+      eq_ofNat_of_toNat
+        (by
+          rw [hchain]; rfl)⟩
   · rw [mul19_toNat (by omega), mask_toNat]; omega
   · rw [shr51_toNat, mask_toNat]; omega
   · rw [shr51_toNat, mask_toNat]; omega
@@ -291,106 +315,113 @@ elab "peel_input " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   evalTactic (← `(tactic| clear $hin $hlimb $limb $hptr))
 
 set_option maxHeartbeats 3200000 in
-theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
-  (hs : s.WF)
-  (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i s.mem = some l → l ≤ 0x18000000000000)
-  (hq : IsFieldElemPtr s.mem q)
-  (hp₀ : IsFieldElemPtr s.mem p₀) :
-  fiat_25519_carry_spec q p₀ s := by
-    simp only [fiat_25519_carry_spec, Cfg.denote]
-
-    obtain ⟨blk, hblk, hlen⟩ := id hp₀.left
-    obtain ⟨input, hinput⟩ := exists_limbs hblk
-    let output := carry_repr input
-    let outputBV := BitVec.ofNat 64 ∘ output
-
-    have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
-    have hcb := carry_bounds input hb
-
-    refine ⟨packLimbs outputBV, ?_, ?val, ?bnd, ?zero⟩
-    case zero =>
-      intro hz
-      have h0 : ∀ i, carry_repr input i = 0 := fun i => by
-        have := (limbReadbackPack s.mem q outputBV hq.left i).symm.trans (hz i)
-        simp only [outputBV, Function.comp, BitVec.toNat_ofNat, Option.some.injEq] at this
-        rwa [Nat.mod_eq_of_lt ((hcb i).trans_lt (by norm_num))] at this
-      exact fun i => (hinput i).trans (by rw [carry_repr_eq_zero input hb h0 i])
-    case val =>
-      simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
-      -- the carried limbs decode to the input's value: every 64-bit truncation
-      -- is an identity, so this is `carry_eq_value` verbatim
-      have hvin : (![input 0, input 1, input 2, input 3, input 4] : Fin 5 → ℕ) = input := by
-        funext i; fin_cases i <;> rfl
-      have hvout : (![output 0 % 18446744073709551616, output 1 % 18446744073709551616,
-          output 2 % 18446744073709551616, output 3 % 18446744073709551616,
-          output 4 % 18446744073709551616] : Fin 5 → ℕ) = carry_repr input := by
-        funext i
-        fin_cases i <;> exact Nat.mod_eq_of_lt ((hcb _).trans_lt (by norm_num))
-      rw [hvin, hvout]
-      exact (carry_eq_value input hb).symm
-    case bnd =>
-      simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
-      -- every limb is within fiat's bound, hence small enough that `ofNat` does
-      -- not truncate
-      intro i
-      fin_cases i <;> exact (Nat.mod_le _ _).trans (hcb _)
-
-    -- What the region actually leaves behind: five 64-bit writes at `q`, eight
-    -- bytes apart, in program order. That this is the spec's single 320-bit
-    -- splice is the `≈` obligation below.
-    obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,
-        m = ((((s.mem.splice q (outputBV 0)).splice (q.withOffset 8) (outputBV 1)).splice
-              (q.withOffset 16) (outputBV 2)).splice (q.withOffset 24) (outputBV 3)).splice
-              (q.withOffset 32) (outputBV 4) := ⟨_, rfl⟩
-    refine ⟨s.popFrame outMem, run_runFunction (s' := { s with mem := outMem }) ?_, ?equiv⟩
-    case equiv =>
-      have hnone : ∀ (b : BlockId), s.alloc.nextFreeBlock ≤ b.id → outMem.live? b = none := by
-        rw [houtMem]
-        exact fun b hb => live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none
-          (live?_splice_eq_none (live?_splice_eq_none (hs b hb)))))
-      refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm
-        (killFrom_equiv_of_none (s := s) (m := outMem) hnone))
+theorem fiat_25519_carry_conforms (q p₀ : Pointer) (s : GlobalState) (hs : s.WF)
+    (hlimb : ∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i s.mem = some l → l ≤ 0x18000000000000)
+    (hq : IsFieldElemPtr s.mem q) (hp₀ : IsFieldElemPtr s.mem p₀) :
+    fiat_25519_carry_spec q p₀ s := by
+  simp only [fiat_25519_carry_spec, Cfg.denote]
+  obtain ⟨blk, hblk, hlen⟩ := id hp₀.left
+  obtain ⟨input, hinput⟩ := exists_limbs hblk
+  let output := carry_repr input
+  let outputBV := BitVec.ofNat 64 ∘ output
+  have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
+  have hcb := carry_bounds input hb
+  refine ⟨packLimbs outputBV, ?_, ?val, ?bnd, ?zero⟩
+  case zero =>
+    intro hz
+    have h0 : ∀ i, carry_repr input i = 0 := fun i => by
+      have := (limbReadbackPack s.mem q outputBV hq.left i).symm.trans (hz i)
+      simp only [outputBV, Function.comp, BitVec.toNat_ofNat, Option.some.injEq] at this
+      rwa [Nat.mod_eq_of_lt ((hcb i).trans_lt (by norm_num))] at this
+    exact fun i => (hinput i).trans (by rw [carry_repr_eq_zero input hb h0 i])
+  case val =>
+    simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
+    -- the carried limbs decode to the input's value: every 64-bit truncation
+    -- is an identity, so this is `carry_eq_value` verbatim
+    have hvin : (![input 0, input 1, input 2, input 3, input 4] : Fin 5 → ℕ) = input := by
+      funext i; fin_cases i <;> rfl
+    have hvout :
+      (![output 0 % 18446744073709551616, output 1 % 18446744073709551616,
+            output 2 % 18446744073709551616, output 3 % 18446744073709551616,
+            output 4 % 18446744073709551616] :
+          Fin 5 → ℕ) =
+        carry_repr input := by
+      funext i
+      fin_cases i <;> exact Nat.mod_eq_of_lt ((hcb _).trans_lt (by norm_num))
+    rw [hvin, hvout]
+    exact (carry_eq_value input hb).symm
+  case bnd =>
+    simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
+    -- every limb is within fiat's bound, hence small enough that `ofNat` does
+    -- not truncate
+    intro i
+    fin_cases i <;> exact (Nat.mod_le _ _).trans (hcb _)
+  -- What the region actually leaves behind: five 64-bit writes at `q`, eight
+  -- bytes apart, in program order. That this is the spec's single 320-bit
+  -- splice is the `≈` obligation below.
+  obtain ⟨outMem, houtMem⟩ :
+    ∃ m : MemoryState,
+      m =
+        ((((s.mem.splice q (outputBV 0)).splice (q.withOffset 8) (outputBV 1)).splice
+                  (q.withOffset 16) (outputBV 2)).splice
+              (q.withOffset 24) (outputBV 3)).splice
+          (q.withOffset 32) (outputBV 4) :=
+    ⟨_, rfl⟩
+  refine ⟨s.popFrame outMem, run_runFunction (s' := { s with mem := outMem }) ?_, ?equiv⟩
+  case
+    equiv =>
+    have hnone : ∀ (b : BlockId), s.alloc.nextFreeBlock ≤ b.id → outMem.live? b = none := by
       rw [houtMem]
-      exact GlobalState.Equiv.symm
+      exact fun b hb =>
+        live?_splice_eq_none
+          (live?_splice_eq_none
+            (live?_splice_eq_none (live?_splice_eq_none (live?_splice_eq_none (hs b hb)))))
+    refine
+      GlobalState.Equiv.trans ?_
+        (GlobalState.Equiv.symm (killFrom_equiv_of_none (s := s) (m := outMem) hnone))
+    rw [houtMem]
+    exact
+      GlobalState.Equiv.symm
         (splice5_equiv (outputBV 0) (outputBV 1) (outputBV 2) (outputBV 3) (outputBV 4) hq)
-
-    simp only [fiat_25519_carry]
-
-    denote_step_reduce v 2 [LLVM.const?] fold
-    subst hv0 hv1 hv2
-
-    peel_load (.bitvec (.concrete 64)), blk, p₀, hblk, s
-    have hbits : ∀ (i : Fin 5) (off : ℕ), off = p₀.offsetInBits + 64 * i.toNat →
-        blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (input i) := limbBits hblk hinput
-    have hoff : ∀ (i : Fin 5) (o : BitVec 64), o.toNat = 8 * i.toNat →
-        (p₀.withOffset o).offsetInBits = p₀.offsetInBits + 64 * i.toNat :=
-      fun i _ ho => limbOffsetInBits hp₀.right (by have : i.toNat < 5 := i.isLt; omega) ho
-    -- `%3` is limb 0, with no gep; rewritten in the goal because `%20` reads it again
-    rw [hbits 0 p₀.offsetInBits (by simp)]
-    denote_step_reduce v 4 [LLVM.lshr, LLVM.lshr?]
-
-    -- `%5 … %19`: the first pass, one limb at a time
-    peel_input 1, p₀, hp₀.left, s
-    denote_step_reduce v 8 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv4] fold
-    peel_input 2, p₀, hp₀.left, s
-    denote_step_reduce v 12 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv8] fold
-    peel_input 3, p₀, hp₀.left, s
-    denote_step_reduce v 16 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv12] fold
-    peel_input 4, p₀, hp₀.left, s
-    denote_step_reduce v 19 [LLVM.add, LLVM.add?, hv16]
-
-    -- `%20 … %33`: the second pass, its stored registers rewritten to `outputBV`
-    have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
-    have hr := carry_registers input hb rfl rfl rfl rfl rfl rfl rfl
-    have ho : ∀ i, BitVec.ofNat 64 (carry_repr input i) = outputBV i := fun _ => rfl
-    denote_step_reduce v 33 [LLVM.and, LLVM.and?, LLVM.lshr, LLVM.lshr?, LLVM.mul, LLVM.mul?,
-      LLVM.add, LLVM.add?, hv7, hv11, hv15, hv19, hr, ho] fold
-    rw [hv27, hv28, hv31, hv32, hv33]
-
-    store_limbs outputBV, q, hq.left, s
-
-    -- `llvm.return`: nothing is left but the state, which is `outMem`
-    simp_return
-    simp [houtMem, hs₁, hs₂, hs₃, hs₄, q₁, q₂, q₃, q₄]
+  simp only [fiat_25519_carry]
+  denote_step_reduce v 2 [LLVM.const?] fold
+  subst hv0 hv1 hv2
+  peel_load (.bitvec (.concrete 64)), blk, p₀, hblk, s
+  have hbits :
+    ∀ (i : Fin 5) (off : ℕ),
+      off = p₀.offsetInBits + 64 * i.toNat →
+        blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (input i) :=
+    limbBits hblk hinput
+  have hoff :
+    ∀ (i : Fin 5) (o : BitVec 64),
+      o.toNat = 8 * i.toNat → (p₀.withOffset o).offsetInBits = p₀.offsetInBits + 64 * i.toNat :=
+    fun i _ ho =>
+    limbOffsetInBits hp₀.right
+      (by
+        have : i.toNat < 5 := i.isLt; omega)
+      ho
+  -- `%3` is limb 0, with no gep; rewritten in the goal because `%20` reads it again
+  rw [hbits 0 p₀.offsetInBits (by simp)]
+  denote_step_reduce v 4 [LLVM.lshr, LLVM.lshr?]
+  -- `%5 … %19`: the first pass, one limb at a time
+  peel_input 1, p₀, hp₀.left, s
+  denote_step_reduce v 8 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv4] fold
+  peel_input 2, p₀, hp₀.left, s
+  denote_step_reduce v 12 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv8] fold
+  peel_input 3, p₀, hp₀.left, s
+  denote_step_reduce v 16 [LLVM.add, LLVM.add?, LLVM.lshr, LLVM.lshr?, hv12] fold
+  peel_input 4, p₀, hp₀.left, s
+  denote_step_reduce v 19 [LLVM.add, LLVM.add?, hv16]
+  -- `%20 … %33`: the second pass, its stored registers rewritten to `outputBV`
+  have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
+  have hr := carry_registers input hb rfl rfl rfl rfl rfl rfl rfl
+  have ho : ∀ i, BitVec.ofNat 64 (carry_repr input i) = outputBV i := fun _ => rfl
+  denote_step_reduce v 33 [LLVM.and, LLVM.and?, LLVM.lshr, LLVM.lshr?, LLVM.mul, LLVM.mul?,
+    LLVM.add, LLVM.add?, hv7, hv11, hv15, hv19, hr, ho] fold
+  rw [hv27, hv28, hv31, hv32, hv33]
+  store_limbs outputBV, q, hq.left, s
+  -- `llvm.return`: nothing is left but the state, which is `outMem`
+  simp_return
+  simp [houtMem, hs₁, hs₂, hs₃, hs₄, q₁, q₂, q₃, q₄]
 
 end Firedancer.Ref

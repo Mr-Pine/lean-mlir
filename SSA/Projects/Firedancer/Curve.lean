@@ -51,7 +51,8 @@ theorem d_spec : 121666 * d = -121665 := by decide
 
 /-- The affine curve equation of RFC 8032 §5.1: `(x, y)` is a point of
 edwards25519. -/
-def OnCurve (x y : ZMod p) : Prop := -x^2 + y^2 = 1 + d * x^2 * y^2
+def OnCurve (x y : ZMod p) : Prop :=
+  -x ^ 2 + y ^ 2 = 1 + d * x ^ 2 * y ^ 2
 
 /-- A curve point in the extended homogeneous coordinates of RFC 8032 §5.1.4:
 `x = X/Z`, `y = Y/Z`, `x·y = T/Z`. The C side holds the four coordinates as a
@@ -69,14 +70,17 @@ namespace Point
 
 /-- The affine x-coordinate, `X/Z`. `ZMod.inv` is total, so this is `X/Z` only
 where `IsUnit Z`; every statement about it carries that hypothesis. -/
-def x (P : Point) : ZMod p := P.X * P.Z⁻¹
+def x (P : Point) : ZMod p :=
+  P.X * P.Z⁻¹
 
 /-- The affine y-coordinate, `Y/Z`. -/
-def y (P : Point) : ZMod p := P.Y * P.Z⁻¹
+def y (P : Point) : ZMod p :=
+  P.Y * P.Z⁻¹
 
 /-- `P` and `Q` represent the same curve point: their affine coordinates
 agree. The notion `FD_R43X6_GE_IS_EQ` decides. -/
-def SamePoint (P Q : Point) : Prop := P.x = Q.x ∧ P.y = Q.y
+def SamePoint (P Q : Point) : Prop :=
+  P.x = Q.x ∧ P.y = Q.y
 
 /-- Equality in `ZMod p` is decidable, so `SamePoint` is: a specification can
 say `if P.SamePoint Q then … else …` and still be executable. -/
@@ -106,8 +110,8 @@ the two steps of that: fractions to cross-products, and cross-products to the
 subtract-and-test-zero the implementation performs. -/
 
 /-- With both denominators invertible, `a/u = b/v ↔ a·v = b·u`. -/
-theorem mul_inv_eq_mul_inv_iff {u v : ZMod p} (hu : IsUnit u) (hv : IsUnit v)
-    (a b : ZMod p) : a * u⁻¹ = b * v⁻¹ ↔ a * v = b * u := by
+theorem mul_inv_eq_mul_inv_iff {u v : ZMod p} (hu : IsUnit u) (hv : IsUnit v) (a b : ZMod p) :
+    a * u⁻¹ = b * v⁻¹ ↔ a * v = b * u := by
   have hu1 : u * u⁻¹ = 1 := ZMod.mul_inv_of_unit u hu
   have hv1 : v * v⁻¹ = 1 := ZMod.mul_inv_of_unit v hv
   constructor <;> intro h
@@ -124,8 +128,7 @@ theorem samePoint_iff_cross {P Q : Point} (hP : IsUnit P.Z) (hQ : IsUnit Q.Z) :
 
 /-- `samePoint_iff_cross` in the form the implementation computes it:
 `xn1 - xn2` and `yn1 - yn2`, each tested for zero by `fd_r43x6_is_nonzero`. -/
-theorem samePoint_iff_cross_sub_eq_zero {P Q : Point}
-    (hP : IsUnit P.Z) (hQ : IsUnit Q.Z) :
+theorem samePoint_iff_cross_sub_eq_zero {P Q : Point} (hP : IsUnit P.Z) (hQ : IsUnit Q.Z) :
     SamePoint P Q ↔ P.X * Q.Z - Q.X * P.Z = 0 ∧ P.Y * Q.Z - Q.Y * P.Z = 0 := by
   rw [samePoint_iff_cross hP hQ, sub_eq_zero, sub_eq_zero]
 
@@ -133,7 +136,8 @@ theorem samePoint_iff_cross_sub_eq_zero {P Q : Point}
 
 /-- The neutral point `(0, 1)` as `FD_R43X6_GE_ZERO` represents it,
 `(X,Y,Z,T) = (0,1,1,0)`. -/
-def zero : Point := ⟨0, 1, 1, 0⟩
+def zero : Point :=
+  ⟨0, 1, 1, 0⟩
 
 theorem wellFormed_zero : zero.WellFormed where
   isUnit_Z := isUnit_one
@@ -149,14 +153,14 @@ for any non-zero Z" -- is the same point as `(0, 1, 1, 0)`. `IsUnit 2` is
 exhibited by hand: `2·(2^254 - 9) = p + 1`. -/
 
 example : SamePoint ⟨0, 2, 2, 0⟩ zero := by
-  have h2 : IsUnit (2 : ZMod p) := IsUnit.of_mul_eq_one ((2^254 - 9 : ℕ) : ZMod p) (by decide)
+  have h2 : IsUnit (2 : ZMod p) := IsUnit.of_mul_eq_one ((2 ^ 254 - 9 : ℕ) : ZMod p) (by decide)
   rw [samePoint_iff_cross h2 isUnit_one]
   constructor <;> simp [zero]
 
 /-- And a pair that is *not* the same point: `(0, 1/2)` is not `(0, 1)`. -/
-example : ¬ SamePoint ⟨0, 2, 2, 0⟩ ⟨0, 1, 2, 0⟩ := by
+example : ¬SamePoint ⟨0, 2, 2, 0⟩ ⟨0, 1, 2, 0⟩ := by
   intro h
-  have h2 : IsUnit (2 : ZMod p) := IsUnit.of_mul_eq_one ((2^254 - 9 : ℕ) : ZMod p) (by decide)
+  have h2 : IsUnit (2 : ZMod p) := IsUnit.of_mul_eq_one ((2 ^ 254 - 9 : ℕ) : ZMod p) (by decide)
   have := (samePoint_iff_cross h2 h2).mp h
   revert this
   decide
@@ -175,10 +179,11 @@ division is total (`a / 0 = 0`, a square), so the two agree only where
 complete, and here the one that says the decompression denominator never
 vanishes. Euler's criterion, with the 255-bit exponentiation done in the
 kernel by `Pratt.powModAux` rather than by `npowRec`. -/
-theorem d_not_isSquare : ¬ IsSquare (d : ZMod p) := by
-  have hd : (d : ZMod p)
-      = ((37095705934669439343138083508754565189542113879843219016388785533085940283555 : ℕ)
-          : ZMod p) := by
+theorem d_not_isSquare : ¬IsSquare (d : ZMod p) := by
+  have hd :
+    (d : ZMod p) =
+      ((37095705934669439343138083508754565189542113879843219016388785533085940283555 : ℕ) :
+        ZMod p) := by
     rw [d]; norm_num
   have hd0 : (d : ZMod p) ≠ 0 := by
     rw [hd, Ne, ZMod.natCast_eq_zero_iff]
@@ -190,7 +195,8 @@ theorem d_not_isSquare : ¬ IsSquare (d : ZMod p) := by
 square. -/
 theorem denom_ne_zero (y : ZMod p) : d * y ^ 2 + 1 ≠ 0 := by
   intro h
-  have hy : y ≠ 0 := by rintro rfl; simp at h
+  have hy : y ≠ 0 := by
+    rintro rfl; simp at h
   refine d_not_isSquare ⟨sqrtm1 * y⁻¹, ?_⟩
   field_simp
   rw [sqrtm1_sq]
@@ -201,8 +207,7 @@ theorem denom_ne_zero (y : ZMod p) : d * y ^ 2 + 1 ≠ 0 := by
 
 Only `mp` needs `b ≠ 0`: `x² · 0 = a` forces `a = 0`, and `0 / 0 = 0` is a
 square, so the converse holds outright. -/
-theorem isSquare_div_iff {a b : ZMod p} (hb : b ≠ 0) :
-    IsSquare (a / b) ↔ ∃ x, x ^ 2 * b = a := by
+theorem isSquare_div_iff {a b : ZMod p} (hb : b ≠ 0) : IsSquare (a / b) ↔ ∃ x, x ^ 2 * b = a := by
   constructor
   · rintro ⟨z, hz⟩
     field_simp at hz
@@ -218,30 +223,44 @@ RFC 8032 §5.1.3 ends the same way in both backends: a square root `x` of
 they get `x` and `y` and in how they spell the sign bit, but not in this. -/
 
 /-- The point a root and a `y` name. -/
-def decodedPoint (xv yv : ZMod p) : Point := ⟨xv, yv, 1, xv * yv⟩
+def decodedPoint (xv yv : ZMod p) : Point :=
+  ⟨xv, yv, 1, xv * yv⟩
 
-@[simp] theorem decodedPoint_X (xv yv : ZMod p) : (decodedPoint xv yv).X = xv := rfl
-@[simp] theorem decodedPoint_Y (xv yv : ZMod p) : (decodedPoint xv yv).Y = yv := rfl
-@[simp] theorem decodedPoint_Z (xv yv : ZMod p) : (decodedPoint xv yv).Z = 1 := rfl
-@[simp] theorem decodedPoint_T (xv yv : ZMod p) : (decodedPoint xv yv).T = xv * yv := rfl
+@[simp]
+theorem decodedPoint_X (xv yv : ZMod p) : (decodedPoint xv yv).X = xv :=
+  rfl
 
-@[simp] theorem decodedPoint_x (xv yv : ZMod p) : (decodedPoint xv yv).x = xv := by
+@[simp]
+theorem decodedPoint_Y (xv yv : ZMod p) : (decodedPoint xv yv).Y = yv :=
+  rfl
+
+@[simp]
+theorem decodedPoint_Z (xv yv : ZMod p) : (decodedPoint xv yv).Z = 1 :=
+  rfl
+
+@[simp]
+theorem decodedPoint_T (xv yv : ZMod p) : (decodedPoint xv yv).T = xv * yv :=
+  rfl
+
+@[simp]
+theorem decodedPoint_x (xv yv : ZMod p) : (decodedPoint xv yv).x = xv := by
   simp [Point.x, decodedPoint]
 
-@[simp] theorem decodedPoint_y (xv yv : ZMod p) : (decodedPoint xv yv).y = yv := by
+@[simp]
+theorem decodedPoint_y (xv yv : ZMod p) : (decodedPoint xv yv).y = yv := by
   simp [Point.y, decodedPoint]
 
 /-- **The root's defining equation is the curve equation** for that point. -/
-theorem onCurve_decodedPoint {xv yv : ZMod p}
-    (h : xv ^ 2 * (d * yv ^ 2 + 1) = yv ^ 2 - 1) :
+theorem onCurve_decodedPoint {xv yv : ZMod p} (h : xv ^ 2 * (d * yv ^ 2 + 1) = yv ^ 2 - 1) :
     OnCurve (decodedPoint xv yv).x (decodedPoint xv yv).y := by
   simp only [decodedPoint_x, decodedPoint_y, OnCurve]
   linear_combination -h
 
 /-- ... and its `T` is the product the spec asks for. -/
-@[simp] theorem decodedPoint_T_div_Z (xv yv : ZMod p) :
-    (decodedPoint xv yv).T / (decodedPoint xv yv).Z
-      = (decodedPoint xv yv).x * (decodedPoint xv yv).y := by
+@[simp]
+theorem decodedPoint_T_div_Z (xv yv : ZMod p) :
+    (decodedPoint xv yv).T / (decodedPoint xv yv).Z =
+      (decodedPoint xv yv).x * (decodedPoint xv yv).y := by
   simp [decodedPoint, Point.x, Point.y]
 
 /-! ## The candidate root
@@ -257,12 +276,10 @@ theorem p_sub_five_div_eight : (p - 5) / 8 = 2 ^ 252 - 3 := by norm_num [p]
 `x²·v = u·(u v⁷)^((p-1)/4)`, which is what turns the region's comparison into
 Euler's criterion. Both backends form the same candidate, so both need this. -/
 theorem sqrtCandidate_sq (u v : ZMod p) :
-    (u * v ^ 3 * (u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 * v
-      = u * (u * v ^ 7) ^ ((p - 1) / 4) := by
+    (u * v ^ 3 * (u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 * v = u * (u * v ^ 7) ^ ((p - 1) / 4) := by
   have e1 : (p - 5) / 8 * 2 = (p - 5) / 4 := by norm_num [p]
   have e2 : (p - 5) / 4 + 1 = (p - 1) / 4 := by norm_num [p]
-  have h8 : ((u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 = (u * v ^ 7) ^ ((p - 5) / 4) := by
-    rw [← pow_mul, e1]
+  have h8 : ((u * v ^ 7) ^ ((p - 5) / 8)) ^ 2 = (u * v ^ 7) ^ ((p - 5) / 4) := by rw [← pow_mul, e1]
   rw [← e2, pow_add, pow_one, mul_pow, h8]
   ring
 
@@ -296,14 +313,27 @@ theorem sqrtCandidate_iff {u v x : ZMod p} (hv : v ≠ 0)
   · subst hu
     simp [hx]
   · rw [hx, sqrtCandidate_sq, ← isSquare_mul_pow_seven_iff (u := u) hv,
-      ZMod.euler_criterion p (mul_ne_zero hu (pow_ne_zero _ hv)),
-      ← pow_quarter_eq_pm_one_iff]
+      ZMod.euler_criterion p (mul_ne_zero hu (pow_ne_zero _ hv)), ← pow_quarter_eq_pm_one_iff]
     constructor
     · rintro (h | h)
-      · exact Or.inr (mul_left_cancel₀ hu (by rw [h]; ring))
-      · exact Or.inl (mul_left_cancel₀ hu (by rw [h]; ring))
+      · exact
+          Or.inr
+            (mul_left_cancel₀ hu
+              (by
+                rw [h]; ring))
+      · exact
+          Or.inl
+            (mul_left_cancel₀ hu
+              (by
+                rw [h]; ring))
     · rintro (h | h)
-      · exact Or.inr (by rw [h]; ring)
-      · exact Or.inl (by rw [h]; ring)
+      · exact
+          Or.inr
+            (by
+              rw [h]; ring)
+      · exact
+          Or.inl
+            (by
+              rw [h]; ring)
 
 end Ed25519

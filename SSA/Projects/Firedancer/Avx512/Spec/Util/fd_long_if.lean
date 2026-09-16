@@ -23,6 +23,7 @@ That matters here -- the condition reaching this region is a `zext` of an
 -/
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 
 /-- `fd_long_if(c, 19, 0)`: the value the conditional subtract removes from
@@ -31,12 +32,17 @@ def fdLongIf : LLVM.IntW 32 → LLVM.IntW 64
   | .poison => .poison
   | .value c => .value (if c = 0#32 then 0#64 else 19#64)
 
-@[simp] theorem fdLongIf_poison : fdLongIf .poison = .poison := rfl
+@[simp]
+theorem fdLongIf_poison : fdLongIf .poison = .poison :=
+  rfl
 
-@[simp] theorem fdLongIf_zero : fdLongIf (.value 0#32) = .value 0#64 := rfl
+@[simp]
+theorem fdLongIf_zero : fdLongIf (.value 0#32) = .value 0#64 :=
+  rfl
 
 /-- The shape the caller uses it in: the condition is a `zext` of an `i1`, so
 it is `0` or `1` and never anything else. -/
-theorem fdLongIf_one : fdLongIf (.value 1#32) = .value 19#64 := rfl
+theorem fdLongIf_one : fdLongIf (.value 1#32) = .value 19#64 :=
+  rfl
 
 end Firedancer.Avx512

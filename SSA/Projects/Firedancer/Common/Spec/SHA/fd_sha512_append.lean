@@ -18,6 +18,7 @@ state, and the implication is vacuous. `data` and `sz` are arbitrary registers.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -26,11 +27,14 @@ well formed, the allocation counter and symbol table are as on entry, and every
 block other than `sha`'s reads as it did. -/
 abbrev fd_sha512_append_frame_spec (sha : Pointer) (data : SLLVM.Ptr) (sz : LLVM.IntW 64)
     (s : GlobalState) : Prop :=
-  let invocation := runFunction (fd_sha512_append.denote
-    (Ctxt.Valuation.ofHVector [sz, data, .value sha]ₕ))
-  ∃ res, StateT.run invocation s = res
-    ∧ ∀ r s', res = .value (r, s') →
-        s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
-          ∧ ∀ b : BlockId, b ≠ sha.id → s'.mem.live? b = s.mem.live? b
+  let invocation :=
+    runFunction (fd_sha512_append.denote (Ctxt.Valuation.ofHVector [sz, data, .value sha]ₕ))
+  ∃ res,
+    StateT.run invocation s = res ∧
+      ∀ r s',
+        res = .value (r, s') →
+          s'.WF ∧
+            s'.alloc = s.alloc ∧
+            s'.globals = s.globals ∧ ∀ b : BlockId, b ≠ sha.id → s'.mem.live? b = s.mem.live? b
 
 end Firedancer.Common

@@ -57,9 +57,8 @@ def bcpA (b : ℤ) (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → �
 with limb 5 taking the last carry and `_y5 += _b` back. -/
 def bcp (b : ℤ) (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ :=
   let c4 := bcpA b x 4 >>> 43
-  R43x6.limbs6 (bcpA b x 0 % 2^43) (bcpA b x 1 % 2^43) (bcpA b x 2 % 2^43)
-    (bcpA b x 3 % 2^43) (bcpA b x 4 % 2^43)
-    (bcpA b x 5 % 2^40 + c4 + b)
+  R43x6.limbs6 (bcpA b x 0 % 2 ^ 43) (bcpA b x 1 % 2 ^ 43) (bcpA b x 2 % 2 ^ 43)
+    (bcpA b x 3 % 2 ^ 43) (bcpA b x 4 % 2 ^ 43) (bcpA b x 5 % 2 ^ 40 + c4 + b)
 
 /-- The **exact** domain of the macro at bias `b`, transcribed from the header
 comment:
@@ -74,17 +73,16 @@ rules out at most `19 · 2^24 < 2^29` of the `2^64` values a limb can take, and
 it is exactly the condition under which no add in the chain overflows a
 `long`. -/
 def BcpPre (b : ℤ) (x : Fin R43x6.limbCount → ℤ) : Prop :=
-    (-2 ^ 63 + 19 * 2 ^ 23 ≤ x 0 ∧ x 0 < 2 ^ 63 - 19 * (2 ^ 23 - 1))
-  ∧ (∀ i : Fin R43x6.limbCount, 1 ≤ (i : ℕ) → (i : ℕ) ≤ 4 →
-        -2 ^ 63 + 2 ^ 20 ≤ x i ∧ x i < 2 ^ 63 - (2 ^ 20 - 1))
-  ∧ (-2 ^ 63 + b ≤ x 5 ∧ x 5 < 2 ^ 63)
+  (-2 ^ 63 + 19 * 2 ^ 23 ≤ x 0 ∧ x 0 < 2 ^ 63 - 19 * (2 ^ 23 - 1)) ∧
+    (∀ i : Fin R43x6.limbCount,
+      1 ≤ (i : ℕ) → (i : ℕ) ≤ 4 → -2 ^ 63 + 2 ^ 20 ≤ x i ∧ x i < 2 ^ 63 - (2 ^ 20 - 1)) ∧
+    (-2 ^ 63 + b ≤ x 5 ∧ x 5 < 2 ^ 63)
 
 /-- The values the chain forms, in program order. Each is the operand of an
 `nsw` add, subtract or multiply in the emitted code, so each has to be shown
 to fit in a `long` before the region denotes to anything but poison. -/
 def bcpChain (b : ℤ) (x : Fin R43x6.limbCount → ℤ) : List ℤ :=
-  [bcpA b x 5, (19 : ℤ) * (bcpA b x 5 >>> 40), bcpA b x 0, bcpA b x 1, bcpA b x 2,
-   bcpA b x 3, bcpA b x 4, bcpA b x 5 % 2^40 + b,
-   bcpA b x 5 % 2^40 + b + (bcpA b x 4 >>> 43)]
+  [bcpA b x 5, (19 : ℤ) * (bcpA b x 5 >>> 40), bcpA b x 0, bcpA b x 1, bcpA b x 2, bcpA b x 3,
+    bcpA b x 4, bcpA b x 5 % 2 ^ 40 + b, bcpA b x 5 % 2 ^ 40 + b + (bcpA b x 4 >>> 43)]
 
 end Firedancer.Avx512

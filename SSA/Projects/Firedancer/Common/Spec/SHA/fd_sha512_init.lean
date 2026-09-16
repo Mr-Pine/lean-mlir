@@ -22,6 +22,7 @@ rather than three stores.
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -34,14 +35,19 @@ def sha512IV : Fin 8 → BitVec 64 :=
 then 24 zero bytes at 200, in the order the region writes them. A `def`, like
 `pointOutMem`, so unifiers do not walk nine splices on sight. -/
 def sha512InitMem (m : MemoryState) (sha : Pointer) : MemoryState :=
-  ((((((((m.splice (sha.withOffset 128) (sha512IV 0)).splice (sha.withOffset 136) (sha512IV 1)).splice
-    (sha.withOffset 144) (sha512IV 2)).splice (sha.withOffset 152) (sha512IV 3)).splice
-    (sha.withOffset 160) (sha512IV 4)).splice (sha.withOffset 168) (sha512IV 5)).splice
-    (sha.withOffset 176) (sha512IV 6)).splice (sha.withOffset 184) (sha512IV 7)).splice
+  ((((((((m.splice (sha.withOffset 128) (sha512IV 0)).splice (sha.withOffset 136)
+                                (sha512IV 1)).splice
+                            (sha.withOffset 144) (sha512IV 2)).splice
+                        (sha.withOffset 152) (sha512IV 3)).splice
+                    (sha.withOffset 160) (sha512IV 4)).splice
+                (sha.withOffset 168) (sha512IV 5)).splice
+            (sha.withOffset 176) (sha512IV 6)).splice
+        (sha.withOffset 184) (sha512IV 7)).splice
     (sha.withOffset 200) (BitVec.replicate 24 (0#8))
 
 /-- A `fd_sha512_t` at `sha`: the whole 256-byte struct is addressable. -/
-abbrev IsSha512Ptr (m : MemoryState) (sha : Pointer) : Prop := Fits m sha (256 * 8)
+abbrev IsSha512Ptr (m : MemoryState) (sha : Pointer) : Prop :=
+  Fits m sha (256 * 8)
 
 /-- **`fd_sha512_init` resets the hash state.** It returns `sha` and leaves the
 entry state with `sha512InitMem` applied: allocation counter, symbol table and
@@ -49,7 +55,7 @@ every block other than `sha`'s untouched. -/
 abbrev fd_sha512_init_spec (sha : Pointer) (s : GlobalState) : Prop :=
   let invocation := runFunction (fd_sha512_init.denote (Ctxt.Valuation.singleton (.value sha)))
   ∃ s' : GlobalState,
-    StateT.run invocation s = .value ([.value sha]ₕ, s')
-      ∧ s' ≈ ({ s with mem := sha512InitMem s.mem sha } : GlobalState)
+    StateT.run invocation s = .value ([.value sha]ₕ, s') ∧
+      s' ≈ ({ s with mem := sha512InitMem s.mem sha } : GlobalState)
 
 end Firedancer.Common
