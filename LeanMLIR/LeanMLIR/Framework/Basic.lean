@@ -790,10 +790,7 @@ end Lemmas
   case rets v  => rfl
   case var ih =>
     simp only [denoteLets, EffectKind.pureMonad_pure_eq, EffectKind.pureMonad_bind_eq, denote]
-    first
-    | (exact ih _; trace "A796")
-    | (simp [ih]; trace "B796"; done)
-    | (trace "C796"; exact ih _)
+    exact ih _
 
 @[simp] theorem Expr.changeVars_changeVars (e : Expr d Γ eff ty) (f : Γ.Hom Δ) (g : Δ.Hom Ξ) :
     (e.changeVars f).changeVars g = e.changeVars (f.comp g) := by
@@ -958,26 +955,16 @@ section Lemmas
     have hop : DialectSignature.effectKind op = .pure := EffectKind.eq_of_le_pure eff_le
     simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk]
     simp only [EffectKind.pure_map]
-    first
-    | (exact congrArg _
-        (congrFun (EffectKind.liftEffect_compose eff_le (EffectKind.pure_le _)) _).symm)
-    | (trace "B965"
-       rw [← EffectKind.liftEffect_pure_impure (EffectKind.pure_le _),
-         ← Function.comp_apply (f := EffectKind.liftEffect (EffectKind.pure_le EffectKind.impure)),
-         EffectKind.liftEffect_compose]
-       done)
-    | (trace "C965"; rfl)
+    exact congrArg _
+      (congrFun (EffectKind.liftEffect_compose eff_le (EffectKind.pure_le _)) _).symm
 
 @[simp] theorem Com.denote_castPureToEff {com : Com d Γ .pure ty} :
     denote (com.castPureToEff eff) = fun V => pure (com.denote V) := by
   funext V
   induction com using Com.rec'
   · rfl
-  · first
-    | (simp only [denote_var, *]; rw [EffectKind.pure_pure]; trace "A976"; rfl)
-    | (simp only [denote_var, *]; trace "B976"; exact (EffectKind.pure_pure _ _).symm ▸ rfl)
-    | (simp only [denote_var, *]; trace "C976"; exact congrArg _ rfl)
-    | (simp [*, EffectKind.pure_pure]; trace "D976"; rfl)
+  · simp [*, EffectKind.pure_pure]
+    rfl
 
 end Lemmas
 
@@ -1253,10 +1240,7 @@ section Lemmas
 @[simp] theorem Com.changeDialect_rets (f : DialectMorphism d d') (vs) :
     Com.changeDialect f (Com.rets vs : Com d Γ eff t)
     = Com.rets (vs.map' f.mapTy (fun _ v => v.toMap)) := by
-  cases eff <;> first
-    | (simp [changeDialect]; trace "A1240"; done)
-    | (trace "B1240"; rfl)
-    | (unfold changeDialect; trace "C1240"; rfl)
+  cases eff <;> simp [changeDialect]
 
 @[simp] theorem Com.changeDialect_var (f : DialectMorphism d d')
     (e : Expr d Γ eff t) (body : Com d _ eff u) :
@@ -1264,17 +1248,11 @@ section Lemmas
     = have h := by simp; rfl
       Com.var (e.changeDialect f)
       <| (body.changeDialect f).changeVars (Hom.id.castCodomain h) := by
-  first
-  | (simp only [changeDialect]; trace "A1264"; done)
-  | (simp [changeDialect]; trace "B1264"; done)
-  | (simp only [changeDialect]; trace "C1264"; rfl)
+  simp only [changeDialect]
 
 @[simp] theorem Regions.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
     Regions.changeDialect (eff := eff) f .nil = .nil := by
-  first
-  | (trace "A1252"; rfl)
-  | (unfold Regions.changeDialect; trace "B1252"; rfl)
-  | (simp [Regions.changeDialect]; trace "C1252"; done)
+  unfold Regions.changeDialect; rfl
 
 end Lemmas
 
@@ -1316,18 +1294,10 @@ section Lemmas
     (lets.castPureToEff eff).addComToEnd (com.castPureToEff eff)
     = cast (by simp) ((lets.addComToEnd com).castPureToEff eff) := by
   induction com using Com.rec'
-  case rets =>
-    first
-    | (simp; done)
-    | (trace "B1316"; exact (cast_eq _ _).symm)
-    | (trace "C1316"; rfl)
+  case rets => exact (cast_eq _ _).symm
   case var ih =>
     simp only [Com.castPureToEff_var, Com.outContext_var, addComToEnd_var,
       ← Lets.castPureToEff_var, ih]
-    first
-    | (trace "A1313"; done)
-    | (trace "B1313"; rfl)
-    | (trace "C1313"; simp)
 
 @[simp] theorem Com.toLets_castPureToEff {com : Com d Γ .pure ty} :
     (com.castPureToEff eff).toLets = cast (by simp) (com.toLets.castPureToEff eff) := by
@@ -1359,15 +1329,10 @@ theorem Com.denoteLets_eq {com : Com d Γ eff t} : com.denoteLets = com.toLets.d
     = fun V => pure (com.denoteLets V |>.comap fun _ v => v.castCtxt (by simp)) := by
   funext V
   induction com using Com.rec'
-  · first
-    | (simp; done)
-    | (trace "B1361"; simp; rfl)
-    | (trace "C1361"; rfl)
-  · first
-    | (simp [*]; done)
-    | (simp [*]; trace "B1363"; rfl)
-    | (simp only [*]; trace "C1363"; rfl)
-    | (trace "D1363"; simp [*, Ctxt.Valuation.comap])
+  · simp
+    rfl
+  · simp [*]
+    rfl
 
 end Lemmas
 
