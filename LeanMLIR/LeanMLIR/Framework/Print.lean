@@ -9,7 +9,6 @@ This file defines `Repr` and `ToString` instances for the core data-structures
 
 open Ctxt (Var)
 
-
 /-!
 ## DialectPrint infrastructure
 -/
@@ -38,16 +37,13 @@ class DialectPrint (d : Dialect) where
   Print the attributes of an operation.
   -/
   printAttributes : d.Op → String
-
   /--
   Prints the type in the dialect.
   -/
   printTy : d.Ty → String
-
   /-- The name of the dialect. -/
   dialectName : String
   -- ^^ TODO: `dialectName` seems unused
-
   /-- Prints the return instruction of the dialect. -/
   printReturn : List d.Ty → String
   /-- Prints the function header of the dialect. -/
@@ -66,6 +62,7 @@ variable {d} [DialectPrint d]
 namespace DialectPrint
 
 instance instToStringTy : ToString (Dialect.Ty d) where toString := printTy
+
 instance instReprTy : Repr (Dialect.Ty d) where reprPrec t _ := printTy t
 
 /--
@@ -80,8 +77,7 @@ For example, if the contex is `Γ := ⟨[i64, i32]⟩` then the expected output 
 -/
 partial def printBlockArgs (Γ : Ctxt d.Ty) : String :=
   let ts := Γ.toList
-  let args := (List.range ts.length).zip ts.reverse |>.map
-    (fun (i, t) => s!"%{i} : {printTy t}")
+  let args := (List.range ts.length).zip ts.reverse |>.map (fun (i, t) => s!"%{i} : {printTy t}")
   "(" ++ String.intercalate ", " args ++ ")"
 
 /--
@@ -98,7 +94,6 @@ def printVar {Γ : Ctxt d.Ty} (v : Γ.Var t) : Format :=
   f!"%{Γ.toList.length - v.val - 1}"
 
 end DialectPrint
-
 
 variable [DialectSignature d]
 
@@ -128,17 +123,12 @@ Print the results of an expression, e.g., `%x =`.
 Returns an empty string if the expression has no results.
 -/
 def Expr.printResultList (_e : Expr d Γ eff ts) : Format :=
-  if ts.length = 0 then
-    ""
+  if ts.length = 0 then ""
   else
-    let rs :=
-      List.range ts.length
-      |>.map (f!"%{· + Γ.length}")
-      |> f!", ".joinSep
+    let rs := List.range ts.length |>.map (f!"%{· + Γ.length}") |> f!", ".joinSep
     f!"{rs} = "
 
 mutual
-
 /--
 Print an `Expr` in generic MLIR syntax.
 
@@ -159,41 +149,32 @@ partial def Expr.print (e : Expr d Γ eff t) : Format :=
       f!" ({reg.print})"
     | _ =>
       let regs :=
-        regArgs.mapToList (Format.align true ++ Com.print ·)
-        |> f!", ".joinSep
-        |> Format.nest 2
+        regArgs.mapToList (Format.align true ++ Com.print ·) |> f!", ".joinSep |> Format.nest 2
       f!" ({regs})"
-  Format.align true ++ f!"{e.printResultList}\"{printOpName e.op}\"{e.printArgs}{printAttributes e.op}{regions} : {e.printType}"
-
+  Format.align true ++
+    f!"{e.printResultList}\"{printOpName e.op}\"{e.printArgs}{printAttributes e.op}{regions} : {e.printType}"
 /--
 Recursively print a `Com` in generic MLIR syntax.
 Each bound variable is printed with its index and corresponding expression.
 -/
 private partial def Com.printAux : Com d Γ eff ts → Format
   | .rets vs =>
-      let vs :=
-        vs.mapToList printVar
-        |> (Format.joinSep · ", ") |> Format.group
+      let vs := vs.mapToList printVar |> (Format.joinSep · ", ") |> Format.group
       let ret := printReturn ts
-      let ts :=
-        ts.map printTy
-        |> (Format.joinSep · ", ") |> Format.group
+      let ts := ts.map printTy |> (Format.joinSep · ", ") |> Format.group
       Format.align true ++ f!"\"{ret}\"({vs}) : ({ts}) -> ()"
   | .var e body => e.print ++ Com.printAux body
-
-
 /--
 Print a `Com` in generic MLIR syntax.
 -/
 partial def Com.print (com : Com d Γ eff ts) : Format :=
-  f!"\{\n"
-  ++ (Format.nest 2 <|
-    Format.align true ++ f!"{printFunc ts}{printBlockArgs Γ}:\n"
-    ++ (Format.nest 2 com.printAux))
-  ++ Format.align true ++ f!"}"
-
+  f!"\{\n" ++
+    (Format.nest 2 <|
+      Format.align true ++ f!"{printFunc ts}{printBlockArgs Γ}:\n" ++
+        (Format.nest 2 com.printAux)) ++
+    Format.align true ++
+    f!"}"
 end
-
 
 /--
 Print a `Com` in generic MLIR syntax, wrapped in an implicit `builtin.module`.
@@ -203,17 +184,19 @@ partial def Com.printModule (com : Com d Γ eff ts) : Format :=
 
 /-! ### ToString -/
 
-instance : ToString (Com d Γ eff t)  where toString com  := s!"{com.print}"
+instance : ToString (Com d Γ eff t) where toString com := s!"{com.print}"
+
 instance : ToString (Expr d Γ eff t) where toString expr := s!"{expr.print}"
 
 /-! ### Repr -/
 
-instance : Repr (Com d Γ eff t)  where reprPrec com _  := com.print
+instance : Repr (Com d Γ eff t) where reprPrec com _ := com.print
+
 instance : Repr (Expr d Γ eff t) where reprPrec expr _ := expr.print
 
 def Lets.repr (prec : Nat) : Lets d eff Γ t → Format
-    | .nil => .align false ++ f!";"
-    | .var body e => body.repr prec ++ (.align false ++ f!"{e.print}")
+  | .nil => .align false ++ f!";"
+  | .var body e => body.repr prec ++ (.align false ++ f!"{e.print}")
 
 instance : Repr (Lets d Γ eff t) where
   reprPrec lets prec := lets.repr prec

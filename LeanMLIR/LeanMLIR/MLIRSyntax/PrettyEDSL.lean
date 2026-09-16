@@ -1,4 +1,5 @@
 import LeanMLIR.MLIRSyntax.GenericParser
+
 /-!
 # Pretty MLIR Syntax
 
@@ -7,11 +8,13 @@ Note that since pretty syntax is just defined as Lean macros, none of this is *r
 -/
 
 namespace MLIR.EDSL.Pretty
+
 open Lean
 
 /-! The category of uniform operation (names).
 Syntax of this category is expected to be just a single atom, which is seen as the name of a
 MLIR operation where all inputs and outputs have the same type -/
+
 declare_syntax_cat MLIR.Pretty.uniform_op
 
 /-- Given syntax which consists of just a node with a single atom (as expected by `uniform_op`),
@@ -34,8 +37,10 @@ Where the number of repeated `t`s is determined by the number of arguments given
 It's also possible to leave out the `: $t` type annotation entirely, in which case `t` will be
 assumed to be `_`, the "hole" type.
 -/
-syntax (mlir_op_operand " = ")? MLIR.Pretty.uniform_op mlir_op_operand,*
-  (" : " mlir_type)? : mlir_op
+
+syntax (mlir_op_operand " = ")? MLIR.Pretty.uniform_op mlir_op_operand,* (" : " mlir_type)? :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $[$resName =]? $name:MLIR.Pretty.uniform_op $xs,* $[: $t]? ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported

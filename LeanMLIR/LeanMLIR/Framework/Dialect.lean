@@ -18,7 +18,9 @@ structure Dialect where
   (m : Type → Type := Id)
 
 /-! ## ToExpr -/
+
 section ToExpr
+
 open Lean Qq
 
 /--

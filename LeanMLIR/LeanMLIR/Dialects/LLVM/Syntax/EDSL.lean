@@ -8,12 +8,14 @@ import Qq
 
 open Qq Lean Meta Elab.Term Elab Command
 open InstCombine (LLVM MetaLLVM MOp Width)
-
 open MLIR
 
 namespace InstcombineTransformDialect
+
 open AST (Op TransformError)
-private abbrev ReaderM (φ) := AST.ReaderM (MetaLLVM φ)
+
+private abbrev ReaderM (φ) :=
+  AST.ReaderM (MetaLLVM φ)
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty)
   | MLIR.AST.MLIRType.int MLIR.AST.Signedness.Signless w => return .bitvec w
@@ -21,20 +23,25 @@ def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ
   -- (there is no `vscale`), and multi-dimensional vectors would have to nest,
   -- so both fall through to `unsupportedType` below.
   | MLIR.AST.MLIRType.vector [length] [] elemTy => do
-      return .vector length (← mkTy elemTy)
+    return .vector length (← mkTy elemTy)
   | t => throw <| .unsupportedType (some t)
 
-instance instTransformTy : AST.TransformTy (MetaLLVM φ) φ := { mkTy }
-instance : AST.TransformTy (LLVM) 0 := { mkTy }
+instance instTransformTy : AST.TransformTy (MetaLLVM φ) φ :=
+  { mkTy }
 
-def getOutputWidth (opStx : MLIR.AST.Op φ) (op : String) :
-    Except TransformError (Width φ) := do
+instance : AST.TransformTy (LLVM) 0 :=
+  { mkTy }
+
+def getOutputWidth (opStx : MLIR.AST.Op φ) (op : String) : Except TransformError (Width φ) := do
   match opStx.res with
-  | res::[] =>
+  | res :: [] =>
     match res.2 with
-    | .int _ w => pure w
-    | _ => throw <| .generic s!"The operation {op} must output an integer type"
-  | _ => throw <| .generic s!"The operation {op} must have a single output"
+    | .int _ w =>
+      pure w
+    | _ =>
+      throw <| .generic s!"The operation {op} must output an integer type"
+  | _ =>
+    throw <| .generic s!"The operation {op} must have a single output"
 
 /-- The declared result type of a single-result operation. Unlike
 `getOutputWidth` this keeps the whole type, which poison needs since it exists
@@ -42,25 +49,31 @@ at vector types too. -/
 def getOutputTy (opStx : MLIR.AST.Op φ) (op : String) :
     MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty) := do
   match opStx.res with
-  | res::[] => mkTy res.2
-  | _ => throw <| .generic s!"The operation {op} must have a single output"
+  | res :: [] =>
+    mkTy res.2
+  | _ =>
+    throw <| .generic s!"The operation {op} must have a single output"
 
 /-- The integers inside a `dense<…>` attribute: either a single value (the
 splat form) or one per lane. -/
 def denseInts : MLIR.AST.AttrValue φ → MLIR.AST.ExceptM (MetaLLVM φ) (List Int)
   | .int v _ => return [v]
-  | .list xs => xs.mapM fun
+  | .list xs =>
+    xs.mapM fun
       | .int v _ => pure v
       | _ => throw <| .generic "llvm.mlir.constant: dense elements must be integers"
-  | _ => throw <| .generic
-      "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
+  | _ =>
+    throw <|
+      .generic "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
 
 /-- The declared type of the `i`-th operand of an operation. -/
 def getArgTy (opStx : MLIR.AST.Op φ) (op : String) (i : Nat) :
     MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty) := do
   match opStx.args[i]? with
-  | some (_, t) => mkTy t
-  | none => throw <| .generic s!"{op}: expected at least {i + 1} operand(s)"
+  | some (_, t) =>
+    mkTy t
+  | none =>
+    throw <| .generic s!"{op}: expected at least {i + 1} operand(s)"
 
 /-- The integers of an `array<…>` attribute, as `llvm.shufflevector` writes its
 mask. -/
@@ -69,15 +82,15 @@ def arrayInts (opStx : MLIR.AST.Op φ) (op attr : String) :
   let some (.array _ els) := opStx.getAttr? attr
     | throw <| .generic s!"{op}: expected an `array<…>` attribute `{attr}`"
   els.mapM fun
-    | .int v _ => pure v
-    | _ => throw <| .generic s!"{op}: `{attr}` must hold integers"
+      | .int v _ => pure v
+      | _ => throw <| .generic s!"{op}: `{attr}` must hold integers"
 
 /-- The lane count of a `vector<n x i64>` result, which is the shape the AVX-512
 IFMA intrinsics have. -/
-def getVectorLaneCount (opStx : MLIR.AST.Op φ) (op : String) :
-    MLIR.AST.ExceptM (MetaLLVM φ) Nat := do
-  let .vector l (.bitvec (.concrete 64)) ← getOutputTy opStx op
-    | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
+def getVectorLaneCount (opStx : MLIR.AST.Op φ) (op : String) : MLIR.AST.ExceptM (MetaLLVM φ) Nat :=
+  do
+  let .vector l (.bitvec (.concrete 64)) ←
+    getOutputTy opStx op | throw <| .generic s!"{op}: expected a `vector<n x i64>` result"
   return l
 
 /-- Given a variable of arbitrary type, return its width.
@@ -90,31 +103,46 @@ def getVarWidth {Γ : Ctxt (MetaLLVM φ).Ty} : (Σ t, Γ.Var t) → ReaderM φ (
 
 def parseOverflowFlags (op : AST.Op φ) : ReaderM φ LLVM.NoWrapFlags := do
   match op.getAttr? "overflowFlags" with
-  | .none => return {}
-  | .some y => match y with
-    | .opaque_ "llvm.overflow" "nsw" => return ⟨true, false⟩
-    | .opaque_ "llvm.overflow" "nuw" => return ⟨false, true⟩
-    | .opaque_ "llvm.overflow" "none" => return ⟨false, false⟩
-    | .list [.opaque_ "llvm.overflow" "nuw", .opaque_ "llvm.overflow" "nsw"]
-    | .list [.opaque_ "llvm.overflow" "nsw", .opaque_ "llvm.overflow" "nuw"] =>
-        return ⟨true, true⟩
+  | .none =>
+    return {}
+  | .some y =>
+    match y with
+    | .opaque_ "llvm.overflow" "nsw" =>
+      return ⟨true, false⟩
+    | .opaque_ "llvm.overflow" "nuw" =>
+      return ⟨false, true⟩
+    | .opaque_ "llvm.overflow" "none" =>
+      return ⟨false, false⟩
+    | .list [.opaque_ "llvm.overflow" "nuw", .opaque_ "llvm.overflow" "nsw"] |
+      .list [.opaque_ "llvm.overflow" "nsw", .opaque_ "llvm.overflow" "nuw"] =>
+      return ⟨true, true⟩
     | _ =>
       -- Parse oveflowFlags passed as integer attribute
-          let ⟨n, _ ⟩ ← op.getIntAttr "overflowFlags"
-          match n with
-          | 0 => return { nsw := false, nuw := false}
-          | 1 => return { nsw := true, nuw := false}
-          | 2 => return { nsw := false, nuw := true}
-          | 3 => return { nsw := true, nuw := true}
-          | s => throw <| .generic s!"The overflow flag with predicate {s} is not allowed. \
+      let ⟨n, _⟩ ← op.getIntAttr "overflowFlags"
+      match n with
+      | 0 =>
+        return { nsw := false, nuw := false }
+      | 1 =>
+        return { nsw := true, nuw := false }
+      | 2 =>
+        return { nsw := false, nuw := true }
+      | 3 =>
+        return { nsw := true, nuw := true }
+      | s =>
+        throw <|
+            .generic
+              s!"The overflow flag with predicate {s} is not allowed. \
             We currently support nsw (no signed wrap) and nuw (no unsigned wrap)"
+
 /-- The `predicate` attribute of a generic-form `llvm.icmp`. The mapping itself
 is `LLVM.IntPred.ofMLIRPredicate?`, which documents why MLIR's numbering is not
 this inductive's. -/
 def parseIcmpPredicate (n : Int) : AST.ReaderM (MetaLLVM φ) (LLVM.IntPred) := do
   match LLVM.IntPred.ofMLIRPredicate? n with
-  | some c => return c
-  | none => throw <| .generic s!"The icmp predicate {n} is not supported"
+  | some c =>
+    return c
+  | none =>
+    throw <| .generic s!"The icmp predicate {n} is not supported"
 
 open InstCombine.MOp in
 def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
@@ -249,6 +277,7 @@ def mkExpr (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
 
 instance : AST.TransformExpr (MetaLLVM φ) φ :=
   { mkExpr := fun Γ opStx _regions => mkExpr Γ opStx }
+
 instance : AST.TransformExpr LLVM 0 :=
   { mkExpr := fun Γ opStx _regions => mkExpr Γ opStx }
 
@@ -262,6 +291,7 @@ def mkReturn (Γ : Ctxt (MetaLLVM φ).Ty) (opStx : MLIR.AST.Op φ) :
     return ⟨.pure, [ty], Com.ret v⟩
 
 instance : AST.TransformReturn (MetaLLVM φ) φ := { mkReturn }
+
 instance : AST.TransformReturn LLVM 0 := { mkReturn }
 
 /-!
@@ -337,7 +367,6 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
       mkApp2 (mkConst ``Op.const) w val
 
 end InstcombineTransformDialect
-
 
 open SSA InstcombineTransformDialect InstCombine in
 elab "[llvm(" mvars:term,* ")| " reg:mlir_region "]" : term => do

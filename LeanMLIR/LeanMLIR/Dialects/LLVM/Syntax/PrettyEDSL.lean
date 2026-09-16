@@ -8,45 +8,72 @@ import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Disjoint
 open Lean
 
 namespace MLIR.EDSL
+
 open Pretty
 
-syntax "llvm.return"  : MLIR.Pretty.uniform_op
-syntax "llvm.copy"    : MLIR.Pretty.uniform_op
-syntax "llvm.freeze"  : MLIR.Pretty.uniform_op
-syntax "llvm.neg"     : MLIR.Pretty.uniform_op
-syntax "llvm.not"     : MLIR.Pretty.uniform_op
-syntax "llvm.or"      : MLIR.Pretty.uniform_op
-syntax "llvm.and"     : MLIR.Pretty.uniform_op
-syntax "llvm.srem"    : MLIR.Pretty.uniform_op
-syntax "llvm.urem"    : MLIR.Pretty.uniform_op
-syntax "llvm.xor"     : MLIR.Pretty.uniform_op
+syntax "llvm.return" : MLIR.Pretty.uniform_op
 
-syntax "llvm.add"     : MLIR.Pretty.overflow_op
-syntax "llvm.shl"     : MLIR.Pretty.overflow_op
-syntax "llvm.mul"     : MLIR.Pretty.overflow_op
-syntax "llvm.sub"     : MLIR.Pretty.overflow_op
+syntax "llvm.copy" : MLIR.Pretty.uniform_op
 
-syntax "llvm.udiv"    : MLIR.Pretty.exact_op
-syntax "llvm.sdiv"    : MLIR.Pretty.exact_op
-syntax "llvm.lshr"    : MLIR.Pretty.exact_op
-syntax "llvm.ashr"    : MLIR.Pretty.exact_op
+syntax "llvm.freeze" : MLIR.Pretty.uniform_op
 
-syntax "llvm.or"      : MLIR.Pretty.disjoint_op
+syntax "llvm.neg" : MLIR.Pretty.uniform_op
+
+syntax "llvm.not" : MLIR.Pretty.uniform_op
+
+syntax "llvm.or" : MLIR.Pretty.uniform_op
+
+syntax "llvm.and" : MLIR.Pretty.uniform_op
+
+syntax "llvm.srem" : MLIR.Pretty.uniform_op
+
+syntax "llvm.urem" : MLIR.Pretty.uniform_op
+
+syntax "llvm.xor" : MLIR.Pretty.uniform_op
+
+syntax "llvm.add" : MLIR.Pretty.overflow_op
+
+syntax "llvm.shl" : MLIR.Pretty.overflow_op
+
+syntax "llvm.mul" : MLIR.Pretty.overflow_op
+
+syntax "llvm.sub" : MLIR.Pretty.overflow_op
+
+syntax "llvm.udiv" : MLIR.Pretty.exact_op
+
+syntax "llvm.sdiv" : MLIR.Pretty.exact_op
+
+syntax "llvm.lshr" : MLIR.Pretty.exact_op
+
+syntax "llvm.ashr" : MLIR.Pretty.exact_op
+
+syntax "llvm.or" : MLIR.Pretty.disjoint_op
 
 declare_syntax_cat InstCombine.cmp_op_name
-syntax "llvm.icmp.eq"  : InstCombine.cmp_op_name
-syntax "llvm.icmp.ne"  : InstCombine.cmp_op_name
+
+syntax "llvm.icmp.eq" : InstCombine.cmp_op_name
+
+syntax "llvm.icmp.ne" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.slt" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.sle" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.sgt" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.sge" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.ult" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.ule" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.ugt" : InstCombine.cmp_op_name
+
 syntax "llvm.icmp.uge" : InstCombine.cmp_op_name
 
 syntax mlir_op_operand " = " InstCombine.cmp_op_name mlir_op_operand ", " mlir_op_operand
-        (" : " mlir_type)? : mlir_op
+  (" : " mlir_type)? : mlir_op
+
 macro_rules
   | `(mlir_op| $resName:mlir_op_operand = $name:InstCombine.cmp_op_name $x, $y $[: $t]?) => do
     let some opName := extractOpName name.raw
@@ -55,11 +82,16 @@ macro_rules
     `(mlir_op| $resName:mlir_op_operand = $opName ($x, $y) : ($t, $t) -> (i1) )
 
 declare_syntax_cat InstCombine.int_cast_op
+
 syntax "llvm.trunc" : MLIR.Pretty.overflow_int_cast_op
+
 syntax "llvm.zext" : MLIR.Pretty.nneg_op
+
 syntax "llvm.sext" : InstCombine.int_cast_op
 
-syntax mlir_op_operand " = " InstCombine.int_cast_op mlir_op_operand " : " mlir_type " to " mlir_type : mlir_op
+syntax mlir_op_operand " = " InstCombine.int_cast_op mlir_op_operand " : " mlir_type " to " mlir_type :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $resName:mlir_op_operand = $name:InstCombine.int_cast_op $x : $t to $t') => do
     let some opName := extractOpName name.raw
@@ -67,10 +99,13 @@ macro_rules
     `(mlir_op| $resName:mlir_op_operand = $opName ($x) : ($t) -> $t')
 
 open MLIR.AST
-syntax mlir_op_operand " = " "llvm.mlir.constant" "("   neg_num (" : " mlir_type)? ")"
+
+syntax mlir_op_operand " = " "llvm.mlir.constant" "(" neg_num (" : " mlir_type)? ")"
   (" : " mlir_type)? : mlir_op
-syntax mlir_op_operand " = " "llvm.mlir.constant" "("  ("$" noWs "{" term "}") ")"
-  (" : " mlir_type)?   : mlir_op
+
+syntax mlir_op_operand " = " "llvm.mlir.constant" "(" ("$" noWs "{" term "}") ")"
+  (" : " mlir_type)? : mlir_op
+
 macro_rules
   | `(mlir_op| $res:mlir_op_operand = llvm.mlir.constant( $x $[: $inner_type]?)
       $[: $outer_type]? ) => do
@@ -92,10 +127,14 @@ macro_rules
       `(mlir_op| $res:mlir_op_operand = "llvm.mlir.constant"() {value = $$($x) } : () -> ($t) )
 
 syntax mlir_op_operand " = " "llvm.mlir.constant" "(true)" (" : " mlir_type)? : mlir_op
+
 syntax mlir_op_operand " = " "llvm.mlir.constant" "(false)" (" : " mlir_type)? : mlir_op
+
 syntax mlir_op_operand " = " "llvm.mlir.constant" neg_num (" : " mlir_type)? : mlir_op
-syntax mlir_op_operand " = " "llvm.mlir.constant" ("$" noWs "{" term "}")
-  (" : " mlir_type)? : mlir_op
+
+syntax mlir_op_operand " = " "llvm.mlir.constant" ("$" noWs "{" term "}") (" : " mlir_type)? :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $res:mlir_op_operand = llvm.mlir.constant (true) $[: $t]?) =>
       `(mlir_op| $res:mlir_op_operand = llvm.mlir.constant (1 : i1) : i1)
@@ -106,8 +145,9 @@ macro_rules
   | `(mlir_op| $res:mlir_op_operand = llvm.mlir.constant ${ $x:term } $[: $t]?) =>
       `(mlir_op| $res:mlir_op_operand = llvm.mlir.constant($$($x) $[: $t]?) $[: $t]?)
 
+syntax mlir_op_operand " = " "llvm.icmp" str mlir_op_operand ", " mlir_op_operand (" : " mlir_type)? :
+  mlir_op
 
-syntax mlir_op_operand " = " "llvm.icmp" str mlir_op_operand ", " mlir_op_operand (" : " mlir_type)? : mlir_op
 macro_rules
   | `(mlir_op| $res:mlir_op_operand = llvm.icmp $p $x, $y $[: $t]?) => do
     let t ← t.getDM `(mlir_type| _)
@@ -125,7 +165,8 @@ macro_rules
       | _ => Macro.throwErrorAt p s!"unexpected predicate {p.getString}"
 
 syntax mlir_op_operand " = " "llvm.select" mlir_op_operand ", " mlir_op_operand ", " mlir_op_operand
-    (" : " mlir_type)? : mlir_op
+  (" : " mlir_type)? : mlir_op
+
 macro_rules
   | `(mlir_op| $res:mlir_op_operand = llvm.select $c, $x, $y $[: $t]?) => do
     let t ← t.getDM `(mlir_type| _)

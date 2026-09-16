@@ -28,201 +28,197 @@ open Lean.Parser
 open Lean.Parser.ParserState
 open Lean.PrettyPrinter
 open Lean.PrettyPrinter.Formatter
-
 open MLIR.AST
 
 namespace MLIR.EDSL
 
 -- | Custom parsers for balanced brackets
 inductive Bracket
-| Square -- []
-| Round -- ()
-| Curly -- {}
-| Angle -- <>
-deriving Inhabited, DecidableEq
+  | Square -- []
+  | Round -- ()
+  | Curly -- {}
+  | Angle -- <>
+  deriving Inhabited, DecidableEq
 
 instance : ToString Bracket where
-   toString :=
-    fun b =>
-     match b with
-     | .Square => "["
-     | .Round => "("
-     | .Curly => "{"
-     | .Angle => "<"
-
+  toString := fun b =>
+    match b with
+    | .Square => "["
+    | .Round => "("
+    | .Curly => "{"
+    | .Angle => "<"
 
 -- TODO: remove <Tab> from quail
-def isOpenBracket(c: Char): Option Bracket :=
-match c with
-| '(' => some .Round
-| '[' => some .Square
-| '{' => some .Curly
-| '<' => some .Angle
-| _ => none
+def isOpenBracket (c : Char) : Option Bracket :=
+  match c with
+  | '(' => some .Round
+  | '[' => some .Square
+  | '{' => some .Curly
+  | '<' => some .Angle
+  | _ => none
 
-def isCloseBracket(c: Char):Option Bracket :=
-match c with
-| ')' => some .Round
-| ']' => some .Square
-| '{' => some .Curly
-| '<' => some .Angle
-| _ => none
+def isCloseBracket (c : Char) : Option Bracket :=
+  match c with
+  | ')' => some .Round
+  | ']' => some .Square
+  | '{' => some .Curly
+  | '<' => some .Angle
+  | _ => none
 
 mutual
-
 -- 'a -> symbol
 -- `a -> antiquotation `(... ,(...))
-partial def consumeCloseBracket(c: Bracket)
-  (startPos: String.Pos.Raw)
-  (i: String.Pos.Raw)
-  (brackets: List Bracket)
-  (ctx: ParserContext)
-  (s: ParserState): ParserState := Id.run do
+partial def consumeCloseBracket (c : Bracket) (startPos : String.Pos.Raw) (i : String.Pos.Raw)
+    (brackets : List Bracket) (ctx : ParserContext) (s : ParserState) : ParserState :=
+  Id.run do
     match brackets with
-    | b::bs =>
-      if b == c
-      then
-        if bs == []
-        then
+    | b :: bs =>
+      if b == c then
+        if bs == [] then
           let parser_fn := Lean.Parser.mkNodeToken `balanced_brackets startPos
           parser_fn ctx (s.setPos (ctx.next i)) -- consume the input here.
-        else balancedBracketsFnAux startPos (ctx.next i) bs ctx s
-      else s.mkError $ "| found Opened `" ++ toString b ++ "` expected to close at `" ++
-      toString c ++ "`"
-    | _ => s.mkError $ "| found Closed `" ++ toString c ++ "`, but have no opened brackets on stack"
-
-
-partial def balancedBracketsFnAux (startPos: String.Pos.Raw)
-  (i: String.Pos.Raw)
-  (bs: List Bracket) (ctx: ParserContext) (s: ParserState): ParserState :=
-  if ctx.atEnd i
-  then s.mkError "found EOF"
+        else
+          balancedBracketsFnAux startPos (ctx.next i) bs ctx s
+      else
+        s.mkError $
+            "| found Opened `" ++ toString b ++ "` expected to close at `" ++ toString c ++ "`"
+    | _ =>
+      s.mkError $ "| found Closed `" ++ toString c ++ "`, but have no opened brackets on stack"
+partial def balancedBracketsFnAux (startPos : String.Pos.Raw) (i : String.Pos.Raw)
+    (bs : List Bracket) (ctx : ParserContext) (s : ParserState) : ParserState :=
+  if ctx.atEnd i then s.mkError "found EOF"
   else
-  match ctx.get i with
-  -- opening parens
-  | '(' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Round::bs) ctx s
-  | '[' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Square::bs) ctx s
-  | '<' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Angle::bs) ctx s
-  | '{' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Curly::bs) ctx s
-  -- closing parens
-  | ')' => consumeCloseBracket Bracket.Round startPos i bs ctx s
-  | ']' => consumeCloseBracket Bracket.Square startPos i bs ctx s
-  | '>' => consumeCloseBracket Bracket.Angle startPos i bs ctx s
-  | '}' => consumeCloseBracket Bracket.Curly startPos i bs ctx s
-  | _c => balancedBracketsFnAux startPos (ctx.next i) bs ctx s
-
+    match ctx.get i with
+    -- opening parens
+    | '(' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Round :: bs) ctx s
+    | '[' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Square :: bs) ctx s
+    | '<' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Angle :: bs) ctx s
+    | '{' => balancedBracketsFnAux startPos (ctx.next i) (Bracket.Curly :: bs) ctx s
+    -- closing parens
+    | ')' => consumeCloseBracket Bracket.Round startPos i bs ctx s
+    | ']' => consumeCloseBracket Bracket.Square startPos i bs ctx s
+    | '>' => consumeCloseBracket Bracket.Angle startPos i bs ctx s
+    | '}' => consumeCloseBracket Bracket.Curly startPos i bs ctx s
+    | _c => balancedBracketsFnAux startPos (ctx.next i) bs ctx s
 end
 
 -- | TODO: filter tab complete by type?
-def balancedBracketsFnEntry (ctx: ParserContext) (s: ParserState): ParserState :=
-  if ctx.get s.pos == '<'
-  then balancedBracketsFnAux
-   (startPos := s.pos)
-   (i := s.pos)
-   (bs := [])
-   ctx s
+def balancedBracketsFnEntry (ctx : ParserContext) (s : ParserState) : ParserState :=
+  if ctx.get s.pos == '<' then
+    balancedBracketsFnAux (startPos := s.pos) (i := s.pos) (bs := []) ctx s
   else s.mkError "Expected '<'"
-
 
 @[inline]
 def balancedBrackets : Parser :=
-   withAntiquot (mkAntiquot "balancedBrackets" `balanced_brackets) {
-       fn := balancedBracketsFnEntry,
-       info := mkAtomicInfo "balancedBrackets" : Parser
-    }
+  withAntiquot (mkAntiquot "balancedBrackets" `balanced_brackets)
+    { fn := balancedBracketsFnEntry, info := mkAtomicInfo "balancedBrackets" : Parser }
 
 -- Code stolen from test/WebServer/lean
 @[combinator_formatter MLIR.EDSL.balancedBrackets]
-def MLIR.EDSL.balancedBrackets.formatter : Formatter := pure ()
+def MLIR.EDSL.balancedBrackets.formatter : Formatter :=
+  pure ()
 
 @[combinator_parenthesizer MLIR.EDSL.balancedBrackets]
-def MLIR.EDSL.balancedBracketsParenthesizer : Parenthesizer := pure ()
-
+def MLIR.EDSL.balancedBracketsParenthesizer : Parenthesizer :=
+  pure ()
 
 macro "[balanced_brackets|" xs:balancedBrackets "]" : term => do
   match xs.raw[0] with
-  | .atom _ val => return (Lean.quote val: TSyntax `str)
-  | _  => Macro.throwErrorAt xs "expected balanced bracts to have atom"
+  | .atom _ val =>
+    return (Lean.quote val : TSyntax `str)
+  | _ =>
+    Macro.throwErrorAt xs "expected balanced bracts to have atom"
 
 section Test
 
 private def testBalancedBrackets : String := [balanced_brackets| < { xxasdasd } > ]
+
 /--
 info: private def MLIR.EDSL.testBalancedBrackets : String := "< { xxasdasd } >"
 -/
-#guard_msgs in #print testBalancedBrackets
+#guard_msgs in
+#print testBalancedBrackets
 
 end Test
 
-
 -- | positive and negative numbers, hex, octal
 declare_syntax_cat mlir_int
-syntax numLit: mlir_int
 
-def IntToString (i: Int): String := i.repr
+syntax numLit : mlir_int
 
-instance : Quote Int := ⟨fun n => Syntax.mkNumLit <| n.repr⟩
+def IntToString (i : Int) : String :=
+  i.repr
 
-def quoteMList (k: List (TSyntax `term)) (ty: TSyntax `term): MacroM (TSyntax `term) :=
+instance : Quote Int :=
+  ⟨fun n => Syntax.mkNumLit <| n.repr⟩
+
+def quoteMList (k : List (TSyntax `term)) (ty : TSyntax `term) : MacroM (TSyntax `term) :=
   match k with
   | [] => `(@List.nil $ty)
-  | (k::ks) => do
-      let sks <- quoteMList ks ty
-      `($k :: $sks)
-
+  | (k :: ks) => do
+    let sks <- quoteMList ks ty
+    `($k :: $sks)
 
 -- AFFINE SYTAX
 -- ============
 
 declare_syntax_cat affine_expr
+
 declare_syntax_cat affine_tuple
+
 declare_syntax_cat affine_map
 
-
 syntax ident : affine_expr
+
 syntax "(" sepBy(affine_expr, ",") ")" : affine_tuple
+
 syntax "affine_map<" affine_tuple "->" affine_tuple ">" : affine_map
 
 syntax "[affine_expr|" affine_expr "]" : term
+
 syntax "[affine_tuple|" affine_tuple "]" : term
+
 syntax "[affine_map|" affine_map "]" : term
+
 -- syntax "[affine_map|" affine_map "]" : term
 
 macro_rules
-| `([affine_expr| $xraw:ident ]) => do
-  let xstr := xraw.getId.toString
-  `(AffineExpr.Var $(Lean.quote xstr))
+  | `([affine_expr|$xraw:ident]) => do
+    let xstr := xraw.getId.toString
+    `(AffineExpr.Var $(Lean.quote xstr))
 
 macro_rules
-| `([affine_tuple| ( $xs,* ) ]) => do
-   let initList  <- `(@List.nil MLIR.AST.AffineExpr)
-   let argsList <- xs.getElems.foldrM
-    (init := initList)
-    (fun x xs => `([affine_expr| $x] :: $xs))
-   `(AffineTuple.mk $argsList)
-
+  | `([affine_tuple|($xs,*)]) => do
+    let initList <- `(@List.nil MLIR.AST.AffineExpr)
+    let argsList <- xs.getElems.foldrM (init := initList) (fun x xs => `([affine_expr|$x] :: $xs))
+    `(AffineTuple.mk $argsList)
 
 macro_rules
-| `([affine_map| affine_map< $xs:affine_tuple -> $ys:affine_tuple >]) => do
-  let xs' <- `([affine_tuple| $xs])
-  let ys' <- `([affine_tuple| $ys])
-  `(AffineMap.mk $xs' $ys' )
-
+  | `([affine_map|affine_map<$xs:affine_tuple->$ys:affine_tuple>]) => do
+    let xs' <- `([affine_tuple|$xs])
+    let ys' <- `([affine_tuple|$ys])
+    `(AffineMap.mk $xs' $ys')
 
 -- EDSL
 -- ====
 
 declare_syntax_cat mlir_bb
+
 declare_syntax_cat mlir_region
+
 declare_syntax_cat mlir_op
+
 declare_syntax_cat mlir_op_args
+
 declare_syntax_cat mlir_op_successor_args
+
 declare_syntax_cat mlir_op_type
+
 declare_syntax_cat mlir_op_operand
+
 declare_syntax_cat mlir_ops
+
 declare_syntax_cat mlir_type
-
-
 
 -- EDSL OPERANDS
 -- ==============
@@ -232,6 +228,7 @@ syntax "%" numLit : mlir_op_operand
 syntax "%" ident : mlir_op_operand
 
 syntax "[mlir_op_operand|" mlir_op_operand "]" : term
+
 macro_rules
   | `([mlir_op_operand| $$($q)]) => return q
   | `([mlir_op_operand| % $x:ident]) => `(SSAVal.name $(Lean.quote (x.getId.toString)))
@@ -239,29 +236,37 @@ macro_rules
 
 section Test
 
-private def operand0 := [mlir_op_operand| %x]
+private def operand0 :=
+  [mlir_op_operand|%x]
+
 /--
 info: private def MLIR.EDSL.operand0 : SSAVal :=
 SSAVal.name "x"
 -/
-#guard_msgs in #print operand0
+#guard_msgs in
+#print operand0
 
-private def operand1 := [mlir_op_operand| %x]
+private def operand1 :=
+  [mlir_op_operand|%x]
+
 /--
 info: private def MLIR.EDSL.operand1 : SSAVal :=
 SSAVal.name "x"
 -/
-#guard_msgs in #print operand1
+#guard_msgs in
+#print operand1
 
-private def operand2 := [mlir_op_operand| %0]
+private def operand2 :=
+  [mlir_op_operand|%0]
+
 /--
 info: private def MLIR.EDSL.operand2 : SSAVal :=
 SSAVal.name (IntToString 0)
 -/
-#guard_msgs in #print operand2
+#guard_msgs in
+#print operand2
 
 end Test
-
 
 -- EDSL OP-SUCCESSOR-ARGS
 -- =================
@@ -290,7 +295,9 @@ def getSuffixId : TSyntax ``mlir_suffix_id → String
   | _ => "" -- Should never happen, since `mlir_suffix_id` is a closed syntax definition
 
 declare_syntax_cat mlir_op_successor_arg -- bb argument
+
 syntax "^" mlir_suffix_id : mlir_op_successor_arg -- bb argument with no operands
+
 -- syntax "^" ident ":" "(" mlir_op_operand","* ")" : mlir_op_successor_arg
 
 /-- The block name a successor refers to, e.g. `"bb9"` for `^bb9`. -/
@@ -301,30 +308,33 @@ def getSuccessorName : TSyntax `mlir_op_successor_arg → String
 syntax "[mlir_op_successor_arg|" mlir_op_successor_arg "]" : term
 
 macro_rules
-  | `([mlir_op_successor_arg| ^ $x:mlir_suffix_id  ]) =>
-      `(BBName.mk $(Lean.quote (getSuffixId x)))
+  | `([mlir_op_successor_arg|^$x:mlir_suffix_id]) => `(BBName.mk $(Lean.quote (getSuffixId x)))
 
 section Test
 
-private def succ0 : BBName := ([mlir_op_successor_arg| ^bb])
+private def succ0 : BBName :=
+  ([mlir_op_successor_arg|^bb])
+
 /--
 info: private def MLIR.EDSL.succ0 : BBName :=
 BBName.mk "bb"
 -/
-#guard_msgs in #print succ0
+#guard_msgs in
+#print succ0
 
 end Test
-
 
 -- EDSL MLIR TYPES
 -- ===============
 
-
 syntax "[mlir_type|" mlir_type "]" : term
 
 syntax "!" str : mlir_type
+
 syntax "!" ident : mlir_type
-syntax ident: mlir_type
+
+syntax ident : mlir_type
+
 syntax "_" : mlir_type
 
 macro_rules
@@ -353,35 +363,50 @@ macro_rules
 
 section Test
 
-private def tyIndex : MLIRTy := [mlir_type| index]
+private def tyIndex : MLIRTy :=
+  [mlir_type|index]
+
 /--
 info: MLIR.AST.MLIRType.index
 -/
-#guard_msgs in #eval tyIndex
+#guard_msgs in
+#eval tyIndex
 
-private def tyUser : MLIRTy := [mlir_type| !"lz.int"]
+private def tyUser : MLIRTy :=
+  [mlir_type|!"lz.int"]
+
 /--
 info: MLIR.AST.MLIRType.undefined "lz.int"
 -/
-#guard_msgs in #eval tyUser
+#guard_msgs in
+#eval tyUser
 
-private def tyUserIdent : MLIRTy := [mlir_type| !shape.value]
+private def tyUserIdent : MLIRTy :=
+  [mlir_type|!shape.value]
+
 /--
 info: MLIR.AST.MLIRType.undefined "shape.value"
 -/
-#guard_msgs in #eval tyUserIdent
+#guard_msgs in
+#eval tyUserIdent
 
-private def tyi32NoGap : MLIRTy := [mlir_type| i32]
+private def tyi32NoGap : MLIRTy :=
+  [mlir_type|i32]
+
 /--
 info: MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)
 -/
-#guard_msgs in #eval tyi32NoGap
+#guard_msgs in
+#eval tyi32NoGap
 
-private def tyf32NoGap : MLIRTy := [mlir_type| f32]
+private def tyf32NoGap : MLIRTy :=
+  [mlir_type|f32]
+
 /--
 info: MLIR.AST.MLIRType.float 32
 -/
-#guard_msgs in #eval tyf32NoGap
+#guard_msgs in
+#eval tyf32NoGap
 
 -- Uses dialect coercion empty → builtin
 --example : MLIRType builtin := [mlir_type| i32]
@@ -397,10 +422,11 @@ end Test
 -- static-dim-list ::= decimal-literal (`x` decimal-literal)*
 -- | Encoding lookahead with notFollowedBy
 declare_syntax_cat static_dim_list
+
 syntax sepBy(numLit, "×", "×" notFollowedBy(mlir_type <|> "[")) : static_dim_list
 
-
 syntax "[static_dim_list|" static_dim_list "]" : term
+
 macro_rules
 | `([static_dim_list| $[ $ns:num ]×* ]) => do
       quoteMList (ns.toList.map (⟨·.raw⟩)) (<- `(Nat))
@@ -430,23 +456,20 @@ private structure VectorDim where
 /-- Consume next interger, return in pair with remaining characters. -/
 private def takeNat (cs : List Char) : Option (Nat × List Char) :=
   let ds := cs.takeWhile Char.isDigit
-  if ds.isEmpty then none
-  else some ((String.ofList ds).toNat!,
-             cs.dropWhile Char.isDigit)
+  if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
 
 /-- Consume next dimension (scalable or not), return with remaining
 characters. -/
 private def takeDim : List Char → Option (VectorDim × List Char)
   | '[' :: cs =>
-      match takeNat cs with
-      | some (n, ']' :: rest) => some (⟨n, true⟩, rest)
-      | _ => none
+    match takeNat cs with
+    | some (n, ']' :: rest) => some (⟨n, true⟩, rest)
+    | _ => none
   | cs => (takeNat cs).map fun (n, rest) => (⟨n, false⟩, rest)
 
 /-- Consume `dim (`x` dim)* `x`` , stopping as soon as the input no longer starts
 with a dimension followed by an `x`. The remainder is the element type. -/
-private partial def takeDims (cs : List Char) (acc : List VectorDim) :
-    List VectorDim × List Char :=
+private partial def takeDims (cs : List Char) (acc : List VectorDim) : List VectorDim × List Char :=
   match takeDim cs with
   | some (d, 'x' :: rest) => takeDims rest (d :: acc)
   | _ => (acc.reverse, cs)
@@ -528,52 +551,72 @@ macro_rules
     `(MLIRType.undefined $(Lean.quote (x.getId.toString ++ val)))
 
 syntax "tensor1d" : mlir_type
+
 macro_rules
-| `([mlir_type| tensor1d ]) => do
+  | `([mlir_type|tensor1d]) => do
     `(MLIRType.tensor1d)
 
 syntax "tensor2d" : mlir_type
+
 macro_rules
-| `([mlir_type| tensor2d ]) => do
+  | `([mlir_type|tensor2d]) => do
     `(MLIRType.tensor2d)
 
 section Test
 
-private def staticDimList0 : List Nat := [static_dim_list| 1]
-/-- info: [1] -/
-#guard_msgs in #reduce staticDimList0
+private def staticDimList0 : List Nat :=
+  [static_dim_list|1]
 
-private def staticDimList1 : List Nat := [static_dim_list| 1 × 2]
+/-- info: [1] -/
+#guard_msgs in
+#reducestaticDimList0
+
+private def staticDimList1 : List Nat :=
+  [static_dim_list|1×2]
+
 /-- info: [1, 2] -/
-#guard_msgs in #reduce staticDimList1
+#guard_msgs in
+#reducestaticDimList1
 
 -- 0-D vector: no dimensions at all
 private def vectorTy0 : MLIRTy := [mlir_type| vector<i32>]
+
 /-- info: MLIR.AST.MLIRType.vector [] [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
-#guard_msgs in #eval vectorTy0
+#guard_msgs in
+#eval vectorTy0
 
 private def vectorTy1 : MLIRTy := [mlir_type| vector<2xi32>]
+
 /-- info: MLIR.AST.MLIRType.vector [2] [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
-#guard_msgs in #eval vectorTy1
+#guard_msgs in
+#eval vectorTy1
 
 -- fixed dimensions followed by a scalable one
 private def vectorTy2 : MLIRTy := [mlir_type| vector<2x3x[4]xi32>]
+
 /-- info: MLIR.AST.MLIRType.vector [2, 3] [4] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
-#guard_msgs in #eval vectorTy2
+#guard_msgs in
+#eval vectorTy2
 
 -- purely scalable, as SVE / RVV code tends to be written
 private def vectorTy3 : MLIRTy := [mlir_type| vector<[4]xf32>]
+
 /-- info: MLIR.AST.MLIRType.vector [] [4] (MLIR.AST.MLIRType.float 32) -/
-#guard_msgs in #eval vectorTy3
+#guard_msgs in
+#eval vectorTy3
 
 private def vectorTy4 : MLIRTy := [mlir_type| vector<8xindex>]
+
 /-- info: MLIR.AST.MLIRType.vector [8] [] (MLIR.AST.MLIRType.index) -/
-#guard_msgs in #eval vectorTy4
+#guard_msgs in
+#eval vectorTy4
 
 -- dialect types are accepted as element types
 private def vectorTy5 : MLIRTy := [mlir_type| vector<4x!shape.value>]
+
 /-- info: MLIR.AST.MLIRType.vector [4] [] (MLIR.AST.MLIRType.undefined "shape.value") -/
-#guard_msgs in #eval vectorTy5
+#guard_msgs in
+#eval vectorTy5
 
 -- `MLIRType.vector` keeps fixed and scalable dimensions in separate lists, so a
 -- scalable dimension that is not trailing has to be rejected.
@@ -585,21 +628,29 @@ private def vectorTy5 : MLIRTy := [mlir_type| vector<4x!shape.value>]
 
 -- 0-D tensor: no dimensions at all
 private def tensorTy0 : MLIRTy := [mlir_type| tensor<i32>]
+
 /-- info: MLIR.AST.MLIRType.tensor [] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 32)) -/
-#guard_msgs in #eval tensorTy0
+#guard_msgs in
+#eval tensorTy0
 
 private def tensorTy1 : MLIRTy := [mlir_type| tensor<5xi64>]
+
 /-- info: MLIR.AST.MLIRType.tensor [5] (MLIR.AST.MLIRType.int (MLIR.AST.Signedness.Signless) (ConcreteOrMVar.concrete 64)) -/
-#guard_msgs in #eval tensorTy1
+#guard_msgs in
+#eval tensorTy1
 
 private def tensorTy2 : MLIRTy := [mlir_type| tensor<2x3xf32>]
+
 /-- info: MLIR.AST.MLIRType.tensor [2, 3] (MLIR.AST.MLIRType.float 32) -/
-#guard_msgs in #eval tensorTy2
+#guard_msgs in
+#eval tensorTy2
 
 -- dialect types are accepted as element types, as for `vector`
 private def tensorTy3 : MLIRTy := [mlir_type| tensor<4x!shape.value>]
+
 /-- info: MLIR.AST.MLIRType.tensor [4] (MLIR.AST.MLIRType.undefined "shape.value") -/
-#guard_msgs in #eval tensorTy3
+#guard_msgs in
+#eval tensorTy3
 
 /-- error: tensor type '<?x4xf32>' is not statically shaped; `MLIRType.tensor` represents only ranked tensors with constant dimensions -/
 #guard_msgs in #check ([mlir_type| tensor<?x4xf32>] : MLIRTy)
@@ -613,51 +664,47 @@ private def tensorTy3 : MLIRTy := [mlir_type| tensor<4x!shape.value>]
 /-- error: tensor type is missing an element type -/
 #guard_msgs in #check ([mlir_type| tensor<4x>] : MLIRTy)
 
-private def tensor1dTest : MLIRTy := [mlir_type| tensor1d]
+private def tensor1dTest : MLIRTy :=
+  [mlir_type|tensor1d]
 
-private def tensor2dTest : MLIRTy := [mlir_type| tensor2d]
+private def tensor2dTest : MLIRTy :=
+  [mlir_type|tensor2d]
 
 end Test
 
-
-
 -- EDSL MLIR USER ATTRIBUTES
 -- =========================
-
 
 -- EDSL MLIR BASIC BLOCK OPERANDS
 -- ==============================
 
 declare_syntax_cat mlir_bb_operand
+
 syntax mlir_op_operand ":" mlir_type : mlir_bb_operand
 
 syntax "[mlir_bb_operand|" mlir_bb_operand "]" : term
 
 macro_rules
-| `([mlir_bb_operand| $name:mlir_op_operand : $ty:mlir_type ]) =>
-     `( ([mlir_op_operand| $name], [mlir_type|$ty]) )
-
-
+  | `([mlir_bb_operand|$name:mlir_op_operand:$ty:mlir_type]) =>
+    `(([mlir_op_operand|$name], [mlir_type|$ty]))
 
 -- EDSL MLIR BASIC BLOCKS
 -- ======================
 
-
-
 syntax (mlir_op)* : mlir_ops
 
 syntax "[mlir_op|" mlir_op "]" : term
+
 syntax "[mlir_ops|" mlir_ops "]" : term
 
 macro_rules
-| `([mlir_ops| $[ $ops ]*  ]) => do
-      let initList: TSyntax `term <- `(@List.nil (MLIR.AST.Op _))
-      let l ← ops.foldrM (init := initList)
-        fun x (xs: TSyntax `term) => `([mlir_op|$x] :: $xs)
-      return l
+  | `([mlir_ops|$[$ops]*]) => do
+    let initList : TSyntax `term <- `(@List.nil (MLIR.AST.Op _))
+    let l ← ops.foldrM (init := initList) fun x (xs : TSyntax `term) => `([mlir_op|$x] :: $xs)
+    return l
 
 macro_rules
-  | `([mlir_ops| $$($q)]) => `(coe $q)
+  | `([mlir_ops|$$($q)]) => `(coe $q)
 
 /-
 Reference from the MLIR standard
@@ -677,7 +724,6 @@ value-use ::= value-id (`#` decimal-literal)?
 value-use-list ::= value-use (`,` value-use)*
 -/
 
-
 /-! ### MLIR `//` line comments
 
 `mlir-opt --mlir-print-op-generic` decorates block headers with predecessor
@@ -686,29 +732,31 @@ comments (`^bb1:  // pred: ^bb0`). Lean's whitespace function does not consume
 discarded by the macros. -/
 
 /-- Node kind for a `//`-to-end-of-line MLIR comment. -/
-abbrev mlirCommentKind : SyntaxNodeKind := `MLIR.EDSL.mlirComment
+abbrev mlirCommentKind : SyntaxNodeKind :=
+  `MLIR.EDSL.mlirComment
 
 open Lean.Parser in
 /-- Consume `//` and everything up to (excluding) the next newline. -/
 def mlirCommentFn : ParserFn := fun c s =>
   let i := s.pos
   if h : c.atEnd i then s.mkEOIError
-  else if c.get' i h == '/' then
-    let i₂ := c.next' i h
-    if h₂ : c.atEnd i₂ then s.mkErrorAt "'//' line comment" i
-    else if c.get' i₂ h₂ == '/' then
-      let s := s.setPos (c.next' i₂ h₂)
-      let s := takeUntilFn (· == '\n') c s
-      mkNodeToken mlirCommentKind i true c s
+  else
+    if c.get' i h == '/' then
+      let i₂ := c.next' i h
+      if h₂ : c.atEnd i₂ then s.mkErrorAt "'//' line comment" i
+      else
+        if c.get' i₂ h₂ == '/' then
+          let s := s.setPos (c.next' i₂ h₂)
+          let s := takeUntilFn (· == '\n') c s
+          mkNodeToken mlirCommentKind i true c s
+        else s.mkErrorAt "'//' line comment" i
     else s.mkErrorAt "'//' line comment" i
-  else s.mkErrorAt "'//' line comment" i
 
 open Lean.Parser in
 @[inherit_doc mlirCommentFn]
-def mlirCommentNoAntiquot : Parser := {
-  fn := mlirCommentFn
-  info := mkAtomicInfo "mlirComment"
-}
+def mlirCommentNoAntiquot : Parser :=
+  { fn := mlirCommentFn
+    info := mkAtomicInfo "mlirComment" }
 
 open Lean.Parser in
 @[inherit_doc mlirCommentFn]
@@ -716,19 +764,24 @@ def mlirComment : Parser :=
   withAntiquot (mkAntiquot "mlirComment" mlirCommentKind) mlirCommentNoAntiquot
 
 @[combinator_formatter mlirCommentNoAntiquot]
-def mlirCommentNoAntiquot.formatter := Lean.PrettyPrinter.Formatter.visitAtom mlirCommentKind
+def mlirCommentNoAntiquot.formatter :=
+  Lean.PrettyPrinter.Formatter.visitAtom mlirCommentKind
+
 @[combinator_parenthesizer mlirCommentNoAntiquot]
-def mlirCommentNoAntiquot.parenthesizer := Lean.PrettyPrinter.Parenthesizer.visitToken
+def mlirCommentNoAntiquot.parenthesizer :=
+  Lean.PrettyPrinter.Parenthesizer.visitToken
 
 -- A basic block: `^name(args...):`, an optional trailing comment, then ops.
-syntax "^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")?
-    ":" (mlirComment)? mlir_ops : mlir_bb
+syntax "^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")? ":" (mlirComment)? mlir_ops :
+  mlir_bb
 
 -- A region is either one or more labeled blocks (the first is the entry
 -- block), or a single headerless op list.
 syntax "{" mlir_bb+ "}" : mlir_region
+
 syntax "{" mlir_ops "}" : mlir_region
-syntax "[mlir_region|" mlir_region "]": term
+
+syntax "[mlir_region|" mlir_region "]" : term
 
 /-- Elaborate one `mlir_bb` to `(block name, args term, ops term)`. -/
 def elabMlirBb (blk : TSyntax `mlir_bb) :
@@ -762,21 +815,28 @@ macro_rules
 | `([mlir_region| $q:mlir_region ]) => `(mlir_region| $q)
 
 macro_rules
-| `([mlir_region| $$($q) ]) => return q
+  | `([mlir_region|$$($q)]) => return q
 
 -- MLIR ATTRIBUTE VALUE
 -- ====================
 
 -- | TODO: consider renaming this to mlir_attr
 declare_syntax_cat mlir_attr_val
+
 declare_syntax_cat mlir_attr_val_symbol
+
 syntax "@" ident : mlir_attr_val_symbol
+
 syntax "@" str : mlir_attr_val_symbol
+
 syntax "#" ident : mlir_attr_val -- alias
+
 syntax "#" strLit : mlir_attr_val -- alias
 
 declare_syntax_cat dialect_attribute_contents
+
 syntax mlir_attr_val : dialect_attribute_contents
+
 /--
 Following https://mlir.llvm.org/docs/LangRef/, we define a `dialect-attribute`,
 which is a particular case of an `mlir-attr-val` that is namespaced to a particular dialect
@@ -799,15 +859,19 @@ dialect-attribute-contents ::= dialect-attribute-body
 ```
 -/
 syntax "(" dialect_attribute_contents + ")" : dialect_attribute_contents
-syntax "[" dialect_attribute_contents + "]": dialect_attribute_contents
-syntax "{" dialect_attribute_contents + "}": dialect_attribute_contents
-syntax "#" ident "<" mlir_attr_val,*  ">" : mlir_attr_val
+
+syntax "[" dialect_attribute_contents + "]" : dialect_attribute_contents
+
+syntax "{" dialect_attribute_contents + "}" : dialect_attribute_contents
+
+syntax "#" ident "<" mlir_attr_val,* ">" : mlir_attr_val
+
 -- If I un-comment this line, it causes an error. I don't know why. Oh well.
 -- syntax "#" ident "<" ident ">" : mlir_attr_val
 -- syntax "#" ident "<" strLit ">" : mlir_attr_val
 syntax "#opaque<" ident "," strLit ">" ":" mlir_type : mlir_attr_val -- opaqueElementsAttr
-syntax mlir_attr_val_symbol "::" mlir_attr_val_symbol : mlir_attr_val_symbol
 
+syntax mlir_attr_val_symbol "::" mlir_attr_val_symbol : mlir_attr_val_symbol
 
 -- syntax "#" ident "." ident "<" balanced_parens ">" : mlir_attr_val -- generic user attributes
 declare_syntax_cat balanced_parens
@@ -816,36 +880,47 @@ declare_syntax_cat balanced_parens
 syntax neg_num := "-"? num
 
 syntax str : mlir_attr_val
+
 syntax mlir_type : mlir_attr_val
+
 syntax affine_map : mlir_attr_val
+
 syntax mlir_attr_val_symbol : mlir_attr_val
+
 syntax neg_num (":" mlir_type)? : mlir_attr_val
+
 syntax scientificLit (":" mlir_type)? : mlir_attr_val
+
 syntax ident : mlir_attr_val
 
 syntax "[" sepBy(mlir_attr_val, ",") "]" : mlir_attr_val
+
 syntax "[mlir_attr_val|" mlir_attr_val "]" : term
+
 syntax "[mlir_attr_val_symbol|" mlir_attr_val_symbol "]" : term
 
 /-- DenseIntElementsAttr -/
 syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
+
 macro_rules
-| `([mlir_attr_val| dense< $v:mlir_attr_val > : $t:mlir_type]) =>
-    `(AttrValue.dense [mlir_attr_val| $v] [mlir_type| $t])
+  | `([mlir_attr_val|dense<$v:mlir_attr_val>:$t:mlir_type]) =>
+    `(AttrValue.dense [mlir_attr_val|$v] [mlir_type|$t])
 
 syntax "array<" mlir_type ":" sepBy(mlir_attr_val, ",") ">" : mlir_attr_val
+
 macro_rules
-| `([mlir_attr_val| array< $t:mlir_type : $xs ,* >]) => do
+  | `([mlir_attr_val|array<$t:mlir_type:$xs ,*>]) => do
     -- NOTE: fold from the right so the resulting list preserves source order;
     -- a left fold with `::` would reverse it (which e.g. flips shufflevector
     -- masks).
     let initList : TSyntax `term <- `([])
-    let vals: TSyntax `term <- xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs: TSyntax `term) =>
-      `([mlir_attr_val| $x] :: $xs)
-    `(AttrValue.array [mlir_type| $t] $vals)
+    let vals : TSyntax `term <-
+      xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs : TSyntax `term) =>
+          `([mlir_attr_val|$x] :: $xs)
+    `(AttrValue.array [mlir_type|$t] $vals)
 
 macro_rules
-| `([mlir_attr_val| $$($x) ]) => `($x)
+  | `([mlir_attr_val|$$($x)]) => `($x)
 
 /-- Convert a possibly negated numeral into a term representing the same value -/
 def negNumToTerm : TSyntax ``neg_num → MacroM Term
@@ -854,19 +929,20 @@ def negNumToTerm : TSyntax ``neg_num → MacroM Term
   | _ => Macro.throwUnsupported
 
 macro_rules
-| `([mlir_attr_val| $x:neg_num ]) => `([mlir_attr_val| $x:neg_num : i64 ])
-| `([mlir_attr_val| $x:neg_num : $t:mlir_type]) => do
+  | `([mlir_attr_val|$x:neg_num]) => `([mlir_attr_val|$x:neg_num:i64])
+  | `([mlir_attr_val|$x:neg_num:$t:mlir_type]) => do
     let x ← negNumToTerm x
-    `(AttrValue.int $x [mlir_type| $t])
+    `(AttrValue.int $x [mlir_type|$t])
 
 macro_rules
-| `([mlir_attr_val| # $dialect:ident <$xs ,* > ]) => do
-  -- NOTE: fold from the right so the resulting list preserves source order,
-  -- as for `array<…>` above.
-  let initList : TSyntax `term  <- `([])
-  let vals : TSyntax `term <- xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs : TSyntax `term) =>
-    `([mlir_attr_val| #$dialect<$x>] :: $xs)
-  `(AttrValue.list $vals)
+  | `([mlir_attr_val|#$dialect:ident<$xs ,*>]) => do
+    -- NOTE: fold from the right so the resulting list preserves source order,
+    -- as for `array<…>` above.
+    let initList : TSyntax `term <- `([])
+    let vals : TSyntax `term <-
+      xs.getElems.foldrM (init := initList) fun (x : TSyntax `mlir_attr_val) (xs : TSyntax `term) =>
+          `([mlir_attr_val|#$dialect<$x>] :: $xs)
+    `(AttrValue.list $vals)
 
 macro_rules
 | `([mlir_attr_val| # $dialect:ident < $opaqueData:str > ]) => do
@@ -876,6 +952,7 @@ macro_rules
   let d := Lean.quote dialect.getId.eraseMacroScopes.toString
   let g : TSyntax `str := Lean.Syntax.mkStrLit (toString opaqueData.getId)
   `(AttrValue.opaque_ $d $g)
+
 macro_rules
 | `([mlir_attr_val| #opaque< $dialect:ident, $opaqueData:str> : $t:mlir_type ]) => do
   let dialect := Lean.quote dialect.getId.eraseMacroScopes.toString
@@ -894,16 +971,14 @@ macro_rules
   | `([mlir_attr_val| $ty:mlir_type]) => `(AttrValue.type [mlir_type| $ty])
 
 macro_rules
-  | `([mlir_attr_val| $a:affine_map]) =>
-      `(AttrValue.affine [affine_map| $a])
+  | `([mlir_attr_val|$a:affine_map]) => `(AttrValue.affine [affine_map|$a])
 
 macro_rules
 | `([mlir_attr_val_symbol| @ $x:str ]) =>
       `(AttrValue.symbol $x)
 
 macro_rules
-| `([mlir_attr_val_symbol| @ $x:ident ]) =>
-      `(AttrValue.symbol $(Lean.quote x.getId.toString))
+  | `([mlir_attr_val_symbol|@$x:ident]) => `(AttrValue.symbol $(Lean.quote x.getId.toString))
 
 macro_rules
   | `([mlir_attr_val_symbol| $x:mlir_attr_val_symbol :: $y:mlir_attr_val_symbol ]) =>
@@ -914,77 +989,117 @@ macro_rules
   | `([mlir_attr_val| $x:scientific : $t:mlir_type]) => `(AttrValue.float $(⟨x⟩) [mlir_type| $t])
 
 macro_rules
-  | `([mlir_attr_val| # $a:ident]) =>
-      `(AttrValue.alias $(Lean.quote a.getId.toString))
+  | `([mlir_attr_val|#$a:ident]) => `(AttrValue.alias $(Lean.quote a.getId.toString))
 
 section Test
 
-private def attrVal0Str : AttrVal := [mlir_attr_val| "foo"]
+private def attrVal0Str : AttrVal :=
+  [mlir_attr_val|"foo"]
+
 /-- info: AttrValue.str "foo" -/
-#guard_msgs in #reduce attrVal0Str
+#guard_msgs in
+#reduceattrVal0Str
 
 -- Uses dialect coercion: empty → builtin
-example : AttrVal := [mlir_attr_val| "foo"]
+example : AttrVal :=
+  [mlir_attr_val|"foo"]
+
 -- Uses dialect coercion: empty → empty + builtin
 --example : AttrValue (Dialect.empty + builtin) := [mlir_attr_val| "foo"]
 -- Uses dialect coercion after building an AttrValue Dialect.empty
 
-private def attrVal1bTy : AttrVal := [mlir_attr_val| i32]
+private def attrVal1bTy : AttrVal :=
+  [mlir_attr_val|i32]
+
 /-- info: AttrValue.type (MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32)) -/
-#guard_msgs in #reduce attrVal1bTy
+#guard_msgs in
+#reduceattrVal1bTy
 
-private def attrVal2List : AttrVal := [mlir_attr_val| ["foo", "foo"] ]
+private def attrVal2List : AttrVal :=
+  [mlir_attr_val|["foo","foo"]]
+
 /-- info: AttrValue.list [AttrValue.str "foo", AttrValue.str "foo"] -/
-#guard_msgs in #reduce attrVal2List
+#guard_msgs in
+#reduceattrVal2List
 
-private def attrVal3AffineMap : AttrVal := [mlir_attr_val| affine_map<(x, y) -> (y)>]
+private def attrVal3AffineMap : AttrVal :=
+  [mlir_attr_val|affine_map<(x,y)->(y)>]
+
 /--
 info: AttrValue.affine
   (AffineMap.mk (AffineTuple.mk [AffineExpr.Var "x", AffineExpr.Var "y"]) (AffineTuple.mk [AffineExpr.Var "y"]))
 -/
-#guard_msgs in #reduce attrVal3AffineMap
+#guard_msgs in
+#reduceattrVal3AffineMap
 
-private def attrVal4Symbol : AttrVal := [mlir_attr_val| @"foo" ]
+private def attrVal4Symbol : AttrVal :=
+  [mlir_attr_val|@"foo"]
+
 /-- info: AttrValue.symbol "foo" -/
-#guard_msgs in #reduce attrVal4Symbol
+#guard_msgs in
+#reduceattrVal4Symbol
 
-private def attrVal5int: AttrVal := [mlir_attr_val| 42 ]
+private def attrVal5int : AttrVal :=
+  [mlir_attr_val|42]
+
 /-- info: AttrValue.int (Int.ofNat 42) (MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 64)) -/
-#guard_msgs in #reduce attrVal5int
+#guard_msgs in
+#reduceattrVal5int
 
-private def attrVal5bint: AttrVal := [mlir_attr_val| -42 ]
+private def attrVal5bint : AttrVal :=
+  [mlir_attr_val|-42]
+
 /-- info: AttrValue.int (Int.negSucc 41) (MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 64)) -/
-#guard_msgs in #reduce attrVal5bint
+#guard_msgs in
+#reduceattrVal5bint
 
-private def attrVal6Symbol : AttrVal := [mlir_attr_val| @func_foo ]
+private def attrVal6Symbol : AttrVal :=
+  [mlir_attr_val|@func_foo]
+
 /-- info: AttrValue.symbol "func_foo" -/
-#guard_msgs in #reduce attrVal6Symbol
+#guard_msgs in
+#reduceattrVal6Symbol
 
-private def attrVal7NestedSymbol : AttrVal := [mlir_attr_val| @func_foo::@"func_bar" ]
+private def attrVal7NestedSymbol : AttrVal :=
+  [mlir_attr_val|@func_foo::@"func_bar"]
+
 /-- info: (AttrValue.symbol "func_foo").nestedsymbol (AttrValue.symbol "func_bar") -/
-#guard_msgs in #reduce attrVal7NestedSymbol
+#guard_msgs in
+#reduceattrVal7NestedSymbol
 
-private def attrVal8Alias : AttrVal := [mlir_attr_val| #"A" ]
+private def attrVal8Alias : AttrVal :=
+  [mlir_attr_val|#"A"]
+
 /-- info: AttrValue.alias "A" -/
-#guard_msgs in #reduce attrVal8Alias
+#guard_msgs in
+#reduceattrVal8Alias
 
-private def attrVal9Alias : AttrVal := [mlir_attr_val| #a ]
+private def attrVal9Alias : AttrVal :=
+  [mlir_attr_val|#a]
+
 /-- info: AttrValue.alias "a" -/
-#guard_msgs in #reduce attrVal9Alias
+#guard_msgs in
+#reduceattrVal9Alias
 
-private def attrVal10Float : AttrVal := [mlir_attr_val| 0.0023 ]
+private def attrVal10Float : AttrVal :=
+  [mlir_attr_val|0.0023]
+
 /--
 info: private def MLIR.EDSL.attrVal10Float : AttrVal :=
 AttrValue.float 23e-4 (MLIRType.float 64)
 -/
-#guard_msgs in #print attrVal10Float
+#guard_msgs in
+#print attrVal10Float
 
-private def attrVal11Escape : AttrVal := [mlir_attr_val| $(attrVal10Float) ]
+private def attrVal11Escape : AttrVal :=
+  [mlir_attr_val|$(attrVal10Float)]
+
 /--
 info: private def MLIR.EDSL.attrVal11Escape : AttrVal :=
 attrVal10Float
 -/
-#guard_msgs in #print attrVal11Escape
+#guard_msgs in
+#print attrVal11Escape
 
 end Test
 
@@ -993,76 +1108,107 @@ end Test
 -/
 
 syntax mlir_attr_key := ident <|> strLit
+
 syntax mlir_attr_entry := mlir_attr_key (" = " mlir_attr_val)?
 
 macro "[mlir_attr_entry|" entry:mlir_attr_entry "]" : term => do
   let `(mlir_attr_entry| $key $[= $val]?) := entry | Macro.throwUnsupported
-  let key ← match key.raw[0] with
-    | .ident _ key _ _ => pure key.toString
+  let key ←
+    match key.raw[0] with
+    | .ident _ key _ _ =>
+      pure key.toString
     --         ^^^ Notice we don't use the `val`, since the name might have been hygiene'd
     --             Instead, we use `rawVal`, which is documented as being
     --               "the literal substring from the input file" thus safe from hygiene
-    | .node _ `str ⟨(.atom _ val)::[]⟩ => pure val
+    | .node _ `str ⟨(.atom _ val) :: []⟩ =>
+      pure val
     -- ^^^ The `strLit` case
-    | _ => Macro.throwUnsupported
-  let value ← match val with
-    | none      => `(AttrValue.unit)
-    | some val  => `([mlir_attr_val| $val])
+    | _ =>
+      Macro.throwUnsupported
+  let value ←
+    match val with
+    | none =>
+      `(AttrValue.unit)
+    | some val =>
+      `([mlir_attr_val|$val])
   `(AttrEntry.mk $(Lean.quote key) $value)
 
 declare_syntax_cat mlir_attr_dict
-syntax  "<" ? "{" sepBy(mlir_attr_entry, ",") "}" ">" ?  : mlir_attr_dict
+
+syntax "<" ? "{" sepBy(mlir_attr_entry, ",") "}" ">" ? : mlir_attr_dict
+
 syntax "[mlir_attr_dict|" mlir_attr_dict "]" : term
 
 macro_rules
-| `([mlir_attr_dict| $[<%$caretLeft]? {  $attrEntries,* } $[>%$caretRight]? ]) => do
-        match caretLeft, caretRight with
-        | none, some y => Macro.throwErrorAt y "Caret closed without being opened"
-        | some x, none => Macro.throwErrorAt x "Caret opened without being closed"
-        | _ , _ =>
-          let attrsList <- attrEntries.getElems.toList.mapM (fun x => `([mlir_attr_entry| $x]))
-          let attrsList <- quoteMList attrsList (<- `(MLIR.AST.AttrEntry _))
-          `(AttrDict.mk $attrsList)
+  | `([mlir_attr_dict|$[<%$caretLeft]? {  $attrEntries,* } $[>%$caretRight]?]) => do
+    match caretLeft, caretRight with
+    | none, some y =>
+      Macro.throwErrorAt y "Caret closed without being opened"
+    | some x, none =>
+      Macro.throwErrorAt x "Caret opened without being closed"
+    | _, _ =>
+      let attrsList <- attrEntries.getElems.toList.mapM (fun x => `([mlir_attr_entry|$x]))
+      let attrsList <- quoteMList attrsList (<- `(MLIR.AST.AttrEntry _))
+      `(AttrDict.mk $attrsList)
+
 -- dict attribute val
 syntax mlir_attr_dict : mlir_attr_val
 
 macro_rules
-| `([mlir_attr_val| $v:mlir_attr_dict]) => `(AttrValue.dict [mlir_attr_dict| $v])
+  | `([mlir_attr_val|$v:mlir_attr_dict]) => `(AttrValue.dict [mlir_attr_dict|$v])
 
 section Test
 
-def attr0Str : AttrEntry 0 := [mlir_attr_entry| sym_name = "add"]
+def attr0Str : AttrEntry 0 :=
+  [mlir_attr_entry|sym_name = "add"]
+
 /--
 info: def MLIR.EDSL.attr0Str : AttrEntry 0 :=
 AttrEntry.mk "sym_name" (AttrValue.str "add")
 -/
-#guard_msgs in #print attr0Str
+#guard_msgs in
+#print attr0Str
 
-def attr3Unit : AttrEntry 0 := [mlir_attr_entry| sym_name]
+def attr3Unit : AttrEntry 0 :=
+  [mlir_attr_entry|sym_name]
+
 /--
 info: def MLIR.EDSL.attr3Unit : AttrEntry 0 :=
 AttrEntry.mk "sym_name" AttrValue.unit
 -/
-#guard_msgs in #print attr3Unit
+#guard_msgs in
+#print attr3Unit
 
-def attr4Negative : AttrEntry 0 := [mlir_attr_entry| value = -1: i32]
+def attr4Negative : AttrEntry 0 :=
+  [mlir_attr_entry|value = -1:i32]
+
 /--
 info: AttrEntry.mk "value" (AttrValue.int (Int.negSucc 0) (MLIRType.int Signedness.Signless (ConcreteOrMVar.concrete 32)))
 -/
-#guard_msgs in #reduce attr4Negative
+#guard_msgs in
+#reduceattr4Negative
 
-def attrDict0 : AttrDict 0 := [mlir_attr_dict| {}]
-def attrDict1 : AttrDict 0 := [mlir_attr_dict| {foo = "bar" }]
-def attrDict2 : AttrDict 0 := [mlir_attr_dict| {foo = "bar", baz = "quux" }]
+def attrDict0 : AttrDict 0 :=
+  [mlir_attr_dict|{}]
 
-def propDict2 : AttrDict 0 := [mlir_attr_dict| <{foo = "bar", baz = "quux" }>]
+def attrDict1 : AttrDict 0 :=
+  [mlir_attr_dict|{foo = "bar"}]
 
-def nestedAttrDict0 : AttrDict 0 := [mlir_attr_dict| {foo = {bar = "baz"} }]
+def attrDict2 : AttrDict 0 :=
+  [mlir_attr_dict|{foo = "bar",baz = "quux"}]
+
+def propDict2 : AttrDict 0 :=
+  [mlir_attr_dict|<{foo = "bar",baz = "quux"}>]
+
+def nestedAttrDict0 : AttrDict 0 :=
+  [mlir_attr_dict|{foo = {bar = "baz"}}]
+
 /--
 info: def MLIR.EDSL.nestedAttrDict0 : AttrDict 0 :=
 AttrDict.mk [AttrEntry.mk "foo" (AttrValue.dict (AttrDict.mk [AttrEntry.mk "bar" (AttrValue.str "baz")]))]
 -/
-#guard_msgs in #print nestedAttrDict0
+#guard_msgs in
+#print nestedAttrDict0
 
 end Test
 
@@ -1071,25 +1217,22 @@ end Test
 -/
 
 -- Op with potential result
-syntax
-  (mlir_op_operand,* "=")?
-  str "(" mlir_op_operand,* ")"
-         ( "[" mlir_op_successor_arg,* "]" )?
-         ( "(" mlir_region,* ")" )?
-         (mlir_attr_dict)?
-  ":" "(" mlir_type,* ")" "->" "("mlir_type,*")" : mlir_op
+syntax (mlir_op_operand,* "=")? str "(" mlir_op_operand,* ")" ( "[" mlir_op_successor_arg,* "]")?
+  ( "(" mlir_region,* ")")? (mlir_attr_dict)? ":" "(" mlir_type,* ")" "->" "(" mlir_type,* ")" :
+  mlir_op
 
 macro_rules
   | `([mlir_op| $x]) => `(mlir_op| $x)
 
 macro_rules
-  | `([mlir_op| $$($x)]) => return x
+  | `([mlir_op|$$($x)]) => return x
 
 /-- Quote a successor list (e.g. `[^bb1, ^bb2]`) to a `List String` term. -/
 def quoteSuccessors (succs : Option (Lean.Syntax.TSepArray `mlir_op_successor_arg ",")) :
     MacroM (TSyntax `term) := do
   match succs with
-  | none => `(@List.nil String)
+  | none =>
+    `(@List.nil String)
   | some ss =>
     let elems := ss.getElems.toList.map fun s => Lean.quote (getSuccessorName s)
     quoteMList elems (← `(String))
@@ -1136,11 +1279,8 @@ macro_rules
               $attrDict) -- attrs
 
 -- Op with definite result
-syntax mlir_op_operand "="
-  strLit "(" mlir_op_operand,* ")"
-         ( "[" mlir_op_successor_arg,* "]" )?
-         ( "(" mlir_region,* ")" )?
-         (mlir_attr_dict)? ":" "(" mlir_type,* ")" "->" mlir_type : mlir_op
+syntax mlir_op_operand "=" strLit "(" mlir_op_operand,* ")" ( "[" mlir_op_successor_arg,* "]")?
+  ( "(" mlir_region,* ")")? (mlir_attr_dict)? ":" "(" mlir_type,* ")" "->" mlir_type : mlir_op
 
 macro_rules
   | `(mlir_op|
@@ -1168,7 +1308,8 @@ macro_rules
 section Test
 
 private def op1 : Op φ :=
-  [mlir_op| "foo"(%x, %y) : (i32, i32) -> () ]
+  [mlir_op|"foo"(%x, %y):(i32, i32)->()]
+
 /--
 info: private def MLIR.EDSL.op1 : {φ : ℕ} → Op φ :=
 fun {φ} =>
@@ -1177,10 +1318,12 @@ fun {φ} =>
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
     successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
-#guard_msgs in #print op1
+#guard_msgs in
+#print op1
 
 private def op2 : Op φ :=
-  [mlir_op| %z = "foo"(%x, %y) : (i32, i32) -> (i32)]
+  [mlir_op|%z="foo"(%x, %y):(i32, i32)->(i32)]
+
 /--
 info: private def MLIR.EDSL.op2 : {φ : ℕ} → Op φ :=
 fun {φ} =>
@@ -1189,28 +1332,28 @@ fun {φ} =>
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
     successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
-#guard_msgs in #print op2
+#guard_msgs in
+#print op2
 
 /--
 TODO: we've attempted to support anti-quotations, but it doesn't actually work, as seen in the
 following example:
 -/
 -- def op2' : Op φ := [mlir_op| $op2]
+private def bbop1 : SSAVal × MLIRTy φ :=
+  [mlir_bb_operand|%x:i32]
 
-private def bbop1 : SSAVal × MLIRTy φ := [mlir_bb_operand| %x : i32 ]
 /--
 info: private def MLIR.EDSL.bbop1 : {φ : ℕ} → SSAVal × MLIRTy φ :=
 fun {φ} => (SSAVal.name "x", MLIRType.int Signedness.Signless 32)
 -/
-#guard_msgs in #print bbop1
+#guard_msgs in
+#print bbop1
 
 private def bb1NoArgs : Region φ :=
-  [mlir_region| {
-     ^entry:
-     "foo"(%x, %y) : (i32, i32) -> ()
-      %z = "bar"(%x) : (i32) -> (i32)
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{^entry:"foo"(%x, %y):(i32,
+            i32)->()%z="bar"(%x):(i32)->(i32)"std.return"(%x0):(i42)->()}]
+
 /--
 info: private def MLIR.EDSL.bb1NoArgs : {φ : ℕ} → Region φ :=
 fun {φ} =>
@@ -1228,7 +1371,8 @@ fun {φ} =>
           successors := [], regions := [], attrs := AttrDict.mk [] }],
     blocks := [] }
 -/
-#guard_msgs in #print bb1NoArgs
+#guard_msgs in
+#print bb1NoArgs
 
 /-
 TODO: antiquotations for regions don't seem to work, the following fails to compile with error:
@@ -1238,12 +1382,9 @@ private def bb1NoArgsAntiQuot : Region φ := [mlir_region| $bb1NoArgs]
 ``` -/
 
 private def bb2SingleArg : Region φ :=
-  [mlir_region| {
-     ^entry(%argp : i32):
-     "foo"(%x, %y) : (i32, i32) -> ()
-      %z = "bar"(%x) : (i32) -> (i32)
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{^entry(%argp:i32):"foo"(%x, %y):(i32,
+            i32)->()%z="bar"(%x):(i32)->(i32)"std.return"(%x0):(i42)->()}]
+
 /--
 info: private def MLIR.EDSL.bb2SingleArg : {φ : ℕ} → Region φ :=
 fun {φ} =>
@@ -1261,16 +1402,13 @@ fun {φ} =>
           successors := [], regions := [], attrs := AttrDict.mk [] }],
     blocks := [] }
 -/
-#guard_msgs in #print bb2SingleArg
-
+#guard_msgs in
+#print bb2SingleArg
 
 private def bb3MultipleArgs : Region φ :=
-  [mlir_region| {
-     ^entry(%argp : i32, %argq : i64):
-     "foo"(%x, %y) : (i32, i32) -> ()
-      %z = "bar"(%x) : (i32) -> (i32)
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{^entry(%argp:i32,%argq:i64):"foo"(%x, %y):(i32,
+            i32)->()%z="bar"(%x):(i32)->(i32)"std.return"(%x0):(i42)->()}]
+
 /--
 info: { name := "entry",
   args :=
@@ -1290,21 +1428,22 @@ info: { name := "entry",
         regions := [], attrs := AttrDict.mk [] }],
   blocks := [] }
 -/
-#guard_msgs in #reduce bb3MultipleArgs
+#guard_msgs in
+#reducebb3MultipleArgs
 
+private def rgn0 : Region φ :=
+  ([mlir_region|{}])
 
-private def rgn0 : Region φ := ([mlir_region|  { }])
 /--
 info: private def MLIR.EDSL.rgn0 : {φ : ℕ} → Region φ :=
 fun {φ} => { name := "entry", args := [], ops := [], blocks := [] }
 -/
-#guard_msgs in #print rgn0
+#guard_msgs in
+#print rgn0
 
 private def rgn1 : Region φ :=
-  [mlir_region|  {
-    ^entry:
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{^entry:"std.return"(%x0):(i42)->()}]
+
 /--
 info: private def MLIR.EDSL.rgn1 : {φ : ℕ} → Region φ :=
 fun {φ} =>
@@ -1314,13 +1453,12 @@ fun {φ} =>
           successors := [], regions := [], attrs := AttrDict.mk [] }],
     blocks := [] }
 -/
-#guard_msgs in #print rgn1
+#guard_msgs in
+#print rgn1
 
 private def rgn2 : Region φ :=
-  [mlir_region|  {
-    ^entry:
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{^entry:"std.return"(%x0):(i42)->()}]
+
 /--
 info: private def MLIR.EDSL.rgn2 : {φ : ℕ} → Region φ :=
 fun {φ} =>
@@ -1330,13 +1468,12 @@ fun {φ} =>
           successors := [], regions := [], attrs := AttrDict.mk [] }],
     blocks := [] }
 -/
-#guard_msgs in #print rgn2
+#guard_msgs in
+#print rgn2
 
 -- | test what happens if we try to use an entry block with no explicit bb name
 private def rgn3 : Region φ :=
-  [mlir_region|  {
-      "std.return"(%x0) : (i42) -> ()
-  }]
+  [mlir_region|{"std.return"(%x0):(i42)->()}]
 
 /--
 info: private def MLIR.EDSL.rgn1 : {φ : ℕ} → Region φ :=
@@ -1347,12 +1484,14 @@ fun {φ} =>
           successors := [], regions := [], attrs := AttrDict.mk [] }],
     blocks := [] }
 -/
-#guard_msgs in #print rgn1
-
+#guard_msgs in
+#print rgn1
 
 /-! ## test simple ops (no regions) -/
 
-private def opcall1 : Op φ := [mlir_op| "foo" (%x, %y) : (i32, i32) -> () ]
+private def opcall1 : Op φ :=
+  [mlir_op|"foo"(%x, %y):(i32, i32)->()]
+
 /--
 info: private def MLIR.EDSL.opcall1 : {φ : ℕ} → Op φ :=
 fun {φ} =>
@@ -1361,13 +1500,12 @@ fun {φ} =>
       [(SSAVal.name "x", MLIRType.int Signedness.Signless 32), (SSAVal.name "y", MLIRType.int Signedness.Signless 32)],
     successors := [], regions := [], attrs := AttrDict.mk [] }
 -/
-#guard_msgs in #print opcall1
+#guard_msgs in
+#print opcall1
 
+private def oprgn0 : Op φ :=
+  [mlir_op|"func"()({^entry:%x="foo.add"():()->(i64)}):()->()]
 
-
-private def oprgn0 : Op φ := [mlir_op|
- "func"() ({ ^entry: %x = "foo.add"() : () -> (i64) } ) : () -> ()
-]
 /--
 info: { name := "func", res := [], args := [], successors := [],
   regions :=
@@ -1379,20 +1517,16 @@ info: { name := "func", res := [], args := [], successors := [],
         blocks := [] }],
   attrs := AttrDict.mk [] }
 -/
-#guard_msgs in #reduce oprgn0
+#guard_msgs in
+#reduceoprgn0
 
 -- | note that this is a "full stack" example!
-private def opRgnAttr0 : Op φ := [mlir_op|
- "module"() ({
-  ^entry:
-   "func"() ({
-     ^bb0(%arg0:i32, %arg1:i32):
-      %zero = "std.addi"(%arg0 , %arg1) : (i32, i16) -> (i64)
-      "std.return"(%zero) : (i32) -> ()
-    }){sym_name = "add"} : () -> ()
-   "module_terminator"() : () -> ()
- }) : () -> ()
-]
+private def opRgnAttr0 : Op φ :=
+  [mlir_op|"module"()({^entry:"func"()({^bb0(%arg0:i32,%arg1:i32):%zero="std.addi"(%arg0,
+                      %arg1):(i32,
+                      i16)->(i64)"std.return"(%zero):(i32)->()}){sym_name =
+                "add"}:()->()"module_terminator"():()->()}):()->()]
+
 /--
 info: private def MLIR.EDSL.opRgnAttr0 : {φ : ℕ} → Op φ :=
 fun {φ} =>
@@ -1422,7 +1556,8 @@ fun {φ} =>
           blocks := [] }],
     attrs := AttrDict.mk [] }
 -/
-#guard_msgs in #print opRgnAttr0
+#guard_msgs in
+#print opRgnAttr0
 
 end Test
 
@@ -1433,16 +1568,21 @@ section Test
 rather than `#print` transcripts, so they don't churn with `Repr`. -/
 
 private def brOp : Op 0 :=
-  [mlir_op| "llvm.br"(%x)[^bb1] : (i32) -> ()]
+  [mlir_op|"llvm.br"(%x)[^bb1]:(i32)->()]
+
 #guard brOp.successors == ["bb1"]
+
 #guard brOp.args.length == 1
 
 private def condBrOp : Op 0 :=
-  [mlir_op| "llvm.cond_br"(%c, %v)[^bb1, ^bb9] <{operandSegmentSizes = array<i32: 1, 1, 0>}> : (i1, i32) -> ()]
+  [mlir_op|"llvm.cond_br"(%c, %v)[^bb1, ^bb9]<{operandSegmentSizes = array<i32:1,1,0>}>:(i1,
+      i32)->()]
+
 #guard condBrOp.successors == ["bb1", "bb9"]
 
 private def switchOp : Op 0 :=
   [mlir_op| "llvm.switch"(%x)[^bb9, ^bb1, ^bb5] <{case_operand_segments = array<i32: 0, 0>, case_values = dense<[0, 2251799813685229]> : vector<2xi64>, operandSegmentSizes = array<i32: 1, 0, 0>}> : (i64) -> ()]
+
 #guard switchOp.successors == ["bb9", "bb1", "bb5"]
 
 -- An op with no successor list still has `successors = []`.
@@ -1454,9 +1594,13 @@ private def twoBlocks : Region 0 := [mlir_region| {
   ^bb1:  // pred: ^bb0
     "llvm.return"() : () -> ()
 }]
+
 #guard twoBlocks.name == "bb0"
+
 #guard twoBlocks.args.length == 1
+
 #guard twoBlocks.blocks.map (·.name) == ["bb1"]
+
 #guard (twoBlocks.ops.getLast?.map (·.successors)) == some ["bb1"]
 
 -- Block arguments on a non-entry block (the φ shape), a multi-predecessor
@@ -1467,66 +1611,68 @@ private def phiBlocks : Region 0 := [mlir_region| {
   ^bb1(%v: i32):  // 2 preds: ^bb0, ^bb0
     "llvm.return"(%v) : (i32) -> ()
 }]
+
 #guard phiBlocks.blocks.map (fun b => (b.name, b.args.length)) == [("bb1", 1)]
 
 end Test
-
 
 -- | Builtins
 -- =========
 
 -- TODO: Move to `func` dialect
-syntax
-  "func" mlir_attr_val_symbol "(" mlir_bb_operand,* ")" ( "->" mlir_type )? "{"
-    mlir_ops
-  "}" : mlir_op
+syntax "func" mlir_attr_val_symbol "(" mlir_bb_operand,* ")" ( "->" mlir_type)? "{" mlir_ops "}" :
+  mlir_op
 
 macro_rules
-| `([mlir_op| func $name:mlir_attr_val_symbol ( $args,* ) $[ -> $ret:mlir_type ]? { $ops } ]) => do
-     -- Make the arguments for the entry block
-     let bbargs ← args.getElems.mapM (fun x => `([mlir_bb_operand| $x]))
-     let bbargs ← quoteMList bbargs.toList (← `(MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
-     -- Make the entry block (the only block)
-     let rgn ← `(Region.mk "entry" $bbargs [mlir_ops| $ops] [])
-
-     -- Make the function signature
-     let argTypes ← args.getElems.mapM (fun x => `(Prod.snd [mlir_bb_operand| $x]))
-     let argTypes ← quoteMList argTypes.toList (← `(MLIR.AST.MLIRType))
-     let retType ← match ret with
-       | none => `(MLIRType.tuple [])
-       | some τ => `([mlir_type| $τ])
-     let signature ← `(MLIRType.fn (MLIRType.tuple $argTypes) $retType)
-
-     -- Make the entire operation
-     let attrs ← `(AttrDict.mk [
-        AttrEntry.mk "function_type" (AttrValue.type $signature),
-        AttrEntry.mk "sym_name" [mlir_attr_val_symbol| $name]
-      ])
-     `(Op.mk "func" [] [] [] [$rgn] $attrs)
-
-
+  | `([mlir_op|func $name:mlir_attr_val_symbol($args,*)$[->$ret:mlir_type]?{$ops}]) => do
+    -- Make the arguments for the entry block
+    let bbargs ← args.getElems.mapM (fun x => `([mlir_bb_operand|$x]))
+    let bbargs ← quoteMList bbargs.toList (← `(MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
+    -- Make the entry block (the only block)
+    let rgn ← `(Region.mk "entry" $bbargs [mlir_ops|$ops] [])
+    -- Make the function signature
+    let argTypes ← args.getElems.mapM (fun x => `(Prod.snd [mlir_bb_operand|$x]))
+    let argTypes ← quoteMList argTypes.toList (← `(MLIR.AST.MLIRType))
+    let retType ←
+      match ret with
+      | none =>
+        `(MLIRType.tuple [])
+      | some τ =>
+        `([mlir_type|$τ])
+    let signature ← `(MLIRType.fn (MLIRType.tuple $argTypes) $retType)
+    -- Make the entire operation
+    let attrs ←
+      `(AttrDict.mk
+            [AttrEntry.mk "function_type" (AttrValue.type $signature),
+              AttrEntry.mk "sym_name" [mlir_attr_val_symbol|$name]])
+    `(Op.mk "func" [] [] [] [$rgn] $attrs)
 
 syntax "module" "{" mlir_op* "}" : mlir_op
 
 macro_rules
-| `([mlir_op| module { $ops* } ]) => do
-     let initList <- `([Op.empty "module_terminator"])
-     let ops <- ops.foldrM (init := initList) fun x xs => `([mlir_op| $x] :: $xs)
-     let rgn <- `(Region.fromOps $ops)
-     `(Op.mk "module" [] [] [] [$rgn] AttrDict.empty)
+  | `([mlir_op|module{$ops*}]) => do
+    let initList <- `([Op.empty "module_terminator"])
+    let ops <- ops.foldrM (init := initList) fun x xs => `([mlir_op|$x] :: $xs)
+    let rgn <- `(Region.fromOps $ops)
+    `(Op.mk "module" [] [] [] [$rgn] AttrDict.empty)
 
 section Test
 
-private def mod1 : Op φ := [mlir_op| module { }]
+private def mod1 : Op φ :=
+  [mlir_op|module{}]
+
 /--
 info: private def MLIR.EDSL.mod1 : {φ : ℕ} → Op φ :=
 fun {φ} =>
   { name := "module", res := [], args := [], successors := [],
     regions := [Region.fromOps [Op.empty "module_terminator"]], attrs := AttrDict.empty }
 -/
-#guard_msgs in #print mod1
+#guard_msgs in
+#print mod1
 
-private def mod2 : Op φ := [mlir_op| module { "dummy.dummy"(): () -> () }]
+private def mod2 : Op φ :=
+  [mlir_op|module{"dummy.dummy"():()->()}]
+
 /--
 info: private def MLIR.EDSL.mod2 : {φ : ℕ} → Op φ :=
 fun {φ} =>
@@ -1537,7 +1683,8 @@ fun {φ} =>
             Op.empty "module_terminator"]],
     attrs := AttrDict.empty }
 -/
-#guard_msgs in #print mod2
+#guard_msgs in
+#print mod2
 
 end Test
 

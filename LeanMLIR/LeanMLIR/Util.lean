@@ -9,7 +9,8 @@ import Cli
 import Lean
 
 @[simp]
-def uncurry (f : α → β → γ) (pair : α × β) : γ := f pair.fst pair.snd
+def uncurry (f : α → β → γ) (pair : α × β) : γ :=
+  f pair.fst pair.snd
 
 @[simp]
 def pairBind [Monad m] (f : α → β → m γ) (pair : (m α × m β)) : m γ := do
@@ -19,8 +20,8 @@ def pairBind [Monad m] (f : α → β → m γ) (pair : (m α × m β)) : m γ :
 
 @[simp]
 def tripleBind [Monad m] (f : α → β → γ → m δ) (triple : (m α × m β × m γ)) : m δ := do
-  let (fstM,sndM,trdM) := triple
-  let (fst,snd,trd) := (← fstM,← sndM,← trdM)
+  let (fstM, sndM, trdM) := triple
+  let (fst, snd, trd) := (← fstM, ← sndM, ← trdM)
   f fst snd trd
 
 @[simp]
@@ -31,18 +32,17 @@ def pairMapM [Monad m] (f : α → β → γ) (pair : (m α × m β)) : m γ := 
 
 @[simp]
 def tripleMapM [Monad m] (f : α → β → γ → δ) (triple : (m α × m β × m γ)) : m δ := do
-  let (fstM,sndM,trdM) := triple
-  let (fst,snd,trd) := (← fstM,← sndM,← trdM)
+  let (fstM, sndM, trdM) := triple
+  let (fst, snd, trd) := (← fstM, ← sndM, ← trdM)
   return f fst snd trd
 
-def Fin.coeLt {n m : Nat} : n ≤ m → Fin n → Fin m :=
-  fun h i => match i with
-    | ⟨i, h'⟩ => ⟨i, Nat.lt_of_lt_of_le h' h⟩
-
+def Fin.coeLt {n m : Nat} : n ≤ m → Fin n → Fin m := fun h i =>
+  match i with
+  | ⟨i, h'⟩ => ⟨i, Nat.lt_of_lt_of_le h' h⟩
 
 inductive LengthIndexedList (α : Type u) : Nat → Type u where
-   | nil : LengthIndexedList α 0
-   | cons : α → LengthIndexedList α n → LengthIndexedList α (n + 1)
+  | nil : LengthIndexedList α 0
+  | cons : α → LengthIndexedList α n → LengthIndexedList α (n + 1)
   deriving Repr, DecidableEq
 
 namespace LengthIndexedList
@@ -55,7 +55,6 @@ def fromList {α : Type u} (l : List α) : LengthIndexedList α (List.length l) 
 def map {α β : Type u} (f : α → β) {n : Nat} : LengthIndexedList α n → LengthIndexedList β n
   | nil => nil
   | cons x xs => cons (f x) (map f xs)
-
 
 @[simp]
 def foldl {α β : Type u} {n : Nat} (f : β → α → β) (acc : β) : LengthIndexedList α n → β
@@ -77,13 +76,14 @@ instance : GetElem (LengthIndexedList α n) Nat α fun _xs i => LT.lt i n where
   getElem xs i h := nth xs ⟨i, h⟩
 
 def NatEq {α : Type u} {n m : Nat} : n = m → LengthIndexedList α n → LengthIndexedList α m :=
-  fun h l => match h, l with
-    | rfl, l => l
+  fun h l =>
+  match h, l with
+  | rfl, l => l
 
 def finRange (n : Nat) : LengthIndexedList (Fin n) n :=
   match n with
-    | 0 => LengthIndexedList.nil
-    | m + 1 =>
+  | 0 => LengthIndexedList.nil
+  | m + 1 =>
       let coeFun : Fin m → Fin (m + 1) := Fin.coeLt (Nat.le_succ m)
     LengthIndexedList.cons ⟨m, Nat.lt_succ_self m⟩
       (LengthIndexedList.map coeFun (LengthIndexedList.finRange m))
@@ -97,10 +97,10 @@ elab "print_goal_as_error " : tactic => do
 
 -- TODO: should these go into Std?
 def Vector.ofList {α : Type u} (l : List α) : List.Vector α l.length :=
-⟨l, rfl⟩
+  ⟨l, rfl⟩
 
 def Vector.ofArray {α : Type u} (a : Array α) : List.Vector α a.size :=
- Vector.ofList a.toList
+  Vector.ofList a.toList
 
 instance [inst : Cli.ParseableType τ] {n : ℕ} : Cli.ParseableType (List.Vector τ n) where
   name := s!"Vector ({inst.name}) {n}"
@@ -114,23 +114,27 @@ instance [inst : Cli.ParseableType τ] {n : ℕ} : Cli.ParseableType (List.Vecto
 /-- productsList [xs, ys] = [(x, y) for x in xs for y in ys],
 extended to arbitary number of arrays. -/
 def productsList : List (List α) -> List (List α)
-| [] => [[]] -- empty product returns empty tuple.
-| (xs::xss) => Id.run do
-  let mut out := []
-  let xss' := productsList xss -- make tuples of the other columns.
-  for x in xs do  -- for every element in this column, take product with all other tuples.
-    out := out.append (xss'.map (fun xs => x :: xs))
-  return out
+  | [] => [[]] -- empty product returns empty tuple.
+  | (xs :: xss) =>
+    Id.run do
+      let mut out := []
+      let xss' := productsList xss -- make tuples of the other columns.
+      for x in xs do -- for every element in this column, take product with all other tuples.
+        out := out.append (xss'.map (fun xs => x :: xs))
+      return out
 
-example : productsList [["a"], ["x", "y", "z"]] = [["a", "x"], ["a", "y"], ["a", "z"]] := rfl
-example : productsList [["a"], ["p", "q"], ["x", "y", "z"]] =
-  [["a", "p", "x"], ["a", "p", "y"], ["a", "p", "z"],
-   ["a", "q", "x"], ["a", "q", "y"], ["a", "q", "z"]] := rfl
+example : productsList [["a"], ["x", "y", "z"]] = [["a", "x"], ["a", "y"], ["a", "z"]] :=
+  rfl
+
+example :
+    productsList [["a"], ["p", "q"], ["x", "y", "z"]] =
+      [["a", "p", "x"], ["a", "p", "y"], ["a", "p", "z"], ["a", "q", "x"], ["a", "q", "y"],
+        ["a", "q", "z"]] :=
+  rfl
 
 /-- Builds the cartesian product of all arrays in the input.
     Pretty inefficient right now, as it converts back and forth to lists... -/
-def productsArr : Array (Array α) -> Array (Array α) :=
-  fun arr =>
+def productsArr : Array (Array α) -> Array (Array α) := fun arr =>
      let ls : List (List α) := List.map Array.toList ∘ Array.toList <| arr
      let prods := productsList ls
      List.map List.toArray prods |>.toArray

@@ -16,20 +16,21 @@ inductive TransformError
   | unsupportedUnaryOp
   | unsupportedBinaryOp (error : String)
   | unsupportedOp (error : String)
-  | unsupportedType {φ} (type: Option (MLIRType φ))
+  | unsupportedType {φ} (type : Option (MLIRType φ))
   | generic (error : String)
 
 namespace TransformError
 
 instance : Repr (TransformError) where
-  reprPrec err _ := match err with
+  reprPrec err _ :=
+    match err with
     | nameAlreadyDeclared var => f!"Already declared {var}, shadowing is not allowed"
     | undeclaredName name => f!"Undeclared name '{name}'"
     | indexOutOfBounds name index len =>
-        f!"Index of '{name}' out of bounds of the given context " ++
+      f!"Index of '{name}' out of bounds of the given context " ++
         f!"(index was {index}, but context has length {len})"
     | typeError expected got =>
-        f!"Type mismatch: expected '{repr expected}', but 'name' has type '{repr got}'"
+      f!"Type mismatch: expected '{repr expected}', but 'name' has type '{repr got}'"
     | widthError expected got => f!"Type mismatch: {expected} ≠ {got}"
     | unsupportedUnaryOp => f!"Unsupported unary operation"
     | unsupportedBinaryOp err => f!"Unsupported binary operation '{err}'"

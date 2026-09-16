@@ -2,6 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Util.ConcreteOrMVar
+
 open Lean PrettyPrinter
 
 /-!
@@ -16,31 +17,31 @@ namespace MLIR.AST
 -- Affine expressions [TODO: find some way to separate this out]
 -- ==================
 inductive AffineExpr
-  | Var: String -> AffineExpr
+  | Var : String -> AffineExpr
   deriving DecidableEq, Repr
 
 inductive AffineTuple
-  | mk: List AffineExpr -> AffineTuple
+  | mk : List AffineExpr -> AffineTuple
   deriving DecidableEq, Repr
   -- TODO: make prettier `Repr` instance
 
 inductive AffineMap
-  | mk: AffineTuple -> AffineTuple -> AffineMap
+  | mk : AffineTuple -> AffineTuple -> AffineMap
   deriving DecidableEq, Repr
 
 -- EMBEDDING
 -- ==========
 
 inductive BBName
-  | mk: String -> BBName
+  | mk : String -> BBName
   deriving DecidableEq, Repr
 
 /-- An ssa value is a variable name -/
 inductive SSAVal : Type where
   | name : String -> SSAVal
-deriving DecidableEq, Repr
+  deriving DecidableEq, Repr
 
-def SSAValToString (s: SSAVal): String :=
+def SSAValToString (s : SSAVal) : String :=
   match s with
   | SSAVal.name str => str
 
@@ -50,20 +51,25 @@ instance : ToString SSAVal where
 inductive Signedness where
   | Signless -- i*
   | Unsigned -- u*
-  | Signed   -- si*
-deriving DecidableEq, Repr
+  | Signed -- si*
+  deriving DecidableEq, Repr
 
-abbrev Width φ := ConcreteOrMVar Nat φ
-abbrev Width.concrete : Nat → Width φ := ConcreteOrMVar.concrete
-abbrev Width.mvar : Fin φ → Width φ := ConcreteOrMVar.mvar
+abbrev Width φ :=
+  ConcreteOrMVar Nat φ
+
+abbrev Width.concrete : Nat → Width φ :=
+  ConcreteOrMVar.concrete
+
+abbrev Width.mvar : Fin φ → Width φ :=
+  ConcreteOrMVar.mvar
 
 inductive MLIRType (φ : Nat) : Type _ where
-  | int: Signedness -> Width φ -> MLIRType φ
-  | float: Nat -> MLIRType φ
-  | tensor1d: MLIRType φ -- tensor of int values.
-  | tensor2d: MLIRType φ -- tensor of int values.
-  | tensor4d: MLIRType φ -- tensor of int values.
-  | index:  MLIRType φ
+  | int : Signedness -> Width φ -> MLIRType φ
+  | float : Nat -> MLIRType φ
+  | tensor1d : MLIRType φ -- tensor of int values.
+  | tensor2d : MLIRType φ -- tensor of int values.
+  | tensor4d : MLIRType φ -- tensor of int values.
+  | index : MLIRType φ
   /-- MLIR's `vector<…>` type. A `scalable` dimension of size `n` holds
   `n * vscale` elements, where `vscale` is a positive integer that is only fixed
   at run time by the target; MLIR brackets those dimensions, so
@@ -81,105 +87,109 @@ inductive MLIRType (φ : Nat) : Type _ where
   text. Parametric ones (`!llvm.struct<…>`, `!llvm.array<…>`) keep their full
   `<…>` payload, which a dialect parser may interpret (SLLVM's
   `getelementptr` computes struct layouts from it). -/
-  | undefined: String → MLIRType φ
+  | undefined : String → MLIRType φ
   deriving Repr, DecidableEq
 
 variable (φ : Nat)
 
-instance : ToFormat (Width φ) := ⟨repr⟩
-instance : ToFormat (MLIRType φ) := ⟨repr⟩
+instance : ToFormat (Width φ) :=
+  ⟨repr⟩
+
+instance : ToFormat (MLIRType φ) :=
+  ⟨repr⟩
 
 -- We define "MLIRTy" to be just the basic types outside of any dialect
-abbrev MLIRTy (φ := 0) := MLIRType φ
+abbrev MLIRTy (φ := 0) :=
+  MLIRType φ
 
 /-- Shorthand to build <iN> -/
-def MLIRTy.i (width : Nat) : MLIRTy φ := MLIRType.int Signedness.Signless width
+def MLIRTy.i (width : Nat) : MLIRTy φ :=
+  MLIRType.int Signedness.Signless width
+
 -- Other useful abbreviations
-abbrev MLIRType.i1: MLIRType φ := MLIRType.int .Signless 1
-abbrev MLIRType.i32: MLIRType φ := MLIRType.int .Signless 32
-def MLIRType.i (width : Nat) : MLIRTy φ := MLIRType.int Signedness.Signless width
+abbrev MLIRType.i1 : MLIRType φ :=
+  MLIRType.int .Signless 1
+
+abbrev MLIRType.i32 : MLIRType φ :=
+  MLIRType.int .Signless 32
+
+def MLIRType.i (width : Nat) : MLIRTy φ :=
+  MLIRType.int Signedness.Signless width
 
 /-- An ssa value (variable name) with a type -/
-abbrev TypedSSAVal := SSAVal × MLIRType φ
+abbrev TypedSSAVal :=
+  SSAVal × MLIRType φ
 
 mutual
 inductive AttrValue where
-  | symbol: String -> AttrValue -- symbol ref attr
+  | symbol : String -> AttrValue -- symbol ref attr
   | str : String -> AttrValue
   | int : Int -> MLIRType φ -> AttrValue
-  | nat: Nat -> AttrValue
+  | nat : Nat -> AttrValue
   | bool : Bool -> AttrValue
   | float : Float -> MLIRType φ -> AttrValue
   | type : MLIRType φ -> AttrValue
-  | affine: AffineMap -> AttrValue
-  | permutation: List Nat -> AttrValue -- a permutation
-  | list: List AttrValue -> AttrValue
-  | nestedsymbol: AttrValue -> AttrValue -> AttrValue
-  | alias: String -> AttrValue
-  | dict: AttrDict -> AttrValue
-  | opaque_: (dialect: String) -> (value: String) -> AttrValue
-  | opaqueElements: (dialect: String) -> (value: String) -> (type: MLIRType φ) -> AttrValue
-  | dense: AttrValue -> MLIRType φ -> AttrValue
-  | array: MLIRType φ -> List AttrValue -> AttrValue
-  | unit: AttrValue
-
+  | affine : AffineMap -> AttrValue
+  | permutation : List Nat -> AttrValue -- a permutation
+  | list : List AttrValue -> AttrValue
+  | nestedsymbol : AttrValue -> AttrValue -> AttrValue
+  | alias : String -> AttrValue
+  | dict : AttrDict -> AttrValue
+  | opaque_ : (dialect : String) -> (value : String) -> AttrValue
+  | opaqueElements : (dialect : String) -> (value : String) -> (type : MLIRType φ) -> AttrValue
+  | dense : AttrValue -> MLIRType φ -> AttrValue
+  | array : MLIRType φ -> List AttrValue -> AttrValue
+  | unit : AttrValue
 -- https://mlir.llvm.org/docs/LangRef/#attributes
 -- | TODO: add support for mutually inductive records / structures
 inductive AttrEntry where
-  | mk: (key: String)
-      -> (value: AttrValue)
-      -> AttrEntry
-
-inductive AttrDict where
-  | mk: List AttrEntry -> AttrDict
-
+  | mk : (key : String) -> (value : AttrValue) -> AttrEntry
+  inductive AttrDict where
+    | mk : List AttrEntry -> AttrDict
 end
 
 def AttrEntry.destructure {φ} : AttrEntry φ → String × AttrValue φ
-  | .mk name value => (name,value)
+  | .mk name value => (name, value)
 
-def AttrDict.getAttr {φ} : AttrDict φ → String →  Option (AttrValue φ)
+def AttrDict.getAttr {φ} : AttrDict φ → String → Option (AttrValue φ)
   | .mk attrs, name => attrs.map AttrEntry.destructure |>.lookup name
 
 -- We define "AttrVal" to be just the basic attributes outside of any dialect
-abbrev AttrVal (φ := 0) := AttrValue φ
+abbrev AttrVal (φ := 0) :=
+  AttrValue φ
 
 mutual
 -- | TODO: make these arguments optional?
 structure Op where
-  (name: String)
-  (res: List <| TypedSSAVal φ)
-  (args: List <| TypedSSAVal φ)
-  (successors: List String)
-  (regions: List Region)
-  (attrs: AttrDict φ)
-
+  (name : String)
+  (res : List <| TypedSSAVal φ)
+  (args : List <| TypedSSAVal φ)
+  (successors : List String)
+  (regions : List Region)
+  (attrs : AttrDict φ)
 /-- A non-entry basic block of a `Region`. -/
 structure Block where
-  (name: String)
-  (args: List <| TypedSSAVal φ)
-  (ops: List Op)
-
+  (name : String)
+  (args : List <| TypedSSAVal φ)
+  (ops : List Op)
 /-- `name`/`args`/`ops` are the entry block; `blocks` the tail blocks, in
 source order. Single-block regions have `blocks = []`. -/
 structure Region where
-  (name: String)
-  (args: List <| TypedSSAVal φ)
-  (ops: List Op)
-  (blocks: List Block)
-
+  (name : String)
+  (args : List <| TypedSSAVal φ)
+  (ops : List Op)
+  (blocks : List Block)
 end
 
 -- Attribute definition on the form #<name> = <val>
 inductive AttrDefn where
-  | mk: (name: String) -> (val: AttrValue φ) -> AttrDefn
+  | mk : (name : String) -> (val : AttrValue φ) -> AttrDefn
 
 inductive Module where
-  | mk: (functions: List <| Op φ)
-        -> (attrs: List <| AttrDefn φ)
-        ->  Module
+  | mk : (functions : List <| Op φ) -> (attrs : List <| AttrDefn φ) -> Module
 
 namespace Op
+
 variable {φ} (op : Op φ)
 
 def resNames : List SSAVal :=
@@ -205,13 +215,13 @@ def getAttr? : String → Option (AttrValue φ) :=
 end Op
 
 instance : Coe String SSAVal where
-  coe (s: String) := SSAVal.name s
+  coe (s : String) := SSAVal.name s
 
 instance : Coe String (AttrValue φ) where
-  coe (s: String) := AttrValue.str s
+  coe (s : String) := AttrValue.str s
 
 instance : Coe Int (AttrValue φ) where
-  coe (i: Int) := AttrValue.int i (MLIRType.int .Signless 64)
+  coe (i : Int) := AttrValue.int i (MLIRType.int .Signless 64)
 
 instance : Coe (MLIRType φ) (AttrValue φ) where
   coe := AttrValue.type
@@ -224,15 +234,15 @@ instance : Coe (String × MLIRType φ) (AttrEntry φ) where
 
 instance : Coe (AttrEntry φ) (String × AttrValue φ) where
   coe
-  | AttrEntry.mk key val => (key, val)
+    | AttrEntry.mk key val => (key, val)
 
 instance : Coe (List (AttrEntry φ)) (AttrDict φ) where
   coe
-  | v => AttrDict.mk v
+    | v => AttrDict.mk v
 
- instance : Coe (AttrDict φ) (List (AttrEntry φ)) where
+instance : Coe (AttrDict φ) (List (AttrEntry φ)) where
   coe
-  | AttrDict.mk as => as
+    | AttrDict.mk as => as
 
 mutual
 partial def docAttrVal {φ} : AttrValue φ → Format
@@ -253,15 +263,12 @@ partial def docAttrVal {φ} : AttrValue φ → Format
   | .dense v ty => f!"dense<{docAttrVal v}> : {repr ty}"
   | .array ty vs => f!"array<{repr ty}: {Format.join ((vs.map docAttrVal).intersperse ", ")}>"
   | .unit => "()"
-
 partial def docAttrEntry {φ} : AttrEntry φ → Format
   | .mk k v => f!"{k} = " ++ (docAttrVal v)
-
 partial def docAttrDict {φ} : AttrDict φ → Format
   | .mk attrs =>
-      if List.isEmpty attrs
-      then f!""
-      else f!"\{" ++ (Format.join ((attrs.map docAttrEntry).intersperse ", ")) ++ f!"}"
+    if List.isEmpty attrs then f!""
+    else f!"\{" ++ (Format.join ((attrs.map docAttrEntry).intersperse ", ")) ++ f!"}"
 end
 
 instance : Repr (AttrValue φ) where
@@ -274,55 +281,53 @@ instance : Repr (AttrDict φ) where
   reprPrec x _ := docAttrDict x
 
 instance : Repr (AttrDefn φ) where
-  reprPrec x _ := match x with
+  reprPrec x _ :=
+    match x with
     | AttrDefn.mk name val => f!"#{name} := {repr val}"
 
 instance : Repr SSAVal where
-  reprPrec x _ := match x with
+  reprPrec x _ :=
+    match x with
     | SSAVal.name name => f!"%{name}"
 
 instance : ToFormat SSAVal where
   format := repr
 
 mutual
-partial def op_to_format {φ} : Op φ →  Format
+partial def op_to_format {φ} : Op φ → Format
   | Op.mk name res args succs rgns attrs =>
       let doc_name := f!"\"{name}\""
-      let doc_rgns := if rgns.isEmpty
-                      then f!""
-                      else rgns.map (Format.align true ++ rgn_to_format ·) |> Format.join
+      let doc_rgns :=
+      if rgns.isEmpty then f!"" else rgns.map (Format.align true ++ rgn_to_format ·) |> Format.join
       let doc_args := f!"({args.map repr |>.intersperse f!", " |> Format.join})"
-      let doc_succs := if succs.isEmpty
-                      then f!""
-                      else f!"[{succs.map (f!"^{·}") |>.intersperse f!", " |> Format.join}]"
+      let doc_succs :=
+      if succs.isEmpty then f!""
+      else f!"[{succs.map (f!"^{·}") |>.intersperse f!", " |> Format.join}]"
       let doc_res := f!"({res.map repr |>.intersperse f!", " |> Format.join})"
-
       doc_res ++ " := " ++ doc_name ++ doc_args ++ doc_succs ++ doc_rgns ++ repr attrs
-
 partial def blk_header_to_format {φ} (name : String) (args : List (TypedSSAVal φ)) : Format :=
-  let doc_args := if args.isEmpty then
-      f!""
-    else
-      f!"({args.map (fun (v, t) => f!"{repr v} : {repr t}") |>.intersperse "," |> Format.join})"
+  let doc_args :=
+    if args.isEmpty then f!""
+    else f!"({args.map (fun (v, t) => f!"{repr v} : {repr t}") |>.intersperse "," |> Format.join})"
   f!"^{name}{doc_args} : "
-
 partial def blk_to_format {φ} : Block φ → Format
   | Block.mk name args ops =>
-      blk_header_to_format name args
-        ++ (ops.map (Format.align true ++ op_to_format ·) |> Format.join)
-
+    blk_header_to_format name args ++ (ops.map (Format.align true ++ op_to_format ·) |> Format.join)
 partial def rgn_to_format {φ} : Region φ → Format
   | Region.mk name args ops blocks =>
-      let doc_ops :=
-        ops.map (Format.align true ++ op_to_format ·) |> Format.join
-      let doc_blocks :=
-        blocks.map (Format.align true ++ blk_to_format ·) |> Format.join
+      let doc_ops := ops.map (Format.align true ++ op_to_format ·) |> Format.join
+      let doc_blocks := blocks.map (Format.align true ++ blk_to_format ·) |> Format.join
       blk_header_to_format name args ++ doc_ops ++ doc_blocks
 end
 
-instance : Repr (Op φ) := ⟨fun x _ => op_to_format x⟩
-instance : Repr (Block φ) := ⟨fun x _ => blk_to_format x⟩
-instance : Repr (Region φ) := ⟨fun x _ => rgn_to_format x⟩
+instance : Repr (Op φ) :=
+  ⟨fun x _ => op_to_format x⟩
+
+instance : Repr (Block φ) :=
+  ⟨fun x _ => blk_to_format x⟩
+
+instance : Repr (Region φ) :=
+  ⟨fun x _ => rgn_to_format x⟩
 
 def AttrEntry.key {φ} : AttrEntry φ → String
   | AttrEntry.mk k _ => k
@@ -330,10 +335,11 @@ def AttrEntry.key {φ} : AttrEntry φ → String
 def AttrEntry.value {φ} : AttrEntry φ → AttrValue φ
   | AttrEntry.mk _ v => v
 
+def AttrDict.empty {φ} : AttrDict φ :=
+  AttrDict.mk []
 
-def AttrDict.empty {φ} : AttrDict φ := AttrDict.mk []
-
-def Op.empty {φ} (name : String) : Op φ := Op.mk name [] [] [] [] AttrDict.empty
+def Op.empty {φ} (name : String) : Op φ :=
+  Op.mk name [] [] [] [] AttrDict.empty
 
 def Op.addArg {φ} (o : Op φ) (arg : TypedSSAVal φ) : Op φ :=
   { o with args := o.args ++ [arg] }
@@ -344,67 +350,64 @@ def Op.addResult {φ} (o : Op φ) (new_res : TypedSSAVal φ) : Op φ :=
 def Op.appendRegion {φ} (o : Op φ) (r : Region φ) : Op φ :=
   { o with regions := o.regions ++ [r] }
 
-
 -- | Note: AttrEntry can be given as String × AttrValue
 def AttrDict.add {φ} (attrs : AttrDict φ) (entry : AttrEntry φ) : AttrDict φ :=
-    Coe.coe <| entry :: Coe.coe attrs
+  Coe.coe <| entry :: Coe.coe attrs
 
 def AttrDict.find {φ} (attrs : AttrDict φ) (name : String) : Option (AttrValue φ) :=
   match attrs with
   | AttrDict.mk entries =>
-      match entries.find? (fun entry => entry.key == name) with
-      | some v => v.value
-      | none => none
+    match entries.find? (fun entry => entry.key == name) with
+    | some v => v.value
+    | none => none
 
 def AttrDict.find_nat {φ} (attrs : AttrDict φ) (name : String) : Option Nat :=
   match attrs.find name with
-  | .some (AttrValue.nat i) =>  .some i
+  | .some (AttrValue.nat i) => .some i
   | _ => .none
 
-def AttrDict.find_int {φ} (attrs : AttrDict φ)
-  (name : String): Option (Int × MLIRType φ) :=
+def AttrDict.find_int {φ} (attrs : AttrDict φ) (name : String) : Option (Int × MLIRType φ) :=
   match attrs.find name with
-  | .some (AttrValue.int i ty) =>  .some (i, ty)
+  | .some (AttrValue.int i ty) => .some (i, ty)
   | _ => .none
 
 def AttrDict.find_str {φ} (attrs : AttrDict φ) (name : String) : Option String :=
   match attrs.find name with
-  | .some (AttrValue.str s) =>  .some s
+  | .some (AttrValue.str s) => .some s
   | _ => .none
 
-def AttrDict.find_int' {φ} (attrs : AttrDict φ) (name : String): Option Int :=
+def AttrDict.find_int' {φ} (attrs : AttrDict φ) (name : String) : Option Int :=
   match attrs.find name with
-  | .some (AttrValue.int i _) =>  .some i
+  | .some (AttrValue.int i _) => .some i
   | _ => .none
 
-@[simp] theorem AttrDict.find_none :
-    AttrDict.find (@AttrDict.mk φ []) n' = none := by
+@[simp]
+theorem AttrDict.find_none : AttrDict.find (@AttrDict.mk φ []) n' = none := by
   simp [AttrDict.find, List.find?]
 
-@[simp] theorem AttrDict.find_next (v : AttrValue φ)
-  (l : List (AttrEntry φ)):
+@[simp]
+theorem AttrDict.find_next (v : AttrValue φ) (l : List (AttrEntry φ)) :
     AttrDict.find (AttrDict.mk (AttrEntry.mk n v :: l)) n' =
-    if n == n' then some v else AttrDict.find (AttrDict.mk l) n' := by
-  cases H: n == n' <;>
-  simp [AttrDict.find, List.find?, AttrEntry.key, AttrEntry.value, H]
+      if n == n' then some v else AttrDict.find (AttrDict.mk l) n' := by
+  cases H : n == n' <;> simp [AttrDict.find, List.find?, AttrEntry.key, AttrEntry.value, H]
 
-def AttrDict.addString (attrs: AttrDict φ) (k: String) (v: String): AttrDict φ :=
-    AttrEntry.mk k (v : AttrValue φ) :: attrs
+def AttrDict.addString (attrs : AttrDict φ) (k : String) (v : String) : AttrDict φ :=
+  AttrEntry.mk k (v : AttrValue φ) :: attrs
 
-def AttrDict.addType (attrs: AttrDict φ) (k: String) (v: MLIRType φ): AttrDict φ :=
-    AttrEntry.mk k (v : AttrValue φ) :: attrs
+def AttrDict.addType (attrs : AttrDict φ) (k : String) (v : MLIRType φ) : AttrDict φ :=
+  AttrEntry.mk k (v : AttrValue φ) :: attrs
 
-
-def Op.addAttr (o: Op φ) (k: String) (v: AttrValue φ): Op φ :=
+def Op.addAttr (o : Op φ) (k : String) (v : AttrValue φ) : Op φ :=
   { o with attrs := o.attrs.add (k, v) }
 
-def Region.empty {φ} (name: String): Region φ := Region.mk name [] [] []
-def Region.appendOp (bb: Region φ) (op: Op φ): Region φ :=
+def Region.empty {φ} (name : String) : Region φ :=
+  Region.mk name [] [] []
+
+def Region.appendOp (bb : Region φ) (op : Op φ) : Region φ :=
   { bb with ops := bb.ops ++ [op] }
 
-def Region.appendOps (bb: Region φ) (ops: List (Op φ)): Region φ :=
+def Region.appendOps (bb : Region φ) (ops : List (Op φ)) : Region φ :=
   { bb with ops := bb.ops ++ ops }
-
 
 instance : Inhabited (MLIRType φ) where
   default := MLIRType.undefined "INHABITANT"
@@ -420,13 +423,13 @@ instance : Inhabited (Region φ) where
 
 instance : Repr (Module φ) where
   reprPrec
-  | Module.mk fs attrs, _ =>
+    | Module.mk fs attrs, _ =>
       attrs.map repr ++ fs.map repr |>.map (Format.align true ++ ·) |> Format.join
 
-def Region.fromOps {φ} (os: List (Op φ)) (name: String := "entry") : Region φ :=
+def Region.fromOps {φ} (os : List (Op φ)) (name : String := "entry") : Region φ :=
   Region.mk name [] os []
 
-def Region.setArgs {φ} (bb: Region φ) (args: List (SSAVal × MLIRType φ)) : Region φ :=
+def Region.setArgs {φ} (bb : Region φ) (args : List (SSAVal × MLIRType φ)) : Region φ :=
   { bb with args := args }
 
 end MLIR.AST

@@ -1,7 +1,9 @@
 import LeanMLIR.MLIRSyntax.PrettyEDSL
+
 open Lean
 
 namespace MLIR.EDSL
+
 open Pretty
 
 /-!
@@ -13,6 +15,7 @@ Additionally, `disjoint_op`s may be annotated with the `disjoint` flag.
 The pretty syntax for this flag is `disjoint`.
 It gets translated to `<{isDisjoint}>` in the generic syntax.
 -/
+
 declare_syntax_cat MLIR.Pretty.disjoint_op
 
 -- syntax (mlir_op_operand " = ")? MLIR.Pretty.disjoint_op mlir_op_operand,* (" : " mlir_type)? : mlir_op
@@ -26,7 +29,9 @@ declare_syntax_cat MLIR.Pretty.disjoint_op
 --       | none => #[]
 --     `([mlir_op| $[$resName =]? $opName ($xs,*) : ($argTys,*) -> ($retTy:mlir_type,*) ])
 
-syntax (mlir_op_operand " = ")? MLIR.Pretty.disjoint_op " disjoint " mlir_op_operand,* (" : " mlir_type)? : mlir_op
+syntax (mlir_op_operand " = ")? MLIR.Pretty.disjoint_op " disjoint " mlir_op_operand,* (" : " mlir_type)? :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $[$resName =]? $name:MLIR.Pretty.disjoint_op disjoint $xs,*  $[: $t]? ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported

@@ -1,7 +1,9 @@
 import LeanMLIR.MLIRSyntax.PrettyEDSL
+
 open Lean
 
 namespace MLIR.EDSL
+
 open Pretty
 
 /-!
@@ -13,9 +15,11 @@ Additionally, `exact_op`s may be annotated with the `exact` flag.
 The pretty syntax for this flag is `exact`.
 It gets translated to `<{isExact}>` in the generic syntax.
 -/
+
 declare_syntax_cat MLIR.Pretty.exact_op
 
 syntax (mlir_op_operand " = ")? MLIR.Pretty.exact_op mlir_op_operand,* (" : " mlir_type)? : mlir_op
+
 macro_rules
   | `(mlir_op| $[$resName =]? $name:MLIR.Pretty.exact_op $xs,*  $[: $t]? ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported
@@ -26,7 +30,9 @@ macro_rules
       | none => #[]
     `([mlir_op| $[$resName =]? $opName ($xs,*) : ($argTys,*) -> ($retTy:mlir_type,*) ])
 
-syntax (mlir_op_operand " = ")? MLIR.Pretty.exact_op " exact " mlir_op_operand,* (" : " mlir_type)? : mlir_op
+syntax (mlir_op_operand " = ")? MLIR.Pretty.exact_op " exact " mlir_op_operand,* (" : " mlir_type)? :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $[$resName =]? $name:MLIR.Pretty.exact_op exact $xs,*  $[: $t]? ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported

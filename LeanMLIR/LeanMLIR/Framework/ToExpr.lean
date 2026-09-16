@@ -9,16 +9,15 @@ import Qq
 Define a `ToExpr` instance for core datastructures
 
 -/
+
 open Lean (ToExpr toExpr MetaM mkAppN mkConst mkApp mkApp2 mkApp3 mkApp4 mkApp6)
 open Qq
-
-variable {d : Dialect} [DialectSignature d]
-  [Lean.ToExpr d.Ty] [Lean.ToExpr d.Op] [DialectToExpr d]
+variable {d : Dialect} [DialectSignature d] [Lean.ToExpr d.Ty] [Lean.ToExpr d.Op] [DialectToExpr d]
 
 def effLeToExpr : {eff eff' : EffectKind} → (h : eff ≤ eff') → Q($eff ≤ $eff')
   | .impure, .impure, _ => q(EffectKind.le_refl .impure)
-  | .pure, .pure, _     => q(EffectKind.le_refl .pure)
-  | .pure, .impure, _   => q(EffectKind.pure_le .impure)
+  | .pure, .pure, _ => q(EffectKind.le_refl .pure)
+  | .pure, .impure, _ => q(EffectKind.pure_le .impure)
 
 open DialectSignature in
 /--
@@ -44,36 +43,39 @@ structure DialectMetaMorphism (d : Dialect) [DialectSignature d] (d' : Q(Dialect
       NOTE: the default implementation assumes that `mapOp` preserves the
             effectKind of mapped operations.
   -/
-  mapEffLe {op : d.Op} {eff : EffectKind} (h : effectKind op ≤ eff) : Lean.Expr :=
-    effLeToExpr h
+  mapEffLe {op : d.Op} {eff : EffectKind} (h : effectKind op ≤ eff) : Lean.Expr := effLeToExpr h
 
 open DialectToExpr (toExprDialect)
+
 /-- The trivial identity morphism, which maps programs in dialect `d` to
 *expressions* of programs in dialect `d`.
 
 That is, this morphism represents a straightforward `toExpr` transformation. -/
-def DialectMetaMorphism.id (d : Dialect) [DialectSignature d]
-    [ToExpr d.Op] [ToExpr d.Ty] [DialectToExpr d] :
-    DialectMetaMorphism d (toExprDialect d) where
+def DialectMetaMorphism.id (d : Dialect) [DialectSignature d] [ToExpr d.Op] [ToExpr d.Ty]
+    [DialectToExpr d] : DialectMetaMorphism d (toExprDialect d)
+    where
   mapOp := toExpr
   mapTy := toExpr
 
 /-- Obtain an Lean expression of a list, from a list of Lean expressions. -/
 protected def List.foldToExpr {α : Q(Type)} : List Q($α) → Q(List $α) :=
   List.foldr (fun a as => q($a :: $as)) q([])
+
 /-- Obtain an Lean expression of a product, from a product of Lean expressions. -/
 protected def Prod.foldToExpr {α β : Q(Type)} : Q($α) × Q($β) → Q($α × $β) :=
   -- NOTE: `Prod.mk`, not `Prod`. This built the *type* constructor until
   -- regions became reachable, at which point it produced `@Prod α β a b` and
   -- failed with "function expected". Nothing exercised it before: `Regions`
   -- was only ever `.nil`.
-  Function.uncurry <| mkApp4 (.const ``Prod.mk [0,0]) α β
+  Function.uncurry <| mkApp4 (.const ``Prod.mk [0, 0]) α β
 
 namespace DialectMetaMorphism
 
 variable {d'} (f : DialectMetaMorphism d d')
 
-def mapList (Γ : List d.Ty) : Q(List $(d').Ty) := (f.mapTy <$> Γ).foldToExpr
+def mapList (Γ : List d.Ty) : Q(List $(d').Ty) :=
+  (f.mapTy <$> Γ).foldToExpr
+
 def mapCtxt (Γ : Ctxt d.Ty) : Q(Ctxt $(d').Ty) :=
   let Γ := f.mapList Γ.toList
   q(Ctxt.ofList $Γ)
@@ -99,12 +101,10 @@ def mapVarVec {Γ : Ctxt d.Ty} {argSig} (args : HVector (Γ.Var) argSig) :
 
 end DialectMetaMorphism
 
-variable {d'} (f : DialectMetaMorphism d d')
-  (dE : Q(Dialect)) (sig : Q(DialectSignature $dE)) in
+variable {d'} (f : DialectMetaMorphism d d') (dE : Q(Dialect)) (sig : Q(DialectSignature $dE)) in
 mutual
-
-partial def Com.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty}
-    (com : Com d Γ eff ty) : Lean.Expr :=
+partial def Com.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} (com : Com d Γ eff ty) :
+    Lean.Expr :=
   let ΓE : Q(Ctxt ($dE).Ty) := f.mapCtxt Γ
   let tyE : Q(List ($dE).Ty) := f.mapList ty
   let effE : Q(EffectKind) := Lean.toExpr eff
@@ -117,9 +117,7 @@ partial def Com.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty}
     let e := e.toExprAux
     let body := body.toExprAux
     mkAppN (mkConst ``Com.var) #[dE, sig, ΓE, effE, eTyE, tyE, e, body]
-
-partial def Expr.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} :
-    Expr d Γ eff ty → Lean.Expr :=
+partial def Expr.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} : Expr d Γ eff ty → Lean.Expr :=
   let ΓE : Q(Ctxt ($dE).Ty) := f.mapCtxt Γ
   let tyE : Q(List ($dE).Ty) := f.mapList ty
   let effE : Q(EffectKind) := Lean.toExpr eff
@@ -129,29 +127,21 @@ partial def Expr.toExprAux {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} :
     let op := f.mapOp op
     let ty_eq : Lean.Expr := mkApp2 (.const ``rfl [1]) q(List $Ty) tyE
     let eff_le := f.mapEffLe eff_le
-
     let args := f.mapVarVec args
     let regArgs := Regions.toExprAux regArgs
-
-    mkAppN (mkConst ``Expr.mk) #[
-      dE, sig, effE, ΓE, tyE, op, ty_eq, eff_le, args, regArgs
-    ]
-
+    mkAppN (mkConst ``Expr.mk) #[dE, sig, effE, ΓE, tyE, op, ty_eq, eff_le, args, regArgs]
 partial def Regions.toExprAux {eff : EffectKind} {regSig : RegionSignature d.Ty}
     (regs : Regions d eff regSig) : Lean.Expr :=
   let effE : Q(EffectKind) := Lean.toExpr eff
   match regSig, regs with
-  | [], .nil =>
-    mkAppN (mkConst ``Regions.nil) #[dE, sig, effE]
-  | a::as, .cons x xs =>
+  | [], .nil => mkAppN (mkConst ``Regions.nil) #[dE, sig, effE]
+  | a :: as, .cons x xs =>
     let pToExpr (a) := Prod.foldToExpr <| a.map f.mapCtxt f.mapList
     let aE := pToExpr a
     let asE := (as.map pToExpr).foldToExpr
-
     let x := x.toExprAux
     let xs := Regions.toExprAux xs
     mkAppN (mkConst ``Regions.cons) #[dE, sig, effE, aE, asE, x, xs]
-
 end
 
 variable {Γ : Ctxt d.Ty} {eff : EffectKind} {ty : d.Ty}
@@ -159,7 +149,9 @@ variable {Γ : Ctxt d.Ty} {eff : EffectKind} {ty : d.Ty}
 /-!
 ## MetaMap helper
 -/
+
 section Map
+
 variable {ty : _}
 
 /-- Map a meta morphism over a LeanMLIR program, to obtain a (Lean) `Expr` representing
@@ -179,7 +171,9 @@ def Expr.metaMap (expr : Expr d Γ eff ty) (f : DialectMetaMorphism d d') : Meta
 -/
 
 /-- Build a (Lean) `Expr` to represent a LeanMLIR program. -/
-def Com.toExprM (com : Com d Γ eff ty) : MetaM Lean.Expr := com.metaMap (.id _)
+def Com.toExprM (com : Com d Γ eff ty) : MetaM Lean.Expr :=
+  com.metaMap (.id _)
 
 /-- Build a (Lean) `Expr` to represent a LeanMLIR expression. -/
-def Expr.toExprM (expr : Expr d Γ eff ty) : MetaM Lean.Expr := expr.metaMap (.id _)
+def Expr.toExprM (expr : Expr d Γ eff ty) : MetaM Lean.Expr :=
+  expr.metaMap (.id _)
