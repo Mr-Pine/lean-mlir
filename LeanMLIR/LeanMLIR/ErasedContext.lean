@@ -55,7 +55,7 @@ def cons (hd : Ty) : Ctxt Ty → Ctxt Ty
 @[deprecated cons (since := "2025-09-14")]
 abbrev snoc := fun Γ t => @cons Ty t Γ
 
-@[grind=]
+@[grind=, implicit_reducible]
 def length (Γ : Ctxt Ty) : Nat := Γ.toList.length
 
 instance : GetElem? (Ctxt Ty) Nat Ty (fun Γ i => i < Γ.length) where

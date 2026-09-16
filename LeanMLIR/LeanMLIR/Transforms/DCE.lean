@@ -212,10 +212,11 @@ def Deleted.toHom (h : Deleted Γ r Γ') : Γ'.Hom Γ :=
   simp only [toHom, Hom.delete, Var.val_castCtxt, DeleteRange.val_start_appendInl,
     DeleteRange.val_num_appendInl, Hom.append, Var.castCtxt_rfl]
   cases v using Var.appendCases with
-  | right _  => simp; grind
+  -- v4.34: `grind` needs the `Var` value equations named explicitly
+  | right _  => simp; grind [Var.val_castCtxt, Var.val_appendInr, Var.val_appendInl]
   | left v =>
     have := v.val_lt
-    simp; grind
+    simp; grind [Var.val_castCtxt, Var.val_appendInr, Var.val_appendInl]
 
 @[simp] lemma Deleted.toHom_last
     (DEL : Deleted (⟨us⟩ ++ Γ) (DeleteRange.full ⟨us⟩).appendInr Γ) :
@@ -224,6 +225,7 @@ def Deleted.toHom (h : Deleted Γ r Γ') : Γ'.Hom Γ :=
   funext t v
   apply Subtype.ext
   simp [toHom, Hom.delete, DeleteRange.full, DeleteRange.appendInr]
+  exact Var.val_castCtxt _
 
 /-! ## tryDelete? -/
 
@@ -260,10 +262,11 @@ def Var.tryDeleteOne? [TyDenote Ty] {Γ Γ' : Ctxt Ty} {delv : DeleteRange Γ}
 assuming that none of those variables were deleted. -/
 def Var.tryDelete? [TyDenote Ty] {Γ Γ' : Ctxt Ty} {delv : DeleteRange Γ}
   (DEL : Deleted Γ delv Γ') (vs : HVector Γ.Var β) :
-    Option { v' : HVector Γ'.Var β // vs = v'.map DEL.toHom } := do
-  match vs with
-  | .nil => some ⟨.nil, rfl⟩
-  | v ::ₕ vs => do
+    Option { v' : HVector Γ'.Var β // vs = v'.map DEL.toHom } :=
+  -- v4.34: matching on `vs` alone no longer refines `β`, so match on both
+  match β, vs with
+  | [], .nil => some ⟨.nil, rfl⟩
+  | _ :: _, v ::ₕ vs => do
       let ⟨v, hv⟩ ← tryDeleteOne? DEL v
       let ⟨vs, hvs⟩ ← tryDelete? DEL vs
       return ⟨v ::ₕ vs, by simp_all⟩
