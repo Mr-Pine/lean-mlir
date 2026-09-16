@@ -239,6 +239,9 @@ theorem map_map {A B C : α → Type*} {l : List α} (t : HVector A l)
     (h : i + 1 < (a :: as).length) :
     (HVector.cons x xs).get ⟨i + 1, h⟩ = xs.get ⟨i, Nat.succ_lt_succ_iff.mp h⟩ := rfl
 
+@[simp] theorem map_id (xs : HVector A as) : xs.map (fun _ v => v) = xs := by
+  induction xs <;> simp_all [map]
+
 @[simp] theorem get_map (xs : HVector A as) (f : (a : α) → A a → B a) :
     (xs.map f).get i = f _ (xs.get i) := by
   induction xs with

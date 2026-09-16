@@ -619,7 +619,9 @@ variable [TyDenote Ty]
 -- ^^ for a valuation, we need to evaluate the Lean `Type` corresponding to a `Ty`
 
 /-- A valuation for a context. Provide a way to evaluate every variable in a context. -/
-def Valuation (Γ : Ctxt Ty) : Type :=
+-- v4.34 checks applications at `implicit` transparency, so a valuation has to unfold
+-- to its function type for `HVector.map V ..` to typecheck.
+@[implicit_reducible] def Valuation (Γ : Ctxt Ty) : Type :=
   ⦃t : Ty⦄ → Γ.Var t → (toType t)
 
 /-- A valuation for a context. Provide a way to evaluate every variable in a context. -/
@@ -789,6 +791,18 @@ variable {ts : List Ty}
     · rw [Valuation.ofHVector_cons, Valuation.cons_last]
       exact (HVector.cons_getElem_last ..).symm
 
+/-! The two `Valuation` append lemmas through the `HVector`-on-the-left append. -/
+
+@[simp] theorem Valuation.appendHVector_appendInl {Γ : Ctxt Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) (v : Var ⟨ts⟩ t) :
+    (vals ++ V) v.appendInl = ofHVector vals v :=
+  append_appendInl
+
+@[simp] theorem Valuation.appendHVector_appendInr {Γ : Ctxt Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) (v : Var Γ t) :
+    (vals ++ V) v.appendInr = V v :=
+  append_appendInr
+
 @[simp] theorem Valuation.ofHVector_inj (xs ys : HVector toType ts) :
     ofHVector xs = ofHVector ys ↔ xs = ys := by
   apply Iff.intro (mpr := by rintro rfl; rfl)
@@ -857,6 +871,12 @@ def Valuation.comap {Γi Γo : Ctxt Ty} (Γiv: Γi.Valuation) (hom : Ctxt.Hom Γ
     (f : Δ.Hom Γ) :
     (W ++ V).comap (f.append) = W ++ (V.comap f) := by
   funext t v; cases v using Var.appendCases <;> simp
+
+@[simp] theorem Valuation.comap_append {Γ Δ : Ctxt Ty} {ts : List Ty}
+    (vals : HVector toType ts) (V : Γ.Valuation) (f : Δ.Hom Γ) :
+    (vals ++ V).comap f.append = vals ++ V.comap f := by
+  funext t v
+  cases v using Var.appendCases <;> simp
 
 @[simp] theorem Valuation.comap_appendCodomain {Γ Δ ζ : Ctxt Ty}
     (V : Γ.Valuation) (W : ζ.Valuation) (f : Δ.Hom Γ) :
@@ -929,11 +949,6 @@ def Valuation.cast {Γ Δ : Ctxt Ty} (h : Γ = Δ) (V : Valuation Γ) : Valuatio
 @[simp] theorem Valuation.cast_rfl_eq_id {Γ : Ctxt Ty} (h : Γ = Γ) :
     Valuation.cast h = (id : Γ.Valuation → Γ.Valuation) := rfl
 
-/-- `append_appendInr` through the `HVector`-on-the-left append. -/
-@[simp] theorem Valuation.appendHVector_appendInr {ts : List Ty} {Γ : Ctxt Ty}
-    (vals : HVector toType ts) (V : Valuation Γ) (v : Var Γ t) :
-    (vals ++ V) v.appendInr = V v :=
-  append_appendInr
 
 @[simp] theorem Valuation.cast_apply {Γ : Ctxt Ty} (h : Γ = Δ) (V : Γ.Valuation) (v : Δ.Var t) :
     V.cast h v = V (v.castCtxt h.symm) := rfl
