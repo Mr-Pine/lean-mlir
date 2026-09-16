@@ -437,7 +437,21 @@ def wordsOf (a b c d : PoisonOr (BitVec 64)) : Option (Fin 4 → BitVec 64) :=
 theorem readWord_load_slice {m : MemoryState} {inp q : Pointer} (hin : Fits m inp (64 * 8))
     (hid : q.id = inp.id) {i : Nat} (hi : i < 8)
     (hoff : q.offsetInBits = inp.offsetInBits + 64 * i) {hp : Fits m q 64} :
-    readWord hp = (readWord hin).extractLsb' (64 * i) 64 := sorry
+    readWord hp = (readWord hin).extractLsb' (64 * i) 64 := by
+  obtain ⟨blk, hlive⟩ : ∃ blk, m.live? inp.id = some blk := by
+    obtain ⟨blk, hblk, -⟩ := hin
+    exact ⟨blk, by simp only [MemoryState.live?, hblk]⟩
+  have hw : readWord hin = blk.bytes.extractLsb' inp.offsetInBits (64 * 8) :=
+    readWord_eq_of (by
+      simp only [readWord?, hlive, Option.bind_eq_bind, Option.bind_some, Option.pure_def])
+  apply readWord_eq_of
+  simp only [readWord?, hid, hlive, hoff, Option.bind_eq_bind, Option.bind_some, Option.pure_def,
+    Option.some.injEq, hw]
+  ext k hk
+  simp only [BitVec.getElem_extractLsb']
+  rw [BitVec.getLsbD_extractLsb', decide_eq_true (by omega : 64 * i + k < 64 * 8), Bool.true_and]
+  congr 1
+  omega
 
 /-- What the run does, with the four store operands left abstract: the result is named, as in
 `fd_curve25519_scalar_reduce_frame_spec`, so a walk can step it in place. -/
