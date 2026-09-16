@@ -143,7 +143,7 @@ private theorem runFunction_res {α : Type} {body : EffectM α} {s : GlobalState
       rw [PoisonOr.value_inj, Prod.mk.injEq] at h'
       exact h'.2 ▸ hQ t (by rw [h'.1])
 
-set_option maxRecDepth 100000 in
+-- diagnostic: is the deep valuation spine, not the witness, what needs the depth?
 set_option maxHeartbeats 2000000 in
 theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
     (hs : s.WF) (hin : Fits s.mem inp (64 * 8)) (hout : IsByteBufPtr s.mem out) :
@@ -432,6 +432,33 @@ def wordsOf (a b c d : PoisonOr (BitVec 64)) : Option (Fin 4 → BitVec 64) :=
   match a, b, c, d with
   | .value a, .value b, .value c, .value d => some ![a, b, c, d]
   | _, _, _, _ => none
+
+/-- A poison operand makes the four words `none`. One per slot: the store that is handed
+poison is the only one whose value is known there. -/
+private theorem wordsOf_poison₀ {a b c d : PoisonOr (BitVec 64)} (h : a = .poison) :
+    wordsOf a b c d = none := by subst h; cases b <;> cases c <;> cases d <;> rfl
+
+private theorem wordsOf_poison₁ {a b c d : PoisonOr (BitVec 64)} (h : b = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases c <;> cases d <;> rfl
+
+private theorem wordsOf_poison₂ {a b c d : PoisonOr (BitVec 64)} (h : c = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases b <;> cases d <;> rfl
+
+private theorem wordsOf_poison₃ {a b c d : PoisonOr (BitVec 64)} (h : d = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases b <;> cases c <;> rfl
+
+/-- Four values, four words. -/
+private theorem wordsOf_value {a b c d : PoisonOr (BitVec 64)} {x y z t : BitVec 64}
+    (ha : a = .value x) (hb : b = .value y) (hc : c = .value z) (hd : d = .value t) :
+    wordsOf a b c d = some ![x, y, z, t] := by subst ha; subst hb; subst hc; subst hd; rfl
+
+/-- The two readings of one `wordsOf` a store branch ends with, played off each other.
+
+Stated over an abstract `o`: the witness reaches the goal only as `o`'s unifier, so no tactic
+here ever traverses it. -/
+private theorem wordsOf_absurd {P : Prop} {w : Fin 4 → BitVec 64}
+    {o : Option (Fin 4 → BitVec 64)} (hs : o = some w) (hn : o = none) : P :=
+  Option.noConfusion (hs.symm.trans hn)
 
 /-- A load inside the 512 bits at `inp` returns its slice of them. -/
 theorem readWord_load_slice {m : MemoryState} {inp q : Pointer} (hin : Fits m inp (64 * 8))

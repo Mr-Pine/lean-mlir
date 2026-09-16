@@ -37,8 +37,9 @@ lemma from_bytes_eq_value (buf : BitVec 256) :
     rw [key, key, key, key, key, h255]
     omega
   have hcast := congrArg (fun n : ℕ => (n : ZMod _root_.p)) hnat
-  push_cast at hcast
-  simpa [decodeFieldElem, decodeBytes, from_bytes_repr, Fin.isValue] using hcast
+  -- v4.34: `push_cast` evaluates the powers in `hcast` but not in the target
+  push_cast [-Nat.reducePow] at hcast
+  simpa [decodeFieldElem, decodeBytes, from_bytes_repr, Fin.isValue, -Nat.reducePow] using hcast
 
 /-- What the buffer read is, once the block behind `p` is known. -/
 lemma bufBits {m : MemoryState} {p : Pointer} {blk : LiveBlock}
