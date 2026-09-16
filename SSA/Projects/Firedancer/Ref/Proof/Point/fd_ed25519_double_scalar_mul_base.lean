@@ -268,7 +268,7 @@ structure Frame (s : GlobalState) (r : Pointer) (L : Locals) (W : Vals) (u : Glo
 /-- What the return leaves. -/
 def Done (s : GlobalState) (r : Pointer) (L : Locals) (W : Vals) (Xf : Edwards.Point Ed25519.curve)
     (rs : HVector toType [SLLVM.Ty.ptr]) (u : GlobalState) : Prop :=
-  rs = [.value r]ₕ ∧ Frame s r L W u ∧ ∃ R, PointAt u.mem r R rBnd ∧ R.Represents Xf
+  rs = [.value r]ₕ ∧ Frame s r L W u ∧ ∃ R, PointAt u.mem r R tight ∧ R.Represents Xf
 
 /-- Block `t`'s run in `u`: `Done` at a return, `P` at the successor. -/
 abbrev StepThen (s : GlobalState) (r : Pointer) (L : Locals) (W : Vals)
@@ -659,7 +659,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
     hu₂.refwf.of_ids fun p hp => by
       simp only [List.mem_singleton] at hp; subst hp; exact ⟨L.ai, by simp, entryPtr_id _ _ _⟩
   refine (fd_curve25519_into_precomputed_conforms (aiPtr L.ai k) u₂ hK₂.ptr hrefwf₂
-    (limbBounds_congr_bound (coordPtr_zero _) (hK₂.bnd 0))
+    (biasBounds_congr (coordPtr_zero _) (hK₂.bnd 0).bias)
     (limbBounds_congr_bound (coordPtr_one _) (hK₂.bnd 1))
     (limbBounds_congr_bound (coordPtr_two _) (hK₂.bnd 2)).loose).elim
     fun u₃ h₄ => h₄.elim fun hrun₄ he₄ => ?_
@@ -871,7 +871,7 @@ theorem step_bb8 (hV : EntryEnv V r L) {u : GlobalState}
   denote_reduce_get
   -- `partial_dbl(t, r)`
   refine (fd_ed25519_partial_dbl_conforms L.t r u hu.refwf.wf hu.tptr hR.ptr
-    (Dbln.coordBounds hR.ptr 0 r (coordPtr_zero _) (hR.bnd 0))
+    (biasBounds?_of_limbBounds (Dbln.coordBounds hR.ptr 0 r (coordPtr_zero _) (hR.bnd 0)))
     (Dbln.coordBounds hR.ptr 1 _ rfl (hR.bnd 1)) (Dbln.coordBounds hR.ptr 3 _ rfl (hR.bnd 3))).elim
     fun oT h => h.elim fun oZ h => h.elim fun oY h => h.elim fun oX h₁ =>
     h₁.1.elim fun u₁ hc₁ => ?_
@@ -1182,14 +1182,14 @@ theorem step_bb16 (hV : EntryEnv V r L) {u : GlobalState} (j : Nat) (hj : j ≤ 
 theorem step_bb17 (hV : EntryEnv V r L) {u : GlobalState} (T : Ed25519.Point)
     (hu : Frame s r L W u) (hT : PointAt u.mem L.t T loose)
     {P : SuccArgs fd_ed25519_double_scalar_mul_base.sigs → GlobalState → Prop}
-    (k : ∀ u', Frame s r L W u' → PointAt u'.mem r T.finalMul rBnd → P ⟨18, rfl, .nil⟩ u') :
+    (k : ∀ u', Frame s r L W u' → PointAt u'.mem r T.finalMul tight → P ⟨18, rfl, .nil⟩ u') :
     StepThen s r L W Xf V P ⟨16, rfl, .nil⟩ u := by
   simp only [StepThen]
   denote_reduce_get
   refine (finalMul_rt hV hu hT).elim fun u₁ h₁ => ?_
   peel_call h₁.1 with hV.r, hV.t
   simp_return
-  exact k _ h₁.2.1 (h₁.2.2.2.mono tight_le_rBnd)
+  exact k _ h₁.2.1 h₁.2.2.2
 
 /-- `^bb18`: `add_final_mul_projective(r, t)`; `j >s 0`: `^bb8(j - 1)`, else `^bb19`. From
 `1 ≤ j` only the first, with `r = T` finished projectively, `R`'s `T` kept. -/
@@ -1251,7 +1251,7 @@ theorem walk_bb16 (hV : EntryEnv V r L) {u : GlobalState}
     (j : Nat) (hj : j ≤ 255) (R T : Ed25519.Point) (hu : Frame s r L W u)
     (htb : Table u.mem L.ai W.A 8) (hR : PointAt u.mem r R rBnd)
     (hT : PointAt u.mem L.t T loose)
-    (stop19 : j = 0 → ∀ u', Frame s r L W u' → PointAt u'.mem r T.finalMul rBnd →
+    (stop19 : j = 0 → ∀ u', Frame s r L W u' → PointAt u'.mem r T.finalMul tight →
       Runs s r L W Xf V ⟨18, rfl, .nil⟩ u')
     (stop8 : 1 ≤ j → ∀ u', Frame s r L W u' → Table u'.mem L.ai W.A 8 →
       PointAt u'.mem r { T.finalMul with T := R.T } rBnd →
@@ -1269,7 +1269,7 @@ theorem walk_iter {Bt : ℕ → Ed25519.PrecomputedPoint} {G : Ed25519.Point} (h
     {u : GlobalState} (j : Nat) (hj : j ≤ 255) (R : Ed25519.Point) {X : Edwards.Point Ed25519.curve}
     (hu : Frame s r L W u) (htb : Table u.mem L.ai W.A 8) (hR : PointAt u.mem r R rBnd)
     (hX : R.Represents X)
-    (stop19 : j = 0 → ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' rBnd →
+    (stop19 : j = 0 → ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' tight →
       R'.Represents (ladderStep (W.A.toAffine hA) (G.toAffine hG) X W.w₁ W.w₂ j) →
       Runs s r L W Xf V ⟨18, rfl, .nil⟩ u')
     (stop8 : 1 ≤ j → ∀ u' R', Frame s r L W u' → Table u'.mem L.ai W.A 8 →
@@ -1299,7 +1299,7 @@ theorem walk_bb8_all {Bt : ℕ → Ed25519.PrecomputedPoint} {G : Ed25519.Point}
     (hV : EntryEnv V r L) (hD₁ : DigitVals W.w₁ 15) (hD₂ : DigitVals W.w₂ 255)
     (hBT : BaseTable s r L Bt) (hA : W.A.WellFormed) (hZ : W.A.Z = 1) (hG : G.WellFormed)
     (hB : BaseVals Bt G hG)
-    (stop19 : ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' rBnd → R'.Represents Xf →
+    (stop19 : ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' tight → R'.Represents Xf →
       Runs s r L W Xf V ⟨18, rfl, .nil⟩ u') :
     ∀ (j : Nat), j ≤ 255 → ∀ (u : GlobalState) (R : Ed25519.Point)
       (X : Edwards.Point Ed25519.curve),
@@ -1323,7 +1323,7 @@ theorem walk_loops {Bt : ℕ → Ed25519.PrecomputedPoint} {G : Ed25519.Point}
     (hV : EntryEnv V r L) (hD₁ : DigitVals W.w₁ 15) (hD₂ : DigitVals W.w₂ 255)
     (hBT : BaseTable s r L Bt) (hA : W.A.WellFormed) (hZ : W.A.Z = 1) (hG : G.WellFormed)
     (hB : BaseVals Bt G hG) (hXf : ladder (W.A.toAffine hA) (G.toAffine hG) 0 W.w₁ W.w₂ 255 = Xf)
-    (stop19 : ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' rBnd → R'.Represents Xf →
+    (stop19 : ∀ u' R', Frame s r L W u' → PointAt u'.mem r R' tight → R'.Represents Xf →
       Runs s r L W Xf V ⟨18, rfl, .nil⟩ u')
     {u : GlobalState} (hu : Frame s r L W u) (htb : Table u.mem L.ai W.A 8)
     (hR : PointAt u.mem r .zero tight) :
@@ -1336,11 +1336,11 @@ theorem walk_loops {Bt : ℕ → Ed25519.PrecomputedPoint} {G : Ed25519.Point}
       (.step (step_bb7 hV i' hi'
         (walk_bb8_all hV hD₁ hD₂ hBT hA hZ hG hB stop19 i' hi' u _ 0
           ((ladder_skip (by omega) hz).trans hXf) hu htb hR' h0)))))
-    (fun hz => stop19 u _ hu hR' (by rw [← hXf, ladder_all_zero hz]; exact h0))
+    (fun hz => stop19 u _ hu hR (by rw [← hXf, ladder_all_zero hz]; exact h0))
 
 /-- `^bb19`: Lifetime ends, `return r`. -/
 theorem step_bb19 (hV : EntryEnv V r L) {u : GlobalState} (R : Ed25519.Point)
-    (hu : Frame s r L W u) (hR : PointAt u.mem r R rBnd) (hX : R.Represents Xf)
+    (hu : Frame s r L W u) (hR : PointAt u.mem r R tight) (hX : R.Represents Xf)
     {P : SuccArgs fd_ed25519_double_scalar_mul_base.sigs → GlobalState → Prop}
     : StepThen s r L W Xf V P ⟨18, rfl, .nil⟩ u := by
   simp only [StepThen, Done]
@@ -1445,7 +1445,7 @@ into_precomputed(ai[0])`, then `br ^bb2(1)`. -/
 theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
     (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
     (hn1 : IsByteBufPtr s.mem n1) (hn2 : IsByteBufPtr s.mem n2)
-    (haX : LimbBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
+    (haX : BiasBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
     (haZ : LimbBounds.Loose (isCoordPtr ha 3)) (haT : LimbBounds.Loose (isCoordPtr ha 2))
     : ∃ (L : Locals) (Vout : fd_ed25519_double_scalar_mul_base.Γout.Valuation) (u : GlobalState),
       StateT.run (fd_ed25519_double_scalar_mul_base.entry.denote
@@ -1546,7 +1546,7 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
         (hl₁ _ (hslot (by omega))))) (GlobalState.fits_chainPtr (show 3 < 5 by omega)), by simp⟩
   refine (fd_ed25519_point_dbln_conforms (slot s 3) a 1#32 u₃ ((wf_splice4 hw₂).of_equiv he₃)
     ha2₃ (isPointPtr_of_live?_eq hla₃ ha)
-    (carryBnd (q := a.withOffset ((0 : Fin 4) * (5 * 8))) hla₃ haX)
+    (carryBias (q := a.withOffset ((0 : Fin 4) * (5 * 8))) hla₃ haX)
     (carryBnd (q := a.withOffset ((1 : Fin 4) * (5 * 8))) hla₃ haY)
     (carryBnd (q := a.withOffset ((3 : Fin 4) * (5 * 8))) hla₃ haZ) (by decide)).elim
     fun dX h => h.elim fun dY h => h.elim fun dZ h => h.elim fun dT h => h.1.elim
@@ -1574,6 +1574,11 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
       (h : IsFieldElemPtr u₄.mem q) → LimbBounds h B := fun hq hc hb h =>
     limbBounds_of_readLimb? h fun i l hl =>
       hb i l ((hc i).symm.trans ((readLimb?_of_live?_eq (hq ▸ hl₄₂) i).symm.trans hl))
+  have copyBias : ∀ {q qa : Pointer}, q.id = (slot s 2).id →
+      (∀ i, readLimb? q i u₃.mem = readLimb? qa i u₂.mem) → BiasBounds? qa u₂.mem →
+      (h : IsFieldElemPtr u₄.mem q) → BiasBounds h := fun hq hc hb h =>
+    biasBounds_of_readLimb? h fun i l hl =>
+      hb i l ((hc i).symm.trans ((readLimb?_of_live?_eq (hq ▸ hl₄₂) i).symm.trans hl))
   have hrefwf₄ : u₄.RefWF [slot s 2] :=
     refWF_widen hs ((wf_splice4 hw₃).of_equiv he₄)
       (he₄.globals.symm.trans (he₃.globals.symm.trans (he₂.globals.symm.trans
@@ -1582,9 +1587,10 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.RefWF [r])
         ((hl₂ b (hslot_below hb)).trans ((hl₁ b (hslot_below hb)).trans (fb b hb)))))
       (fun p hp => by simp only [List.mem_singleton] at hp; subst hp; simp)
   refine (fd_curve25519_into_precomputed_conforms (slot s 2) u₄ hai₄ hrefwf₄
-    (copy (q := slot s 2) (qa := a) rfl
+    (copyBias (q := slot s 2) (qa := a) rfl
       (fun i => (readLimb?_of_equiv_mem he₃ (slot s 2) i).trans (hset.2.1 i))
-      (limbBounds_of_live?_eq (p := a) hla₂ (Dbln.coordBounds ha 0 a (coordPtr_zero a) haX)) _)
+      (Dbln.coordBias ha₂ 0 a (coordPtr_zero a)
+        (carryBias (q := a.withOffset ((0 : Fin 4) * (5 * 8))) hla₂ haX)) _)
     (copy (q := (slot s 2).withOffset 40) (qa := a.withOffset 40) rfl
       (fun i => (readLimb?_of_equiv_mem he₃ ((slot s 2).withOffset 40) i).trans (hset.2.2.1 i))
       (limbBounds_of_live?_eq (p := a.withOffset 40) hla₂ (Dbln.coordBounds ha 1 _ rfl haY)) _)
@@ -1716,7 +1722,7 @@ open DoubleScalarMulBase Common.DoubleScalarMulBase in
 theorem fd_ed25519_double_scalar_mul_base_conforms (r n1 a n2 : Pointer) (s : GlobalState)
     (hs : s.RefWF [r]) (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
     (hn1 : IsByteBufPtr s.mem n1) (hn2 : IsByteBufPtr s.mem n2)
-    (haX : LimbBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
+    (haX : BiasBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
     (haZ : LimbBounds.Loose (isCoordPtr ha 3)) (haT : LimbBounds.Loose (isCoordPtr ha 2))
     : fd_ed25519_double_scalar_mul_base_spec r n1 a n2 s := by
   simp only [fd_ed25519_double_scalar_mul_base_spec, Cfg.denote]
@@ -1735,7 +1741,9 @@ theorem fd_ed25519_double_scalar_mul_base_conforms (r n1 a n2 : Pointer) (s : Gl
   -- `r` holds `(n₁ mod 2^255)·a + (n₂ mod 2^255)·G`
   rw [ladder_digitSum, hS₁, hS₂] at hRX
   obtain ⟨oX, oY, oZ, oT, hlr⟩ := hF.written
-  refine ⟨u, ?run, oX, oY, oZ, oT, ?equiv, ?val⟩
+  refine ⟨u, ?run, oX, oY, oZ, oT, ?equiv, ?val, ?bnd⟩
+  case bnd =>
+    exact fun i => carryBnd (q := r.withOffset (i * (5 * 8))) hlr.symm (hRu.bnd i)
   case val =>
     rw [readPoint_of_live?_eq hlr.symm hRu.ptr, hRu.val,
       ← Ed25519.Point.toAffine_congr hWA hA hAa, ← natCast_zsmul, ← natCast_zsmul]

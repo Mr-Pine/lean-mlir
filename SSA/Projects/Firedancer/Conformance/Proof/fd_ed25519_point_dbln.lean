@@ -22,7 +22,7 @@ open Ed25519
 private theorem of_conforms
     (hRef : ∀ (r a : Pointer) (n : BitVec 32) (s : GlobalState)
       (_ : s.WF) (hr : Ref.IsPointPtr s.mem r) (ha : Ref.IsPointPtr s.mem a)
-      (_ : Ref.LimbBounds (Ref.isCoordPtr ha 0)) (_ : Ref.LimbBounds (Ref.isCoordPtr ha 1))
+      (_ : Ref.BiasBounds (Ref.isCoordPtr ha 0)) (_ : Ref.LimbBounds (Ref.isCoordPtr ha 1))
       (_ : Ref.LimbBounds.Loose (Ref.isCoordPtr ha 3))
       (_ : n.toInt < 256), Ref.fd_ed25519_point_dbln_spec r a n s hr ha)
     (hAvx : ∀ (r a : Pointer) (n : BitVec 32) (s : GlobalState)
@@ -35,8 +35,8 @@ private theorem of_conforms
     hX hY hZ
   obtain ⟨oX, oY, oZ, oT, ⟨sRef, hrefRun, hrefEq⟩, hvRef, -⟩ :=
     hRef r a n s hs hr ha
-      (Ref.limbBounds_congr (Ref.coordPtr_zero a).symm
-        (Ref.limbBounds_of_readLimb? (Ref.coordPtr_zero a ▸ Ref.isCoordPtr ha 0) haX))
+      (Ref.biasBounds_congr (Ref.coordPtr_zero a).symm
+        (Ref.biasBounds_of_readLimb? (Ref.coordPtr_zero a ▸ Ref.isCoordPtr ha 0) haX))
       (Ref.limbBounds_of_readLimb? _ haY) (Ref.limbBounds_of_readLimb? _ haZ) hn
   obtain ⟨q, ⟨sAvx, havxRun, havxEq⟩, hvAvx, -⟩ := hAvx r' a' n s' hs' hr' ha' hu' hn
   have hrOut' : Avx512.IsQuadPtr (s'.mem.writeQuad r' q) r' := Avx512.isQuadPtr_writeQuad hr' q

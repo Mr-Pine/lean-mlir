@@ -13,20 +13,19 @@ open InstCombine (LLVM)
 def add_repr (p q : Fin 5 → Nat) :=
   ![p 0 + q 0, p 1 + q 1, p 2 + q 2, p 3 + q 3, p 4 + q 4]
 
-lemma add_repr_bounds (p q : Fin 5 → Nat) (i : Fin 5)
-    (hp : ∀ (i : Fin 5), p i ≤ 0x8000000000000)
-    (hq : ∀ (i : Fin 5), q i ≤ 0x8000000000000) :
+lemma add_repr_bounds (p q : Fin 5 → Nat) (i : Fin 5) {Bp Bq : ℕ}
+    (hp : ∀ (i : Fin 5), p i ≤ Bp) (hq : ∀ (i : Fin 5), q i ≤ Bq)
+    (hB : Bp + Bq ≤ 0x18000000000000) :
     add_repr p q i ≤ 0x18000000000000 := by
   have p0 := hp 0; have p1 := hp 1; have p2 := hp 2; have p3 := hp 3; have p4 := hp 4
   have q0 := hq 0; have q1 := hq 1; have q2 := hq 2; have q3 := hq 3; have q4 := hq 4
   simp only [add_repr]
   fin_cases i <;> simp <;> omega
 
-/-- One limb of the region's `add`, over `toNat`. At fiat's input bound the sum
-is below `2 ^ 64`, so the machine `add` does not wrap. The region computes
-`q + p`, hence the operand order. -/
+/-- One limb of the region's `add`, over `toNat`. Below `2 ^ 64` the machine
+`add` does not wrap. The region computes `q + p`, hence the operand order. -/
 theorem add_limb_toNat {a b : BitVec 64} {m n : ℕ} (ha : a.toNat = m) (hb : b.toNat = n)
-    (hm : m ≤ 0x8000000000000) (hn : n ≤ 0x8000000000000) :
+    (hmn : m + n < 2 ^ 64) :
     (b + a).toNat = m + n := by
   rw [BitVec.toNat_add, ha, hb]
   omega
@@ -40,11 +39,13 @@ lemma add_repr_correct (p q : Fin 5 → Nat) :
 set_option maxHeartbeats 3200000 in
 theorem fiat_25519_add_conforms (o p q: Pointer) (s: GlobalState)
   (hs : s.WF)
-  (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
-  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
+  {Bp Bq : ℕ}
+  (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ Bp)
+  (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ Bq)
   (ho: IsFieldElemPtr s.mem o)
   (hp: IsFieldElemPtr s.mem p)
-  (hq: IsFieldElemPtr s.mem q) :
+  (hq: IsFieldElemPtr s.mem q)
+  (hB : Bp + Bq ≤ 0x18000000000000 := by norm_num) :
   fiat_25519_add_spec o p q s ho hp hq := by
     simp only [fiat_25519_add_spec, Cfg.denote]
 
@@ -53,12 +54,14 @@ theorem fiat_25519_add_conforms (o p q: Pointer) (s: GlobalState)
 
     obtain ⟨pinput, hpinput⟩ := exists_limbs hpblk
     obtain ⟨qinput, hqinput⟩ := exists_limbs hqblk
-    have pb : ∀ i : Fin 5, pinput i ≤ 0x8000000000000 := fun i => hpbounds i _ (hpinput i)
-    have qb : ∀ i : Fin 5, qinput i ≤ 0x8000000000000 := fun i => hqbounds i _ (hqinput i)
+    have pb : ∀ i : Fin 5, pinput i ≤ Bp := fun i => hpbounds i _ (hpinput i)
+    have qb : ∀ i : Fin 5, qinput i ≤ Bq := fun i => hqbounds i _ (hqinput i)
+    have hlt : ∀ i : Fin 5, pinput i + qinput i < 2 ^ 64 :=
+      fun i => ((Nat.add_le_add (pb i) (qb i)).trans hB).trans_lt (by norm_num)
     let output := add_repr pinput qinput
     let outputBV := BitVec.ofNat 64 ∘ output
     have output_bounds : ∀ i : Fin 5, output i ≤ 0x18000000000000 :=
-      fun i => add_repr_bounds pinput qinput i pb qb
+      fun i => add_repr_bounds pinput qinput i pb qb hB
 
     refine ⟨outputBV, ?value, ?bounds, ?exec⟩
 
@@ -148,19 +151,19 @@ theorem fiat_25519_add_conforms (o p q: Pointer) (s: GlobalState)
 
     have m1 : (qlimb₀ + plimb₀).toNat = pinput 0 + qinput 0 :=
       add_limb_toNat (by simpa [readLimb?, MemoryState.live?, hpblk, hplimb₀] using hpinput 0)
-        (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0) (pb 0) (qb 0)
+        (by simpa [readLimb?, MemoryState.live?, hqblk, hqlimb₀] using hqinput 0) (hlt 0)
     have m2 : (qlimb₁ + plimb₁).toNat = pinput 1 + qinput 1 :=
       add_limb_toNat (by rw [hplimb₁]; exact hpl 1 8#64 (by simp))
-        (by rw [hqlimb₁]; exact hql 1 8#64 (by simp)) (pb 1) (qb 1)
+        (by rw [hqlimb₁]; exact hql 1 8#64 (by simp)) (hlt 1)
     have m3 : (qlimb₂ + plimb₂).toNat = pinput 2 + qinput 2 :=
       add_limb_toNat (by rw [hplimb₂]; exact hpl 2 16#64 (by simp))
-        (by rw [hqlimb₂]; exact hql 2 16#64 (by simp)) (pb 2) (qb 2)
+        (by rw [hqlimb₂]; exact hql 2 16#64 (by simp)) (hlt 2)
     have m4 : (qlimb₃ + plimb₃).toNat = pinput 3 + qinput 3 :=
       add_limb_toNat (by rw [hplimb₃]; exact hpl 3 24#64 (by simp))
-        (by rw [hqlimb₃]; exact hql 3 24#64 (by simp)) (pb 3) (qb 3)
+        (by rw [hqlimb₃]; exact hql 3 24#64 (by simp)) (hlt 3)
     have m5 : (qlimb₄ + plimb₄).toNat = pinput 4 + qinput 4 :=
       add_limb_toNat (by rw [hplimb₄]; exact hpl 4 32#64 (by simp))
-        (by rw [hqlimb₄]; exact hql 4 32#64 (by simp)) (pb 4) (qb 4)
+        (by rw [hqlimb₄]; exact hql 4 32#64 (by simp)) (hlt 4)
 
     have hout : ∀ (u : BitVec 64) (i : Fin 5), u.toNat = output i → u = outputBV i :=
       fun _ _ h => eq_ofNat_of_toNat h

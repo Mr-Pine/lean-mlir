@@ -99,7 +99,7 @@ theorem limbBounds_congr_bound {m : MemoryState} {q₁ q₂ : Pointer} {B : ℕ}
 
 theorem fd_ed25519_partial_dbl_conforms (r a : Pointer) (s : GlobalState) (hs : s.WF)
     (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
-    (haX : ∀ (i : Fin 5) (l : ℕ), readLimb? a i s.mem = some l → l ≤ 0x8000000000000)
+    (haX : BiasBounds? a s.mem)
     (haY : ∀ (i : Fin 5) (l : ℕ), readLimb? (a.withOffset 40) i s.mem = some l → l ≤ 0x8000000000000)
     (haZ : ∀ (i : Fin 5) (l : ℕ), readLimb? (a.withOffset 120) i s.mem = some l → l ≤ 0x18000000000000) :
     fd_ed25519_partial_dbl_spec r a s hr ha := by
@@ -179,7 +179,7 @@ theorem fd_ed25519_partial_dbl_conforms (r a : Pointer) (s : GlobalState) (hs : 
   have ha0₅ : IsFieldElemPtr s₅.mem a := isFieldElemPtr_of_live?_eq hla ha0
   have ha1₅ : IsFieldElemPtr s₅.mem (a.withOffset 40) := isFieldElemPtr_of_live?_eq hla ha1
   have ha3₅ : IsFieldElemPtr s₅.mem (a.withOffset 120) := isFieldElemPtr_of_live?_eq hla ha3
-  have bX₅ := limbBounds_of_live?_eq (p := a) hla haX
+  have bX₅ := limbBounds_of_live?_eq (p := a) hla (biasBounds?_le haX)
   have bY₅ := limbBounds_of_live?_eq (p := a.withOffset 40) hla haY
   have bZ₅ := limbBounds_of_live?_eq (p := a.withOffset 120) hla haZ
 

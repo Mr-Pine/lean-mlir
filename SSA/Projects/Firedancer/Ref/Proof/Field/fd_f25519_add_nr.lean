@@ -11,14 +11,15 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
 
-theorem fd_f25519_add_nr_conforms (o p q : Pointer) (s : GlobalState) (hs : s.WF)
-    (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
-    (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ 0x8000000000000)
-    (ho : IsFieldElemPtr s.mem o) (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) :
+theorem fd_f25519_add_nr_conforms (o p q : Pointer) (s : GlobalState) (hs : s.WF) {Bp Bq : ℕ}
+    (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ Bp)
+    (hqbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l → l ≤ Bq)
+    (ho : IsFieldElemPtr s.mem o) (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q)
+    (hB : Bp + Bq ≤ 0x18000000000000 := by norm_num) :
     fd_f25519_add_nr_spec o p q s ho hp hq := by
   simp only [fd_f25519_add_nr_spec, Cfg.denote]
   obtain ⟨out, hout, hbounds, ⟨st, hst, hst_eq⟩⟩ :=
-    fiat_25519_add_conforms o p q s hs hpbounds hqbounds ho hp hq
+    fiat_25519_add_conforms o p q s hs hpbounds hqbounds ho hp hq hB
   have hWF : st.WF := GlobalState.WF.of_equiv hs.splice hst_eq
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → st.mem.live? t = none := by
     rw [hst_eq.1]; exact hWF
