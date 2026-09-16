@@ -12,8 +12,8 @@ namespace LeanMLIR
 class HasUB (m : Type u → Type v) where
   /-- Undefined Behaviour effect -/
   throwUB {α : Type u} : m α
-export HasUB (throwUB)
 
+export HasUB (throwUB)
 variable {m} [HasUB m]
 
 /-- throw UB if `p` is true -/
@@ -23,12 +23,14 @@ def throwUBIf [Pure m] (p : Prop) [Decidable p] : m Unit :=
 end LeanMLIR
 
 /-! ## Helpers on core types -/
+
 section CoreHelpers
+
 open LeanMLIR
 variable {m} [Pure m] [HasUB m]
 
 /-- `x.getOrUB` raises UB if `x` is poison. -/
-def PoisonOr.getOrUB  : PoisonOr α → m α
+def PoisonOr.getOrUB : PoisonOr α → m α
   | .value x => pure x
   | .poison => throwUB
 
@@ -44,6 +46,7 @@ end Lemmas
 end CoreHelpers
 
 /-! ## Instances -/
+
 namespace LeanMLIR
 
 -- PoisonOr is the canonical monad with UB semantics

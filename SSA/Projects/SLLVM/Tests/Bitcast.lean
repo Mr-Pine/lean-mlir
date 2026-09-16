@@ -12,6 +12,7 @@ lane-wise select, and a byte copy between two pointers.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Bitcast
+
 open LeanMLIR
 
 /-- Two 64-bit lanes, read as four 32-bit ones: little-endian, low lane
@@ -24,16 +25,18 @@ def split : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concret
 }]
 
 example :
-    (split.denote (Ctxt.Valuation.singleton
-      (#v[.value 0x1122334455667788#64, .value 0x99aabbccddeeff00#64]))).head
-      = #v[.value 0x55667788#32, .value 0x11223344#32,
-           .value 0xddeeff00#32, .value 0x99aabbcc#32] := rfl
+    (split.denote
+          (Ctxt.Valuation.singleton
+            (#v[.value 0x1122334455667788#64, .value 0x99aabbccddeeff00#64]))).head =
+      #v[.value 0x55667788#32, .value 0x11223344#32, .value 0xddeeff00#32, .value 0x99aabbcc#32] :=
+  rfl
 
 /-- Poison travels with the bits it occupies: the poison 64-bit lane poisons
 the two 32-bit lanes over it and leaves the other two alone. -/
 example :
-    (split.denote (Ctxt.Valuation.singleton (#v[.poison, .value 0#64]))).head
-      = #v[.poison, .poison, .value 0#32, .value 0#32] := rfl
+    (split.denote (Ctxt.Valuation.singleton (#v[.poison, .value 0#64]))).head =
+      #v[.poison, .poison, .value 0#32, .value 0#32] :=
+  rfl
 
 /-- The other direction: four 32-bit lanes read as two 64-bit ones. -/
 def join : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 32)))])
@@ -46,9 +49,10 @@ def join : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete
 /-- A destination lane straddling a poison and a defined source lane is
 poison: it meets the mask. -/
 example :
-    (join.denote (Ctxt.Valuation.singleton
-      (#v[.value 0#32, .poison, .value 0#32, .value 0#32]))).head
-      = #v[.poison, .value 0#64] := rfl
+    (join.denote
+          (Ctxt.Valuation.singleton (#v[.value 0#32, .poison, .value 0#32, .value 0#32]))).head =
+      #v[.poison, .value 0#64] :=
+  rfl
 
 -- `Ctxt.ofList` takes the block arguments in reverse declaration order.
 def pick : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete 64))),
@@ -62,10 +66,12 @@ def pick : Com SLLVM (Ctxt.ofList [SLLVM.Ty.arith (.vector 2 (.bitvec (.concrete
 }]
 
 example :
-    (pick.denote (Ctxt.Valuation.ofHVector
-      [#v[(.value 7#64 : LLVM.IntW 64), .value 8#64],
-        #v[(.value 5#64 : LLVM.IntW 64), .value 6#64],
-        #v[(.value 1#1 : LLVM.IntW 1), .value 0#1]]ₕ)).head
-      = #v[.value 5#64, .value 8#64] := rfl
+    (pick.denote
+          (Ctxt.Valuation.ofHVector
+            [#v[(.value 7#64 : LLVM.IntW 64), .value 8#64],
+              #v[(.value 5#64 : LLVM.IntW 64), .value 6#64],
+              #v[(.value 1#1 : LLVM.IntW 1), .value 0#1]]ₕ)).head =
+      #v[.value 5#64, .value 8#64] :=
+  rfl
 
 end LeanMLIR.SLLVM.Tests.Bitcast

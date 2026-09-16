@@ -12,6 +12,7 @@ attribute dicts, `inbounds` included.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Gep
+
 open LeanMLIR
 
 private def runScalar (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .impure [SLLVM.Ty.bitvec 64]) :

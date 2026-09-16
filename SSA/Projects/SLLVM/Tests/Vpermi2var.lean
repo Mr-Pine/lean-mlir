@@ -16,6 +16,7 @@ it could misassemble them there.
 -/
 
 namespace LeanMLIR.SLLVM.Tests
+
 open LeanMLIR
 open InstCombine (LLVM)
 
@@ -53,11 +54,9 @@ def twoTables : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure
 Per Intel, higher bits are ignored: index `k` selects like `k % 16` does. -/
 
 #guard
-    LLVM.Ty.vpermi2var
-      (vec8 [100, 101, 102, 103, 104, 105, 106, 107])
-      (vec8 [16, 25, 35, 44, -1, 17, 62, 15])
-      (vec8 [200, 201, 202, 203, 204, 205, 206, 207])
-  == vec8 [100, 201, 103, 204, 207, 101, 206, 207]
+  LLVM.Ty.vpermi2var (vec8 [100, 101, 102, 103, 104, 105, 106, 107])
+      (vec8 [16, 25, 35, 44, -1, 17, 62, 15]) (vec8 [200, 201, 202, 203, 204, 205, 206, 207]) ==
+    vec8 [100, 201, 103, 204, 207, 101, 206, 207]
 
 /-! ## Poison
 
@@ -69,14 +68,14 @@ private def aWithPoison5 : Vector (LLVM.IntW 64) 8 :=
   (vec8 [100, 101, 102, 103, 104, 105, 106, 107]).set 5 .poison
 
 #guard
-    LLVM.Ty.vpermi2var aWithPoison5 (vec8 [5, 13, 0, 0, 0, 0, 0, 0])
-      (vec8 [200, 201, 202, 203, 204, 205, 206, 207])
-  == ((vec8 [0, 205, 100, 100, 100, 100, 100, 100]).set 0 .poison)
+  LLVM.Ty.vpermi2var aWithPoison5 (vec8 [5, 13, 0, 0, 0, 0, 0, 0])
+      (vec8 [200, 201, 202, 203, 204, 205, 206, 207]) ==
+    ((vec8 [0, 205, 100, 100, 100, 100, 100, 100]).set 0 .poison)
 
 #guard
-    LLVM.Ty.vpermi2var (vec8 [100, 101, 102, 103, 104, 105, 106, 107])
+  LLVM.Ty.vpermi2var (vec8 [100, 101, 102, 103, 104, 105, 106, 107])
       ((vec8 [0, 9, 0, 0, 0, 0, 0, 0]).set 0 .poison)
-      (vec8 [200, 201, 202, 203, 204, 205, 206, 207])
-  == ((vec8 [0, 201, 100, 100, 100, 100, 100, 100]).set 0 .poison)
+      (vec8 [200, 201, 202, 203, 204, 205, 206, 207]) ==
+    ((vec8 [0, 201, 100, 100, 100, 100, 100, 100]).set 0 .poison)
 
 end LeanMLIR.SLLVM.Tests

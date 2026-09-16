@@ -11,7 +11,9 @@ import SSA.Projects.SLLVM.Tactic.SimpSet
 namespace LeanMLIR
 
 /-! ## Instructions -/
+
 namespace SLLVM
+
 open BitVec
 open InstCombine (LLVM)
 
@@ -19,7 +21,8 @@ open InstCombine (LLVM)
 * the content of memory blocks
 * whether UB has occurred (within the def-use chain of the state)
 -/
-def MemorySSAState := PoisonOr MemoryState
+def MemorySSAState :=
+  PoisonOr MemoryState
 
 /--
 Return the block pointed to by `p`, or throw UB if this block
@@ -50,16 +53,15 @@ def spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) : BitVe
 
 @[simp_sllvm]
 theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) (i : Nat) :
-    (spliceBits bytes off x).getLsbD i
-      = if off ≤ i ∧ i < off + w ∧ i < n then x.getLsbD (i - off) else bytes.getLsbD i := by
+    (spliceBits bytes off x).getLsbD i =
+      if off ≤ i ∧ i < off + w ∧ i < n then x.getLsbD (i - off) else bytes.getLsbD i := by
   simp only [spliceBits, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
     BitVec.getLsbD_shiftLeft, BitVec.getLsbD_setWidth, BitVec.getLsbD_allOnes]
   by_cases h3 : i < n
   · by_cases h1 : off ≤ i
     · by_cases h2 : i < off + w
       · rw [if_pos ⟨h1, h2, h3⟩]
-        simp [h3, show ¬(i < off) by omega, show i - off < n by omega,
-          show i - off < w by omega]
+        simp [h3, show ¬(i < off) by omega, show i - off < n by omega, show i - off < w by omega]
       · -- `i` is past the spliced range, so the mask bit is clear and `x` has no
         -- bit there either: both disjuncts reduce to `bytes.getLsbD i`.
         rw [if_neg (by omega)]
@@ -73,8 +75,8 @@ theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVe
 /-- Two stores at adjacent ranges are one store of the concatenation. `++` puts
 its left operand in the high bits, so the *later*, higher store is the left
 operand. -/
-theorem spliceBits_append {n w w' : Nat} (bytes : BitVec n) (off : Nat)
-    (x : BitVec w) (y : BitVec w') :
+theorem spliceBits_append {n w w' : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w)
+    (y : BitVec w') :
     spliceBits (spliceBits bytes off x) (off + w) y = spliceBits bytes off (y ++ x) := by
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
@@ -87,7 +89,7 @@ theorem spliceBits_append {n w w' : Nat} (bytes : BitVec n) (off : Nat)
     · by_cases h3 : i < off + w + w'
       · -- inside the later store, which is the concatenation's high half
         rw [if_pos (by omega), if_pos (by omega)]
-        simp [show ¬ (i - off < w) by omega, show i - off - w = i - (off + w) by omega]
+        simp [show ¬(i - off < w) by omega, show i - off - w = i - (off + w) by omega]
       · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
   · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
 
@@ -111,10 +113,9 @@ theorem extractLsb'_spliceBits_of_subrange {n w w' : Nat} (bytes : BitVec n) (of
 
 /-- The spliced-in value reads back exactly, provided it fits. -/
 theorem extractLsb'_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w)
-    (h : off + w ≤ n) :
-    (spliceBits bytes off x).extractLsb' off w = x := by
-  rw [extractLsb'_spliceBits_of_subrange bytes off off x le_rfl (by omega) h,
-    Nat.sub_self, BitVec.extractLsb'_eq_self]
+    (h : off + w ≤ n) : (spliceBits bytes off x).extractLsb' off w = x := by
+  rw [extractLsb'_spliceBits_of_subrange bytes off off x le_rfl (by omega) h, Nat.sub_self,
+    BitVec.extractLsb'_eq_self]
 
 /-- A range disjoint from the spliced-in one is untouched. -/
 theorem extractLsb'_spliceBits_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
@@ -146,8 +147,7 @@ def load (p : SLLVM.Ptr) (t : LLVM.Ty) : MemorySSAM (TyDenote.toType t) := do
   let p ← p.getOrUB
   let block ← getLiveBlockOrUB p
   throwUBIf <| p.offsetInBits + LLVM.Ty.width t > block.lengthInBits
-  return LLVM.Ty.unflatten t
-    (block.bytes.extractLsb' p.offsetInBits (LLVM.Ty.width t))
+  return LLVM.Ty.unflatten t (block.bytes.extractLsb' p.offsetInBits (LLVM.Ty.width t))
 
 /--
 A wrapper around `load` which makes the operation pure, operating against the
@@ -180,10 +180,11 @@ def store (p : SLLVM.Ptr) (t : LLVM.Ty) (x : TyDenote.toType t) : MemorySSAM Uni
   let x ← (LLVM.Ty.flatten t x).getOrUB
   let block ← getLiveBlockOrUB p
   throwUBIf <| p.offsetInBits + LLVM.Ty.width t > block.lengthInBits
-  modifyThe MemoryState fun m => { m with
-    mem := m.mem.insert p.id <| .live
-      { block with bytes := spliceBits block.bytes p.offsetInBits x }
-  }
+  modifyThe MemoryState fun m =>
+      { m with
+        mem :=
+          m.mem.insert p.id <|
+            .live { block with bytes := spliceBits block.bytes p.offsetInBits x } }
   return ()
 
 /--
@@ -216,10 +217,11 @@ def memset (p : SLLVM.Ptr) (b : LLVM.IntW 8) (len : LLVM.IntW 64) : MemorySSAM U
   let block ← getLiveBlockOrUB p
   throwUBIf <| p.offsetInBits + 8 * len.toNat > block.lengthInBits
   let fill := BitVec.replicate len.toNat b
-  modifyThe MemoryState fun m => { m with
-    mem := m.mem.insert p.id <| .live
-      { block with bytes := spliceBits block.bytes p.offsetInBits fill }
-  }
+  modifyThe MemoryState fun m =>
+      { m with
+        mem :=
+          m.mem.insert p.id <|
+            .live { block with bytes := spliceBits block.bytes p.offsetInBits fill } }
   return ()
 
 /-- `llvm.bitcast` at arithmetic types: the source's flat bit pattern, read
@@ -230,18 +232,16 @@ eight `<64 x i8>` bytes over it and no others. The widths agree in any
 well-formed module; `setWidth` is what makes that an equation rather than a
 hypothesis. -/
 def bitcast (src dst : LLVM.Ty) (x : TyDenote.toType src) : TyDenote.toType dst :=
-  LLVM.Ty.unflattenMasked dst
-    ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst))
+  LLVM.Ty.unflattenMasked dst ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst))
     ((LLVM.Ty.poisonMask src x).setWidth (LLVM.Ty.width dst))
 
 /-- On a fully defined source `bitcast` is the plain flat round trip. -/
 theorem bitcast_of_defined {src dst : LLVM.Ty} {x : TyDenote.toType src}
     (h : LLVM.Ty.Defined src x) :
-    bitcast src dst x
-      = LLVM.Ty.unflatten dst ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst)) := by
+    bitcast src dst x =
+      LLVM.Ty.unflatten dst ((LLVM.Ty.flattenBV src x).setWidth (LLVM.Ty.width dst)) := by
   rw [bitcast, LLVM.Ty.poisonMask_eq_zero src x h,
-    show BitVec.setWidth (LLVM.Ty.width dst) 0 = 0 by simp,
-    LLVM.Ty.unflattenMasked_zero]
+    show BitVec.setWidth (LLVM.Ty.width dst) 0 = 0 by simp, LLVM.Ty.unflattenMasked_zero]
 
 /-- `llvm.select` at vector types: lane for lane, the scalar select. -/
 def vselect {l w : Nat} (c : Vector (LLVM.IntW 1) l) (x y : Vector (LLVM.IntW w) l) :
@@ -249,8 +249,7 @@ def vselect {l w : Nat} (c : Vector (LLVM.IntW 1) l) (x y : Vector (LLVM.IntW w)
   Vector.ofFn fun i => LLVM.select c[i] x[i] y[i]
 
 /-- `llvm.icmp` at vector types: lane for lane, the scalar compare. -/
-def vicmp {l w : Nat} (c : LLVM.IntPred) (x y : Vector (LLVM.IntW w) l) :
-    Vector (LLVM.IntW 1) l :=
+def vicmp {l w : Nat} (c : LLVM.IntPred) (x y : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW 1) l :=
   Vector.ofFn fun i => LLVM.icmp c x[i] y[i]
 
 /-- `llvm.intr.memcpy`: copy `len` bytes from `src` to `dst`. Read before
@@ -265,10 +264,11 @@ def memcpy (dst src : SLLVM.Ptr) (len : LLVM.IntW 64) : MemorySSAM Unit := do
   let bytes := sblock.bytes.extractLsb' src.offsetInBits (8 * len.toNat)
   let dblock ← getLiveBlockOrUB dst
   throwUBIf <| dst.offsetInBits + 8 * len.toNat > dblock.lengthInBits
-  modifyThe MemoryState fun m => { m with
-    mem := m.mem.insert dst.id <| .live
-      { dblock with bytes := spliceBits dblock.bytes dst.offsetInBits bytes }
-  }
+  modifyThe MemoryState fun m =>
+      { m with
+        mem :=
+          m.mem.insert dst.id <|
+            .live { dblock with bytes := spliceBits dblock.bytes dst.offsetInBits bytes } }
   return ()
 
 /--
@@ -282,15 +282,17 @@ nothing is freed -- the lifetime intrinsics denote to nothing, since with a
 monotonic block counter there is no slot reuse for them to advise on.
 -/
 def alloca (w : Nat) : EffectM SLLVM.Ptr := do
-  let blockId : BlockId ← modifyGetThe AllocState fun s =>
-    (⟨s.nextFreeBlock⟩, { s with nextFreeBlock := s.nextFreeBlock + 1})
+  let blockId : BlockId ←
+    modifyGetThe AllocState fun s =>
+        (⟨s.nextFreeBlock⟩, { s with nextFreeBlock := s.nextFreeBlock + 1 })
   let ptr := .value { id := blockId, offset := 0 }
-  modifyThe MemoryState fun s => { s with
-      mem := s.mem.insert blockId <| .live {
-        length := (w + 7) / 8
-        bytes := 0#_
-      }
-    }
+  modifyThe MemoryState fun s =>
+      { s with
+        mem :=
+          s.mem.insert blockId <|
+            .live
+              { length := (w + 7) / 8
+                bytes := 0#_ } }
   return ptr
 
 /-- `llvm.mlir.addressof`. The address is the one the state records for the
@@ -300,16 +302,17 @@ no special treatment -- a store through one `addressof` is seen by every other,
 because they name the same block. -/
 def addressof (name : String) : EffectM SLLVM.Ptr := do
   match (← getThe GlobalState).globals[name]? with
-  | some p => return .value p
-  | none => throwUB
+  | some p =>
+    return .value p
+  | none =>
+    throwUB
 
 /-- The state an `alloca w` leaves: a zeroed block of `w` bits at the counter,
 the counter advanced past it. The pointer it hands back is
 `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩`; see `run_alloca`. -/
 def _root_.LeanMLIR.GlobalState.afterAlloca (s : GlobalState) (w : Nat) : GlobalState where
   alloc := ⟨s.alloc.nextFreeBlock + 1⟩
-  mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩
-            (.live { length := (w + 7) / 8, bytes := 0#_ })⟩
+  mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ (.live { length := (w + 7) / 8, bytes := 0#_ })⟩
   globals := s.globals
 
 /-- Mark dead every block with id at least `n₀`: the *frame* of a call that
@@ -320,8 +323,7 @@ heap `alloc`) exists. Dead, not removed: a pointer that escaped the callee
 takes the freed-already UB path on use -- until the caller's next `alloca`
 reuses the id, at which point it aliases the new block, as a dangling stack
 pointer does. -/
-def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) :
-    MemoryState :=
+def _root_.LeanMLIR.MemoryState.killFrom (n₀ : Nat) (s : MemoryState) : MemoryState :=
   { mem := s.mem.map fun id b => if n₀ ≤ id.id then .dead else b }
 
 /-- The state a function entered at `s` returns to, having left memory at `m`:

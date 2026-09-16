@@ -35,10 +35,15 @@ inductive CalleeRef
 namespace CfgToExpr
 
 /-- The identity morphism: SLLVM data to expressions of SLLVM data. -/
-private def f := DialectMetaMorphism.id SLLVM
+private def f :=
+  DialectMetaMorphism.id SLLVM
 
-private def tyListE (ts : List SLLVM.Ty) : Lean.Expr := f.mapList ts
-private def ctxtE (Γ : Ctxt SLLVM.Ty) : Lean.Expr := f.mapCtxt Γ
+private def tyListE (ts : List SLLVM.Ty) : Lean.Expr :=
+  f.mapList ts
+
+private def ctxtE (Γ : Ctxt SLLVM.Ty) : Lean.Expr :=
+  f.mapCtxt Γ
+
 private def sigsE (sigs : List (List SLLVM.Ty)) : Lean.Expr :=
   _root_.List.foldToExpr (α := q(List SLLVM.Ty)) (sigs.map fun ts => tyListE ts)
 
@@ -47,34 +52,31 @@ private def targetTyE (Γ : Ctxt SLLVM.Ty) (succs : List (List SLLVM.Ty)) : Lean
 
 /-- The lookup proof `all[idx]? = some ts` is emitted as `Eq.refl`: both the
 list and the index are literals, so the two sides are definitionally equal. -/
-private def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)}
-    (t : Target Γ succs) : Lean.Expr :=
+private def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)} (t : Target Γ succs) :
+    Lean.Expr :=
   let someTsE := mkApp2 (mkConst ``Option.some [levelZero]) q(List SLLVM.Ty) (tyListE t.ts)
-  let hE := mkApp2 (mkConst ``Eq.refl [levelOne])
-    (mkApp (mkConst ``Option [levelZero]) q(List SLLVM.Ty)) someTsE
+  let hE :=
+    mkApp2 (mkConst ``Eq.refl [levelOne]) (mkApp (mkConst ``Option [levelZero]) q(List SLLVM.Ty))
+      someTsE
   mkAppN (mkConst ``Target.mk)
     #[ctxtE Γ, sigsE succs, tyListE t.ts, toExpr t.idx, hE, f.mapVarVec t.args]
 
-private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty)
-    (succs : List (List SLLVM.Ty)) : Terminator Γ rets succs → Lean.Expr
+private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
+    Terminator Γ rets succs → Lean.Expr
   | .ret vs =>
-      mkAppN (mkConst ``Terminator.ret)
-        #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVarVec vs]
-  | .br t =>
-      mkAppN (mkConst ``Terminator.br)
-        #[ctxtE Γ, tyListE rets, sigsE succs, targetE Γ t]
+    mkAppN (mkConst ``Terminator.ret) #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVarVec vs]
+  | .br t => mkAppN (mkConst ``Terminator.br) #[ctxtE Γ, tyListE rets, sigsE succs, targetE Γ t]
   | .condBr c tT tF =>
-      mkAppN (mkConst ``Terminator.condBr)
-        #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVar c, targetE Γ tT, targetE Γ tF]
+    mkAppN (mkConst ``Terminator.condBr)
+      #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVar c, targetE Γ tT, targetE Γ tF]
   | .switch (w := w) v dflt cases =>
       let bvTyE := mkApp (mkConst ``BitVec) (toExpr w)
-      let casesE := _root_.List.foldToExpr
-        (α := mkApp2 (.const ``Prod [0, 0]) bvTyE (targetTyE Γ succs))
+      let casesE :=
+      _root_.List.foldToExpr (α := mkApp2 (.const ``Prod [0, 0]) bvTyE (targetTyE Γ succs))
         (cases.map fun (val, t) =>
-          _root_.Prod.foldToExpr (α := bvTyE) (β := targetTyE Γ succs)
-            (toExpr val, targetE Γ t))
+          _root_.Prod.foldToExpr (α := bvTyE) (β := targetTyE Γ succs) (toExpr val, targetE Γ t))
       mkAppN (mkConst ``Terminator.switch)
-        #[ctxtE Γ, tyListE rets, sigsE succs, toExpr w, f.mapVar v, targetE Γ dflt, casesE]
+      #[ctxtE Γ, tyListE rets, sigsE succs, toExpr w, f.mapVar v, targetE Γ dflt, casesE]
 
 mutual
 
@@ -140,6 +142,6 @@ def Cfg.toExprM {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (cfg : Cfg Γin re
     let entryE ← blockComE refs rets sigs entry
     let blocksE ← blocksE refs rets Γout sigs blocks
     return mkAppN (mkConst ``Cfg.mk)
-      #[ctxtE Γin, tyListE rets, sigsE sigs, ctxtE Γout, entryE, blocksE]
+        #[ctxtE Γin, tyListE rets, sigsE sigs, ctxtE Γout, entryE, blocksE]
 
 end LeanMLIR.SLLVM

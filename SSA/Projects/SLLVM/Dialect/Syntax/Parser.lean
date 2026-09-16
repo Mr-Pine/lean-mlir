@@ -13,7 +13,8 @@ open InstCombine (LLVM)
 open MLIR
 open MLIR.AST
 
-private abbrev ReaderM := MLIR.AST.ReaderM SLLVM
+private abbrev ReaderM :=
+  MLIR.AST.ReaderM SLLVM
 
 /-! ### LLVM aggregate types and their layout
 
@@ -34,10 +35,10 @@ inductive AggTy where
 
 private def takeAggNat (cs : List Char) : Option (Nat × List Char) :=
   let ds := cs.takeWhile Char.isDigit
-  if ds.isEmpty then none
-  else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
+  if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
 
-private def dropWs (cs : List Char) : List Char := cs.dropWhile (· == ' ')
+private def dropWs (cs : List Char) : List Char :=
+  cs.dropWhile (· == ' ')
 
 mutual
 /-- Decode one aggregate type from the head of `cs`. -/
@@ -45,45 +46,50 @@ partial def parseAggTy : List Char → Option (AggTy × List Char)
   | 'i' :: cs => (takeAggNat cs).map fun (w, rest) => (.int w, rest)
   | 'p' :: 't' :: 'r' :: cs => some (.ptr, cs)
   | 'a' :: 'r' :: 'r' :: 'a' :: 'y' :: '<' :: cs => do
-      let (n, cs) ← takeAggNat (dropWs cs)
-      let 'x' :: cs := dropWs cs | none
-      let (t, cs) ← parseAggTy (dropWs cs)
-      let '>' :: cs := dropWs cs | none
-      return (.array n t, cs)
+    let (n, cs) ← takeAggNat (dropWs cs)
+    let 'x' :: cs := dropWs cs | none
+    let (t, cs) ← parseAggTy (dropWs cs)
+    let '>' :: cs := dropWs cs | none
+    return (.array n t, cs)
   | 'v' :: 'e' :: 'c' :: 't' :: 'o' :: 'r' :: '<' :: cs => do
-      let (n, cs) ← takeAggNat (dropWs cs)
-      let 'x' :: cs := dropWs cs | none
-      let (t, cs) ← parseAggTy (dropWs cs)
-      let '>' :: cs := dropWs cs | none
-      return (.vector n t, cs)
+    let (n, cs) ← takeAggNat (dropWs cs)
+    let 'x' :: cs := dropWs cs | none
+    let (t, cs) ← parseAggTy (dropWs cs)
+    let '>' :: cs := dropWs cs | none
+    return (.vector n t, cs)
   | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
-      -- optional `"name", `
-      let cs := dropWs cs
-      let cs ← match cs with
-        | '"' :: cs =>
-            let cs := cs.dropWhile (· != '"')
-            let '"' :: cs := cs | none
-            let ',' :: cs := dropWs cs | none
-            pure (dropWs cs)
-        | _ => pure cs
-      let '(' :: cs := cs | none
-      let (fields, cs) ← parseAggFields (dropWs cs) []
-      let '>' :: cs := dropWs cs | none
-      return (.struct fields, cs)
+    -- optional `"name", `
+    let cs := dropWs cs
+    let cs ←
+      match cs with
+      | '"' :: cs =>
+        let cs := cs.dropWhile (· != '"')
+        let '"' :: cs := cs | none
+        let ',' :: cs := dropWs cs | none
+        pure (dropWs cs)
+      | _ =>
+        pure cs
+    let '(' :: cs := cs | none
+    let (fields, cs) ← parseAggFields (dropWs cs) []
+    let '>' :: cs := dropWs cs | none
+    return (.struct fields, cs)
   | _ => none
-
 /-- `t (`, ` t)* `)`` -/
-partial def parseAggFields (cs : List Char) (acc : List AggTy) :
-    Option (List AggTy × List Char) := do
+partial def parseAggFields (cs : List Char) (acc : List AggTy) : Option (List AggTy × List Char) :=
+  do
   let (t, cs) ← parseAggTy cs
   match dropWs cs with
-  | ',' :: cs => parseAggFields (dropWs cs) (t :: acc)
-  | ')' :: cs => return ((t :: acc).reverse, cs)
-  | _ => none
+  | ',' :: cs =>
+    parseAggFields (dropWs cs) (t :: acc)
+  | ')' :: cs =>
+    return ((t :: acc).reverse, cs)
+  | _ =>
+    none
 end
 
 /-- Round `off` up to a multiple of `a`. -/
-private def alignTo (off a : Nat) : Nat := ((off + a - 1) / a) * a
+private def alignTo (off a : Nat) : Nat :=
+  ((off + a - 1) / a) * a
 
 /-- `(size, alignment)` in bytes, per LLVM's default data layout. An array
 element's stride is its padded size; a struct is laid out sequentially with
@@ -91,49 +97,49 @@ padding, then padded to its own alignment. -/
 partial def AggTy.sizeAlign : AggTy → ExceptM SLLVM (Nat × Nat)
   | .int bits =>
       let sz := (bits + 7) / 8
-      if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then
-        return (sz, sz)
-      else
-        throw <| .generic s!"llvm.getelementptr: unsupported integer size i{bits}"
+      if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then return (sz, sz)
+    else throw <| .generic s!"llvm.getelementptr: unsupported integer size i{bits}"
   | .ptr => return (8, 8)
   | .array n t => do
-      let (s, a) ← t.sizeAlign
-      return (n * alignTo s a, a)
+    let (s, a) ← t.sizeAlign
+    return (n * alignTo s a, a)
   -- Vectors are unpadded, and their alignment is the size rounded up to a
   -- power of two (LLVM's default layout), not the element's.
   | .vector n t => do
-      let (s, _) ← t.sizeAlign
-      let sz := n * s
-      return (sz, Nat.nextPowerOfTwo sz)
+    let (s, _) ← t.sizeAlign
+    let sz := n * s
+    return (sz, Nat.nextPowerOfTwo sz)
   | .struct fields => do
-      let (off, al) ← fields.foldlM (init := (0, 1)) fun (off, al) f => do
-        let (s, a) ← f.sizeAlign
-        return (alignTo off a + s, max al a)
-      return (alignTo off al, al)
+    let (off, al) ←
+      fields.foldlM (init := (0, 1)) fun (off, al) f => do
+          let (s, a) ← f.sizeAlign
+          return (alignTo off a + s, max al a)
+    return (alignTo off al, al)
 
 /-- Byte offset of field `k` of a struct, `k`-scaled stride within an array. -/
 partial def AggTy.constIndexOffset (k : Nat) : AggTy → ExceptM SLLVM (Nat × AggTy)
   | .struct fields => do
-      if h : k < fields.length then
-        -- end of the k-field prefix, then align up to field k's alignment
-        let off ← (fields.take k).foldlM (init := 0) fun off f => do
-          let (s, a) ← f.sizeAlign
-          return alignTo off a + s
-        let fld := fields[k]
-        let (_, a) ← fld.sizeAlign
-        return (alignTo off a, fld)
-      else
-        throw <| .generic s!"llvm.getelementptr: struct field index {k} out of range"
+    if h : k < fields.length then
+      -- end of the k-field prefix, then align up to field k's alignment
+      let off ←
+        (fields.take k).foldlM (init := 0) fun off f => do
+            let (s, a) ← f.sizeAlign
+            return alignTo off a + s
+      let fld := fields[k]
+      let (_, a) ← fld.sizeAlign
+      return (alignTo off a, fld)
+    else
+      throw <| .generic s!"llvm.getelementptr: struct field index {k} out of range"
   | .array n t => do
-      unless k < n do
-        throw <| .generic s!"llvm.getelementptr: array index {k} out of range"
-      let (s, a) ← t.sizeAlign
-      return (k * alignTo s a, t)
+    unless k < n do
+      throw <| .generic s!"llvm.getelementptr: array index {k} out of range"
+    let (s, a) ← t.sizeAlign
+    return (k * alignTo s a, t)
   | .vector n t => do
-      unless k < n do
-        throw <| .generic s!"llvm.getelementptr: vector index {k} out of range"
-      let (s, _) ← t.sizeAlign
-      return (k * s, t)
+    unless k < n do
+      throw <| .generic s!"llvm.getelementptr: vector index {k} out of range"
+    let (s, _) ← t.sizeAlign
+    return (k * s, t)
   | t => throw <| .generic s!"llvm.getelementptr: cannot index into {repr t}"
 
 /-- The aggregate an `!llvm.…` type text denotes, or `none` when the text is
@@ -144,8 +150,7 @@ def aggTyOfText? (s : String) : Option AggTy :=
     match parseAggTy (s.toList.drop "llvm.".length) with
     | some (t, []) => some t
     | _ => none
-  else
-    none
+  else none
 
 /-- The number of bits an aggregate occupies, i.e. its padded size. -/
 def AggTy.widthBits (t : AggTy) : ExceptM SLLVM Nat := do
@@ -167,9 +172,9 @@ def mkArithTy : MLIRType 0 → ExceptM SLLVM LLVM.Ty
   -- exactly the bytes LLVM would write. What it cannot express is per-field
   -- poison -- see `SLLVM.insertvalue`, which is conservative about it.
   | .undefined s =>
-      match aggTyOfText? s with
-      | some t => .bitvec <$> t.widthBits
-      | none => throw <| .unsupportedType (some (MLIRType.undefined (φ := 0) s))
+    match aggTyOfText? s with
+    | some t => .bitvec <$> t.widthBits
+    | none => throw <| .unsupportedType (some (MLIRType.undefined (φ := 0) s))
   | t => throw <| .unsupportedType (some t)
 
 /-- `!ptr` is SLLVM's own spelling; `!llvm.ptr` is what `mlir-translate
@@ -181,39 +186,44 @@ def mkTy : MLIRType 0 → ExceptM SLLVM SLLVM.Ty
 instance : TransformTy SLLVM 0 where
   mkTy := mkTy
 
-
-def getOutputWidth (opStx : MLIR.AST.Op 0) :
-    Except TransformError Nat := do
+def getOutputWidth (opStx : MLIR.AST.Op 0) : Except TransformError Nat := do
   match opStx.res with
-  | res::[] =>
+  | res :: [] =>
     match res.2 with
-    | .int _ (.concrete w) => pure w
-    | _ => throw <| .generic s!"The operation {opStx.name} must output an integer type"
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+    | .int _ (.concrete w) =>
+      pure w
+    | _ =>
+      throw <| .generic s!"The operation {opStx.name} must output an integer type"
+  | _ =>
+    throw <| .generic s!"The operation {opStx.name} must have a single output"
 
 /-- The declared result type of a single-result operation, as an arithmetic
 (`LLVM.Ty`) type. Unlike `getOutputWidth` this keeps the whole type, which
 poison needs since it exists at vector types too. -/
-def getOutputArithTy (opStx : MLIR.AST.Op 0) :
-    ExceptM SLLVM LLVM.Ty := do
+def getOutputArithTy (opStx : MLIR.AST.Op 0) : ExceptM SLLVM LLVM.Ty := do
   match opStx.res with
-  | res::[] => mkArithTy res.2
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+  | res :: [] =>
+    mkArithTy res.2
+  | _ =>
+    throw <| .generic s!"The operation {opStx.name} must have a single output"
 
 /-- The declared result type of a single-result operation, as a full
 `SLLVM.Ty`. `getOutputArithTy` gives only the arithmetic half, which a call's
 result type need not be. -/
 def getOutputTy (opStx : MLIR.AST.Op 0) : ExceptM SLLVM SLLVM.Ty := do
   match opStx.res with
-  | res::[] => mkTy res.2
-  | _ => throw <| .generic s!"The operation {opStx.name} must have a single output"
+  | res :: [] =>
+    mkTy res.2
+  | _ =>
+    throw <| .generic s!"The operation {opStx.name} must have a single output"
 
 /-- The declared type of the `i`-th operand of an operation. -/
-def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) :
-    ExceptM SLLVM LLVM.Ty := do
+def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) : ExceptM SLLVM LLVM.Ty := do
   match opStx.args[i]? with
-  | some (_, t) => mkArithTy t
-  | none => throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
+  | some (_, t) =>
+    mkArithTy t
+  | none =>
+    throw <| .generic s!"{opStx.name}: expected at least {i + 1} operand(s)"
 
 /-- The arithmetic type of an already-parsed operand. Unlike `getArgArithTy`
 this reads the type off the context variable rather than off the syntax, which
@@ -230,18 +240,23 @@ def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
   match opStx.getAttr? "ordering" with
   | none => return ()
   | some (.int 0 _) => return ()
-  | some _ => throw <| .generic s!"{opStx.name}: atomic accesses are not modelled \
+  | some _ =>
+    throw <|
+      .generic
+        s!"{opStx.name}: atomic accesses are not modelled \
       (expected `ordering = 0`, i.e. non-atomic)"
 
 /-- The integers inside a `dense<…>` attribute: either a single value (the
 splat form) or one per lane. -/
 def denseInts : MLIR.AST.AttrValue 0 → ExceptM SLLVM (List Int)
   | .int v _ => return [v]
-  | .list xs => xs.mapM fun
+  | .list xs =>
+    xs.mapM fun
       | .int v _ => pure v
       | _ => throw <| .generic "llvm.mlir.constant: dense elements must be integers"
-  | _ => throw <| .generic
-      "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
+  | _ =>
+    throw <|
+      .generic "llvm.mlir.constant: expected an integer or a list of integers inside `dense<…>`"
 
 /-- The aggregate type of a single-result operation, when its result is one. -/
 def getOutputAggTy? (opStx : MLIR.AST.Op 0) : Option AggTy :=

@@ -13,6 +13,7 @@ memory operations.
 -/
 
 namespace LeanMLIR.SLLVM.Tests
+
 open LeanMLIR
 
 /-- Run a closed program and read its single 64-bit result. The return type is
@@ -91,7 +92,7 @@ def vecRoundTrip :
 
 private def runVec (x : Vector (PoisonOr (BitVec 64)) 4) :
     Option (Vector (PoisonOr (BitVec 64)) 4) :=
-  ((vecRoundTrip.denote (x ::ᵥ Ctxt.Valuation.nil)).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption.map
+  ((vecRoundTrip.denote (x::ᵥCtxt.Valuation.nil)).run ⟨⟨0⟩, ⟨∅⟩, ∅⟩).toOption.map
     (fun r => r.1.head)
 
 -- Lane `0` sits in the low bits, as LLVM lays a vector out in memory.

@@ -19,6 +19,7 @@ a callee's parameters.
 -/
 
 namespace LeanMLIR.SLLVM.Tests
+
 open LeanMLIR
 
 private def runPure (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64]) :
@@ -28,16 +29,11 @@ private def runPure (com : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitve
 /-! ## A call is its callee applied to its arguments -/
 
 def callDouble : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
-  [sllvm| {
-    ^entry():
-      %c = "llvm.mlir.constant"() <{value = 5 : i64}> : () -> (i64)
-      %r = "llvm.call"(%c) ({
-        ^bb0(%a: i64):
-          %d = "llvm.add"(%a, %a) : (i64, i64) -> (i64)
-          "llvm.return"(%d) : (i64) -> ()
-      }) <{callee = @double}> : (i64) -> (i64)
-      "llvm.return"(%r) : (i64) -> ()
-  }]
+  [sllvm|
+    {^entry():%c="llvm.mlir.constant"()<{value =
+              5:i64}>:()->(i64)%r="llvm.call"(%c)({^bb0(%a:i64):%d="llvm.add"(%a, %a):(i64,
+                    i64)->(i64)"llvm.return"(%d):(i64)->()})<{callee =
+              @double}>:(i64)->(i64)"llvm.return"(%r):(i64)->()}]
 
 #guard runPure callDouble == .value 10#64
 
@@ -46,7 +42,8 @@ def callDouble : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
 The type ascription on `callDouble` is the test: it is `.pure`. A call to a
 pure callee does not drag the caller into the effect monad. -/
 
-example : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] := callDouble
+example : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
+  callDouble
 
 /-! ## Argument order
 
@@ -54,33 +51,24 @@ example : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] := callDoub
 that a swapped operand order fails rather than agreeing by luck. -/
 
 def callSub : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
-  [sllvm| {
-    ^entry():
-      %x = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> (i64)
-      %y = "llvm.mlir.constant"() <{value = 3 : i64}> : () -> (i64)
-      %r = "llvm.call"(%x, %y) ({
-        ^bb0(%a: i64, %b: i64):
-          %d = "llvm.sub"(%a, %b) : (i64, i64) -> (i64)
-          "llvm.return"(%d) : (i64) -> ()
-      }) <{callee = @sub}> : (i64, i64) -> (i64)
-      "llvm.return"(%r) : (i64) -> ()
-  }]
+  [sllvm|
+    {^entry():%x="llvm.mlir.constant"()<{value =
+              7:i64}>:()->(i64)%y="llvm.mlir.constant"()<{value =
+              3:i64}>:()->(i64)%r="llvm.call"(%x,
+            %y)({^bb0(%a:i64,%b:i64):%d="llvm.sub"(%a, %b):(i64,
+                    i64)->(i64)"llvm.return"(%d):(i64)->()})<{callee = @sub}>:(i64,
+            i64)->(i64)"llvm.return"(%r):(i64)->()}]
 
 #guard runPure callSub == .value 4#64
 
 /-! ## Poison propagates through a call -/
 
 def callPoison : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
-  [sllvm| {
-    ^entry():
-      %p = "llvm.mlir.poison"() : () -> (i64)
-      %r = "llvm.call"(%p) ({
-        ^bb0(%a: i64):
-          %d = "llvm.add"(%a, %a) : (i64, i64) -> (i64)
-          "llvm.return"(%d) : (i64) -> ()
-      }) <{callee = @double}> : (i64) -> (i64)
-      "llvm.return"(%r) : (i64) -> ()
-  }]
+  [sllvm|
+    {^entry():%p="llvm.mlir.poison"():()->(i64)%r="llvm.call"(%p)({^bb0(%a:i64):%d="llvm.add"(%a,
+                    %a):(i64,
+                    i64)->(i64)"llvm.return"(%d):(i64)->()})<{callee =
+              @double}>:(i64)->(i64)"llvm.return"(%r):(i64)->()}]
 
 #guard runPure callPoison == .poison
 
@@ -91,16 +79,11 @@ checks that the region really is evaluated under a valuation of its *own*
 context rather than the caller's. -/
 
 def callConst : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
-  [sllvm| {
-    ^entry():
-      %c = "llvm.mlir.constant"() <{value = 5 : i64}> : () -> (i64)
-      %r = "llvm.call"(%c) ({
-        ^bb0(%a: i64):
-          %k = "llvm.mlir.constant"() <{value = 99 : i64}> : () -> (i64)
-          "llvm.return"(%k) : (i64) -> ()
-      }) <{callee = @konst}> : (i64) -> (i64)
-      "llvm.return"(%r) : (i64) -> ()
-  }]
+  [sllvm|
+    {^entry():%c="llvm.mlir.constant"()<{value =
+              5:i64}>:()->(i64)%r="llvm.call"(%c)({^bb0(%a:i64):%k="llvm.mlir.constant"()<{value =
+                      99:i64}>:()->(i64)"llvm.return"(%k):(i64)->()})<{callee =
+              @konst}>:(i64)->(i64)"llvm.return"(%r):(i64)->()}]
 
 #guard runPure callConst == .value 99#64
 

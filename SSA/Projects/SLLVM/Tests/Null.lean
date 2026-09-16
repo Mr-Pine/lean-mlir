@@ -13,27 +13,24 @@ its own operation, since `SLLVM.Ptr` is `PoisonOr Pointer` and null is a
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Null
+
 open LeanMLIR
 
-def nullPtr : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.ptr] := [sllvm| {
-  ^entry():
-    %p = "llvm.mlir.zero"() : () -> !llvm.ptr
-    "llvm.return"(%p) : (!llvm.ptr) -> ()
-}]
+def nullPtr : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.ptr] :=
+  [sllvm| {^entry():%p="llvm.mlir.zero"():()->!llvm.ptr"llvm.return"(%p):(!llvm.ptr)->()}]
 
-example : (nullPtr.denote Ctxt.Valuation.nil).head = SLLVM.Ptr.null := rfl
+example : (nullPtr.denote Ctxt.Valuation.nil).head = SLLVM.Ptr.null :=
+  rfl
 
 -- ... which is a `PoisonOr.value`, not poison: a spec may state it as *the*
 -- returned value, and a caller may branch on it.
-example : (nullPtr.denote Ctxt.Valuation.nil).head
-    = PoisonOr.value ⟨SLLVM.nullBlock, 0#64⟩ := rfl
+example : (nullPtr.denote Ctxt.Valuation.nil).head = PoisonOr.value ⟨SLLVM.nullBlock, 0#64⟩ :=
+  rfl
 
-def zeroI64 : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] := [sllvm| {
-  ^entry():
-    %z = "llvm.mlir.zero"() : () -> i64
-    "llvm.return"(%z) : (i64) -> ()
-}]
+def zeroI64 : Com SLLVM (∅ : Ctxt SLLVM.Ty) .pure [SLLVM.Ty.bitvec 64] :=
+  [sllvm| {^entry():%z="llvm.mlir.zero"():()->i64"llvm.return"(%z):(i64)->()}]
 
-example : (zeroI64.denote Ctxt.Valuation.nil).head = .value 0#64 := rfl
+example : (zeroI64.denote Ctxt.Valuation.nil).head = .value 0#64 :=
+  rfl
 
 end LeanMLIR.SLLVM.Tests.Null

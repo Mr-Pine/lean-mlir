@@ -19,6 +19,7 @@ and two `insertvalue`s.
 -/
 
 namespace LeanMLIR.SLLVM.Tests.Aggregate
+
 open LeanMLIR
 
 /-- Run a closed pure program and read its single 64-bit result. -/

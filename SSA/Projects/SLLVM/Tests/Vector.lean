@@ -18,6 +18,7 @@ element's limbs, and every arithmetic test would still pass.
 -/
 
 namespace LeanMLIR.SLLVM.Tests
+
 open LeanMLIR
 
 /-- Run a closed pure program and read its single 64-bit result. Unlike the
