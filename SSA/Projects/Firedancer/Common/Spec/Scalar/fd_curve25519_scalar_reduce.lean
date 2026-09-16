@@ -4,43 +4,24 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_reduce
 import SSA.Projects.Firedancer.Proof.Memory
+import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 
 /-!
-# `fd_curve25519_scalar_reduce` (common) -- the memory footprint
+# `fd_curve25519_scalar_reduce` (common)
 
-`out = in mod l` is *not* what this file states. What it states is the weaker
-claim that the region's only effect on memory is four `i64` stores through
-`out`: the run either goes to poison, or it returns `out` and leaves a state
-equivalent to the entry state with those four stores applied.
+The C computes `out = in mod ℓ`. That value is not specified here.
+`ScalarReduceDetermined` says only that the call is decided by the 512 bits at `in`: one
+function of those bits gives both whether the run returns and the four `i64`s it then stores.
+That is what a comparison of two callers needs. Nothing proves it yet.
 
-Nothing here says what the four words are. Pinning them is the arithmetic --
-the twenty-four 21-bit digits, the reduction rows and the carry chains -- and
-that is a much larger job: 224 of the region's operations carry `nsw`, 42 also
-`nuw`, and every one is poison unless a bound on the digits is discharged.
-That work is parked on the `wip/scalar-reduce-arithmetic` branch, which carries
-the lift, the full `out = in mod l` specification and a derivation reaching the
-first reduction row, along with the two-sided `toInt` overflow lemmas it needs.
-Pick it up there if it is ever worth finishing.
-
-The poison disjunct is not a weakness of the proof but the honest reading of a
-region this heavily flagged: with the digit bounds unproved, an `nsw` operation
-*may* be poison as far as this statement is concerned, and a poison value
-reaching a store is UB (`SLLVM.store` takes `getOrUB` of the flattened value).
-So "not poison" is exactly "the arithmetic did not overflow", and on that
-branch the memory footprint is as stated.
+What is proved is `fd_curve25519_scalar_reduce_frame_spec`, the footprint: a run that returns
+leaves the entry state plus the four stores. It allows poison, since with the digit bounds
+unproved an `nsw` operation may be poison, and `SLLVM.store` takes `getOrUB` of its value.
 -/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
-
-/-- A 64-byte little-endian scalar at `p`, the input's shape. -/
-abbrev IsScalar512Ptr (m : MemoryState) (p : Pointer) : Prop :=
-  Fits m p (64 * 8) ∧ p.offset.toNat + 64 ≤ 2 ^ 64
-
-/-- A 32-byte little-endian scalar at `p`, the output's shape. -/
-abbrev IsScalar256Ptr (m : MemoryState) (p : Pointer) : Prop :=
-  Fits m p (32 * 8) ∧ p.offset.toNat + 32 ≤ 2 ^ 64
 
 /-- The four `i64` stores the region ends with, at `out + 0, 8, 16, 24`.
 
@@ -49,6 +30,30 @@ unifier that meets it walks four splices. -/
 def scalarOutMem (m : MemoryState) (r : Pointer) (w : Fin 4 → BitVec 64) : MemoryState :=
   (((m.splice r (w 0)).splice (r.withOffset 8) (w 1)).splice
     (r.withOffset 16) (w 2)).splice (r.withOffset 24) (w 3)
+
+/-- The four words as one 256-bit little-endian value, `w 3` most significant. -/
+def packWords (w : Fin 4 → BitVec 64) : BitVec 256 := w 3 ++ w 2 ++ w 1 ++ w 0
+
+/-- **The call is decided by the 512 bits at `in`.**
+
+`f` says what the region does with those bits: `none` if the run does not return -- poison, or
+the undefined behaviour poison collapses to -- and otherwise the four words it stores at `out`.
+What those words are is left open, and `in` and `out` may alias.
+
+`in`'s offset may not wrap: `Fits` alone allows a block so long that `in + 8` comes back round
+to its start, and the eight loads would then read bytes these 512 bits do not cover. -/
+def ScalarReduceBy (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) : Prop :=
+  ∀ (out inp : Pointer) (s : GlobalState), s.WF → IsByteBufPtr s.mem out →
+    inp.offset.toNat + 64 ≤ 2 ^ 64 → ∀ hin : Fits s.mem inp (64 * 8),
+      let invocation := runFunction (fd_curve25519_scalar_reduce.denote
+        (Ctxt.Valuation.ofHVector [.value inp, .value out]ₕ))
+      (∀ w, f (readWord hin) = some w →
+          ∃ s' : GlobalState, StateT.run invocation s = .value ([.value out]ₕ, s')
+            ∧ s' ≈ ({ s with mem := scalarOutMem s.mem out w } : GlobalState))
+        ∧ (f (readWord hin) = none → StateT.run invocation s = .poison)
+
+/-- ... for some such `f`, which the caller then names. -/
+def ScalarReduceDetermined : Prop := ∃ f, ScalarReduceBy f
 
 /-- **The region writes nowhere but `out`.**
 

@@ -1,0 +1,90 @@
+/-
+Released under Apache 2.0 license as described in the file LICENSE.
+-/
+import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
+import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_init
+import SSA.Projects.Firedancer.Proof.Globals
+
+/-!
+# The return codes and digest of `fd_ed25519_verify` (common)
+
+SHA-512 is not specified. What is: each hashing call's effect is an opaque
+function of exactly what it reads, so the digest in `k` is a function of `sha`'s
+block, `R`, `A` and the message, and of nothing else. The compression function
+reads its round constants from the global `fd_sha512_core_ref.K`, which must
+therefore hold them.
+-/
+
+namespace Firedancer.Common
+open LeanMLIR SLLVM
+
+/-- `fd_ed25519.h`'s return codes. -/
+def FD_ED25519_SUCCESS : BitVec 32 := 0
+def FD_ED25519_ERR_SIG : BitVec 32 := -1
+def FD_ED25519_ERR_PUBKEY : BitVec 32 := -2
+def FD_ED25519_ERR_MSG : BitVec 32 := -3
+
+/-- The SHA-512 round constants, FIPS 180-4 §4.2.3. -/
+def sha512K : List (BitVec 64) := [
+  0x428a2f98d728ae22#64, 0x7137449123ef65cd#64, 0xb5c0fbcfec4d3b2f#64, 0xe9b5dba58189dbbc#64,
+  0x3956c25bf348b538#64, 0x59f111f1b605d019#64, 0x923f82a4af194f9b#64, 0xab1c5ed5da6d8118#64,
+  0xd807aa98a3030242#64, 0x12835b0145706fbe#64, 0x243185be4ee4b28c#64, 0x550c7dc3d5ffb4e2#64,
+  0x72be5d74f27b896f#64, 0x80deb1fe3b1696b1#64, 0x9bdc06a725c71235#64, 0xc19bf174cf692694#64,
+  0xe49b69c19ef14ad2#64, 0xefbe4786384f25e3#64, 0x0fc19dc68b8cd5b5#64, 0x240ca1cc77ac9c65#64,
+  0x2de92c6f592b0275#64, 0x4a7484aa6ea6e483#64, 0x5cb0a9dcbd41fbd4#64, 0x76f988da831153b5#64,
+  0x983e5152ee66dfab#64, 0xa831c66d2db43210#64, 0xb00327c898fb213f#64, 0xbf597fc7beef0ee4#64,
+  0xc6e00bf33da88fc2#64, 0xd5a79147930aa725#64, 0x06ca6351e003826f#64, 0x142929670a0e6e70#64,
+  0x27b70a8546d22ffc#64, 0x2e1b21385c26c926#64, 0x4d2c6dfc5ac42aed#64, 0x53380d139d95b3df#64,
+  0x650a73548baf63de#64, 0x766a0abb3c77b2a8#64, 0x81c2c92e47edaee6#64, 0x92722c851482353b#64,
+  0xa2bfe8a14cf10364#64, 0xa81a664bbc423001#64, 0xc24b8b70d0f89791#64, 0xc76c51a30654be30#64,
+  0xd192e819d6ef5218#64, 0xd69906245565a910#64, 0xf40e35855771202a#64, 0x106aa07032bbd1b8#64,
+  0x19a4c116b8d2d0c8#64, 0x1e376c085141ab53#64, 0x2748774cdf8eeb99#64, 0x34b0bcb5e19b48a8#64,
+  0x391c0cb3c5c95a63#64, 0x4ed8aa4ae3418acb#64, 0x5b9cca4f7763e373#64, 0x682e6ff3d6b2b8a3#64,
+  0x748f82ee5defb2fc#64, 0x78a5636f43172f60#64, 0x84c87814a1f0ab72#64, 0x8cc702081a6439ec#64,
+  0x90befffa23631e28#64, 0xa4506cebde82bde9#64, 0xbef9a3f7b2c67915#64, 0xc67178f2e372532b#64,
+  0xca273eceea26619c#64, 0xd186b8c721c0c207#64, 0xeada7dd6cde0eb1e#64, 0xf57d4f7fee6ed178#64,
+  0x06f067aa72176fba#64, 0x0a637dc5a2c898a6#64, 0x113f9804bef90dae#64, 0x1b710b35131c471b#64,
+  0x28db77f523047d84#64, 0x32caab7b40c72493#64, 0x3c9ebe0a15c9bebc#64, 0x431d67c49c100d4c#64,
+  0x4cc5d4becb3e42b6#64, 0x597f299cfc657e2a#64, 0x5fcb6fab3ad6faec#64, 0x6c44198c4a475817#64]
+
+/-- `sha512K` as the 640 bits `fd_sha512_core_ref.K` holds, `K[0]` least significant. -/
+def sha512KBits : BitVec (80 * 64) :=
+  BitVec.ofNat _ (sha512K.foldr (fun k acc => k.toNat + 2 ^ 64 * acc) 0)
+
+/-- `fd_sha512_core_ref.K` holds the round constants, outside `sha`'s block. -/
+def Sha512KHolds (s : GlobalState) (sha : Pointer) : Prop :=
+  ∃ q, HoldsGlobal s "fd_sha512_core_ref.K" q sha512KBits ∧ q.id ≠ sha.id
+
+/-- The `n` little-endian bytes of `w`. -/
+def bytesOf {n : Nat} (w : BitVec (n * 8)) : List (BitVec 8) :=
+  List.ofFn fun i : Fin n => w.extractLsb' (i * 8) 8
+
+/-- The block `fd_sha512_append` leaves for a state at offset `off` in `blk`,
+after absorbing `data`. -/
+opaque sha512AppendBlock : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option LiveBlock
+
+/-- The 64 bytes `fd_sha512_fini` writes, little-endian, for a state at `off` in
+`blk` into a hash at `hoff` in `hblk`. -/
+opaque sha512FiniDigest : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → BitVec 512
+
+/-- `b` with `x` stored at byte `k` past offset `off`. -/
+def spliceAt (off k : BitVec 64) {w : Nat} (x : BitVec w) (b : LiveBlock) : LiveBlock :=
+  { length := b.length, bytes := spliceBits b.bytes (8 * (off + k).toNat) x }
+
+/-- `sha512InitMem`'s nine stores, on a state at offset `off` in `blk`. -/
+def sha512InitBlock (off : BitVec 64) (blk : Option LiveBlock) : Option LiveBlock :=
+  blk.map fun b => spliceAt off 200 (BitVec.replicate 24 (0#8)) <| spliceAt off 184 (sha512IV 7) <|
+    spliceAt off 176 (sha512IV 6) <| spliceAt off 168 (sha512IV 5) <|
+    spliceAt off 160 (sha512IV 4) <| spliceAt off 152 (sha512IV 3) <|
+    spliceAt off 144 (sha512IV 2) <| spliceAt off 136 (sha512IV 1) <| spliceAt off 128 (sha512IV 0) b
+
+/-- The digest `fd_ed25519_verify` writes to `k`: a state at `off` in `blk`
+initialised, `R`, `A` and `msg` appended, then finished into `k`, a fresh
+64-byte local. -/
+def ed25519Digest (blk : Option LiveBlock) (off : BitVec 64) (r a : BitVec 256)
+    (msg : List (BitVec 8)) : BitVec 512 :=
+  let st := sha512AppendBlock (sha512AppendBlock (sha512AppendBlock (sha512InitBlock off blk) off
+    (bytesOf (n := 32) r)) off (bytesOf (n := 32) a)) off msg
+  sha512FiniDigest st off (some { length := 64, bytes := 0#_ }) 0
+
+end Firedancer.Common

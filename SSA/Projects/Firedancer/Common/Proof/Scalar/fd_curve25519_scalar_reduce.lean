@@ -146,7 +146,7 @@ private theorem runFunction_res {α : Type} {body : EffectM α} {s : GlobalState
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 2000000 in
 theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
-    (hs : s.WF) (hin : Fits s.mem inp (64 * 8)) (hout : IsScalar256Ptr s.mem out) :
+    (hs : s.WF) (hin : Fits s.mem inp (64 * 8)) (hout : IsByteBufPtr s.mem out) :
     fd_curve25519_scalar_reduce_frame_spec out inp s := by
   simp only [fd_curve25519_scalar_reduce_frame_spec, Cfg.denote]
   refine runFunction_res _ ?_
