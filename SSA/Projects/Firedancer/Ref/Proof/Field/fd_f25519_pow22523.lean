@@ -442,16 +442,16 @@ private def loopBody (γt γb γc exit self : Nat)
       [Ty.ptr] fd_f25519_pow22523.sigs :=
   BlockCom.call (argTys := [Ty.ptr, Ty.ptr])
     "fd_f25519_sqr" fd_f25519_sqr.entry fd_f25519_sqr.blocks
-    (⟨γt + 1, by simpa using hγt⟩ ::ₕ ⟨γt + 1, by simpa using hγt⟩ ::ₕ .nil)
+    (⟨γt + 1, by exact hγt⟩ ::ₕ ⟨γt + 1, by exact hγt⟩ ::ₕ .nil)
     (.var (Expr.mk
         (SLLVMOp.arith (InstCombine.MOp.binary (.concrete 32)
           (.add { nsw := true, nuw := true })))
         rfl (by constructor)
-        (⟨1, by rfl⟩ ::ₕ ⟨γc + 1 + 1, by simpa using hγc⟩ ::ₕ .nil) .nil)
+        (⟨1, by rfl⟩ ::ₕ ⟨γc + 1 + 1, by exact hγc⟩ ::ₕ .nil) .nil)
       (.var (Expr.mk
           (SLLVMOp.arith (InstCombine.MOp.icmp .eq (.concrete 32)))
           rfl (by constructor)
-          (⟨0, by rfl⟩ ::ₕ ⟨γb + 1 + 1 + 1, by simpa using hγb⟩ ::ₕ .nil) .nil)
+          (⟨0, by rfl⟩ ::ₕ ⟨γb + 1 + 1 + 1, by exact hγb⟩ ::ₕ .nil) .nil)
         (.term (Terminator.condBr ⟨0, by rfl⟩
           ⟨exit, hexit, .nil⟩
           ⟨self, hself, ⟨1, by rfl⟩ ::ₕ .nil⟩))))
@@ -551,13 +551,13 @@ private def interBody (γmd γm₀ γm₁ γsd γss γc next : Nat)
       [Ty.ptr] fd_f25519_pow22523.sigs :=
   BlockCom.call (argTys := [Ty.ptr, Ty.ptr, Ty.ptr])
     "fd_f25519_mul" fd_f25519_mul.entry fd_f25519_mul.blocks
-    (⟨γmd, by simpa using hγmd⟩ ::ₕ ⟨γm₀, by simpa using hγm₀⟩ ::ₕ
-     ⟨γm₁, by simpa using hγm₁⟩ ::ₕ .nil)
+    (⟨γmd, by exact hγmd⟩ ::ₕ ⟨γm₀, by exact hγm₀⟩ ::ₕ
+     ⟨γm₁, by exact hγm₁⟩ ::ₕ .nil)
     (BlockCom.call (argTys := [Ty.ptr, Ty.ptr])
       "fd_f25519_sqr" fd_f25519_sqr.entry fd_f25519_sqr.blocks
-      (⟨γsd + 1, by simpa using hγsd⟩ ::ₕ ⟨γss + 1, by simpa using hγss⟩ ::ₕ .nil)
+      (⟨γsd + 1, by exact hγsd⟩ ::ₕ ⟨γss + 1, by exact hγss⟩ ::ₕ .nil)
       (.term (Terminator.br
-        ⟨next, hnext, ⟨γc + 1 + 1, by simpa using hγc⟩ ::ₕ .nil⟩)))
+        ⟨next, hnext, ⟨γc + 1 + 1, by exact hγc⟩ ::ₕ .nil⟩)))
 
 set_option linter.all false in
 /-- Run one inter-loop block, with the two written locals behind the staged
