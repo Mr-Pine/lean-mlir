@@ -1,4 +1,6 @@
-import LeanMLIR.Framework.Basic
+module
+
+public import LeanMLIR.Framework.Basic
 
 /-!
 # Core Datastructures Printing
@@ -6,6 +8,8 @@ import LeanMLIR.Framework.Basic
 This file defines `Repr` and `ToString` instances for the core data-structures
 (`Expr`, `Com`, etc.)
 -/
+
+@[expose] public section
 
 open Ctxt (Var)
 
@@ -157,7 +161,7 @@ partial def Expr.print (e : Expr d Γ eff t) : Format :=
 Recursively print a `Com` in generic MLIR syntax.
 Each bound variable is printed with its index and corresponding expression.
 -/
-private partial def Com.printAux : Com d Γ eff ts → Format
+partial def Com.printAux : Com d Γ eff ts → Format
   | .rets vs =>
       let vs := vs.mapToList printVar |> (Format.joinSep · ", ") |> Format.group
       let ret := printReturn ts

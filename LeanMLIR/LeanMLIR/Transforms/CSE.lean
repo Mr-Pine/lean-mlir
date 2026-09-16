@@ -4,10 +4,17 @@ Released under Apache 2.0 license as described in the file LICENSE.
 /-
 This file implements common subexpression elimination for our SSA based IR.
 -/
-import LeanMLIR.Framework
-import LeanMLIR.Transforms.DCE
+module
+
+public import LeanMLIR.Framework
+public import LeanMLIR.Transforms.DCE
+-- module: `#guard_msgs in #eval` below needs the `Repr` instances at elaboration time
+public meta import LeanMLIR.Framework
+public meta import LeanMLIR.Transforms.DCE
 
 /-! ## Prelims  -/
+
+@[expose] public section
 
 namespace Ctxt
 

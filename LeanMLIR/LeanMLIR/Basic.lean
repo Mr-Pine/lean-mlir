@@ -5,13 +5,14 @@ Released under Apache 2.0 license as described in the file LICENSE.
 /-
 This file should import everything in the LeanMLIR core, *besides* individual dialects
 -/
+module
 
-import LeanMLIR.Framework
-import LeanMLIR.Tactic
-import LeanMLIR.Util
-import LeanMLIR.MLIRSyntax
+public import LeanMLIR.Framework
+public import LeanMLIR.Tactic
+public import LeanMLIR.Util
+public import LeanMLIR.MLIRSyntax
 
 -- ## Transformations
-import LeanMLIR.Transforms.Rewrite
-import LeanMLIR.Transforms.CSE
-import LeanMLIR.Transforms.DCE
+public import LeanMLIR.Transforms.Rewrite
+public import LeanMLIR.Transforms.CSE
+public import LeanMLIR.Transforms.DCE

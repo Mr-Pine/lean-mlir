@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Data.Fintype.Basic
+module
 
-import LeanMLIR.HVector
+public import Mathlib.Data.Fintype.Basic
+
+public import LeanMLIR.HVector
+
+@[expose] public section
 
 /--
   Typeclass for a `baseType` which is a Gödel code of Lean types.

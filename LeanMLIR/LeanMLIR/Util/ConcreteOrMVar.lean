@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Data.Vector.Basic
+module
+
+public import Mathlib.Data.Vector.Basic
+
+@[expose] public section
 
 /--
   A general type that is either a concrete known value of type `α`, or one of `φ` metavariables
@@ -79,7 +83,7 @@ theorem instantiate_mvar_zero {hφ : List.length (w :: ws) = φ} {h0 : 0 < φ} :
   simp [List.Vector.get]
 
 @[simp]
-theorem instantiate_mvar_zero' :
+theorem instantiate_mvar_zero' {w : Nat} :
     (mvar (φ := 1) ⟨0, by simp⟩).instantiate (Subtype.mk [w] (by simp)) = w :=
   rfl
 

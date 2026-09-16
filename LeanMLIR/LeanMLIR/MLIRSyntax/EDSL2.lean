@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax.GenericParser
-import LeanMLIR.MLIRSyntax.Transform
-import LeanMLIR.Framework.ToExpr
+module
+
+public import LeanMLIR.MLIRSyntax.GenericParser
+public import LeanMLIR.MLIRSyntax.Transform
+public import LeanMLIR.Framework.ToExpr
 
 /-!
 # MLIR Dialect Domain Specific Language (v2)
@@ -50,6 +52,8 @@ elab "[FooDialect| " reg:mlir_region "]" : term => do
 ```
 
 -/
+
+@[expose] public section
 
 namespace SSA
 

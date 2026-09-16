@@ -2,11 +2,13 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- should replace with Lean import once Pure is upstream
-import LeanMLIR.MLIRSyntax.AST
-import LeanMLIR.MLIRSyntax.Transform.NameMapping
-import LeanMLIR.MLIRSyntax.Transform.TransformError
-import LeanMLIR.Framework
-import LeanMLIR.ErasedContext
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+public import LeanMLIR.MLIRSyntax.Transform.NameMapping
+public import LeanMLIR.MLIRSyntax.Transform.TransformError
+public import LeanMLIR.Framework
+public import LeanMLIR.ErasedContext
 
 /-!
 # `Transform*` typeclasses
@@ -14,6 +16,8 @@ This file defines `TransformTy`, `TransformExpr`, and `TransformReturn` typeclas
 which dictate how generic MLIR syntax (as defined in `MLIRSyntax.AST`) can be transformed into
 an instance of `Com` or `Expr` for a specific dialect.
 -/
+
+@[expose] public section
 
 universe u
 
@@ -183,7 +187,7 @@ def TypedSSAVal.newVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) :
 
 /-- Given a list of `TypedSSAVal`s, treat each as a binder and declare a new variable with the
     given name and type -/
-private def declareBindings [TransformTy d φ] (Γ : Ctxt d.Ty) (vals : List (TypedSSAVal φ)) :
+def declareBindings [TransformTy d φ] (Γ : Ctxt d.Ty) (vals : List (TypedSSAVal φ)) :
     BuilderM d (DerivedCtxt Γ) := do
   vals.foldlM
       (fun Γ' ssaVal => do
@@ -196,10 +200,10 @@ rather than being called through the `TransformExpr` instance: that keeps the
 recursion below *structural*, which matters because `mkCom` has to reduce under
 `whnf` for the elaborator in `MLIRSyntax/EDSL.lean` (used by FHE, ModArith and
 RISCV64). Neither `partial` nor well-founded recursion reduces there. -/
-private abbrev MkRegion (d : Dialect) [DialectSignature d] (φ : Nat) : Type :=
+abbrev MkRegion (d : Dialect) [DialectSignature d] (φ : Nat) : Type :=
   MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
 
-private def mkRegions [TransformTy d φ] (mkRegion : MkRegion d φ) :
+def mkRegions [TransformTy d φ] (mkRegion : MkRegion d φ) :
     List (MLIR.AST.Region φ) → ExceptM d (List (ParsedRegion d))
   | [] => return []
   | r :: rs => do
@@ -207,7 +211,7 @@ private def mkRegions [TransformTy d φ] (mkRegion : MkRegion d φ) :
     let rs ← mkRegions mkRegion rs
     return r :: rs
 
-private def mkComHelper [TransformTy d φ] [instTransformExpr : TransformExpr d φ]
+def mkComHelper [TransformTy d φ] [instTransformExpr : TransformExpr d φ]
     [instTransformReturn : TransformReturn d φ] (mkRegion : MkRegion d φ) (Γ : Ctxt d.Ty) :
     List (MLIR.AST.Op φ) → BuilderM d (Σ eff ty, Com d Γ eff ty)
   | [retStx] => do
@@ -233,7 +237,7 @@ private def mkComHelper [TransformTy d φ] [instTransformExpr : TransformExpr d 
 The bound is what keeps this structurally recursive, and so reducible. It is
 not a real restriction: MLIR nesting is a handful of levels at most, and
 exceeding it is a clear error rather than a wrong answer. -/
-private def mkComAux [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
+def mkComAux [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
     Nat → MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
   | 0, _ => throw <| .generic "Region nesting is too deep"
   | fuel + 1, reg =>

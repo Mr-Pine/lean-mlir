@@ -1,13 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Refinement
+module
+
+public import LeanMLIR.Framework.Refinement
 
 /-!
 # Poison Semantics
 This file defines a generic `PoisonOr α` type, which dialects can use to
 implement (LLVM) poison semantics.
 -/
+
+@[expose] public section
 
 /--
 Elements of type `PoisonOr α` are either `poison`, or values of type `α`.

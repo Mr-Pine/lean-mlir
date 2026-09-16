@@ -1,14 +1,20 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework
-import LeanMLIR.Util
-import LeanMLIR.Tactic.SimpSet
+module
 
-import Qq
-import Mathlib.Tactic.FinCases
-import Lean.Meta.KAbstract
-import Lean.Elab.Tactic.ElabTerm
+public import LeanMLIR.Framework
+public import LeanMLIR.Util
+public import LeanMLIR.Tactic.SimpSet
+
+public import Qq
+public import Mathlib.Tactic.FinCases
+public import Lean.Meta.KAbstract
+public import Lean.Elab.Tactic.ElabTerm
+-- module: the simproc helpers below are `meta`
+public meta import Mathlib.Lean.Expr.Basic
+
+@[expose] public section
 
 variable [DialectSignature d] [TyDenote d.Ty] [DialectDenote d] [Monad d.m] [LawfulMonad d.m] in
 @[simp_denote]
@@ -137,12 +143,12 @@ section SimpValuationApply
 
 /-- Split a valuation into the statically known elements at its *end* and the rest.
 That is, `V ::ₕ x ::ₕ y` with `V` a free variable gives `(#[y, x], V)`. -/
-private partial def valuationElements (e : Expr) (elems : Array Expr := #[]) : Array Expr × Expr :=
+private meta partial def valuationElements (e : Expr) (elems : Array Expr := #[]) : Array Expr × Expr :=
   match_expr e with
   | Valuation.cons _Ty _instTyDenote _Γ _t x V => valuationElements V (elems.push x)
   | _ => (elems, e)
 
-private partial def varToIndex (e : Expr) : Option Nat :=
+private meta partial def varToIndex (e : Expr) : Option Nat :=
   match_expr e with
   | Var.mk _Ty _Γ _t i _hi => Expr.numeral? i
   | Subtype.mk _α _p i _hi => Expr.numeral? i
@@ -195,7 +201,7 @@ Return `some i` if `e` is one of the following
 - `Fin.succ j`, where `j` is a `finNumeral`
 - `OfNat.ofNat e`, where `isNumeral e`
 -/
-partial def finNumeral? (e : Lean.Expr) : Option Nat :=
+meta partial def finNumeral? (e : Lean.Expr) : Option Nat :=
   match_expr e with
   | Fin.mk _ i _h => Expr.numeral? i
   | Fin.succ _ i => (· + 1) <$> finNumeral? i

@@ -1,5 +1,7 @@
-import LeanMLIR.Framework
-import LeanMLIR.Transforms.Rewrite.Mapping
+module
+
+public import LeanMLIR.Framework
+public import LeanMLIR.Transforms.Rewrite.Mapping
 
 /-!
 # Matching
@@ -9,6 +11,8 @@ pattern of a peephole rewrite, and attempt to find a location in the program
 where the peephole is applicable.
 
 -/
+
+@[expose] public section
 
 set_option deprecated.oldSectionVars true
 open Ctxt (Var VarSet Valuation Hom)

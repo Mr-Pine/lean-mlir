@@ -2,13 +2,16 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- Investigations on asymptotic behavior of representing programs with large explicit contexts
+module
 
-import LeanMLIR.ErasedContext
-import LeanMLIR.HVector
-import LeanMLIR.EffectKind
-import LeanMLIR.Framework.Dialect
+public import LeanMLIR.ErasedContext
+public import LeanMLIR.HVector
+public import LeanMLIR.EffectKind
+public import LeanMLIR.Framework.Dialect
 
-import Mathlib.Data.Finset.Union
+public import Mathlib.Data.Finset.Union
+
+@[expose] public section
 
 set_option deprecated.oldSectionVars true
 

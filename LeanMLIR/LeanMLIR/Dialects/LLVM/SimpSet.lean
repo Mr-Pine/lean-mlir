@@ -1,9 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Lean.Meta.Tactic.Simp.SimpTheorems
-import Lean.Meta.Tactic.Simp.RegisterCommand
-import Lean.LabelAttribute
+module
+
+public meta import Lean.Meta.Tactic.Simp.Attr
+
+public import Lean.Meta.Tactic.Simp.SimpTheorems
+public import Lean.Meta.Tactic.Simp.RegisterCommand
+public import Lean.LabelAttribute
+
+@[expose] public section
 
 register_simp_attr simp_llvm
 

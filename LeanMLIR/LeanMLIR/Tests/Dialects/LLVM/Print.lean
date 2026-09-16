@@ -1,8 +1,12 @@
-import LeanMLIR.Dialects.LLVM.Syntax
+module
+
+public import LeanMLIR.Dialects.LLVM.Syntax
 
 /-!
 # Print Tests
 -/
+
+@[expose] public section
 
 namespace Tests
 

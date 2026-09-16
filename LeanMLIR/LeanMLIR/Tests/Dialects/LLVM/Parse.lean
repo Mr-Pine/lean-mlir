@@ -1,4 +1,8 @@
-import LeanMLIR.Dialects.LLVM.Syntax
+module
+
+public import LeanMLIR.Dialects.LLVM.Syntax
+
+@[expose] public section
 
 namespace LeanMLIR.Tests
 

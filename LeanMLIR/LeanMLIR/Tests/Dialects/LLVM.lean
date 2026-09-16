@@ -1,2 +1,4 @@
-import LeanMLIR.Tests.Dialects.LLVM.Print
-import LeanMLIR.Tests.Dialects.LLVM.PrettySyntax
+module
+
+public import LeanMLIR.Tests.Dialects.LLVM.Print
+public import LeanMLIR.Tests.Dialects.LLVM.PrettySyntax

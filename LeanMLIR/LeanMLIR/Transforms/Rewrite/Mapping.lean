@@ -1,6 +1,8 @@
-import Mathlib.Data.List.AList
+module
 
-import LeanMLIR.ErasedContext
+public import Mathlib.Data.List.AList
+
+public import LeanMLIR.ErasedContext
 
 /-!
 ## Mapping
@@ -8,6 +10,8 @@ import LeanMLIR.ErasedContext
 This file defines the `Mapping` structure, which we use to incrementally build
 a context homomorphism while matching a peephole rewrite.
 -/
+
+@[expose] public section
 
 open Ctxt (Var)
 variable {Ty : Type}

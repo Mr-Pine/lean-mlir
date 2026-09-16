@@ -1,10 +1,14 @@
-import LeanMLIR.MLIRSyntax.AST
-import LeanMLIR.MLIRSyntax.Transform
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+public import LeanMLIR.MLIRSyntax.Transform
 
 /-!
 This file defines a set of helper functions on `AST` objects that
 are usefull to implementors of `Transform` typeclasses
 -/
+
+@[expose] public section
 
 namespace MLIR.AST
 

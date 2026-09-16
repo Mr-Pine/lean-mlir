@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Tactic.TypeStar
-import Qq
+module
+
+public import Mathlib.Tactic.TypeStar
+public import Qq
+
+@[expose] public section
 
 /-- An heterogeneous vector -/
 inductive HVector {α : Type*} (f : α → Type*) : List α → Type _
@@ -549,7 +553,7 @@ structure HVectorLiteral where
 /-- Given a Lean expression of type `HVector _ _`, try to decompose it into an
 array of element expressions.
 Returns `none` if the passed expression is not a recognized literal. -/
-def litExpr? : Expr → (Option HVectorLiteral)
+meta def litExpr? : Expr → (Option HVectorLiteral)
   | mkApp6 (.const ``HVector.cons _) _α _A _as a x xs => do
     let ret ← litExpr? xs
     some { ret with elems := ret.elems.push ⟨a, x⟩ }

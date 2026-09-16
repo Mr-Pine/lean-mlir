@@ -8,15 +8,17 @@ Extracts multiple goals from a theorem.
 Adapted from Mathlib's `ExtractGoals` module.
 Adaptor: Siddharth Bhat
 -/
-import Mathlib.Init
-import Lean.Elab.Tactic.ElabTerm
-import Lean.Meta.Tactic.Cleanup
-import Lean.PrettyPrinter
-import Lean.Elab.Print
-import Batteries.Lean.Meta.Inaccessible
-import Lean.Meta.Eqns
-import Lean.Util.CollectAxioms
-import Lean.Elab.Command
+module
+
+public import Mathlib.Init
+public import Lean.Elab.Tactic.ElabTerm
+public import Lean.Meta.Tactic.Cleanup
+public import Lean.PrettyPrinter
+public import Lean.Elab.Print
+public import Batteries.Lean.Meta.Inaccessible
+public import Lean.Meta.Eqns
+public import Lean.Util.CollectAxioms
+public import Lean.Elab.Command
 
 
 /-!
@@ -31,13 +33,15 @@ Our goals states are complex enough, due to the presence of `HRefinement`,
 that we need to use `pp.analyze` to print them correctly.
 -/
 
+@[expose] public meta section
+
 namespace PrintPrivate
 open Lean Meta Elab Command
 
-private def throwUnknownId (id : Name) : MetaM Unit :=
+def throwUnknownId (id : Name) : MetaM Unit :=
   throwError "unknown identifier '{.ofConstName id}'"
 
-private def levelParamsToMessageData (levelParams : List Name) : MessageData :=
+def levelParamsToMessageData (levelParams : List Name) : MessageData :=
   match levelParams with
   | []    => ""
   | u::us => Id.run do
@@ -46,7 +50,7 @@ private def levelParamsToMessageData (levelParams : List Name) : MessageData :=
       m := m ++ ", " ++ toMessageData u
     return m ++ "}"
 
-private def mkHeader (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (safety : DefinitionSafety) (sig : Bool := true) : MetaM MessageData := do
+def mkHeader (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (safety : DefinitionSafety) (sig : Bool := true) : MetaM MessageData := do
   let mut attrs := #[]
   match (← getReducibilityStatus id) with
   | ReducibilityStatus.irreducible =>   attrs := attrs.push m!"irreducible"
@@ -82,14 +86,14 @@ private def mkHeader (kind : String) (id : Name) (levelParams : List Name) (type
   else
     return m!"{m}{kind}"
 
-private def mkOmittedMsg : Option Expr → MessageData
+def mkOmittedMsg : Option Expr → MessageData
   | none   => "<not imported>"
   | some e => e
 
-private def mkAxiomLikeMessage (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (safety : DefinitionSafety) : MetaM MessageData := do
+def mkAxiomLikeMessage (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (safety : DefinitionSafety) : MetaM MessageData := do
   mkHeader kind id levelParams type safety
 
-private def mkDefLikeMessage (sigOnly : Bool) (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (value? : Option Expr) (safety := DefinitionSafety.safe) : MetaM MessageData := do
+def mkDefLikeMessage (sigOnly : Bool) (kind : String) (id : Name) (levelParams : List Name) (type : Expr) (value? : Option Expr) (safety := DefinitionSafety.safe) : MetaM MessageData := do
   if sigOnly then
     mkAxiomLikeMessage kind id levelParams type safety
   else
@@ -109,7 +113,7 @@ open Lean Meta Elab Tactic
 
 /-- set pp.analyze to true so that the extracted goals are
     printed with their type information, and therefore round-trippable. -/
-private def setAnalyzeTrue (opts : Options) : Options :=
+def setAnalyzeTrue (opts : Options) : Options :=
      (opts.setBool pp.analyze.name true)
      |>.setBool pp.analyze.checkInstances.name true
 
@@ -146,13 +150,13 @@ elab_rules : tactic
 
 
 /--
-info: theorem _example.extracted_1._1 : ∀ (P Q R : Prop), P :=
+info: private theorem _example.extracted_1._1 : ∀ (P Q R : Prop), P :=
 sorry
 ---
-info: theorem _example.extracted_1._2 : ∀ (P Q R : Prop), Q :=
+info: private theorem _example.extracted_1._2 : ∀ (P Q R : Prop), Q :=
 sorry
 ---
-info: theorem _example.extracted_1._3 : ∀ (P Q R : Prop), R :=
+info: private theorem _example.extracted_1._3 : ∀ (P Q R : Prop), R :=
 sorry
 ---
 warning: declaration uses `sorry`
@@ -168,7 +172,7 @@ Note: This linter can be disabled with `set_option linter.unusedTactic false`
 
 
 /--
-info: theorem _example.extracted_1._1 : ∀ (P Q : Nat), P + Q = Q + P :=
+info: private theorem _example.extracted_1._1 : ∀ (P Q : Nat), P + Q = Q + P :=
 sorry
 ---
 warning: declaration uses `sorry`

@@ -1,15 +1,19 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Util.Poison
-import LeanMLIR.Util.ForStd
-import LeanMLIR.Dialects.LLVM.SimpSet
+module
+
+public import LeanMLIR.Util.Poison
+public import LeanMLIR.Util.ForStd
+public import LeanMLIR.Dialects.LLVM.SimpSet
 
 --TODO: are any of these imports actually needed in this file?
-import Mathlib.Tactic.Cases
-import Mathlib.Tactic.SplitIfs
-import Mathlib.Tactic.Tauto
-import Aesop
+public import Mathlib.Tactic.Cases
+public import Mathlib.Tactic.SplitIfs
+public import Mathlib.Tactic.Tauto
+public import Aesop
+
+@[expose] public section
 
 namespace InstCombine
 

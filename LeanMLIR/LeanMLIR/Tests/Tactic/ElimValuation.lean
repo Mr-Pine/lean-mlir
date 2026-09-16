@@ -1,4 +1,6 @@
-import LeanMLIR
+module
+
+public import LeanMLIR
 
 /-!
 # ElimValuation simproc
@@ -7,6 +9,8 @@ The following is an MWE extracted from `circomvent` (our LLZK experiments repo),
 where the `SSA.elimValuation` simproc triggered a `(kernel) application type mismatch`
 error.
 -/
+
+@[expose] public section
 
 namespace MWE
 
