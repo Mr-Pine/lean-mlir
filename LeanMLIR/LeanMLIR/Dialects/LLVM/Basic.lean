@@ -215,7 +215,8 @@ abbrev MetaLLVM (φ : Nat) : Dialect where
   Op := MOp φ
   Ty := MTy φ
 
-def LLVM : Dialect where
+-- v4.34: reducible, so `LLVM.Ty` still unfolds to `MTy 0` at `implicit` transparency.
+@[implicit_reducible] def LLVM : Dialect where
   Op := MOp 0
   Ty := MTy 0
 
@@ -623,7 +624,8 @@ def BitVec.width {n : Nat} (_ : BitVec n) : Nat := n
 /-- The denotation of an LLVM type. A vector denotes lane-wise, so poison is
 tracked per lane exactly as it is in LLVM: `<4 x i32>` may be poison in one lane
 while the others hold values. -/
-def denote : LLVM.Ty → Type
+-- v4.34: reducible, so `⟦·⟧` at an LLVM type still unfolds under a vector.
+@[implicit_reducible] def denote : LLVM.Ty → Type
   | bitvec w => LLVM.IntW w
   | vector l e => Vector (denote e) l
 
@@ -881,8 +883,7 @@ def unflattenMasked : (t : LLVM.Ty) → BitVec (width t) → BitVec (width t) �
 there. The `Defined` case of every `bitcast`. -/
 theorem unflattenMasked_zero : ∀ (t : LLVM.Ty) (b : BitVec (width t)),
     unflattenMasked t b 0 = unflatten t b
-  -- v4.34: `simp` leaves the reflexivity goal; its closing `rfl` is too weak a transparency.
-  | bitvec _, b => by simp [unflattenMasked, unflatten]; rfl
+  | bitvec _, b => by simp [unflattenMasked, unflatten]
   | vector l e, b => by
       show (Vector.ofFn _ : Vector (TyDenote.toType e) l) = Vector.ofFn _
       ext i hi

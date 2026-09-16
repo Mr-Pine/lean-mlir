@@ -21,12 +21,9 @@ namespace LeanMLIR
 namespace SLLVM
 open InstCombine (LLVM)
 
--- v4.34: `LLVM.Ty` is `Dialect.Ty LLVM`, and with `LLVM` semireducible it no longer reduces
--- to `InstCombine.MTy 0` when applications are type-checked at `implicit` transparency --
--- which makes every `⟦bitvec w⟧` under a vector ill-typed to `rw`.
--- TODO: belongs (unscoped) on the `def` in `LeanMLIR/Dialects/LLVM/Basic.lean`.
--- ... and `⟦·⟧` at an LLVM type is `LLVM.Ty.denote`, which has to reduce for the same reason.
-attribute [local implicit_reducible] InstCombine.LLVM InstCombine.LLVM.Ty.denote
+-- v4.34: `LLVM.Ty` is `Dialect.Ty LLVM` and `⟦·⟧` at it is `LLVM.Ty.denote`; while both are
+-- semireducible, `⟦bitvec w⟧` under a vector is ill-typed at `implicit` transparency and no
+-- `rw` can match through it; the attribute now sits on the defs themselves.
 
 /-! ## `MemorySSAM.run`
 

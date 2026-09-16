@@ -27,7 +27,18 @@ namespace LeanMLIR.SLLVM
 open LeanMLIR
 open InstCombine (LLVM)
 
+-- v4.34: `SLLVM` is semireducible, so `SLLVM.Op`/`SLLVM.m` no longer reduce when applications
+-- are type-checked at `implicit` transparency.
+-- TODO: belongs unscoped on the `def` in `SSA/Projects/SLLVM/Dialect/Basic.lean`.
+
 /-! ## Effects on a concrete state -/
+
+-- v4.34: a `do`-block now exposes `MonadState.get` where it used to expose `getThe`.
+@[simp, simp_denote, simp_sllvm]
+theorem run_get_state (s : GlobalState) :
+    StateT.run (@get GlobalState EffectM
+        (@instMonadStateOfMonadStateOf _ _ EffectM.instMonadStateOfGlobalState)) s
+      = .value (s, s) := rfl
 
 @[simp, simp_denote, simp_sllvm]
 theorem run_getThe_state (s : GlobalState) :
@@ -73,7 +84,9 @@ or the operation is UB. -/
 theorem run_addressof {name : String} {s : GlobalState} {p : Pointer}
     (h : s.globals[name]? = some p) :
     StateT.run (SLLVM.addressof name) s = .value (PoisonOr.value p, s) := by
+  -- v4.34: `simp` no longer finishes off the final `StateT.run (pure _)`.
   simp [SLLVM.addressof, h]
+  rfl
 
 /-! ## The operations, in `denoteOp` form
 
@@ -86,8 +99,7 @@ expressions a parsed program carries. -/
       (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
         (SLLVMOp.alloca w) rfl (EffectKind.le_refl _) HVector.nil Regions.nil) V
       = (([·]ₕ) <$> SLLVM.alloca w : EffectM _) := by
-  simp [Expr.denoteOp, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 @[simp_denote] theorem denoteOp_addressof {Γ : Ctxt SLLVM.Ty} (name : String)
     (V : Ctxt.Valuation Γ) :
@@ -95,8 +107,7 @@ expressions a parsed program carries. -/
       (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
         (SLLVMOp.addressof name) rfl (EffectKind.le_refl _) HVector.nil Regions.nil) V
       = (([·]ₕ) <$> SLLVM.addressof name : EffectM _) := by
-  simp [Expr.denoteOp, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 @[simp_denote] theorem denoteOp_lifetime {Γ : Ctxt SLLVM.Ty} (start : Bool)
     (p : Ctxt.Var Γ .ptr) (V : Ctxt.Valuation Γ) :
@@ -105,8 +116,7 @@ expressions a parsed program carries. -/
         (SLLVMOp.lifetime start) rfl (EffectKind.le_refl _)
         (p ::ₕ .nil) Regions.nil) V
       = (pure []ₕ : EffectM _) := by
-  simp [Expr.denoteOp, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 @[simp_denote] theorem denoteOp_load {Γ : Ctxt SLLVM.Ty} (t : LLVM.Ty)
     (p : Ctxt.Var Γ .ptr) (V : Ctxt.Valuation Γ) :
@@ -116,8 +126,17 @@ expressions a parsed program carries. -/
         (p ::ₕ .nil) Regions.nil) V
       = (([·]ₕ) <$> (liftM (SLLVM.load (V p) t)) :
           EffectM (HVector TyDenote.toType [SLLVM.Ty.arith t])) := by
-  simp [Expr.denoteOp, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
+
+/-- v4.34: a one-element `HVector` prepended to a valuation is a `cons`. The step lemmas
+below used to get this by `rfl` through `Ctxt.Valuation.ofHVector`. -/
+theorem valuation_appendHVector_singleton {Γ : Ctxt SLLVM.Ty} {t : SLLVM.Ty}
+    (x : TyDenote.toType t) (V : Ctxt.Valuation Γ) :
+    ((x ::ₕ HVector.nil) ++ V : Ctxt.Valuation _) = x ::ᵥ V := by
+  show Ctxt.Valuation.ofHVector (x ::ₕ .nil) ++ V = x ::ᵥ V
+  simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
+  -- v4.34: `cons_append`'s `no_index` LHS no longer matches under `simp`.
+  exact Ctxt.Valuation.cons_append.trans (congrArg _ Ctxt.Valuation.nil_append)
 
 /-! ## Peeling one impure instruction -/
 
@@ -134,10 +153,7 @@ theorem run_denote_var_single {Γ : Ctxt SLLVM.Ty} {t : SLLVM.Ty} {ts : List SLL
   rw [Expr.denote_unfold]
   simp only [EffectM.run_bind, EffectM.run_map, h, PoisonOr.map_value,
     PoisonOr.value_bind]
-  congr 2
-  show (Ctxt.Valuation.ofHVector (x ::ₕ .nil)) ++ V = x ::ᵥ V
-  simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-    Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+  rw [valuation_appendHVector_singleton]
 
 /-- Step a zero-result impure instruction (a store, a lifetime marker, a void
 call): the state advances and the valuation is untouched. -/

@@ -20,6 +20,10 @@ namespace LeanMLIR.SLLVM
 
 open LeanMLIR
 
+-- v4.34: `SLLVM` is semireducible, so `SLLVM.Op`/`SLLVM.m` no longer reduce when applications
+-- are type-checked at `implicit` transparency and `Expr.op_mk` cannot fire under `denoteOp`.
+-- TODO: belongs unscoped on the `def` in `SSA/Projects/SLLVM/Dialect/Basic.lean`.
+
 /-- **Denotation of a pure call**: the callee's denotation applied to the
 call's arguments. Note the `reverse`: block arguments enter a `Ctxt` in
 reverse declaration order, so the operand list has to be turned around before
@@ -34,8 +38,7 @@ it becomes a valuation of the callee's context. -/
         (SLLVMOp.call callee argTys retTys .pure) rfl (EffectKind.le_refl _) args
         (Regions.cons com Regions.nil)) V
       = com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse) := by
-  simp [Expr.denoteOp, Regions.denote, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 /-- **Denotation of an impure call**: the callee's denotation applied to the
 call's arguments, run as a function (`runFunction`): the callee's frame --
@@ -53,7 +56,6 @@ freed-already UB path on use, as a real dangling stack pointer would. -/
         (SLLVMOp.call callee argTys retTys .impure) rfl (EffectKind.le_refl _) args
         (Regions.cons com Regions.nil)) V
       = runFunction (com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)) := by
-  simp [Expr.denoteOp, Regions.denote, EffectKind.liftEffect,
-    DialectSignature.effectKind, DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 end LeanMLIR.SLLVM

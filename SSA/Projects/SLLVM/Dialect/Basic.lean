@@ -154,7 +154,8 @@ was a `bitvec`. -/
     simp [LLVM.Ty.flatten, LLVM.Ty.flattenBV, LLVM.Ty.Defined, LLVM.Ty.ofBitvec,
       PoisonOr.value_ne_poison]
 
-def SLLVM : Dialect where
+-- v4.34: reducible, so `SLLVM.Op`/`SLLVM.m` still unfold at `implicit` transparency.
+@[implicit_reducible] def SLLVM : Dialect where
   Op := SLLVMOp
   Ty := SLLVMTy
   m := EffectM
