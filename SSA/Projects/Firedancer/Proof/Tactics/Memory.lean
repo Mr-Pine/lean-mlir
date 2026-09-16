@@ -88,6 +88,7 @@ elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
         `(Lean.Parser.Tactic.simpLemma| $t:term)
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
+      reduce_cfg_indices
       rw [BlockCom.run_bind_denote_var_of_nil (s' := $stOut)
         (by simp only [$[$simpArgs],*]
             rw [run_liftM (run_store (t := $ty) (x := $val) $hflat
@@ -126,6 +127,7 @@ elab "peel_load " t:term ", " blk:term ", " p:term ", " hblk:term ", " st:term :
         `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits $width))
     evalTactic (← `(tactic|
      (try simp only [bind_assoc]
+      reduce_cfg_indices
       rw [BlockCom.run_bind_denote_var_of_value (x := $val) (s' := $st)
         (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
             rw [run_liftM (run_load (t := $t) ($hblk)
@@ -172,6 +174,7 @@ filling `len` bytes with the byte `b` at `p`.
 macro "peel_memset " b:term ", " len:term ", " p:term ", " hp:term ", " st:term : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil
       (s' := { $st with mem := ($st).mem.splice $p (BitVec.replicate $len $b) })
       (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
@@ -208,6 +211,7 @@ elab "peel_memcpy " len:term ", " dst:term ", " src:term ", "
         pure (← `({ $st with mem := ($st).mem.splice $dst (BitVec.extractLsb' (($src).offsetInBits) (8 * $len) ($hsrc).choose.bytes) }), ← `(tactic| rfl))
   evalTactic (← `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil (s' := $stOut)
       (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
           rw [run_liftM (run_memcpy (len := BitVec.ofNat 64 $len)

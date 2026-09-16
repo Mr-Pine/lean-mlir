@@ -163,6 +163,31 @@ theorem BlockCom.denote_var_pureOp_single {Γ Γout : Ctxt SLLVM.Ty} {t rets suc
     simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
     exact Ctxt.Valuation.cons_nil_append ..
 
+open Lean Meta Elab Tactic in
+/-- v4.34: reduce a lifted program's `Cfg.Γout`/`Cfg.sigs` in the goal.
+
+`Cfg.denote` unfolds to `cfg.entry.denote V >>= k`, where the `bind`'s type argument is
+written `cfg.Γout.Valuation × (… ⊕ SuccArgs cfg.sigs)`. Once `simp` has replaced
+`cfg.entry` by the literal block -- which it does without touching that type argument --
+the application is only type-correct up to delta on the lifted `def`, so at `implicit`
+transparency it is ill-typed and `rw` finds no occurrence of any pattern through it. This
+reduces exactly those two projections and leaves `cfg.blocks` folded, which is what keeps
+the goal small. -/
+elab "reduce_cfg_indices" : tactic => do
+  liftMetaTactic1 fun g => do
+    let ty ← instantiateMVars (← g.getType)
+    let hit ← IO.mkRef false
+    let ty' ← Meta.transform ty (post := fun e => do
+      if e.getAppNumArgs == 3 then
+        let f := e.getAppFn
+        if f.isConstOf ``Cfg.Γout || f.isConstOf ``Cfg.sigs then
+          let e' ← whnf e
+          unless e' == e do
+            hit.set true
+            return .done e'
+      return .continue)
+    if ← hit.get then return some (← g.change ty' (checkDefEq := false)) else return some g
+
 /-! ### Peeling an impure instruction
 
 The stepper stops at a load or a store: its value is not a function of the
