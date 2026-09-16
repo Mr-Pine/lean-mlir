@@ -140,9 +140,11 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
           ∧ BiasBounds (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr)
           ∧ limbSum (m := s.mem.splice r (packLimbs out)) (isFieldElemPtr_splice hr)
               < 2 ^ 256 - 38
-          ∧ ({ s with mem := s.mem.splice r (packLimbs out) } : GlobalState) ≈ s' by
-    obtain ⟨s', hrun, out, heven, hsquare, hzero, hbnd, hsum, heqv⟩ := h
-    exact ⟨out, heven, hsquare, hzero, hbnd, hsum, s', hrun, heqv⟩
+          ∧ ({ s with mem := s.mem.splice r (packLimbs out) } : GlobalState) ≈ s'
+          ∧ (ZeroLimbs r (s.mem.splice r (packLimbs out)) →
+              ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem) by
+    obtain ⟨s', hrun, out, heven, hsquare, hzero, hbnd, hsum, heqv, hzl⟩ := h
+    exact ⟨out, heven, hsquare, hzero, hbnd, hsum, ⟨s', hrun, heqv⟩, hzl⟩
 
   refine run_runFunction' _ ?_
   simp only [Cfg.denote]
@@ -214,11 +216,19 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   have uAt : ∀ {w : GlobalState}, Frame s r w →
       ∃ h : IsFieldElemPtr w.mem u, readFieldElem h = readFieldElem hu ∧ LimbBounds h :=
     fun F => F.caller hu hnu hur hulimb
+  -- ... and so are their all-zero limbs
+  have zV : ∀ {w : GlobalState}, Frame s r w → ZeroLimbs v w.mem → ZeroLimbs v s.mem :=
+    fun F => ZeroLimbs.of_live?_eq (F.live v.id hnv hvr)
+  have zU : ∀ {w : GlobalState}, Frame s r w → ZeroLimbs u w.mem → ZeroLimbs u s.mem :=
+    fun F => ZeroLimbs.of_live?_eq (F.live u.id hnu hur)
 
   -- %12 `fd_f25519_sqr( v2, v )`
   obtain ⟨pv₀, hval₀, hbnd₀⟩ := vAt F₀
   have pv2₀ : IsFieldElemPtr sLocals.mem v2 := by rw [hv2ptr]; exact F₀.locals 0
-  obtain ⟨s₁, hrun₁, f₁⟩ := sqr_step F₀.wf pv2₀ pv₀ hval₀ hbnd₀.loose
+  obtain ⟨s₁, hrun₁, f₁, hz₁⟩ := sqr_step' F₀.wf pv2₀ pv₀ hval₀ hbnd₀.loose
+  -- `zₖ`: all-zero limbs in the local step `k` wrote come from `u` or `v`
+  have z₁ : ZeroLimbs v2 s₁.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => Or.inr (zV F₀ (hz₁ h))
   peel_call hrun₁
   clear hrun₁
   have F₁ : Frame s r s₁ := F₀.stepLocal hnr (hv2ptr ▸ f₁.wrote)
@@ -228,8 +238,10 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pv₁, hval₁, hbnd₁⟩ := vAt F₁
   have pv3₁ : IsFieldElemPtr s₁.mem v3 := by rw [hv3ptr]; exact F₁.locals 1
-  obtain ⟨s₂, hrun₂, f₂⟩ :=
-    mul_step F₁.wf pv3₁ f₁.ptr pv₁ f₁.val hval₁ f₁.bnd.loose hbnd₁.loose
+  obtain ⟨s₂, hrun₂, f₂, hz₂⟩ :=
+    mul_step' F₁.wf pv3₁ f₁.ptr pv₁ f₁.val hval₁ f₁.bnd.loose hbnd₁.loose
+  have z₂ : ZeroLimbs v3 s₂.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₂ h).elim z₁ fun h => Or.inr (zV F₁ h)
   peel_call hrun₂
   clear hrun₂
   have F₂ : Frame s r s₂ := F₁.stepLocal hnr (hv3ptr ▸ f₂.wrote)
@@ -239,8 +251,10 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pu₂, hval₂, hbnd₂⟩ := uAt F₂
   have puv3₂ : IsFieldElemPtr s₂.mem uv3 := by rw [huv3ptr]; exact F₂.locals 2
-  obtain ⟨s₃, hrun₃, f₃⟩ :=
-    mul_step F₂.wf puv3₂ pu₂ f₂.ptr hval₂ f₂.val hbnd₂.loose f₂.bnd.loose
+  obtain ⟨s₃, hrun₃, f₃, hz₃⟩ :=
+    mul_step' F₂.wf puv3₂ pu₂ f₂.ptr hval₂ f₂.val hbnd₂.loose f₂.bnd.loose
+  have z₃ : ZeroLimbs uv3 s₃.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₃ h).elim (fun h => Or.inl (zU F₂ h)) z₂
   peel_call hrun₃
   clear hrun₃
   have F₃ : Frame s r s₃ := F₂.stepLocal hnr (huv3ptr ▸ f₃.wrote)
@@ -252,7 +266,10 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     survive (f₃.live v3.id (by rw [huv3ptr, hv3ptr]; exact fieldLocal_ne (by decide)))
       f₂.ptr f₂.val f₂.bnd
   have pv6₃ : IsFieldElemPtr s₃.mem v6 := by rw [hv6ptr]; exact F₃.locals 3
-  obtain ⟨s₄, hrun₄, f₄⟩ := sqr_step F₃.wf pv6₃ pv3₃ hv3₃ hb3₃.loose
+  obtain ⟨s₄, hrun₄, f₄, hz₄⟩ := sqr_step' F₃.wf pv6₃ pv3₃ hv3₃ hb3₃.loose
+  have z₄ : ZeroLimbs v6 s₄.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => z₂ (ZeroLimbs.of_live?_eq
+      (f₃.live v3.id (by rw [huv3ptr, hv3ptr]; exact fieldLocal_ne (by decide))) (hz₄ h))
   peel_call hrun₄
   clear hrun₄
   have F₄ : Frame s r s₄ := F₃.stepLocal hnr (hv6ptr ▸ f₄.wrote)
@@ -262,8 +279,10 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pv₄, hval₄, hbnd₄⟩ := vAt F₄
   have pv7₄ : IsFieldElemPtr s₄.mem v7 := by rw [hv7ptr]; exact F₄.locals 4
-  obtain ⟨s₅, hrun₅, f₅⟩ :=
-    mul_step F₄.wf pv7₄ f₄.ptr pv₄ f₄.val hval₄ f₄.bnd.loose hbnd₄.loose
+  obtain ⟨s₅, hrun₅, f₅, hz₅⟩ :=
+    mul_step' F₄.wf pv7₄ f₄.ptr pv₄ f₄.val hval₄ f₄.bnd.loose hbnd₄.loose
+  have z₅ : ZeroLimbs v7 s₅.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₅ h).elim z₄ fun h => Or.inr (zV F₄ h)
   peel_call hrun₅
   clear hrun₅
   have F₅ : Frame s r s₅ := F₄.stepLocal hnr (hv7ptr ▸ f₅.wrote)
@@ -273,15 +292,18 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pu₅, hval₅, hbnd₅⟩ := uAt F₅
   have puv7₅ : IsFieldElemPtr s₅.mem uv7 := by rw [huv7ptr]; exact F₅.locals 5
-  obtain ⟨s₆, hrun₆, f₆⟩ :=
-    mul_step F₅.wf puv7₅ pu₅ f₅.ptr hval₅ f₅.val hbnd₅.loose f₅.bnd.loose
+  obtain ⟨s₆, hrun₆, f₆, hz₆⟩ :=
+    mul_step' F₅.wf puv7₅ pu₅ f₅.ptr hval₅ f₅.val hbnd₅.loose f₅.bnd.loose
+  have z₆ : ZeroLimbs uv7 s₆.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₆ h).elim (fun h => Or.inl (zU F₅ h)) z₅
   peel_call hrun₆
   clear hrun₆
   have F₆ : Frame s r s₆ := F₅.stepLocal hnr (huv7ptr ▸ f₆.wrote)
   clear puv7₅ pu₅ hval₅ hbnd₅
 
   -- %18 `fd_f25519_pow22523( r, uv7 )` -- the first write to the out-parameter
-  obtain ⟨s₇, hrun₇, f₇⟩ := pow_step F₆.wf F₆.ptr f₆.ptr f₆.val f₆.bnd.loose
+  obtain ⟨s₇, hrun₇, f₇, hz₇⟩ := pow_step F₆.wf F₆.ptr f₆.ptr f₆.val f₆.bnd.loose
+  have z₇ : ZeroLimbs r s₇.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem := fun h => z₆ (hz₇ h)
   peel_call hrun₇
   clear hrun₇
   have F₇ : Frame s r s₇ := F₆.stepOut hnr f₇.wrote
@@ -299,8 +321,14 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨puv3₇, huv3₇, hbuv3₇⟩ :=
     survive (f₇.live uv3.id (by rw [huv3ptr]; exact Ne.symm (fieldLocal_ne_below hnr)))
       puv3₆ huv3₆ hbuv3₆
-  obtain ⟨s₈, hrun₈, f₈⟩ :=
-    mul_step F₇.wf F₇.ptr f₇.ptr puv3₇ f₇.val huv3₇ f₇.bnd.loose hbuv3₇.loose
+  obtain ⟨s₈, hrun₈, f₈, hz₈⟩ :=
+    mul_step' F₇.wf F₇.ptr f₇.ptr puv3₇ f₇.val huv3₇ f₇.bnd.loose hbuv3₇.loose
+  have z₈ : ZeroLimbs r s₈.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₈ h).elim z₇ fun h => z₃ <|
+      ZeroLimbs.of_live?_eq (f₄.live uv3.id (by rw [hv6ptr, huv3ptr]; exact fieldLocal_ne (by decide))) <|
+      ZeroLimbs.of_live?_eq (f₅.live uv3.id (by rw [hv7ptr, huv3ptr]; exact fieldLocal_ne (by decide))) <|
+      ZeroLimbs.of_live?_eq (f₆.live uv3.id (by rw [huv7ptr, huv3ptr]; exact fieldLocal_ne (by decide))) <|
+      ZeroLimbs.of_live?_eq (f₇.live uv3.id (by rw [huv3ptr]; exact Ne.symm (fieldLocal_ne_below hnr))) h
   peel_call hrun₈
   clear hrun₈
   have F₈ : Frame s r s₈ := F₇.stepOut hnr f₈.wrote
@@ -328,7 +356,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   peel_lifetime
   obtain ⟨pu₁₀, huval₁₀, hubnd₁₀⟩ := uAt F₁₀
   have puneg₁₀ : IsFieldElemPtr s₁₀.mem u_neg := by rw [hu_negptr]; exact F₁₀.locals 7
-  obtain ⟨s₁₁, w₁₁, hrun₁₁, hnegval, hnegbnd⟩ := neg_step F₁₀.wf puneg₁₀ pu₁₀ huval₁₀ hubnd₁₀.bias
+  obtain ⟨s₁₁, w₁₁, hrun₁₁, hnegval, hnegbnd, -⟩ := neg_step F₁₀.wf puneg₁₀ pu₁₀ huval₁₀ hubnd₁₀.bias
   peel_call hrun₁₁
   clear hrun₁₁
   have F₁₁ : Frame s r s₁₁ := F₁₀.stepLocal hnr (hu_negptr ▸ w₁₁)
@@ -414,12 +442,26 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
   obtain ⟨pr₁₄, hrval₁₄, hrbnd₁₄⟩ := survive (heq₁₄.live r.id).symm pr₁₃ hrval₁₃ hrbnd₁₃
   obtain ⟨pr₁₅, hrval₁₅, hrbnd₁₅⟩ := survive (heq₁₅.live r.id).symm pr₁₄ hrval₁₄ hrbnd₁₄
 
+  -- `r`'s block, `%19` to `%27`
+  have hr₁₅ : s₁₅.mem.live? r.id = s₈.mem.live? r.id :=
+    (heq₁₅.live r.id).symm.trans <| (heq₁₄.live r.id).symm.trans <|
+    (heq₁₃.live r.id).symm.trans <|
+    (f₁₂.live r.id (by rw [hu_neg_sqrtm1ptr]; exact fieldLocal_ne_below hnr)).trans <|
+    (w₁₁.live r.id (by rw [hu_negptr]; exact fieldLocal_ne_below hnr)).trans <|
+    (f₁₀.live r.id hcheckr).trans (f₉.live r.id hcheckr)
+
   -- %27 `fd_f25519_mul( r_prime, r, fd_f25519_sqrtm1 )`
   peel_lifetime
   obtain ⟨pg₁₅, hgval₁₅, hgbnd₁₅⟩ := F₁₅.caller hpsqrtm1 hng hglobne hsqrtm1limbs
   have prp₁₅ : IsFieldElemPtr s₁₅.mem r_prime := by rw [hr_primeptr]; exact F₁₅.locals 9
-  obtain ⟨s₁₆, hrun₁₆, f₁₆⟩ :=
-    mul_step F₁₅.wf prp₁₅ pr₁₅ pg₁₅ hrval₁₅ (hgval₁₅.trans hsqrtm1) hrbnd₁₅.loose hgbnd₁₅.loose
+  obtain ⟨s₁₆, hrun₁₆, f₁₆, hz₁₆⟩ :=
+    mul_step' F₁₅.wf prp₁₅ pr₁₅ pg₁₅ hrval₁₅ (hgval₁₅.trans hsqrtm1) hrbnd₁₅.loose hgbnd₁₅.loose
+  -- `√-1 ≠ 0`, so its limbs are not all zero
+  have z₁₆ : ZeroLimbs r_prime s₁₆.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₁₆ h).elim (fun h => z₈ (ZeroLimbs.of_live?_eq hr₁₅ h)) fun h => by
+      have h0 := sqrtm1_sq
+      rw [← hsqrtm1, ← hgval₁₅, readFieldElem_of_zeroLimbs pg₁₅ h] at h0
+      exact absurd (by linear_combination h0 : (1 : ZMod p) = 0) (by decide +kernel)
   peel_call hrun₁₆
   clear hrun₁₆
   have F₁₆ : Frame s r s₁₆ := F₁₅.stepLocal hnr (hr_primeptr ▸ f₁₆.wrote)
@@ -449,16 +491,20 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
       pr₁₅ hrval₁₅ hrbnd₁₅
 
   -- %29 `fd_f25519_if( r, flipped_sign_sqrt | flipped_sign_sqrt_i, r_prime, r )`
-  obtain ⟨s₁₇, w₁₇, hrun₁₇, hifval, hifbnd⟩ :=
+  obtain ⟨s₁₇, w₁₇, hrun₁₇, hifval, hifbnd, hz₁₇⟩ :=
     if_step F₁₆.wf pr₁₆ f₁₆.ptr pr₁₆ f₁₆.val hrval₁₆ f₁₆.bnd hrbnd₁₆ cond
+  have z₁₇ : ZeroLimbs r s₁₇.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem :=
+    fun h => (hz₁₇ h).elim z₁₆ fun h => z₈ <| ZeroLimbs.of_live?_eq hr₁₅ <|
+      ZeroLimbs.of_live?_eq (f₁₆.live r.id (by rw [hr_primeptr]; exact fieldLocal_ne_below hnr)) h
   peel_call hrun₁₇
   clear hrun₁₇
   have F₁₇ : Frame s r s₁₇ := F₁₆.stepOut hnr w₁₇
   clear pr₁₆ hrval₁₆ hrbnd₁₆ pr₁₅ hrval₁₅ hrbnd₁₅
 
   -- %30 `fd_f25519_abs( r, r )` -- the region's last write
-  obtain ⟨s₁₈, w₁₈, hrun₁₈, habsval, habsbnd, habssum⟩ :=
+  obtain ⟨s₁₈, w₁₈, hrun₁₈, habsval, habsbnd, habssum, hz₁₈⟩ :=
     abs_step F₁₇.wf w₁₇.ptr w₁₇.ptr hifval hifbnd
+  have z₁₈ : ZeroLimbs r s₁₈.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem := fun h => z₁₇ (hz₁₈ h)
   peel_call hrun₁₈
   clear hrun₁₈
   have F₁₈ : Frame s r s₁₈ := F₁₇.stepOut hnr w₁₈
@@ -561,7 +607,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
     exact Nat.mod_eq_of_lt (readLimb_lt i hq)
 
   refine ⟨fun i => (readLimb i w₁₈.ptr : BitVec 64), ?even, ?_, ?zeroV, ?bounds, ?sum,
-    ?stateEq⟩
+    ?stateEq, fun h => z₁₈ (zeroLimbs_of_splice_readLimb hr.left w₁₈.ptr h)⟩
 
   case even =>
     -- `fd_f25519_abs` returns the representative with an even canonical form:

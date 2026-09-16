@@ -137,6 +137,35 @@ lemma carry_bounds (input : Fin 5 → Nat) (hi : ∀ i : Fin 5, input i ≤ 0x18
   have k4 : (c4 + input 4) % 2 ^ 51 ≤ 0x8000000000000 := by omega
   exact forall_fin5 k0 k1 k2 k3 k4 i
 
+/-- All-zero carried limbs come only from an all-zero input. -/
+lemma carry_repr_eq_zero (input : Fin 5 → ℕ) (hi : ∀ i : Fin 5, input i ≤ 0x18000000000000)
+    (h : ∀ i, carry_repr input i = 0) : ∀ i, input i = 0 := by
+  have h0 := hi 0; have h1 := hi 1; have h2 := hi 2; have h3 := hi 3; have h4 := hi 4
+  have z0 := h 0; have z1 := h 1; have z2 := h 2; have z3 := h 3; have z4 := h 4
+  simp only [carry_repr, Fin.isValue, Matrix.cons_val_zero, Matrix.cons_val_one,
+    Matrix.cons_val] at z0 z1 z2 z3 z4
+  suffices hz : input 0 = 0 ∧ input 1 = 0 ∧ input 2 = 0 ∧ input 3 = 0 ∧ input 4 = 0 by
+    intro i; fin_cases i <;> simp [hz]
+  -- the carries as atoms, so omega sees a linear chain
+  generalize input 0 = a0 at *
+  generalize input 1 = a1 at *
+  generalize input 2 = a2 at *
+  generalize input 3 = a3 at *
+  generalize input 4 = a4 at *
+  generalize hc1 : a0 / 2 ^ 51 = c1 at *
+  generalize hc2 : (c1 + a1) / 2 ^ 51 = c2 at *
+  generalize hc3 : (c2 + a2) / 2 ^ 51 = c3 at *
+  generalize hc4 : (c3 + a3) / 2 ^ 51 = c4 at *
+  generalize hc5 : (c4 + a4) / 2 ^ 51 = c5 at *
+  have b5 : c5 ≤ 3 := by omega
+  generalize hc6 : (a0 % 2 ^ 51 + c5 * 19) / 2 ^ 51 = c6 at *
+  have t6 : c6 % 2 ^ 8 = c6 := Nat.mod_eq_of_lt (by omega)
+  rw [t6] at z1 z2
+  generalize hc7 : (c6 + (c1 + a1) % 2 ^ 51) / 2 ^ 51 = c7 at *
+  have t7 : c7 % 2 ^ 8 = c7 := Nat.mod_eq_of_lt (by omega)
+  rw [t7] at z2
+  omega
+
 /-! ### The carry chain over `BitVec 64`
 
 `fiat_25519_carry` runs `carry_repr`'s chain in 64-bit registers. At fiat's input
@@ -275,18 +304,20 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
     let output := carry_repr input
     let outputBV := BitVec.ofNat 64 ∘ output
 
-    refine ⟨packLimbs outputBV, ?_⟩
-
-    constructor
-    pick_goal 2
-
-    simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
-
     have hb : ∀ i : Fin 5, input i ≤ 0x18000000000000 := fun i => hlimb i _ (hinput i)
     have hcb := carry_bounds input hb
 
-    constructor
-    · -- the carried limbs decode to the input's value: every 64-bit truncation
+    refine ⟨packLimbs outputBV, ?_, ?val, ?bnd, ?zero⟩
+    case zero =>
+      intro hz
+      have h0 : ∀ i, carry_repr input i = 0 := fun i => by
+        have := (limbReadbackPack s.mem q outputBV hq.left i).symm.trans (hz i)
+        simp only [outputBV, Function.comp, BitVec.toNat_ofNat, Option.some.injEq] at this
+        rwa [Nat.mod_eq_of_lt ((hcb i).trans_lt (by norm_num))] at this
+      exact fun i => (hinput i).trans (by rw [carry_repr_eq_zero input hb h0 i])
+    case val =>
+      simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
+      -- the carried limbs decode to the input's value: every 64-bit truncation
       -- is an identity, so this is `carry_eq_value` verbatim
       have hvin : (![input 0, input 1, input 2, input 3, input 4] : Fin 5 → ℕ) = input := by
         funext i; fin_cases i <;> rfl
@@ -297,7 +328,9 @@ theorem fiat_25519_carry_conforms (q p₀: Pointer) (s: GlobalState)
         fin_cases i <;> exact Nat.mod_eq_of_lt ((hcb _).trans_lt (by norm_num))
       rw [hvin, hvout]
       exact (carry_eq_value input hb).symm
-    · -- every limb is within fiat's bound, hence small enough that `ofNat` does
+    case bnd =>
+      simp [readFieldElem?, hq, limbReadbackPack s.mem q, outputBV, hinput]
+      -- every limb is within fiat's bound, hence small enough that `ofNat` does
       -- not truncate
       intro i
       fin_cases i <;> exact (Nat.mod_le _ _).trans (hcb _)

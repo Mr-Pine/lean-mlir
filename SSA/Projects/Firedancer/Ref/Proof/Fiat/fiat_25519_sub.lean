@@ -83,12 +83,15 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
             StateT.run (runFunction (fiat_25519_sub.denote
                 (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))) s = .value ([]ₕ, s')
           ∧ output_state ≈ s')
-        ∧ readFieldElem? o output_state.mem
+        ∧ (readFieldElem? o output_state.mem
             = Sub.sub <$> readFieldElem? p s.mem <*> readFieldElem? q s.mem
-        ∧ ∀ (i : Fin 5) (l : ℕ),
-            readLimb? o i output_state.mem = some l → l ≤ 0x18000000000000 by
-      obtain ⟨out, hrun, hval, hbnd⟩ := h
-      refine ⟨out, ?_, limbBounds_of_readLimb? _ hbnd, hrun⟩
+          ∧ ∀ (i : Fin 5) (l : ℕ),
+            readLimb? o i output_state.mem = some l → l ≤ 0x18000000000000)
+        ∧ ∀ (i : Fin 5) (lp lq : ℕ), readLimb? p i s.mem = some lp → readLimb? q i s.mem = some lq →
+            readLimb? o i output_state.mem = some (biasLimb i + lp - lq) by
+      obtain ⟨out, hrun, ⟨hval, hbnd⟩, hlimbs⟩ := h
+      refine ⟨out, ?_, limbBounds_of_readLimb? _ hbnd, hrun,
+        fun i => hlimbs i _ _ (Option.some_get _).symm (Option.some_get _).symm⟩
       refine readFieldElem_eq_of ?_
       rw [hval, show readFieldElem? p s.mem = some (readFieldElem hp) from (Option.some_get _).symm,
         show readFieldElem? q s.mem = some (readFieldElem hq) from (Option.some_get _).symm]
@@ -103,9 +106,17 @@ theorem fiat_25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     let output := sub_repr pinput qinput
     let outputBV := BitVec.ofNat 64 ∘ output
 
-    refine ⟨packLimbs outputBV, ?_⟩
-
-    constructor
+    refine ⟨packLimbs outputBV, ?left, ?right, ?limbs⟩
+    case limbs =>
+      intro i lp lq hlp hlq
+      have hpl : pinput i = lp := Option.some.inj ((hpinput i).symm.trans hlp)
+      have hql : qinput i = lq := Option.some.inj ((hqinput i).symm.trans hlq)
+      have hlt : output i < 2 ^ 64 :=
+        (sub_repr_bounds pinput qinput i fun j => hpbounds j _ (hpinput j)).trans_lt (by norm_num)
+      rw [limbReadbackPack s.mem o outputBV ho.left i]
+      show some (BitVec.ofNat 64 (output i)).toNat = _
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, ← hpl, ← hql]
+      fin_cases i <;> rfl
     case right =>
       simp [readFieldElem?, hqinput, hpinput, ho, limbReadbackPack, outputBV]
       have pinput_bounds (j: Fin 5) : pinput j ≤ 0x8000000000000 := by simp only [hpinput, hpbounds j]

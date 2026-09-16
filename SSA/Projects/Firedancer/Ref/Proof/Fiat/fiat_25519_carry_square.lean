@@ -114,7 +114,7 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
       show (BitVec.ofNat 64 (output i)).toNat = output i
       rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hi]
 
-    refine ⟨outputBV, ?value, ?bounds, ?exec⟩
+    refine ⟨outputBV, ?value, ?bounds, ?exec, ?zero⟩
 
     case value =>
       have hread : readFieldElem? o (s.mem.splice o (packLimbs outputBV))
@@ -130,6 +130,14 @@ theorem fiat_25519_carry_square_conforms (o p: Pointer) (s: GlobalState)
       intro i
       simp only [readLimb, limbReadbackPack s.mem o outputBV ho.left i, Option.get_some, hlimb]
       exact hcb i
+    case zero =>
+      intro hz
+      have h0 : ∀ i, output i = 0 := fun i => by
+        have := (limbReadbackPack s.mem o outputBV ho.left i).symm.trans (hz i)
+        rw [hlimb i] at this
+        exact Option.some.inj this
+      have hp0 := carry_product_repr_eq_zero pinput pinput hpb hpb h0
+      exact fun i => (hpinput i).trans (by rw [hp0.elim id id i])
 
     case exec =>
     obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,

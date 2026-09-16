@@ -21,5 +21,7 @@ abbrev fiat_25519_opp_spec (o q: Pointer) (s: GlobalState)
     readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = -q_input
     ∧ BiasBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
+    -- limbwise `bias - q`
+    ∧ (∀ i, readLimb? o i output_state.mem = some (biasLimb i - readLimb i hq))
 
 end Firedancer.Ref

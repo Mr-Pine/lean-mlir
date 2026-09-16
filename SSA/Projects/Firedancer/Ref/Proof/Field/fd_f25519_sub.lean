@@ -11,17 +11,19 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 set_option maxHeartbeats 3200000 in
-theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
+/-- `fd_f25519_sub_conforms`, plus: `o` is all-zero limbs only if `q` sits at the bias limbs. -/
+theorem fd_f25519_sub_conforms' (o p q: Pointer) (s: GlobalState)
   (hs : s.WF)
   (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
   (hqbounds : BiasBounds? q s.mem)
   (ho : IsFieldElemPtr s.mem o)
   (hp : IsFieldElemPtr s.mem p)
   (hq : IsFieldElemPtr s.mem q) :
-  fd_f25519_sub_spec o p q s ho hp hq := by
-    simp only [fd_f25519_sub_spec, Cfg.denote]
-
-    obtain ⟨subres, hsubval, hsubbnd, substate, hsubstate, hsubstate_eq⟩ :=
+  fd_f25519_sub_spec o p q s ho hp hq
+    ∧ ∀ s' : GlobalState, StateT.run (runFunction (fd_f25519_sub.denote
+        (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))) s = .value ([.value o]ₕ, s') →
+      ZeroLimbs o s'.mem → ∀ i, biasLimb i ≤ readLimb i hq := by
+    obtain ⟨subres, hsubval, hsubbnd, ⟨substate, hsubstate, hsubstate_eq⟩, hsublimbs⟩ :=
       fiat_25519_sub_conforms o p q s hs hpbounds hqbounds ho hp hq
     -- the callee states its result as a readback; the walk below runs on the
     -- proof-free forms, so take them once here
@@ -70,8 +72,28 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
         ≈ { alloc := s.alloc, mem := s.mem.splice o subres, globals := s.globals } :=
       GlobalState.Equiv.symm hsubstate_eq
 
-    refine ⟨carryres, ?value, ?bounds, s.popFrame carrystate.mem,
-      run_runFunction (s' := carrystate) ?run, ?equiv⟩
+    have hrun : StateT.run (runFunction (fd_f25519_sub.denote
+        (Ctxt.Valuation.ofHVector [.value q, .value p, .value o]ₕ))) s
+        = .value ([.value o]ₕ, s.popFrame carrystate.mem) := by
+      simp only [Cfg.denote]
+      refine run_runFunction (s' := carrystate) ?_
+      refine (BlockCom.run_bind_denote_call_of_nil (s' := substate) ?_).trans ?_
+      · exact hsubstate
+      refine (BlockCom.run_bind_denote_call_of_nil (s' := carrystate) ?_).trans ?_
+      · exact hcarrystate
+      rfl
+
+    refine ⟨⟨carryres, ?value, ?bounds, s.popFrame carrystate.mem, hrun, ?equiv⟩,
+      fun s' h hz i => ?zero⟩
+    case zero =>
+      -- back through the carry to the uncarried `bias + p - q`
+      rw [hrun] at h
+      replace h := (Prod.mk.inj (PoisonOr.value_inj.mp h)).2
+      have hz₁ := hcarryres.2.2 (ZeroLimbs.of_equiv hcarrystate_eq
+        (ZeroLimbs.of_equiv (GlobalState.Equiv.symm hpop) (h ▸ hz)))
+      have hz₂ := (ZeroLimbs.of_equiv hsubstate_eq hz₁ i).symm.trans (hsublimbs i)
+      simp only [Option.some.injEq] at hz₂
+      omega
 
     case equiv =>
       refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm hpop)
@@ -82,12 +104,16 @@ theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
     case value =>
       exact readFieldElem_eq_of (hfield.trans (hcarryres.1.trans hsubval?))
     case bounds =>
-      exact limbBounds_of_readLimb? _ fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)
-    case run =>
-      refine (BlockCom.run_bind_denote_call_of_nil (s' := substate) ?_).trans ?_
-      · exact hsubstate
-      refine (BlockCom.run_bind_denote_call_of_nil (s' := carrystate) ?_).trans ?_
-      · exact hcarrystate
-      rfl
+      exact limbBounds_of_readLimb? _ fun i l hl => hcarryres.2.1 i l ((hlimbs i).symm.trans hl)
+
+theorem fd_f25519_sub_conforms (o p q: Pointer) (s: GlobalState)
+  (hs : s.WF)
+  (hpbounds : ∀ (i : Fin 5) (l : ℕ), readLimb? p i s.mem = some l → l ≤ 0x8000000000000)
+  (hqbounds : BiasBounds? q s.mem)
+  (ho : IsFieldElemPtr s.mem o)
+  (hp : IsFieldElemPtr s.mem p)
+  (hq : IsFieldElemPtr s.mem q) :
+  fd_f25519_sub_spec o p q s ho hp hq :=
+  (fd_f25519_sub_conforms' o p q s hs hpbounds hqbounds ho hp hq).1
 
 end Firedancer.Ref

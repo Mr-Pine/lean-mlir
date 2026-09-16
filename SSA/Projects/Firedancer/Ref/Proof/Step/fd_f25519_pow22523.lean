@@ -14,9 +14,12 @@ theorem pow_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
     ∃ w', StateT.run (runFunction (fd_f25519_pow22523.denote
         (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
         = .value ([.value dst]ₕ, w')
-      ∧ StepFacts dst (x ^ (2 ^ 252 - 3)) w w' := by
-  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := fd_f25519_pow22523_conforms dst src w hw hd h₀ hb
-  refine ⟨w', hrun, StepFacts.of_splice hw hd heq ?_ (limbBounds_readLimb? _ hbnd)⟩
+      ∧ StepFacts dst (x ^ (2 ^ 252 - 3)) w w'
+      ∧ (ZeroLimbs dst w'.mem → ZeroLimbs src w.mem) := by
+  obtain ⟨out, hval, hbnd, ⟨w', hrun, heq⟩, hzero⟩ :=
+    fd_f25519_pow22523_conforms dst src w hw hd h₀ hb
+  refine ⟨w', hrun, StepFacts.of_splice hw hd heq ?_ (limbBounds_readLimb? _ hbnd),
+    fun h => hzero (ZeroLimbs.of_equiv heq h)⟩
   rw [← hv, ← hval]
   exact (Option.some_get _).symm
 

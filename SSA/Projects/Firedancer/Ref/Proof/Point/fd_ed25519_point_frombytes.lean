@@ -14,6 +14,7 @@ import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
 import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
 import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_frombytes
 import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqrt_ratio
+import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
 
 /-!
 # `fd_ed25519_point_frombytes` conforms to its spec
@@ -51,6 +52,57 @@ theorem live?_pointOutMem_congr {m m' : MemoryState} {r : Pointer}
 
 /- Scaffolding for the `fd_ed25519_point_frombytes` derivation. -/
 namespace PointFromBytes
+
+/-- A bound on a copied field element, read back through a memory that agrees
+on the copy's block. -/
+theorem copyBound {m m' ms : MemoryState} {c c' q : Pointer} {B : Fin 5 → ℕ} (hc : c' = c)
+    (hlive : m.live? c.id = m'.live? c.id) {h : IsFieldElemPtr m c}
+    {h' : IsFieldElemPtr m' c'} {hq : IsFieldElemPtr ms q}
+    (hl : ∀ i, readLimb i h' = readLimb i hq) (hb : ∀ i, readLimb i hq ≤ B i) :
+    ∀ i, readLimb i h ≤ B i := by
+  subst hc
+  intro i
+  have : readLimb i h = readLimb i h' := by simp only [readLimb, readLimb?_of_live?_eq hlive]
+  rw [this, hl]
+  exact hb i
+
+/-- A bias-bounded zero below `2 · p` whose limbs are not all zero has `p`'s limbs. -/
+theorem limbs_p_of_zero {m : MemoryState} {q : Pointer} {h : IsFieldElemPtr m q}
+    (hb : BiasBounds h) (hs : limbSum h < 2 ^ 256 - 38) (hnz : ¬ ZeroLimbs q m)
+    (h0 : readFieldElem h = 0) :
+    ∀ i : Fin 5, readLimb? q i m = some (match i with
+      | 0 => 0x7ffffffffffed
+      | _ => 0x7ffffffffffff) := by
+  obtain ⟨k, hk⟩ : _root_.p ∣ limbSum h :=
+    (ZMod.natCast_eq_zero_iff _ _).mp (by rw [← readFieldElem_eq_limbSum]; exact h0)
+  have b0 : readLimb 0 h ≤ 4503599627370458 := hb 0
+  have b1 : readLimb 1 h ≤ 4503599627370494 := hb 1
+  have b2 : readLimb 2 h ≤ 4503599627370494 := hb 2
+  have b3 : readLimb 3 h ≤ 4503599627370494 := hb 3
+  have b4 : readLimb 4 h ≤ 4503599627370494 := hb 4
+  have hl : ∀ i, readLimb? q i m = some (readLimb i h) := fun i => (Option.some_get _).symm
+  simp only [limbSum] at hk hs
+  norm_num [_root_.p] at hk hs
+  -- the sum is `0` or `p`; `0` is the all-zero limbs
+  rcases k with _ | _ | k
+  · refine absurd (fun i => ?_) hnz
+    rw [hl i]; fin_cases i <;> simp <;> omega
+  · intro i; rw [hl i]; fin_cases i <;> simp <;> omega
+  · omega
+
+/-- `bias - q` limbwise is zero-patterned when a zero `q` has `p`'s limbs. -/
+theorem zeroRep_of_neg {m m' : MemoryState} {q q' : Pointer} {h : IsFieldElemPtr m q}
+    (hp : readFieldElem? q m = some 0 → ∀ i : Fin 5, readLimb? q i m = some (match i with
+      | 0 => 0x7ffffffffffed
+      | _ => 0x7ffffffffffff))
+    (hval : readFieldElem? q' m' = some 0 → readFieldElem? q m = some 0)
+    (hl : ∀ i, readLimb? q' i m' = some (biasLimb i - readLimb i h)) : ZeroRep q' m' := by
+  intro hz
+  have hq := hp (hval hz)
+  refine Or.inr fun i => ?_
+  have e : readLimb i h = _ := Option.some.inj ((Option.some_get _).trans (hq i))
+  rw [hl i, e]
+  fin_cases i <;> rfl
 
 /-- The five `fd_f25519_t` locals `%6 … %10` allocate. In allocation order
 they are the locals `fd_curve25519.c` declares --
@@ -363,6 +415,8 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
       (decodeBytes (readBuf hbuf) ^ 2 - 1) (d * decodeBytes (readBuf hbuf) ^ 2 + 1) w)
     (refWF : w.RefWF [r, frombytesLocal s 0, frombytesLocal s 1, frombytesLocal s 2,
       frombytesLocal s 3, frombytesLocal s 4])
+    -- a zero `x` is in one of `fd_f25519_is_zero`'s patterns
+    (hzx : ZeroRep (frombytesLocal s 0) w.mem)
     -- what `x` is worth on entry: a root of the ratio, with the requested sign
     -- except at `0` (`fd_f25519_neg` fixes no sign there)
     (hsq : xv ^ 2 * (d * decodeBytes (readBuf hbuf) ^ 2 + 1)
@@ -377,7 +431,8 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
           (s.popFrame s'.mem : GlobalState)
               ≈ ({ alloc := s.alloc, mem := pointOutMem s.mem r oX oY oZ oT,
                    globals := s.globals } : GlobalState)
-          ∧ DecodesTo s.mem r buf hr hbuf oX oY oZ oT := by
+          ∧ DecodesTo s.mem r buf hr hbuf oX oY oZ oT
+          ∧ DecodedBounds s.mem r hr oX oY oZ oT := by
   have hmapnil : ∀ {α : Type} {A B : α → Type} (f : (a : α) → A a → B a),
       HVector.map f (.nil : HVector A []) = .nil := fun _ => rfl
   denote_enter_block
@@ -389,6 +444,9 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
   clear hrun₁
   have state₁ := state.stepT hnr f₁.wrote f₁.val f₁.bnd
   have refWF₁ := refWF.wrote (by simp) f₁.wrote
+  have hzx₁ : ZeroRep (frombytesLocal s 0) w₁.mem :=
+    ZeroRep.of_readLimb? (fun i => readLimb?_of_live?_eq (f₁.live _ (fieldLocal_ne (by decide))) i)
+      hzx
 
   obtain ⟨oX, oY, oZ, oT, ⟨w₂, hrun₂, heq₂⟩, hlX, hlY, hlT, hlZ⟩ :=
   fd_ed25519_point_from_conforms r (frombytesLocal s 0) (frombytesLocal s 1) pone
@@ -425,7 +483,7 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
         (live?_splice_congr (p := r.withOffset 40) (x := oY)
           (live?_splice_congr (p := r) (x := oX) (state₁.live r.id hnr))))
 
-  refine ⟨?state, ?_⟩
+  refine ⟨?state, ?_, ?bnd⟩
   case state =>
     refine popFrame_equiv_block (o := r.id) hs hnr (fun b hb hbo => ?_) (fun b hbo => ?_)
       ((heq₂.live r.id).symm.trans hrlive)
@@ -437,6 +495,25 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
       (fun i => oY.extractLsb' (64 * i.toNat) 64) (fun i => oZ.extractLsb' (64 * i.toNat) 64)
       (fun i => oT.extractLsb' (64 * i.toNat) 64)) r :=
     isPointPtr_splice (isPointPtr_splice (isPointPtr_splice (isPointPtr_splice hr)))
+  case bnd =>
+    -- each coordinate is the local `%26` copied, and `r`'s block reads the same
+    -- through `s.mem`'s writes as through `w₁`'s
+    have hlive : ∀ o : BitVec 64, (pointOutMem s.mem r (fun i => oX.extractLsb' (64 * i.toNat) 64)
+        (fun i => oY.extractLsb' (64 * i.toNat) 64) (fun i => oZ.extractLsb' (64 * i.toNat) 64)
+        (fun i => oT.extractLsb' (64 * i.toNat) 64)).live? (r.withOffset o).id
+        = ((((w₁.mem.splice r oX).splice (r.withOffset 40) oY).splice (r.withOffset 120) oZ).splice
+          (r.withOffset 80) oT).live? (r.withOffset o).id := fun o => by
+      simp only [pointOutMem, packLimbs_extractLsb', withOffset_id]
+      exact hrlive.symm
+    exact ⟨copyBound (coordPtr_zero r).symm (hlive _) hlX state₁.bndx,
+      copyBound (coordPtr_one r).symm (hlive _) hlY state₁.bndy,
+      copyBound (coordPtr_two r).symm (hlive _) hlT state₁.bndt,
+      copyBound (coordPtr_three r).symm (hlive _) hlZ state₁.bndone,
+      -- `X` copies `x`'s limbs
+      ZeroRep.of_readLimb? (fun i =>
+        (readLimb?_of_live?_eq (by simpa only [withOffset_id] using hlive 0) i).trans
+          (((Option.some_get _).symm.trans (congrArg some (hlX i))).trans (Option.some_get _)))
+        hzx₁⟩
   show IsDecoding (readPoint hpt) (readBuf hbuf)
   -- `hpt` reads the point out of `s.mem`; the four writes `hlX`--`hlZ`
   -- describe land on `w₁.mem`. Both memories agree on `r`'s block -- the
@@ -680,15 +757,18 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   clear f₃ S₂ hm₂
 
   -- %16 `fd_f25519_sub( u, u, 1 )` -- `u = y² - 1`
-  obtain ⟨s₄, hrun₄, f₄⟩ :=
+  obtain ⟨s₄, hrun₄, f₄, hzu₄⟩ :=
     sub_step S₃.wf S₃.ptru S₃.ptru S₃.ptrone S₃.valu S₃.valone
       S₃.bndu S₃.bndone.bias
+  -- `1` is tight, far below the bias, so `u`'s limbs are never all zero
+  have nzu₄ : ¬ ZeroLimbs pu s₄.mem := fun h =>
+    absurd ((hzu₄ h 0).trans (S₃.bndone 0)) (by norm_num)
   peel_call hrun₄
   clear hrun₄
   have S₄ : State s r pd pone 0 y 0 u (d * y ^ 2) s₄ :=
     S₃.stepU hnr f₄.wrote (by rw [f₄.val];) f₄.bnd
   have hm₄ := hm₃.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₄.wrote
-  clear f₄ S₃ hm₃
+  clear hzu₄ f₄ S₃ hm₃
 
   -- %17 `fd_f25519_add( v, v, 1 )` -- `v = d·y² + 1`
   obtain ⟨s₅, hrun₅, f₅⟩ :=
@@ -698,6 +778,8 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   clear hrun₅
   have S₅ : State s r pd pone 0 y 0 u v s₅ :=
     S₄.stepV hnr f₅.wrote (by rw [f₅.val];) f₅.bnd
+  have nzu₅ : ¬ ZeroLimbs pu s₅.mem := fun h =>
+    nzu₄ (ZeroLimbs.of_live?_eq (f₅.live pu.id (fieldLocal_ne (by decide))) h)
   have hm₅ := hm₄.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₅.wrote
   clear f₅ S₄ hm₄
 
@@ -705,10 +787,17 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   -- branches on. `@fd_f25519_sqrtm1` is the callee's own `addressof`; it
   -- reaches here because `Wrote.globals` carries the symbol table.
   obtain ⟨pm1, hgm1, hapartm1⟩ := hm₅.gm1
-  obtain ⟨s₆, w₆, root, hrun₆, hval₆, heven₆, hsq₆, hzero₆, hbnd₆, hsum₆⟩ :=
+  obtain ⟨s₆, w₆, root, hrun₆, hval₆, heven₆, hsq₆, hzero₆, hbnd₆, hsum₆, hzr₆⟩ :=
     sqrtRatio_step S₅.wf S₅.ptrx S₅.ptru S₅.ptrv hgm1 (hapartm1 px (by simp))
       S₅.valu S₅.valv S₅.bndu S₅.bndv
       (fieldLocal_ne (by decide)) (fieldLocal_ne (by decide))
+  -- `v ≠ 0`, so its limbs are not all zero either; hence a zero root has `p`'s limbs
+  have nzv₅ : ¬ ZeroLimbs pv s₅.mem := fun h =>
+    denom_ne_zero y (S₅.valv.symm.trans (readFieldElem_of_zeroLimbs S₅.ptrv h))
+  have hxp₆ : readFieldElem? px s₆.mem = some 0 → ∀ i : Fin 5, readLimb? px i s₆.mem
+      = some (match i with | 0 => 0x7ffffffffffed | _ => 0x7ffffffffffff) := fun h0 =>
+    PointFromBytes.limbs_p_of_zero (h := w₆.ptr) hbnd₆ hsum₆ (fun h => (hzr₆ h).elim nzu₅ nzv₅)
+      (Option.some.inj ((Option.some_get _).trans h0))
   peel_call hrun₆
   clear hrun₆
   -- `fd_f25519_sqrt_ratio` leaves the loose bound, not the tight one -- which
@@ -786,6 +875,10 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   peel_call hrun₇
   clear hrun₇
   have S₇ := S₆.of_equiv heq₇
+  have hxp₇ : readFieldElem? px s₇.mem = some 0 → ∀ i : Fin 5, readLimb? px i s₇.mem
+      = some (match i with | 0 => 0x7ffffffffffed | _ => 0x7ffffffffffff) := fun h0 i => by
+    rw [← readLimb?_of_equiv heq₇]
+    exact hxp₆ (by rw [readFieldElem?_of_equiv heq₇]; exact h0) i
   have hm₇ := hm₆.of_equiv heq₇
   clear S₆ hm₆
 
@@ -821,19 +914,23 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
     -- %24 `fd_f25519_neg( x, x )` -- the sign the encoding asked for.
     -- `neg` takes the *bias* bounds, which is why `x` never needed to be
     -- tight; and it leaves them, which is all `^bb3`'s `mul` wants.
-    obtain ⟨s₈, f₈, hrun₈, hnegval, hnegbnd⟩ :=
+    obtain ⟨s₈, f₈, hrun₈, hnegval, hnegbnd, hneglimbs⟩ :=
       neg_step S₇.wf S₇.ptrx S₇.ptrx S₇.valx S₇.bndx
+    -- `-x` is zero only at `x = 0`, whose limbs are `p`'s; `bias - p` is `p`
+    have hzx₈ : ZeroRep px s₈.mem := PointFromBytes.zeroRep_of_neg hxp₇ (fun h0 => by
+      have e : -root = 0 := hnegval.symm.trans (Option.some.inj ((Option.some_get _).trans h0))
+      rw [readFieldElem?_eq_some S₇.ptrx S₇.valx, neg_eq_zero.mp e]) hneglimbs
     peel_call hrun₈
     clear hrun₈
     have S₈ : State s r pd pone (-root) y 0 u v s₈ :=
       S₇.stepX hnr f₈ hnegval hnegbnd
     have hm₈ := hm₇.wrote (by simp [hpxptr, hpyptr, hptptr, hpuptr, hpvptr]) f₈
-    clear S₇ hm₇
+    clear hneglimbs S₇ hm₇
 
     simp [hmapnil]
 
     refine bb3_run hs hr hbuf hnr hreturnValue _ s₈ (-root) (by rfl) (by rfl) (by rfl) (by rfl)
-      (by rfl) hglobne₂ S₈ hm₈ (by rw [show (-root) ^ 2 = root ^ 2 from by ring]; exact hsq₆) ?_
+      (by rfl) hglobne₂ S₈ hm₈ hzx₈ (by rw [show (-root) ^ 2 = root ^ 2 from by ring]; exact hsq₆) ?_
 
     -- `heven₆` makes `sgn x` zero, so `hsign` says the requested bit is `1`
     have hexp : (readBuf hbuf)[255] = true := by
@@ -858,7 +955,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   simp [hsign, hmapnil]
 
   refine bb3_run hs hr hbuf hnr hreturnValue _ s₇ root (by rfl) (by rfl) (by rfl) (by rfl)
-    (by rfl) hglobne₂ S₇ hm₇ hsq₆ ?_
+    (by rfl) hglobne₂ S₇ hm₇ (fun h0 => Or.inr (hxp₇ h0)) hsq₆ ?_
   right
   simp [heven₆]
   have h := hsign

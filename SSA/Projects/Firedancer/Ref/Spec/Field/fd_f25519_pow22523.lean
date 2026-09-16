@@ -20,5 +20,7 @@ abbrev fd_f25519_pow22523_spec (o p : Pointer) (s : GlobalState)
     readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = p_input ^ (2 ^ 252 - 3)
     ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([.value o]ₕ, s') ∧ output_state ≈ s')
+    -- all-zero limbs come only from an all-zero input
+    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs p s.mem)
 
 end Firedancer.Ref

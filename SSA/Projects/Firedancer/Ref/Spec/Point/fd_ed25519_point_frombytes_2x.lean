@@ -38,10 +38,12 @@ abbrev fd_ed25519_point_frombytes_2x_spec (r₁ buf₁ r₂ buf₂ : Pointer) (s
       let sq₂ := IsSquare ((decodeBytes (readBuf hbuf₂') ^ 2 - 1)
         / (d * decodeBytes (readBuf hbuf₂') ^ 2 + 1))
       DecodesTo s.mem r₁ buf₁ hr₁ hbuf₁ oX oY oZ oT
+        ∧ DecodedBounds s.mem r₁ hr₁ oX oY oZ oT
         ∧ (¬ sq₂ → ret = .value (-2 : BitVec 32) ∧ s' ≈ ({ s with mem := m₁ } : GlobalState))
         ∧ (sq₂ → ∃ pX pY pZ pT : Fin 5 → BitVec 64,
             ret = .value (0 : BitVec 32)
             ∧ s' ≈ ({ s with mem := pointOutMem m₁ r₂ pX pY pZ pT } : GlobalState)
-            ∧ DecodesTo m₁ r₂ buf₂ hr₂' hbuf₂' pX pY pZ pT))
+            ∧ DecodesTo m₁ r₂ buf₂ hr₂' hbuf₂' pX pY pZ pT
+            ∧ DecodedBounds m₁ r₂ hr₂' pX pY pZ pT))
 
 end Firedancer.Ref

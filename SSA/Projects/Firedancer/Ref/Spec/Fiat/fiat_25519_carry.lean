@@ -20,6 +20,8 @@ abbrev fiat_25519_carry_spec (p₀ p₁: Pointer) (s: GlobalState) : Prop :=
 
     (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
     ∧ readFieldElem? p₀ output_state.mem = input_value
-    ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i output_state.mem = some l → l ≤ 0x8000000000000
+    ∧ (∀ (i : Fin 5) (l : ℕ), readLimb? p₀ i output_state.mem = some l → l ≤ 0x8000000000000)
+    -- all-zero limbs come only from an all-zero input
+    ∧ (ZeroLimbs p₀ output_state.mem → ZeroLimbs p₁ s.mem)
 
 end Firedancer.Ref

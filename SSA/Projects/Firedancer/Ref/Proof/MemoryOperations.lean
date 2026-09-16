@@ -373,14 +373,6 @@ theorem readBuf?_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
     (hp : Fits m p (32 * 8)) : readBuf? p (m.splice p x) = some x :=
   readWord?_splice_self x hp
 
-/-- A buffer read looks only at the block the pointer addresses, so it
-survives any step that left that block alone -- `readLimb?_of_live?_eq` for
-the 32-byte reads. -/
-theorem readBuf_of_live?_eq {m m' : MemoryState} {p : Pointer}
-    (h : m'.live? p.id = m.live? p.id) {hp : IsByteBufPtr m p} {hp' : IsByteBufPtr m' p} :
-    readBuf hp' = readBuf hp := by
-  simp only [readBuf, readBuf?, h]
-
 /-- ... and the same across a callee's return, in `isByteBufPtr_of_equiv`'s
 shape and for the same reason. -/
 theorem readBuf_of_equiv {w s : GlobalState} {m : MemoryState} {q : Pointer}
@@ -452,6 +444,22 @@ theorem readFieldElem_eq_decode {m : MemoryState} {p : Pointer} (h : IsFieldElem
   have hl : ∀ i, readLimb? p i m = some (readLimb i h) := fun i => (Option.some_get _).symm
   simp only [readFieldElem?, hl, Option.bind_eq_bind, Option.bind_some, Option.pure_def]
   congr 1
+
+/-- All-zero limbs read as `0`. -/
+theorem readFieldElem_of_zeroLimbs {m : MemoryState} {p : Pointer} (h : IsFieldElemPtr m p)
+    (hz : ZeroLimbs p m) : readFieldElem h = 0 := by
+  have hl : ∀ i, readLimb i h = 0 := fun i => by simp only [readLimb, hz i, Option.get_some]
+  simp [readFieldElem_eq_decode h, decodeFieldElem, hl]
+
+/-- A copy of `q`'s limbs spliced at `p` is all-zero only if `q`'s are. -/
+theorem zeroLimbs_of_splice_readLimb {m m' : MemoryState} {p q : Pointer}
+    (hp : Fits m p (5 * 64)) (hq : IsFieldElemPtr m' q)
+    (hz : ZeroLimbs p (m.splice p (packLimbs fun i => (readLimb i hq : BitVec 64)))) :
+    ZeroLimbs q m' := fun i => by
+  have h := hz i
+  rw [limbReadbackPack _ _ _ hp i, Option.some.injEq] at h
+  simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (readLimb_lt i hq)] at h
+  rw [← h]; exact (Option.some_get _).symm
 
 /-- A limb, read as a 64-bit word at the pointer a `getelementptr` produced:
 same block, `k` limbs along. This is the bridge between the walk's loads, which

@@ -133,6 +133,23 @@ theorem decodesTo_of_equiv {w s : GlobalState} {m : MemoryState} {r buf : Pointe
   rw [← hpoint, ← hbytes]
   exact h
 
+/-- ... and so does `DecodedBounds`. -/
+theorem decodedBounds_of_equiv {w s : GlobalState} {m : MemoryState} {r : Pointer}
+    {oX oY oZ oT : Fin 5 → BitVec 64}
+    (he : w ≈ ({ s with mem := m } : GlobalState))
+    {hr : IsPointPtr w.mem r} {hr' : IsPointPtr m r}
+    (h : DecodedBounds w.mem r hr oX oY oZ oT) : DecodedBounds m r hr' oX oY oZ oT := by
+  have hlive : ∀ o : BitVec 64, (pointOutMem m r oX oY oZ oT).live? (r.withOffset o).id
+      = (pointOutMem w.mem r oX oY oZ oT).live? (r.withOffset o).id := fun o => by
+    rw [withOffset_id]
+    exact (live?_pointOutMem_congr (live?_of_equiv_mem he r.id)).symm
+  exact ⟨PointFromBytes.copyBound rfl (hlive _) (fun _ => rfl) h.1,
+    PointFromBytes.copyBound rfl (hlive _) (fun _ => rfl) h.2.1,
+    PointFromBytes.copyBound rfl (hlive _) (fun _ => rfl) h.2.2.1,
+    PointFromBytes.copyBound rfl (hlive _) (fun _ => rfl) h.2.2.2.1,
+    ZeroRep.of_readLimb? (fun i => readLimb?_of_live?_eq
+      (live?_pointOutMem_congr (live?_of_equiv_mem he r.id)).symm i) h.2.2.2.2⟩
+
 /-- Only the first call wrote: the popped state is the entry state with `r₁`'s
 four stores. The side conditions are named `have`s -- left as `refine`
 placeholders they elaborate against a metavariable, and the four splices are
@@ -207,7 +224,7 @@ theorem conforms_of_isSquare (r₁ buf₁ r₂ buf₂ : Pointer) (s : GlobalStat
   have hn₂ : r₂.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hm.wf hr₂.left
 
   -- `^bb1`: the first point decoded, so the second call runs on what it left
-  obtain ⟨hret₁, heq₁, hdec₁⟩ := hok₁ sq₁
+  obtain ⟨hret₁, heq₁, hdec₁, hbnd₁⟩ := hok₁ sq₁
   have hlive₁ : ∀ b : BlockId, b ≠ r₁.id → w₁.mem.live? b = s.mem.live? b := fun b hb =>
     (live?_of_equiv_mem heq₁ b).trans (by simp [pointOutMem, Ne.symm hb])
   -- `r₂` and `buf₂` at the state the second call is entered in. `r₂` may be
@@ -235,16 +252,16 @@ theorem conforms_of_isSquare (r₁ buf₁ r₂ buf₂ : Pointer) (s : GlobalStat
     obtain ⟨hret₂, heq₂⟩ := hfail₂ sq₂
     obtain ⟨t, hrun, rfl⟩ := run_fail₂ hrun₁ hret₁ hnull₁ hrun₂ hret₂
     refine ⟨_, _, hrun, fun h => absurd sq₁ h,
-      fun _ => ⟨oX, oY, oZ, oT, hdec₁, fun _ => ⟨rfl, ?_⟩, fun h => absurd h sq₂⟩⟩
+      fun _ => ⟨oX, oY, oZ, oT, hdec₁, hbnd₁, fun _ => ⟨rfl, ?_⟩, fun h => absurd h sq₂⟩⟩
     exact out_fail₂ hm.wf hn₁ heq₁ heq₂
 
   -- both points decoded: `r₁`'s writes, then `r₂`'s on top
-  obtain ⟨hret₂, heq₂, hdec₂⟩ := hok₂ sq₂
+  obtain ⟨hret₂, heq₂, hdec₂, hbnd₂⟩ := hok₂ sq₂
   obtain ⟨t, hrun, rfl⟩ := run_ok hrun₁ hret₁ hnull₁ hrun₂ hret₂ hnull₂
   exact ⟨_, _, hrun, fun h => absurd sq₁ h,
-    fun _ => ⟨oX, oY, oZ, oT, hdec₁, fun h => absurd sq₂ h,
+    fun _ => ⟨oX, oY, oZ, oT, hdec₁, hbnd₁, fun h => absurd sq₂ h,
       fun _ => ⟨pX, pY, pZ, pT, rfl, out_ok hm.wf hn₁ hn₂ heq₁ heq₂,
-        decodesTo_of_equiv heq₁ hdec₂⟩⟩⟩
+        decodesTo_of_equiv heq₁ hdec₂, decodedBounds_of_equiv heq₁ hbnd₂⟩⟩⟩
 
 end PointFromBytes2x
 

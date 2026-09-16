@@ -28,7 +28,7 @@ theorem Avx512.isQuadPtr_writeQuad {m : MemoryState} {p r : Pointer}
 
 abbrev fd_ed25519_point_frombytes_2x_equivalent : Prop :=
   ∀ (s : GlobalState) (a b aBuf bBuf : Pointer),
-  (hs : s.RefWF [a, b]) → (ha : Ref.IsPointPtr s.mem a) → (hb : Ref.IsPointPtr s.mem b) → (haBuf : Ref.IsByteBufPtr s.mem aBuf) → (hbBuf : Ref.IsByteBufPtr s.mem bBuf) →
+  (hs : s.RefWF [a, b]) → (ha : Ref.IsPointPtr s.mem a) → (hb : Ref.IsPointPtr s.mem b) → (haBuf : IsByteBufPtr s.mem aBuf) → (hbBuf : IsByteBufPtr s.mem bBuf) →
   (hbBufA : bBuf.id ≠ a.id) →
   -- Both regions write `b`'s point over `a`'s: if the two were the same object
   -- the second store would win, and the first point could not be read back.

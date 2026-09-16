@@ -211,17 +211,17 @@ abbrev SameBuf (m m' : MemoryState) (q q' : Pointer) : Prop :=
 
 /-- The AVX lanes are the four 64-bit windows of the `ref` buffer's word. -/
 theorem readWv_eq_extractLsb' {m m' : MemoryState} {q q' : Pointer}
-    (hq : Ref.IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
+    (hq : IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
     Avx512.readWv hq'
-      = Vector.ofFn (fun j : Fin 4 => (Ref.readBuf hq).extractLsb' (64 * j.val) 64) := by
+      = Vector.ofFn (fun j : Fin 4 => (readBuf hq).extractLsb' (64 * j.val) 64) := by
   obtain ⟨blk, hblk, -⟩ := hq.left
   obtain ⟨blk', hblk', -⟩ := hq'.left
   have hl : m.live? q.id = some blk := by simp only [MemoryState.live?, hblk]
   have hl' : m'.live? q'.id = some blk' := by simp only [MemoryState.live?, hblk']
   rw [SameBuf, hl, hl'] at hbufs
   simp at hbufs
-  have hW : Ref.readBuf hq = blk'.bytes.extractLsb' q'.offsetInBits 256 := by
-    simp [Ref.readBuf, Ref.readBuf?, hl, hbufs]
+  have hW : readBuf hq = blk'.bytes.extractLsb' q'.offsetInBits 256 := by
+    simp [readBuf, readBuf?, hl, hbufs]
   rw [hW]
   refine Vector.ext fun j hj => ?_
   simp [Avx512.readWv, Avx512.readWv?, hl']
@@ -229,10 +229,10 @@ theorem readWv_eq_extractLsb' {m m' : MemoryState} {q q' : Pointer}
 
 /-- ... so both sides name the same `y`. -/
 theorem decodeBytes_eq_wvY {m m' : MemoryState} {q q' : Pointer}
-    (hq : Ref.IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
-    Ref.decodeBytes (Ref.readBuf hq) = Avx512.wvY (Avx512.readWv hq') := by
-  have hnat : Avx512.wvNat (Avx512.readWv hq') = (Ref.readBuf hq).toNat := by
-    have hlt := (Ref.readBuf hq).isLt
+    (hq : IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
+    Ref.decodeBytes (readBuf hq) = Avx512.wvY (Avx512.readWv hq') := by
+  have hnat : Avx512.wvNat (Avx512.readWv hq') = (readBuf hq).toNat := by
+    have hlt := (readBuf hq).isLt
     rw [readWv_eq_extractLsb' hq hq' hbufs]
     simp only [Avx512.wvNat, Vector.getElem_ofFn, BitVec.extractLsb'_toNat,
       Nat.shiftRight_eq_div_pow]
@@ -244,8 +244,8 @@ theorem decodeBytes_eq_wvY {m m' : MemoryState} {q q' : Pointer}
 /-- ... and read the same sign bit: the buffer's top bit is the top bit of the
 `wv_t`'s last lane. -/
 theorem wvSign_eq_getElem_readBuf {m m' : MemoryState} {q q' : Pointer}
-    (hq : Ref.IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
-    Avx512.wvSign (Avx512.readWv hq') = (Ref.readBuf hq)[255] := by
+    (hq : IsByteBufPtr m q) (hq' : Avx512.IsWvPtr m' q') (hbufs : SameBuf m m' q q') :
+    Avx512.wvSign (Avx512.readWv hq') = (readBuf hq)[255] := by
   rw [Avx512.wvSign, readWv_eq_extractLsb' hq hq' hbufs]
   simp [BitVec.getLsbD_extractLsb']
 
@@ -356,7 +356,7 @@ theorem fd_ed25519_point_frombytes_2x : fd_ed25519_point_frombytes_2x_equivalent
   intro ⟨resEq, resOk⟩
   simp at resEq resOk
 
-  by_cases hsqₐ : IsSquare ((Ref.decodeBytes (Ref.readBuf haBuf) ^ 2 - 1) / (d * Ref.decodeBytes (Ref.readBuf haBuf) ^ 2 + 1))
+  by_cases hsqₐ : IsSquare ((Ref.decodeBytes (readBuf haBuf) ^ 2 - 1) / (d * Ref.decodeBytes (readBuf haBuf) ^ 2 + 1))
   case neg =>
     simp [hsqₐ] at hs₂
     simp [hs₂.left] at resOk
@@ -365,19 +365,19 @@ theorem fd_ed25519_point_frombytes_2x : fd_ed25519_point_frombytes_2x_equivalent
     simp [hsq'ₐ, ← resEq, resOk] at hs'₂State
   simp [hsqₐ] at hs₂
   simp [hsq'ₐ] at hs'₂State
-  obtain ⟨aX, aY, aZ, aT, hdecA, hfailB, hokB⟩ := hs₂
+  obtain ⟨aX, aY, aZ, aT, hdecA, -, hfailB, hokB⟩ := hs₂
   refine ⟨aX, aY, aZ, aT, ?_⟩
 
   -- `bBuf` is read at the memory `a`'s four coordinate stores left; those miss
   -- its block, so the second squareness test is the one over the entry state.
-  have hreadB : Ref.readBuf (m := Ref.pointOutMem s.mem a aX aY aZ aT)
-      (Ref.isByteBufPtr_splice (Ref.isByteBufPtr_splice
-        (Ref.isByteBufPtr_splice (Ref.isByteBufPtr_splice hbBuf))))
-      = Ref.readBuf hbBuf :=
-    Ref.readBuf_of_live?_eq (Ref.live?_pointOutMem_ne (Ne.symm hbBufA))
+  have hreadB : readBuf (m := Ref.pointOutMem s.mem a aX aY aZ aT)
+      (isByteBufPtr_splice (isByteBufPtr_splice
+        (isByteBufPtr_splice (isByteBufPtr_splice hbBuf))))
+      = readBuf hbBuf :=
+    readBuf_of_live?_eq (Ref.live?_pointOutMem_ne (Ne.symm hbBufA))
   rw [hreadB] at hfailB hokB
 
-  by_cases hsq : IsSquare ((Ref.decodeBytes (Ref.readBuf hbBuf) ^ 2 - 1) / (d * Ref.decodeBytes (Ref.readBuf hbBuf) ^ 2 + 1))
+  by_cases hsq : IsSquare ((Ref.decodeBytes (readBuf hbBuf) ^ 2 - 1) / (d * Ref.decodeBytes (readBuf hbBuf) ^ 2 + 1))
   case neg =>
     simp [hsq] at hfailB
     simp [hfailB.left] at resOk
@@ -387,7 +387,7 @@ theorem fd_ed25519_point_frombytes_2x : fd_ed25519_point_frombytes_2x_equivalent
     simp [hsq', ← resEq, resOk] at hs'₂State
   simp [hsq'] at hs'₂State
 
-  obtain ⟨bX, bY, bZ, bT, hs₂, hrefDecodes⟩ := hokB.right
+  obtain ⟨bX, bY, bZ, bT, hs₂, hrefDecodes, -⟩ := hokB.right
   refine ⟨bX, bY, bZ, bT, ?_⟩
 
   -- `a`'s point survives `b`'s four stores, and then reads back as what its own

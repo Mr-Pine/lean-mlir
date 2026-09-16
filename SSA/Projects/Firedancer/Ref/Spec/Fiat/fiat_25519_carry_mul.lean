@@ -18,6 +18,8 @@ abbrev fiat_25519_carry_mul_spec (o p q: Pointer) (s: GlobalState)
 
     decodeFieldElem (fun i => (out.extractLsb' (64 * i.toNat) 64).toNat) = p_input * q_input
     ∧ (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
-    ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? o i output_state.mem = some l → l ≤ 0x8000000000000
+    ∧ (∀ (i : Fin 5) (l : ℕ), readLimb? o i output_state.mem = some l → l ≤ 0x8000000000000)
+    -- all-zero limbs come only from an all-zero operand
+    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs p s.mem ∨ ZeroLimbs q s.mem)
 
 end Firedancer.Ref

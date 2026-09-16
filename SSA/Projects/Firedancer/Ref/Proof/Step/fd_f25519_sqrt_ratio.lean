@@ -34,8 +34,10 @@ theorem sqrtRatio_step {dst su sv pm1 : Pointer} {w : GlobalState} (hw : w.WF)
       ∧ root.val % 2 = 0
       ∧ ((∃ z : ZMod _root_.p, z ^ 2 * x₁ = x₀) → root ^ 2 * x₁ = x₀)
       ∧ (x₁ = 0 → root = 0)
-      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38 := by
-  obtain ⟨out, heven, hsq, hzero, hbnd, hsum, w', hrun, heq⟩ :=
+      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38
+      -- all-zero limbs come only from an all-zero input
+      ∧ (ZeroLimbs dst w'.mem → ZeroLimbs su w.mem ∨ ZeroLimbs sv w.mem) := by
+  obtain ⟨out, heven, hsq, hzero, hbnd, hsum, ⟨w', hrun, heq⟩, hzl⟩ :=
     fd_f25519_sqrt_ratio_conforms dst su sv w hw
       ⟨pm1, hm1.ptr, hm1.addr, hm1.value, hm1.bnd, hm1d⟩ hd h₀ h₁ hb₀ hb₁ hud hvd
   rw [hv₀, hv₁] at hrun hsq
@@ -45,7 +47,8 @@ theorem sqrtRatio_step {dst su sv pm1 : Pointer} {w : GlobalState} (hw : w.WF)
   have hroot : readFieldElem hwrote.ptr
       = readFieldElem (m := w.mem.splice dst (packLimbs out)) (isFieldElemPtr_splice hd) :=
     readFieldElem_eq_splice hd heq
-  refine ⟨w', hwrote, readFieldElem hwrote.ptr, hrun, rfl, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨w', hwrote, readFieldElem hwrote.ptr, hrun, rfl, ?_, ?_, ?_, ?_, ?_,
+    fun h => hzl (ZeroLimbs.of_equiv heq h)⟩
   · rw [hroot]; exact heven
   · intro h; rw [hroot]; exact hsq h
   · intro h; rw [hroot]; exact hzero h

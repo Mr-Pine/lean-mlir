@@ -17,7 +17,7 @@ theorem fd_f25519_sub_nr_conforms (o p q : Pointer) (s : GlobalState) (hs : s.WF
     (ho : IsFieldElemPtr s.mem o) (hp : IsFieldElemPtr s.mem p) (hq : IsFieldElemPtr s.mem q) :
     fd_f25519_sub_nr_spec o p q s ho hp hq := by
   simp only [fd_f25519_sub_nr_spec, Cfg.denote]
-  obtain ⟨out, hout, hbounds, ⟨st, hst, hst_eq⟩⟩ :=
+  obtain ⟨out, hout, hbounds, ⟨st, hst, hst_eq⟩, -⟩ :=
     fiat_25519_sub_conforms o p q s hs hpbounds hqbounds ho hp hq
   have hWF : st.WF := GlobalState.WF.of_equiv hs.splice hst_eq
   have hnone : ∀ t : BlockId, s.alloc.nextFreeBlock ≤ t.id → st.mem.live? t = none := by

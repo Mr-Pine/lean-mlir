@@ -95,7 +95,7 @@ theorem fd_f25519_add_conforms (o p q: Pointer) (s: GlobalState)
     case bounds =>
       refine limbBounds_of_readLimb? _ ?_
       rw [hpack]
-      exact fun i l hl => hcarryres.2 i l ((hlimbs i).symm.trans hl)
+      exact fun i l hl => hcarryres.2.1 i l ((hlimbs i).symm.trans hl)
     case equiv =>
       rw [hpack]
       refine GlobalState.Equiv.trans ?_ (GlobalState.Equiv.symm hpop)
