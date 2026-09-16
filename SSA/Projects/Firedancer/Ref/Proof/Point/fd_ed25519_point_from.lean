@@ -209,6 +209,6 @@ theorem fd_ed25519_point_from_conforms (r x y z t : Pointer) (s : GlobalState)
         (x := PoisonOr.value (r.withOffset 80)) (s' := u₄) ?_).trans ?_
     · exact hrun₄
 
-    simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm]
+    simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm] <;> rfl
 
 end Firedancer.Ref

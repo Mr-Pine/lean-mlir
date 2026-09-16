@@ -221,6 +221,8 @@ elab "peel_call " h:term " with " l:term,+ : tactic => do
   peelCallCore a b c h l.getElems
 
 macro "simp_return" : tactic =>
-  `(tactic| simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm, Ctxt.Valuation.singleton])
+  -- v4.34: `simp` stops at the terminator's `pure`-bind, whose `.2` no longer reduces.
+  `(tactic| simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm,
+      Ctxt.Valuation.singleton] <;> rfl)
 
 end Firedancer
