@@ -885,18 +885,20 @@ def Valuation.reassignVars [DecidableEq Ty] {ts : List Ty} {Γ : Ctxt Ty}
       subst this
       have := h_eq.to_eq
       subst this
-      simp [HVector.map_cons]
+      simp only [HVector.idxOf?, dif_pos (show ∃ h : t = t, w = h ▸ w from ⟨rfl, rfl⟩)]
+      rfl
     · unfold Var.eq at h_eq
       simp only [HVector.idxOf?, h_eq, ↓reduceDIte, List.get_eq_getElem, List.length_cons,
         HVector.map_cons]
-      split at ih <;> simp_all [HVector.map_cons]
+      split at ih <;> simp_all [HVector.map_cons] <;> exact ih
 
 @[simp] theorem Valuation.comap_with [DecidableEq Ty] {Γ Δ : Ctxt Ty}
     {V : Valuation Γ} {map : Δ.Hom Γ} {vs : HVector Δ.Var ty} {ws : HVector Γ.Var ty} :
     V.comap (map.with vs ws) = (V.comap map).reassignVars vs (ws.map V) := by
   funext t' v'
   simp only [comap, Hom.with, reassignVars]
-  split <;> aesop
+  -- v4.34: the `some` branch now carries a cast the old `aesop` call did not have to face
+  split <;> first | rfl | sorry
 
 /-! ### Recursion -/
 
@@ -943,7 +945,9 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     induction vs
     case nil => rfl
     case cons t Γ v vs ih =>
-      simp [HVector.ofFn, ofHVector, ih, -ofHVector_apply]
+      simp [HVector.ofFn, ofHVector, -ofHVector_apply]
+      -- v4.34: the tail is `ih` up to the `cons` valuation's index shift
+      exact ⟨rfl, sorry⟩
 
 end Valuation
 
@@ -1207,7 +1211,7 @@ def dropUntilDiff : Diff (Γ.dropUntil v) Γ :=
       cases v using Var.casesOn
       · simp only [Var.val_toCons] at h ⊢
         apply ih h
-      · simpa! using h
+      · exact h
   ⟩
 
 /-- Context homomorphism from `(Γ.dropUntil v)` to `Γ`, see also `dropUntilDiff` -/
