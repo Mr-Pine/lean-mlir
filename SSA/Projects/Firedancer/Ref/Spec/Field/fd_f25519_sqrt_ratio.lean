@@ -63,5 +63,7 @@ abbrev fd_f25519_sqrt_ratio_spec (o u v : Pointer) (s : GlobalState)
         result = .value
           ([(.value (if isSquare then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, s')
         ∧ output_state ≈ s')
+    -- all-zero limbs come only from an all-zero input
+    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs u s.mem ∨ ZeroLimbs v s.mem)
 
 end Firedancer.Ref

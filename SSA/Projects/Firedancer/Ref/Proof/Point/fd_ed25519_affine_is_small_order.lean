@@ -63,11 +63,11 @@ attribute [local irreducible] fd_ed25519_point_to fd_f25519_is_zero fd_f25519_eq
 
 set_option maxHeartbeats 400000 in
 set_option maxRecDepth 40000 in
-theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState)
+theorem fd_ed25519_affine_is_small_order_conforms' (a : Pointer) (s : GlobalState)
     (ha : IsPointPtr s.mem a) :
     fd_ed25519_affine_is_small_order_spec a s ha := by
   simp only [fd_ed25519_affine_is_small_order_spec, Cfg.denote]
-  intro hrefwf hZ hcurve haLimbs
+  intro hrefwf hZ hcurve haZero haY
   have hs : s.WF := hrefwf.wf
 
   -- the two order-8 globals, at whatever addresses the loader chose
@@ -150,13 +150,12 @@ theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState
 
   have hreadPt : readPoint ha4 = readPoint ha := readPoint_of_live?_eq (fb4 a.id halt) ha ha4
 
-  -- the argument's per-coordinate bounds, at the state the copy runs in
-  have haLimbs4 : AllLimbBounds ha4 := by
-    intro i
-    show LimbBounds (isCoordPtr ha4 i)
-    refine limbBounds_of_readLimb? _ (fun k l hl => ?_)
-    rw [readLimb?_of_live?_eq (p := a.withOffset (i * (5 * 8))) (fb4 a.id halt) k] at hl
-    exact limbBounds_readLimb? (isCoordPtr ha i) (coordLimbBounds ha haLimbs i) k l hl
+  -- the argument's `X` and `Y` facts, at the state the copy runs in
+  have haZero4 : ZeroRep a r4.mem :=
+    ZeroRep.of_readLimb? (readLimb?_of_live?_eq (fb4 a.id halt)) haZero
+  have haY4 : LimbBounds (isCoordPtr ha4 1) :=
+    limbBounds_of_readLimb? _ (limbBounds_of_live?_eq (p := a.withOffset ((1 : Fin 4) * (5 * 8)))
+      (fb4 a.id halt) (limbBounds_readLimb? _ haY))
 
   -- Everything above is about the entry state and its four locals. The walk
   -- starts here; each callee's state is obtained where the walk reaches it, so
@@ -211,10 +210,7 @@ theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState
   have hXvalOut : readFieldElem hoXm = (readPoint ha4).X := hvalX
   have hYvalOut : readFieldElem hoYm = (readPoint ha4).Y := hvalY
 
-  have haXbnd : LimbBounds haXm :=
-    limbBounds_congr (coordPtr_zero a) (coordLimbBounds ha4 haLimbs4 0)
-  have haYbnd : LimbBounds haYm :=
-    limbBounds_congr (coordPtr_one a) (coordLimbBounds ha4 haLimbs4 1)
+  have haYbnd : LimbBounds haYm := limbBounds_congr (coordPtr_one a) haY4
 
   -- ... transported across the callee's equivalence, to the state it left
   have hptWF : ptstate.WF := (wf_splice4 hr4).of_equiv hptstate_eq
@@ -222,12 +218,11 @@ theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState
     isFieldElemPtr_of_live?_eq (live?_of_equiv_mem hptstate_eq.symm xr.id) hoXm
   have hyPt : IsFieldElemPtr ptstate.mem yr :=
     isFieldElemPtr_of_live?_eq (live?_of_equiv_mem hptstate_eq.symm yr.id) hoYm
-  have hxPtBnd : LimbBounds hxPt := by
-    intro i
-    rw [readLimb_eq_of_readLimb? (h' := hoXm)
-        (readLimb?_of_live?_eq (live?_of_equiv_mem hptstate_eq.symm xr.id) i),
-      hXlimb i]
-    exact haXbnd i
+  have hxPtZero : ZeroRep xr ptstate.mem :=
+    ZeroRep.of_readLimb? (fun i =>
+      (readLimb?_of_live?_eq (live?_of_equiv_mem hptstate_eq.symm xr.id) i).trans
+        ((Option.some_get _).symm.trans ((congrArg some (hXlimb i)).trans (Option.some_get _))))
+      haZero4
   have hyPtBnd : LimbBounds hyPt := by
     intro i
     rw [readLimb_eq_of_readLimb? (h' := hoYm)
@@ -248,7 +243,7 @@ theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState
     FrameBelow.of_equiv hptstate_eq (frameBelow_splice4 fb4 hxrge hyrge hzrge htrge)
 
   -- `fd_f25519_is_zero( x )`
-  obtain ⟨izXstate, hizX, hizX_eq⟩ := fd_f25519_is_zero_conforms xr ptstate hptWF hxPt hxPtBnd
+  obtain ⟨izXstate, hizX, hizX_eq⟩ := fd_f25519_is_zero_conforms' xr ptstate hptWF hxPt hxPtZero
   peel_call hizX
 
   have hizXWF : izXstate.WF := hptWF.of_equiv hizX_eq
@@ -364,5 +359,17 @@ theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState
       Or.inr (Or.inr (Or.inr h))]
   · rintro (h | h | h | h)
     exacts [Or.inl (Or.inl (Or.inr h)), Or.inl (Or.inl (Or.inl h)), Or.inl (Or.inr h), Or.inr h]
+
+/-- `fd_ed25519_affine_is_small_order_conforms'` for tight limbs. -/
+theorem fd_ed25519_affine_is_small_order_conforms (a : Pointer) (s : GlobalState)
+    (ha : IsPointPtr s.mem a) (hs : s.RefWF []) (hZ : (readPoint ha).Z = 1)
+    (hc : OnCurve (readPoint ha).x (readPoint ha).y) (hb : AllLimbBounds ha) :
+    ∃ s' : GlobalState, StateT.run (runFunction (fd_ed25519_affine_is_small_order.denote
+        (Ctxt.Valuation.singleton (.value a)))) s
+      = .value ([(.value (if ((readPoint ha).X, (readPoint ha).Y) ∈ lowOrder then 1#32 else 0#32)
+          : LLVM.IntW 32)]ₕ, s') ∧ s ≈ s' :=
+  fd_ed25519_affine_is_small_order_conforms' a s ha hs hZ hc
+    (zeroRep_of_limbBounds (coordPtr_zero a ▸ isCoordPtr ha 0)
+      (limbBounds_congr (coordPtr_zero a) (hb 0))) (hb 1)
 
 end Firedancer.Ref

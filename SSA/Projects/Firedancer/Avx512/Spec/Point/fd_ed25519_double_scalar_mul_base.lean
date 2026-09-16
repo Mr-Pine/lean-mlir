@@ -28,8 +28,8 @@ abbrev fd_ed25519_double_scalar_mul_base_spec (r n1 a n2 : Pointer) (s : GlobalS
     (Ctxt.Valuation.ofHVector [.value n2, .value a, .value n1, .value r]ₕ))
   let result := StateT.run invocation s
 
-  ∀ (_hr : IsQuadPtr s.mem r) (ha : IsQuadPtr s.mem a) (hn1 : Common.IsScalarPtr s.mem n1)
-    (hn2 : Common.IsScalarPtr s.mem n2) (hA : (readQuad ha).toPoint.WellFormed),
+  ∀ (_hr : IsQuadPtr s.mem r) (ha : IsQuadPtr s.mem a) (hn1 : IsByteBufPtr s.mem n1)
+    (hn2 : IsByteBufPtr s.mem n2) (hA : (readQuad ha).toPoint.WellFormed),
   R43x6.U44 (readQuad ha).v03 → R43x6.U44 (readQuad ha).v14 → R43x6.U44 (readQuad ha).v25 →
   ∀ (Bt : ℕ → Ed25519.PrecomputedPoint), BaseTableHolds s r Bt →
   BaseVals Bt Ed25519.basePoint Ed25519.wellFormed_basePoint →
@@ -38,8 +38,8 @@ abbrev fd_ed25519_double_scalar_mul_base_spec (r n1 a n2 : Pointer) (s : GlobalS
     let output_state : GlobalState := { s with mem := s.mem.writeQuad r q }
 
     output_state ≈ s'
-    ∧ q.toPoint.Represents (((Common.readScalar hn1).toNat % 2 ^ 255) • (readQuad ha).toPoint.toAffine hA
-      + ((Common.readScalar hn2).toNat % 2 ^ 255) • Ed25519.basePoint.toAffine Ed25519.wellFormed_basePoint)
+    ∧ q.toPoint.Represents (((readBuf hn1).toNat % 2 ^ 255) • (readQuad ha).toPoint.toAffine hA
+      + ((readBuf hn2).toNat % 2 ^ 255) • Ed25519.basePoint.toAffine Ed25519.wellFormed_basePoint)
     ∧ R43x6.U44 q.v03 ∧ R43x6.U44 q.v14 ∧ R43x6.U44 q.v25
 
 end Firedancer.Avx512

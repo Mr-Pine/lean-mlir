@@ -79,6 +79,19 @@ lemma carry_chain_le (c0 c1 c2 c3 c4 : ℕ)
   -- while `b7` keeps the powers, leaving omega two unrelated atoms.
   refine forall_fin5 ?_ ?_ ?_ ?_ ?_ <;> omega
 
+/-- The chain's limbs are all `0` only when its columns are. -/
+lemma carry_chain_eq_zero (c0 c1 c2 c3 c4 : ℕ)
+    (h0 : c0 ≤ 693 * 2 ^ 102) (h1 : c1 ≤ 531 * 2 ^ 102) (h2 : c2 ≤ 369 * 2 ^ 102)
+    (h3 : c3 ≤ 207 * 2 ^ 102) (h4 : c4 ≤ 45 * 2 ^ 102)
+    (h : ∀ i, carry_chain c0 c1 c2 c3 c4 i = 0) :
+    c0 = 0 ∧ c1 = 0 ∧ c2 = 0 ∧ c3 = 0 ∧ c4 = 0 := by
+  obtain ⟨-, -, -, -, -, b5, b6, -⟩ := carry_chain_carries c0 c1 c2 c3 c4 _ _ _ _ _ _ _
+    h0 h1 h2 h3 h4 rfl rfl rfl rfl rfl rfl rfl
+  have z0 := h 0; have z1 := h 1; have z2 := h 2; have z3 := h 3; have z4 := h 4
+  simp only [carry_chain, Fin.isValue, Matrix.cons_val_zero, Matrix.cons_val_one,
+    Matrix.cons_val] at z0 z1 z2 z3 z4
+  omega
+
 lemma two_pow_255 : (2 : ZMod _root_.p) ^ 255 = 19 := by
   have hp : (2 : ℕ) ^ 255 = _root_.p + 19 := by norm_num [_root_.p]
   simpa only [Nat.cast_pow, Nat.cast_add, Nat.cast_ofNat, ZMod.natCast_self, zero_add]
@@ -280,5 +293,22 @@ lemma carry_product_eq_value (a b : Fin 5 → ℕ)
   rw [carry_product_repr_eq, carry_chain_value _ _ _ _ _ h0 h1 h2 h3 h4]
   exact product_columns_value a b
 
+
+/-- All-zero product limbs come only from an all-zero operand. -/
+lemma carry_product_repr_eq_zero (a b : Fin 5 → ℕ)
+    (ha : ∀ i, a i ≤ 0x18000000000000) (hb : ∀ i, b i ≤ 0x18000000000000)
+    (h : ∀ i, carry_product_repr a b i = 0) :
+    (∀ i, a i = 0) ∨ (∀ i, b i = 0) := by
+  obtain ⟨h0, h1, h2, h3, h4⟩ := product_columns_le a b ha hb
+  rw [carry_product_repr_eq] at h
+  obtain ⟨c0, c1, c2, c3, c4⟩ := carry_chain_eq_zero _ _ _ _ _ h0 h1 h2 h3 h4 h
+  simp only [Nat.add_eq_zero_iff, mul_eq_zero, OfNat.ofNat_ne_zero, or_false] at c0 c1 c2 c3 c4
+  by_cases hb0 : ∀ i, b i = 0
+  · exact Or.inr hb0
+  · left
+    push_neg at hb0
+    obtain ⟨j, hj⟩ := hb0
+    intro i
+    fin_cases i <;> fin_cases j <;> simp_all
 
 end Firedancer.Ref

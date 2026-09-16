@@ -71,8 +71,9 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
   obtain ⟨pa₁, hva₁, hba₁⟩ := carry_of_live?_eq (fb a.id hna) ha hba
 
   -- `fd_f25519_neg( t, a )`: the local takes `-a` at the opp bias bound
-  obtain ⟨negOut, hnegval, hnegbnd, s₂, hrun₁, heq₁⟩ :=
-    fd_f25519_neg_conforms t a s₁ hs₁WF pt₁ pa₁ (limbBounds_of_readLimb? pa₁ hba₁).bias
+  have hneg := fd_f25519_neg_conforms' t a s₁ hs₁WF pt₁ pa₁ (limbBounds_of_readLimb? pa₁ hba₁).bias
+  obtain ⟨negOut, hnegval, hnegbnd, s₂, hrun₁, heq₁⟩ := hneg.1
+  have hneglimbs := hneg.2 s₂ hrun₁
   have hs₂WF : s₂.WF := GlobalState.WF.of_equiv hs₁WF.splice heq₁
   have hlive₁ : ∀ b : BlockId, t.id ≠ b → s₂.mem.live? b = s₁.mem.live? b :=
     fun b hb => (heq₁.live b).symm.trans (live?_splice_ne hb)
@@ -130,7 +131,28 @@ theorem fd_f25519_abs_conforms (o a : Pointer) (s : GlobalState)
     · exact hbt₃
     · exact fun i l hl => le_trans (hba₃ i l hl) (tight_le_biasLimb i)
 
-  refine ⟨fun i => (readLimb i hsrc : BitVec 64), ?val, ?bnd, ?sum, ?run⟩
+  refine ⟨fun i => (readLimb i hsrc : BitVec 64), ?val, ?bnd, ?sum, ?run, ?zero⟩
+
+  case zero =>
+    intro hz
+    -- the copy is all-zero, so `src` was
+    have hzs : ∀ i, readLimb? src i s₃.mem = some 0 := fun i => by
+      have h := hz i
+      rw [limbReadbackPack _ _ _ ho.left i, Option.some.injEq] at h
+      simp only [BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat,
+        Nat.mod_eq_of_lt (readLimb_lt i hsrc)] at h
+      rw [← h]; exact (Option.some_get _).symm
+    by_cases hpar : (readFieldElem ha).val % 2 = 1
+    · -- `-a`'s limb `0` is `bias - a₀`, and `a₀ ≤ 2^51` is well below the bias
+      have h0 := hzs 0
+      rw [hsrcdef, if_pos hpar, readLimb?_of_live?_eq (hlive₂ t.id), hneglimbs 0,
+        Option.some.injEq] at h0
+      have := hba₁ 0 (readLimb 0 pa₁) (Option.some_get _).symm
+      simp only [biasLimb_zero] at h0
+      omega
+    · have hsa : src = a := by rw [hsrcdef, if_neg hpar]
+      rw [hsa] at hzs
+      exact ZeroLimbs.of_live?_eq (hframe a.id hna) hzs
 
   case val => rw [readFieldElem_splice_congr ho po₃, hifval, hvt₃, hva₃]
 

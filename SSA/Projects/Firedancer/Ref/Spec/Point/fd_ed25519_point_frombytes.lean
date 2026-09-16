@@ -4,6 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_frombytes
 import SSA.Projects.Firedancer.Ref.Spec.Point
+import SSA.Projects.Firedancer.Ref.Spec.Bias
+import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Curve
 
 import SSA.Projects.Firedancer.Prime
@@ -56,6 +58,16 @@ abbrev DecodesTo (m : MemoryState) (r buf : Pointer) (hr : IsPointPtr m r)
     (hbuf : IsByteBufPtr m buf) (oX oY oZ oT : Fin 5 → BitVec 64) : Prop :=
   IsDecoding (readPoint (isPointPtr_pointOutMem hr oX oY oZ oT)) (readBuf hbuf)
 
+/-- The limbs a decompression leaves at `r`: `X` at `fd_f25519_neg`'s bias bound, since the
+region negates without carrying, and `Y`, `T`, `Z` tight; and a zero `X` in one of the two
+patterns `fd_f25519_is_zero` accepts. In `DecodesTo`'s shape, so a `simp` over the stores
+leaves it alone. -/
+abbrev DecodedBounds (m : MemoryState) (r : Pointer) (hr : IsPointPtr m r)
+    (oX oY oZ oT : Fin 5 → BitVec 64) : Prop :=
+  let h := isPointPtr_pointOutMem hr oX oY oZ oT
+  BiasBounds (isCoordPtr h 0) ∧ LimbBounds (isCoordPtr h 1) ∧ LimbBounds (isCoordPtr h 2)
+    ∧ LimbBounds (isCoordPtr h 3) ∧ ZeroRep r (pointOutMem m r oX oY oZ oT)
+
 /-- Point decompression, RFC 8032 §5.1.3: `buf` is `y` with the sign of `x` in
 its top bit, and `r` becomes the point it names -- or the call writes nothing
 and returns `NULL`.
@@ -83,6 +95,7 @@ abbrev fd_ed25519_point_frombytes_spec (r buf : Pointer) (s : GlobalState)
       (¬ isSquare → ret = SLLVM.Ptr.null ∧ s ≈ s') ∧
       (isSquare → ret = .value r
         ∧ s' ≈ ({ s with mem := pointOutMem s.mem r oX oY oZ oT } : GlobalState)
-        ∧ DecodesTo s.mem r buf hr hbuf oX oY oZ oT)
+        ∧ DecodesTo s.mem r buf hr hbuf oX oY oZ oT
+        ∧ DecodedBounds s.mem r hr oX oY oZ oT)
 
 end Firedancer.Ref

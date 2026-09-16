@@ -19,11 +19,14 @@ theorem abs_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
           (Ctxt.Valuation.ofHVector [.value src, .value dst]ₕ))) w
         = .value ([.value dst]ₕ, w')
       ∧ readFieldElem hw'.ptr = (if x.val % 2 = 1 then -x else x)
-      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38 := by
-  obtain ⟨out, hval, hbnd, hsum, w', hrun, heq⟩ := fd_f25519_abs_conforms dst src w hw hd h₀ hb
+      ∧ BiasBounds hw'.ptr ∧ limbSum hw'.ptr < 2 ^ 256 - 38
+      ∧ (ZeroLimbs dst w'.mem → ZeroLimbs src w.mem) := by
+  obtain ⟨out, hval, hbnd, hsum, ⟨w', hrun, heq⟩, hzero⟩ :=
+    fd_f25519_abs_conforms dst src w hw hd h₀ hb
   refine ⟨w', Wrote.of_splice hw hd heq, hrun,
     readFieldElem_of_splice heq (by rw [← hv, ← hval]; exact (Option.some_get _).symm),
-    biasBounds_of_splice heq (biasBounds_readLimb? _ hbnd), ?_⟩
+    biasBounds_of_splice heq (biasBounds_readLimb? _ hbnd), ?_,
+    fun hz => hzero (ZeroLimbs.of_equiv heq hz)⟩
   rw [limbSum_of_splice hd heq]
   exact hsum
 

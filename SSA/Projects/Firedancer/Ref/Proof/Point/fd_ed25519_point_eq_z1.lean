@@ -4,6 +4,7 @@ import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 import SSA.Projects.Firedancer.Ref.Proof.Point
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 
 import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
 import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
@@ -20,12 +21,13 @@ attribute [local irreducible] fd_f25519_mul fd_f25519_eq
 
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 20000 in
-theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
+/-- `b`'s `X` only feeds a multiplication, so its bias bound is enough. -/
+theorem fd_ed25519_point_eq_z1_conforms' (a b : Pointer) (s : GlobalState)
     (hs : s.WF)
     (ha : IsPointPtr s.mem a)
     (hb : IsPointPtr s.mem b)
     (haLimbs : AllLimbBounds ha)
-    (hbLimbs : AllLimbBounds hb)
+    (hbX : BiasBounds (isCoordPtr hb 0)) (hbY : LimbBounds (isCoordPtr hb 1))
     (haZUnit : IsUnit (readPoint ha).Z) :
     fd_ed25519_point_eq_z1_spec a b s ha hb := by
   intro hz1
@@ -42,11 +44,11 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   -- the input bounds, in the `readLimb?` form the callees take
   have baZ := limbBounds_readLimb? (isCoordPtr ha 3) (coordLimbBounds ha haLimbs 3)
   have baY := limbBounds_readLimb? (isCoordPtr ha 1) (coordLimbBounds ha haLimbs 1)
-  have bbY := limbBounds_readLimb? (isCoordPtr hb 1) (coordLimbBounds hb hbLimbs 1)
+  have bbY := limbBounds_readLimb? (isCoordPtr hb 1) hbY
   have baX : ∀ (i : Fin 5) (l : ℕ), readLimb? a i s.mem = some l → l ≤ 2 ^ 51 :=
     coordPtr_zero a ▸ limbBounds_readLimb? (isCoordPtr ha 0) (coordLimbBounds ha haLimbs 0)
-  have bbX : ∀ (i : Fin 5) (l : ℕ), readLimb? b i s.mem = some l → l ≤ 2 ^ 51 :=
-    coordPtr_zero b ▸ limbBounds_readLimb? (isCoordPtr hb 0) (coordLimbBounds hb hbLimbs 0)
+  have bbX : ∀ (i : Fin 5) (l : ℕ), readLimb? b i s.mem = some l → l ≤ 0xffffffffffffe :=
+    coordPtr_zero b ▸ biasBounds?_le (biasBounds_readLimb? (isCoordPtr hb 0) hbX)
 
   -- `fd_f25519_t x1[1], y1[1]`
   obtain ⟨x1, s₁, hx1def, hs₁def, hs₁, hfitx1, hx1id, hx1off, hctr₁, -⟩ :=
@@ -243,5 +245,15 @@ theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
   · rw [if_pos hA, if_neg hB, if_neg fun h => hB (hsame.mp h).2]; rfl
   · rw [if_neg hA, if_pos hB, if_neg fun h => hA (hsame.mp h).1]; rfl
   · rw [if_neg hA, if_neg hB, if_neg fun h => hA (hsame.mp h).1]; rfl
+
+theorem fd_ed25519_point_eq_z1_conforms (a b : Pointer) (s : GlobalState)
+    (hs : s.WF)
+    (ha : IsPointPtr s.mem a)
+    (hb : IsPointPtr s.mem b)
+    (haLimbs : AllLimbBounds ha)
+    (hbLimbs : AllLimbBounds hb)
+    (haZUnit : IsUnit (readPoint ha).Z) :
+    fd_ed25519_point_eq_z1_spec a b s ha hb :=
+  fd_ed25519_point_eq_z1_conforms' a b s hs ha hb haLimbs (hbLimbs 0).bias (hbLimbs 1) haZUnit
 
 end Firedancer.Ref

@@ -18,5 +18,7 @@ abbrev fiat_25519_carry_square_spec (o p: Pointer) (s: GlobalState)
     readFieldElem (m := output_state.mem) (isFieldElemPtr_splice ho) = p_input * p_input
     ∧ LimbBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
+    -- all-zero limbs come only from an all-zero operand
+    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs p s.mem)
 
 end Firedancer.Ref

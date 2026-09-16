@@ -32,19 +32,6 @@ open InstCombine (LLVM)
 abbrev IsSlidesPtr (m : MemoryState) (p : Pointer) : Prop :=
   Fits m p (256 * 16) ∧ p.offset.toNat + 512 ≤ 2 ^ 64
 
-/-- The 32-byte little-endian scalar at `p`. -/
-def readScalar? (p : Pointer) (m : MemoryState) : Option (BitVec 256) := do
-  let blk ← m.live? p.id
-  return blk.bytes.extractLsb' p.offsetInBits 256
-
-theorem readScalar?_isSome {m : MemoryState} {p : Pointer} (h : IsScalarPtr m p) :
-    (readScalar? p m).isSome := by
-  obtain ⟨⟨blk, hblk, -⟩, -⟩ := h
-  simp [readScalar?, MemoryState.live?, hblk]
-
-def readScalar {m : MemoryState} {p : Pointer} (h : IsScalarPtr m p) : BitVec 256 :=
-  (readScalar? p m).get (readScalar?_isSome h)
-
 /-- `∑ k < K, slides[k] * 2 ^ k`, with `slides[k]` signed. -/
 def digitSum (w : BitVec 4096) : Nat → Int
   | 0 => 0
@@ -58,7 +45,7 @@ are untouched. Each entry of `w`, as a signed `short`, is zero or odd and at mos
 absolute value. For `bits ≤ 13` and `slides`, `n` in different blocks, the entries weighted by
 `2 ^ k` sum to `n`'s low 255 bits. -/
 abbrev fd_curve25519_scalar_wnaf_spec (slides n : Pointer) (bits : BitVec 32)
-    (s : GlobalState) (hn : IsScalarPtr s.mem n) : Prop :=
+    (s : GlobalState) (hn : IsByteBufPtr s.mem n) : Prop :=
   let invocation := runFunction (fd_curve25519_scalar_wnaf.denote
     (Ctxt.Valuation.ofHVector [.value bits, .value n, .value slides]ₕ))
 
@@ -67,6 +54,6 @@ abbrev fd_curve25519_scalar_wnaf_spec (slides n : Pointer) (bits : BitVec 32)
       ∧ (∀ k < 256, (w.extractLsb' (16 * k) 16 = 0 ∨ (w.extractLsb' (16 * k) 16).toInt % 2 = 1)
         ∧ (w.extractLsb' (16 * k) 16).toInt.natAbs ≤ 2 ^ bits.toNat)
       ∧ (bits.toNat ≤ 13 → slides.id ≠ n.id →
-        digitSum w 256 = ((readScalar hn).toNat % 2 ^ 255 : Nat))
+        digitSum w 256 = ((readBuf hn).toNat % 2 ^ 255 : Nat))
 
 end Firedancer.Common

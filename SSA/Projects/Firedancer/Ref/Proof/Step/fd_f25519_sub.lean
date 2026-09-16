@@ -20,11 +20,13 @@ theorem sub_step {dst src₀ src₁ : Pointer} {w : GlobalState} (hw : w.WF)
     ∃ w', StateT.run (runFunction (fd_f25519_sub.denote
         (Ctxt.Valuation.ofHVector [.value src₁, .value src₀, .value dst]ₕ))) w
         = .value ([.value dst]ₕ, w')
-      ∧ StepFacts dst (x₀ - x₁) w w' := by
-  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ :=
-    fd_f25519_sub_conforms dst src₀ src₁ w hw
-      (limbBounds_readLimb? h₀ hb₀) (biasBounds_readLimb? h₁ hb₁) hd h₀ h₁
-  refine ⟨w', hrun, StepFacts.of_splice hw hd heq ?_ (limbBounds_readLimb? _ hbnd)⟩
+      ∧ StepFacts dst (x₀ - x₁) w w'
+      -- all-zero limbs only if the subtrahend sits at the bias limbs
+      ∧ (ZeroLimbs dst w'.mem → ∀ i, biasLimb i ≤ readLimb i h₁) := by
+  have hc := fd_f25519_sub_conforms' dst src₀ src₁ w hw
+    (limbBounds_readLimb? h₀ hb₀) (biasBounds_readLimb? h₁ hb₁) hd h₀ h₁
+  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ := hc.1
+  refine ⟨w', hrun, StepFacts.of_splice hw hd heq ?_ (limbBounds_readLimb? _ hbnd), hc.2 w' hrun⟩
   rw [← hv₀, ← hv₁, ← hval]
   exact (Option.some_get _).symm
 

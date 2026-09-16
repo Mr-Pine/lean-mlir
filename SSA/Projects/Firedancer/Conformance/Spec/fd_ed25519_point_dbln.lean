@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_dbln
 import SSA.Projects.Firedancer.Ref.Spec.Point
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_dbln
 import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
@@ -16,8 +17,8 @@ for coordinate, not merely as points; neither reads `T`, so the inputs need
 only agree on `X`, `Y`, `Z`.
 
 Each side's bounds are the ones its callees need: ref's `fd_f25519_add_nr`
-takes tight `X`, `Y` and its `fd_f25519_sqr` a loose `Z`; avx512 takes `u44`
-lanes. `n < 256` because the `uchar` counter wraps at 256 and the loop then
+takes a bias-bounded `X` and tight `Y`, and its `fd_f25519_sqr` a loose `Z`;
+avx512 takes `u44` lanes. `n < 256` because the `uchar` counter wraps at 256 and the loop then
 never exits.
 -/
 
@@ -30,7 +31,7 @@ abbrev fd_ed25519_point_dbln_equivalent : Prop :=
   ∀ (s : GlobalState) (r a : Pointer) (n : BitVec 32),
   (hs : s.WF) →
   (hr : Ref.IsPointPtr s.mem r) → (ha : Ref.IsPointPtr s.mem a) →
-  (haX : ∀ (i : Fin 5) (l : ℕ), Ref.readLimb? a i s.mem = some l → l ≤ 0x8000000000000) →
+  (haX : Ref.BiasBounds? a s.mem) →
   (haY : ∀ (i : Fin 5) (l : ℕ),
     Ref.readLimb? (a.withOffset 40) i s.mem = some l → l ≤ 0x8000000000000) →
   (haZ : ∀ (i : Fin 5) (l : ℕ),

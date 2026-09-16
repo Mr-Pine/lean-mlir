@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_affine_is_small_order
 import SSA.Projects.Firedancer.Ref.Spec.Point
+import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Ref.Proof.RefWF -- Should move out of Proof
 
 /-!
@@ -32,10 +33,10 @@ operand.
 `apart` is empty: the region writes only through its own four allocas, which are
 fresh blocks, so no global needs to be held apart from anything a caller owns.
 
-`AllLimbBounds ha` is what the callees need of the argument.
+`ZeroRep` of `X` and tight `Y` are what the callees need of the argument.
 `fd_ed25519_point_to` copies limbs verbatim, so the `x` and `y` slots inherit
-the argument's bounds, which is what `fd_f25519_is_zero` and `fd_f25519_eq`'s
-first operand ask for.
+them: `fd_f25519_is_zero` asks `ZeroRep` of `x` and `y` (tight `y` gives it),
+and `fd_f25519_eq`'s first operand tight `y`. `Z` and `T` need no bound.
 -/
 
 namespace Firedancer.Ref
@@ -51,7 +52,7 @@ abbrev fd_ed25519_affine_is_small_order_spec (a : Pointer) (s : GlobalState)
   let P := readPoint ha
   let output_value : LLVM.IntW _ := .value (if (P.X, P.Y) ∈ lowOrder then 1#32 else 0#32)
 
-  s.RefWF [] → P.Z = 1 → OnCurve P.x P.y → AllLimbBounds ha →
+  s.RefWF [] → P.Z = 1 → OnCurve P.x P.y → ZeroRep a s.mem → LimbBounds (isCoordPtr ha 1) →
     ∃ s' : GlobalState, result = .value ([output_value]ₕ, s') ∧ s ≈ s'
 
 end Firedancer.Ref

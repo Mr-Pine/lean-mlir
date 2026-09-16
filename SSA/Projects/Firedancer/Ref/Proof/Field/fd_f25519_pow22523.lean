@@ -77,9 +77,10 @@ end Ids
 /-- What holds of a state part-way through the pow22523 derivation: the three
 locals hold the values `v₀ v₁ v₂` with tight limbs, and every block below the
 frame reads as it did on entry. The values change at every step -- only the
-frame clause is invariant. -/
+frame clause is invariant. `z₀ z₁ z₂` say what all-zero limbs in a local imply:
+`True` for a fresh local, all-zero limbs of the input once it is written. -/
 structure State (t₀ t₁ t₂ : Pointer) (n₀ : Nat) (s₀ : GlobalState)
-    (v₀ v₁ v₂ : ZMod _root_.p) (u : GlobalState) : Prop where
+    (v₀ v₁ v₂ : ZMod _root_.p) (z₀ z₁ z₂ : Prop) (u : GlobalState) : Prop where
   wf : u.WF
   fb : FrameBelow n₀ s₀ u
   p₀ : IsFieldElemPtr u.mem t₀
@@ -91,6 +92,9 @@ structure State (t₀ t₁ t₂ : Pointer) (n₀ : Nat) (s₀ : GlobalState)
   b₀ : LimbBounds p₀
   b₁ : LimbBounds p₁
   b₂ : LimbBounds p₂
+  zh₀ : ZeroLimbs t₀ u.mem → z₀
+  zh₁ : ZeroLimbs t₁ u.mem → z₁
+  zh₂ : ZeroLimbs t₂ u.mem → z₂
 
 /-! ### Rebuilding the state assertion after a step
 
@@ -100,11 +104,12 @@ else survives because the write touched only `dst`'s block. -/
 section Update
 
 variable {t₀ t₁ t₂ a o : Pointer} {n₀ : Nat} {s₀ : GlobalState}
-  {v₀ v₁ v₂ w : ZMod _root_.p} {u u' : GlobalState}
+  {v₀ v₁ v₂ w : ZMod _root_.p} {z₀ z₁ z₂ y : Prop} {u u' : GlobalState}
 
 theorem State.update₀ (ids : Ids t₀ t₁ t₂ a o n₀)
-    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u) (st : StepFacts t₀ w u u') :
-    State t₀ t₁ t₂ n₀ s₀ w v₁ v₂ u' := by
+    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u) (st : StepFacts t₀ w u u')
+    (hz : ZeroLimbs t₀ u'.mem → y) :
+    State t₀ t₁ t₂ n₀ s₀ w v₁ v₂ y z₁ z₂ u' := by
   obtain ⟨p₁, hv₁, hb₁⟩ := survive (st.live _ (Ne.symm ids.ne₁₀)) ps.p₁ ps.v₁h ps.b₁
   obtain ⟨p₂, hv₂, hb₂⟩ := survive (st.live _ (Ne.symm ids.ne₂₀)) ps.p₂ ps.v₂h ps.b₂
   exact {
@@ -112,11 +117,15 @@ theorem State.update₀ (ids : Ids t₀ t₁ t₂ a o n₀)
     fb := fun b hb => (st.live b (ids.below₀ hb)).trans (ps.fb b hb)
     p₀ := st.ptr, p₁ := p₁, p₂ := p₂
     v₀h := st.val, v₁h := hv₁, v₂h := hv₂
-    b₀ := st.bnd, b₁ := hb₁, b₂ := hb₂ }
+    b₀ := st.bnd, b₁ := hb₁, b₂ := hb₂
+    zh₀ := hz
+    zh₁ := fun h => ps.zh₁ (ZeroLimbs.of_live?_eq (st.live _ (Ne.symm ids.ne₁₀)) h)
+    zh₂ := fun h => ps.zh₂ (ZeroLimbs.of_live?_eq (st.live _ (Ne.symm ids.ne₂₀)) h) }
 
 theorem State.update₁ (ids : Ids t₀ t₁ t₂ a o n₀)
-    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u) (st : StepFacts t₁ w u u') :
-    State t₀ t₁ t₂ n₀ s₀ v₀ w v₂ u' := by
+    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u) (st : StepFacts t₁ w u u')
+    (hz : ZeroLimbs t₁ u'.mem → y) :
+    State t₀ t₁ t₂ n₀ s₀ v₀ w v₂ z₀ y z₂ u' := by
   obtain ⟨p₀, hv₀, hb₀⟩ := survive (st.live _ ids.ne₁₀) ps.p₀ ps.v₀h ps.b₀
   obtain ⟨p₂, hv₂, hb₂⟩ := survive (st.live _ (Ne.symm ids.ne₂₁)) ps.p₂ ps.v₂h ps.b₂
   exact {
@@ -124,11 +133,15 @@ theorem State.update₁ (ids : Ids t₀ t₁ t₂ a o n₀)
     fb := fun b hb => (st.live b (ids.below₁ hb)).trans (ps.fb b hb)
     p₀ := p₀, p₁ := st.ptr, p₂ := p₂
     v₀h := hv₀, v₁h := st.val, v₂h := hv₂
-    b₀ := hb₀, b₁ := st.bnd, b₂ := hb₂ }
+    b₀ := hb₀, b₁ := st.bnd, b₂ := hb₂
+    zh₀ := fun h => ps.zh₀ (ZeroLimbs.of_live?_eq (st.live _ ids.ne₁₀) h)
+    zh₁ := hz
+    zh₂ := fun h => ps.zh₂ (ZeroLimbs.of_live?_eq (st.live _ (Ne.symm ids.ne₂₁)) h) }
 
 theorem State.update₂ (ids : Ids t₀ t₁ t₂ a o n₀)
-    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u) (st : StepFacts t₂ w u u') :
-    State t₀ t₁ t₂ n₀ s₀ v₀ v₁ w u' := by
+    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u) (st : StepFacts t₂ w u u')
+    (hz : ZeroLimbs t₂ u'.mem → y) :
+    State t₀ t₁ t₂ n₀ s₀ v₀ v₁ w z₀ z₁ y u' := by
   obtain ⟨p₀, hv₀, hb₀⟩ := survive (st.live _ ids.ne₂₀) ps.p₀ ps.v₀h ps.b₀
   obtain ⟨p₁, hv₁, hb₁⟩ := survive (st.live _ ids.ne₂₁) ps.p₁ ps.v₁h ps.b₁
   exact {
@@ -136,22 +149,25 @@ theorem State.update₂ (ids : Ids t₀ t₁ t₂ a o n₀)
     fb := fun b hb => (st.live b (ids.below₂ hb)).trans (ps.fb b hb)
     p₀ := p₀, p₁ := p₁, p₂ := st.ptr
     v₀h := hv₀, v₁h := hv₁, v₂h := st.val
-    b₀ := hb₀, b₁ := hb₁, b₂ := st.bnd }
+    b₀ := hb₀, b₁ := hb₁, b₂ := st.bnd
+    zh₀ := fun h => ps.zh₀ (ZeroLimbs.of_live?_eq (st.live _ ids.ne₂₀) h)
+    zh₁ := fun h => ps.zh₁ (ZeroLimbs.of_live?_eq (st.live _ ids.ne₂₁) h)
+    zh₂ := hz }
 
 /-- Re-express the tracked values; the towers a derivation accumulates are
 `ring`-equal to the closed powers a statement wants. -/
-theorem State.cast (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u)
+theorem State.cast (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u)
     {w₀ w₁ w₂ : ZMod _root_.p}
     (h0 : w₀ = v₀) (h1 : w₁ = v₁) (h2 : w₂ = v₂) :
-    State t₀ t₁ t₂ n₀ s₀ w₀ w₁ w₂ u := h0 ▸ h1 ▸ h2 ▸ ps
+    State t₀ t₁ t₂ n₀ s₀ w₀ w₁ w₂ z₀ z₁ z₂ u := h0 ▸ h1 ▸ h2 ▸ ps
 
 end Update
 
 /-- The caller's operands (`a`, `o`) live below the frame, so every fact
 about them at entry survives to any `State` state. -/
 theorem State.operand_facts {t₀ t₁ t₂ : Pointer} {n₀ : Nat} {s₀ : GlobalState}
-    {v₀ v₁ v₂ : ZMod _root_.p} {u : GlobalState}
-    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u) {q : Pointer} (hqid : q.id.id < n₀)
+    {v₀ v₁ v₂ : ZMod _root_.p} {z₀ z₁ z₂ : Prop} {u : GlobalState}
+    (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u) {q : Pointer} (hqid : q.id.id < n₀)
     (hq : IsFieldElemPtr s₀.mem q) (hqb : LimbBounds.Loose hq) :
     ∃ hq' : IsFieldElemPtr u.mem q,
       readFieldElem hq' = readFieldElem hq ∧ LimbBounds.Loose hq' := by
@@ -216,7 +232,8 @@ lemma bb0_run (o a : Pointer) (s : GlobalState) (hs : s.WF)
       (V : fd_f25519_pow22523.Γout.Valuation),
       Ids t₀ t₁ t₂ a o s.alloc.nextFreeBlock
       ∧ State t₀ t₁ t₂ s.alloc.nextFreeBlock s
-          (readFieldElem ha ^ 31) (readFieldElem ha ^ 62) w₂ u
+          (readFieldElem ha ^ 31) (readFieldElem ha ^ 62) w₂
+          (ZeroLimbs a s.mem) (ZeroLimbs a s.mem) True u
       ∧ EntryEnv t₀ t₁ t₂ a o V
       ∧ StateT.run (fd_f25519_pow22523.denote
           (Ctxt.Valuation.ofHVector [.value a, .value o]ₕ)) s
@@ -256,7 +273,7 @@ lemma bb0_run (o a : Pointer) (s : GlobalState) (hs : s.WF)
     rw [ht₂def, hs₂def]
     exact readLimb?_afterAlloca_self s₁ i
   have ps₀ : State t₀ t₁ t₂ s.alloc.nextFreeBlock s
-      (readFieldElem pt₀) (readFieldElem pt₁) (readFieldElem pt₂) s₂ := {
+      (readFieldElem pt₀) (readFieldElem pt₁) (readFieldElem pt₂) True True True s₂ := {
     wf := hs₂WF, fb := fb₂
     p₀ := pt₀, p₁ := pt₁, p₂ := pt₂
     v₀h := rfl, v₁h := rfl, v₂h := rfl
@@ -265,45 +282,54 @@ lemma bb0_run (o a : Pointer) (s : GlobalState) (hs : s.WF)
     b₁ := limbBounds_of_readLimb? _ fun i l hl => by
       rw [hz₁ i, Option.some.injEq] at hl; omega
     b₂ := limbBounds_of_readLimb? _ fun i l hl => by
-      rw [hz₂ i, Option.some.injEq] at hl; omega }
+      rw [hz₂ i, Option.some.injEq] at hl; omega
+    zh₀ := fun _ => trivial, zh₁ := fun _ => trivial, zh₂ := fun _ => trivial }
+  -- all-zero limbs of the input, read at any state of the walk
+  have za : ∀ {u : GlobalState} {v₀ v₁ v₂ : ZMod p} {z₀ z₁ z₂ : Prop},
+      State t₀ t₁ t₂ s.alloc.nextFreeBlock s v₀ v₁ v₂ z₀ z₁ z₂ u →
+      ZeroLimbs a u.mem → ZeroLimbs a s.mem :=
+    fun ps => ZeroLimbs.of_live?_eq (ps.fb a.id ids.ida)
   -- %9: t₀ ← a²
   obtain ⟨hau₀, hva₀, hba₀⟩ := ps₀.operand_facts ids.ida ha halimb
-  obtain ⟨u₁, hrun₁, st₁⟩ := sqr_step ps₀.wf ps₀.p₀ hau₀ hva₀ hba₀
-  have ps₁ := State.update₀ ids ps₀ st₁
+  obtain ⟨u₁, hrun₁, st₁, hz₁⟩ := sqr_step' ps₀.wf ps₀.p₀ hau₀ hva₀ hba₀
+  have ps₁ := State.update₀ (y := ZeroLimbs a s.mem) ids ps₀ st₁ fun h => za ps₀ (hz₁ h)
   -- %10: t₁ ← a⁴
-  obtain ⟨u₂, hrun₂, st₂⟩ :=
-    sqr_step ps₁.wf ps₁.p₁ ps₁.p₀ ps₁.v₀h ps₁.b₀.loose
-  have ps₂ := State.update₁ ids ps₁ st₂
+  obtain ⟨u₂, hrun₂, st₂, hz₂⟩ :=
+    sqr_step' ps₁.wf ps₁.p₁ ps₁.p₀ ps₁.v₀h ps₁.b₀.loose
+  have ps₂ := State.update₁ (y := ZeroLimbs a s.mem) ids ps₁ st₂ fun h => ps₁.zh₀ (hz₂ h)
   -- %11: t₁ ← a⁸
-  obtain ⟨u₃, hrun₃, st₃⟩ :=
-    sqr_step ps₂.wf ps₂.p₁ ps₂.p₁ ps₂.v₁h ps₂.b₁.loose
-  have ps₃ := State.update₁ ids ps₂ st₃
+  obtain ⟨u₃, hrun₃, st₃, hz₃⟩ :=
+    sqr_step' ps₂.wf ps₂.p₁ ps₂.p₁ ps₂.v₁h ps₂.b₁.loose
+  have ps₃ := State.update₁ (y := ZeroLimbs a s.mem) ids ps₂ st₃ fun h => ps₂.zh₁ (hz₃ h)
   -- %12: t₁ ← a⁹
   obtain ⟨hau₃, hva₃, hba₃⟩ := ps₃.operand_facts ids.ida ha halimb
-  obtain ⟨u₄, hrun₄, st₄⟩ :=
-    mul_step ps₃.wf ps₃.p₁ hau₃ ps₃.p₁ hva₃ ps₃.v₁h hba₃
+  obtain ⟨u₄, hrun₄, st₄, hz₄⟩ :=
+    mul_step' ps₃.wf ps₃.p₁ hau₃ ps₃.p₁ hva₃ ps₃.v₁h hba₃
       ps₃.b₁.loose
-  have ps₄ := State.update₁ ids ps₃ st₄
+  have ps₄ := State.update₁ (y := ZeroLimbs a s.mem) ids ps₃ st₄ fun h =>
+    (hz₄ h).elim (za ps₃) ps₃.zh₁
   -- %13: t₀ ← a¹¹
-  obtain ⟨u₅, hrun₅, st₅⟩ :=
-    mul_step ps₄.wf ps₄.p₀ ps₄.p₀ ps₄.p₁ ps₄.v₀h ps₄.v₁h
+  obtain ⟨u₅, hrun₅, st₅, hz₅⟩ :=
+    mul_step' ps₄.wf ps₄.p₀ ps₄.p₀ ps₄.p₁ ps₄.v₀h ps₄.v₁h
       ps₄.b₀.loose
       ps₄.b₁.loose
-  have ps₅ := State.update₀ ids ps₄ st₅
+  have ps₅ := State.update₀ (y := ZeroLimbs a s.mem) ids ps₄ st₅ fun h =>
+    (hz₅ h).elim ps₄.zh₀ ps₄.zh₁
   -- %14: t₀ ← a²²
-  obtain ⟨u₆, hrun₆, st₆⟩ :=
-    sqr_step ps₅.wf ps₅.p₀ ps₅.p₀ ps₅.v₀h ps₅.b₀.loose
-  have ps₆ := State.update₀ ids ps₅ st₆
+  obtain ⟨u₆, hrun₆, st₆, hz₆⟩ :=
+    sqr_step' ps₅.wf ps₅.p₀ ps₅.p₀ ps₅.v₀h ps₅.b₀.loose
+  have ps₆ := State.update₀ (y := ZeroLimbs a s.mem) ids ps₅ st₆ fun h => ps₅.zh₀ (hz₆ h)
   -- %15: t₀ ← a³¹
-  obtain ⟨u₇, hrun₇, st₇⟩ :=
-    mul_step ps₆.wf ps₆.p₀ ps₆.p₁ ps₆.p₀ ps₆.v₁h ps₆.v₀h
+  obtain ⟨u₇, hrun₇, st₇, hz₇⟩ :=
+    mul_step' ps₆.wf ps₆.p₀ ps₆.p₁ ps₆.p₀ ps₆.v₁h ps₆.v₀h
       ps₆.b₁.loose
       ps₆.b₀.loose
-  have ps₇ := State.update₀ ids ps₆ st₇
+  have ps₇ := State.update₀ (y := ZeroLimbs a s.mem) ids ps₆ st₇ fun h =>
+    (hz₇ h).elim ps₆.zh₁ ps₆.zh₀
   -- %16: t₁ ← a⁶²
-  obtain ⟨u₈, hrun₈, st₈⟩ :=
-    sqr_step ps₇.wf ps₇.p₁ ps₇.p₀ ps₇.v₀h ps₇.b₀.loose
-  have ps₈ := State.update₁ ids ps₇ st₈
+  obtain ⟨u₈, hrun₈, st₈, hz₈⟩ :=
+    sqr_step' ps₇.wf ps₇.p₁ ps₇.p₀ ps₇.v₀h ps₇.b₀.loose
+  have ps₈ := State.update₁ (y := ZeroLimbs a s.mem) ids ps₇ st₈ fun h => ps₇.zh₀ (hz₈ h)
   refine ⟨t₀, t₁, t₂, readFieldElem pt₂, u₈,
     (.value t₁ ::ᵥ .value t₀ ::ᵥ .value t₀ ::ᵥ .value t₀ ::ᵥ .value t₁ ::ᵥ
      .value t₁ ::ᵥ .value t₁ ::ᵥ .value t₀ ::ᵥ .value t₂ ::ᵥ .value t₁ ::ᵥ .value t₀ ::ᵥ
@@ -595,187 +621,187 @@ private lemma inter_run {γmd γm₀ γm₁ γsd γss γc self next : Nat}
 section Loops
 
 variable {t₀ t₁ t₂ a o : Pointer} {n₀ : Nat} {s₀ : GlobalState}
-  {v₀ v₁ v₂ : ZMod p} {u : GlobalState}
+  {v₀ v₁ v₂ : ZMod p} {z₀ z₁ z₂ : Prop} {u : GlobalState}
   (V : fd_f25519_pow22523.Γout.Valuation)
 
 /-- The `loop_run` step obligation for a loop over `t₁`. -/
 private def step₁ (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ w v₂ s → ∃ s',
+    ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ w v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₁]ₕ))) s
         = .value ([.value t₁]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (w * w) v₂ s' := fun _ _ pw => by
-  obtain ⟨s', hrun, st⟩ := sqr_step pw.wf pw.p₁ pw.p₁ pw.v₁h pw.b₁.loose
-  exact ⟨s', hrun, State.update₁ ids pw st⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (w * w) v₂ z₀ z₁ z₂ s' := fun _ _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ := sqr_step' pw.wf pw.p₁ pw.p₁ pw.v₁h pw.b₁.loose
+  exact ⟨s', hrun, State.update₁ ids pw st fun h => pw.zh₁ (hz h)⟩
 
 /-- The `loop_run` step obligation for a loop over `t₂`. -/
 private def step₂ (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ w s → ∃ s',
+    ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ w z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₂, .value t₂]ₕ))) s
         = .value ([.value t₂]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (w * w) s' := fun _ _ pw => by
-  obtain ⟨s', hrun, st⟩ := sqr_step pw.wf pw.p₂ pw.p₂ pw.v₂h pw.b₂.loose
-  exact ⟨s', hrun, State.update₂ ids pw st⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (w * w) z₀ z₁ z₂ s' := fun _ _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ := sqr_step' pw.wf pw.p₂ pw.p₂ pw.v₂h pw.b₂.loose
+  exact ⟨s', hrun, State.update₂ ids pw st fun h => pw.zh₂ (hz h)⟩
 
 /-- `t₀ ← t₁ · t₀` (the mul of `^bb1`/`^bb7`). -/
 private def mulStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁, .value t₀]ₕ))) s
         = .value ([.value t₀]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) v₁ v₂ s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ :=
-    mul_step pw.wf pw.p₀ pw.p₁ pw.p₀ pw.v₁h pw.v₀h pw.b₁.loose pw.b₀.loose
-  exact ⟨s', hrun, State.update₀ ids pw st⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) v₁ v₂ (z₁ ∨ z₀) z₁ z₂ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ :=
+    mul_step' pw.wf pw.p₀ pw.p₁ pw.p₀ pw.v₁h pw.v₀h pw.b₁.loose pw.b₀.loose
+  exact ⟨s', hrun, State.update₀ ids pw st fun h => (hz h).imp pw.zh₁ pw.zh₀⟩
 
 /-- `t₁ ← t₀ ^ 2` (the sqr of `^bb1`/`^bb7`). -/
 private def sqrStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁]ₕ))) s
         = .value ([.value t₁]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₀ ^ 2) v₂ s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ := sqr_step pw.wf pw.p₁ pw.p₀ pw.v₀h pw.b₀.loose
-  exact ⟨s', hrun, (State.update₁ ids pw st).cast rfl (by ring) rfl⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₀ ^ 2) v₂ z₀ z₀ z₂ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ := sqr_step' pw.wf pw.p₁ pw.p₀ pw.v₀h pw.b₀.loose
+  exact ⟨s', hrun, (State.update₁ ids pw st fun h => pw.zh₀ (hz h)).cast rfl (by ring) rfl⟩
 
 /-- `t₁ ← t₁ · t₀` (the mul of `^bb3`/`^bb9`). -/
 private def mulStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁, .value t₁]ₕ))) s
         = .value ([.value t₁]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) v₂ s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ :=
-    mul_step pw.wf pw.p₁ pw.p₁ pw.p₀ pw.v₁h pw.v₀h pw.b₁.loose pw.b₀.loose
-  exact ⟨s', hrun, State.update₁ ids pw st⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) v₂ z₀ (z₁ ∨ z₀) z₂ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ :=
+    mul_step' pw.wf pw.p₁ pw.p₁ pw.p₀ pw.v₁h pw.v₀h pw.b₁.loose pw.b₀.loose
+  exact ⟨s', hrun, State.update₁ ids pw st fun h => (hz h).imp pw.zh₁ pw.zh₀⟩
 
 /-- `t₂ ← t₁ ^ 2` (the sqr of `^bb3`/`^bb9`). -/
 private def sqrStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₂]ₕ))) s
         = .value ([.value t₂]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₁ ^ 2) s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ := sqr_step pw.wf pw.p₂ pw.p₁ pw.v₁h pw.b₁.loose
-  exact ⟨s', hrun, (State.update₂ ids pw st).cast rfl rfl (by ring)⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₁ ^ 2) z₀ z₁ z₁ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ := sqr_step' pw.wf pw.p₂ pw.p₁ pw.v₁h pw.b₁.loose
+  exact ⟨s', hrun, (State.update₂ ids pw st fun h => pw.zh₁ (hz h)).cast rfl rfl (by ring)⟩
 
 /-- `t₁ ← t₂ · t₁` (the mul of `^bb5`/`^bb11`). -/
 private def mulStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₂, .value t₁]ₕ))) s
         = .value ([.value t₁]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₂ * v₁) v₂ s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ :=
-    mul_step pw.wf pw.p₁ pw.p₂ pw.p₁ pw.v₂h pw.v₁h pw.b₂.loose pw.b₁.loose
-  exact ⟨s', hrun, State.update₁ ids pw st⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₂ * v₁) v₂ z₀ (z₂ ∨ z₁) z₂ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ :=
+    mul_step' pw.wf pw.p₁ pw.p₂ pw.p₁ pw.v₂h pw.v₁h pw.b₂.loose pw.b₁.loose
+  exact ⟨s', hrun, State.update₁ ids pw st fun h => (hz h).imp pw.zh₂ pw.zh₁⟩
 
 /-- `t₁ ← t₁ ^ 2` (the sqr of `^bb5`/`^bb11`). -/
 private def sqrStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
-    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ s → ∃ s',
+    ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₁]ₕ))) s
         = .value ([.value t₁]ₕ, s')
-      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2) v₂ s' := fun _ pw => by
-  obtain ⟨s', hrun, st⟩ := sqr_step pw.wf pw.p₁ pw.p₁ pw.v₁h pw.b₁.loose
-  exact ⟨s', hrun, (State.update₁ ids pw st).cast rfl (by ring) rfl⟩
+      ∧ State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2) v₂ z₀ z₁ z₂ s' := fun _ pw => by
+  obtain ⟨s', hrun, st, hz⟩ := sqr_step' pw.wf pw.p₁ pw.p₁ pw.v₁h pw.b₁.loose
+  exact ⟨s', hrun, (State.update₁ ids pw st fun h => pw.zh₁ (hz h)).cast rfl (by ring) rfl⟩
 
 variable (ids : Ids t₀ t₁ t₂ a o n₀)
   {V : fd_f25519_pow22523.Γout.Valuation}
   (env : EntryEnv t₀ t₁ t₂ a o V)
-  (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ u)
+  (ps : State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ u)
 include ids env ps
 
 /-- `^bb2` (block index 1) → `^bb1` (index 0): four `sqr(t₁, t₁)`,
 so `t₁ ← t₁ ^ 2 ^ 4`. -/
 lemma bb2_run :
     Hop V u (hdr 1) (seg 0)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 4) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 4) v₂ z₀ z₁ z₂) :=
   loop_run V 5 (by norm_num) (by norm_num) env.v7 (by exact_mod_cast env.c5) env.c1
     (by rfl) _ (step₁ ids) ps
 
 /-- `^bb4` (index 3) → `^bb3` (index 2): nine `sqr(t₁, t₁)`. -/
 lemma bb4_run :
     Hop V u (hdr 3) (seg 2)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 9) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 9) v₂ z₀ z₁ z₂) :=
   loop_run V 10 (by norm_num) (by norm_num) env.v7 (by exact_mod_cast env.c10) env.c1
     (by rfl) _ (step₁ ids) ps
 
 /-- `^bb6` (index 5) → `^bb5` (index 4): nineteen `sqr(t₂, t₂)`. -/
 lemma bb6_run :
     Hop V u (hdr 5) (seg 4)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₂ ^ 2 ^ 19)) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₂ ^ 2 ^ 19) z₀ z₁ z₂) :=
   loop_run V 20 (by norm_num) (by norm_num) env.v8 (by exact_mod_cast env.c20) env.c1
     (by rfl) _ (step₂ ids) ps
 
 /-- `^bb8` (index 7) → `^bb7` (index 6): nine `sqr(t₁, t₁)`. -/
 lemma bb8_run :
     Hop V u (hdr 7) (seg 6)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 9) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 9) v₂ z₀ z₁ z₂) :=
   loop_run V 10 (by norm_num) (by norm_num) env.v7 (by exact_mod_cast env.c10) env.c1
     (by rfl) _ (step₁ ids) ps
 
 /-- `^bb10` (index 9) → `^bb9` (index 8): forty-nine `sqr(t₁, t₁)`. -/
 lemma bb10_run :
     Hop V u (hdr 9) (seg 8)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 49) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 49) v₂ z₀ z₁ z₂) :=
   loop_run V 50 (by norm_num) (by norm_num) env.v7 (by exact_mod_cast env.c50) env.c1
     (by rfl) _ (step₁ ids) ps
 
 /-- `^bb12` (index 11) → `^bb11` (index 10): ninety-nine `sqr(t₂, t₂)`. -/
 lemma bb12_run :
     Hop V u (hdr 11) (seg 10)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₂ ^ 2 ^ 99)) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ v₁ (v₂ ^ 2 ^ 99) z₀ z₁ z₂) :=
   loop_run V 100 (by norm_num) (by norm_num) env.v8 (by exact_mod_cast env.c100) env.c1
     (by rfl) _ (step₂ ids) ps
 
 /-- `^bb14` (index 13) → `^bb13` (index 12): forty-nine `sqr(t₁, t₁)`. -/
 lemma bb14_run :
     Hop V u (hdr 13) (seg 12)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 49) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ ^ 2 ^ 49) v₂ z₀ z₁ z₂) :=
   loop_run V 50 (by norm_num) (by norm_num) env.v7 (by exact_mod_cast env.c50) env.c1
     (by rfl) _ (step₁ ids) ps
 
 /-- `^bb1` (index 0) → `^bb4` (index 3): `t₀ ← t₁·t₀`, `t₁ ← t₀²`. -/
 lemma bb1_run :
     Hop V u (seg 0) (hdr 3)
-      (State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) v₂ (z₁ ∨ z₀) (z₁ ∨ z₀) z₂) :=
   inter_run V env.v6 env.v7 env.v6 env.v7 env.v6 env.c1 (by rfl)
     (mulStepA ids) (sqrStepA ids) ps
 
 /-- `^bb3` (index 2) → `^bb6` (index 5): `t₁ ← t₁·t₀`, `t₂ ← t₁²`. -/
 lemma bb3_run :
     Hop V u (seg 2) (hdr 5)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) ((v₁ * v₀) ^ 2)) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) z₀ (z₁ ∨ z₀) (z₁ ∨ z₀)) :=
   inter_run V env.v7 env.v7 env.v6 env.v8 env.v7 env.c1 (by rfl)
     (mulStepB ids) (sqrStepB ids) ps
 
 /-- `^bb5` (index 4) → `^bb8` (index 7): `t₁ ← t₂·t₁`, `t₁ ← t₁²`. -/
 lemma bb5_run :
     Hop V u (seg 4) (hdr 7)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ ((v₂ * v₁) ^ 2) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ ((v₂ * v₁) ^ 2) v₂ z₀ (z₂ ∨ z₁) z₂) :=
   inter_run V env.v7 env.v8 env.v7 env.v7 env.v7 env.c1 (by rfl)
     (mulStepC ids) (sqrStepC ids) ps
 
 /-- `^bb7` (index 6) → `^bb10` (index 9): `t₀ ← t₁·t₀`, `t₁ ← t₀²`. -/
 lemma bb7_run :
     Hop V u (seg 6) (hdr 9)
-      (State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) v₂ (z₁ ∨ z₀) (z₁ ∨ z₀) z₂) :=
   inter_run V env.v6 env.v7 env.v6 env.v7 env.v6 env.c1 (by rfl)
     (mulStepA ids) (sqrStepA ids) ps
 
 /-- `^bb9` (index 8) → `^bb12` (index 11): `t₁ ← t₁·t₀`, `t₂ ← t₁²`. -/
 lemma bb9_run :
     Hop V u (seg 8) (hdr 11)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) ((v₁ * v₀) ^ 2)) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ (v₁ * v₀) ((v₁ * v₀) ^ 2) z₀ (z₁ ∨ z₀) (z₁ ∨ z₀)) :=
   inter_run V env.v7 env.v7 env.v6 env.v8 env.v7 env.c1 (by rfl)
     (mulStepB ids) (sqrStepB ids) ps
 
 /-- `^bb11` (index 10) → `^bb14` (index 13): `t₁ ← t₂·t₁`, `t₁ ← t₁²`. -/
 lemma bb11_run :
     Hop V u (seg 10) (hdr 13)
-      (State t₀ t₁ t₂ n₀ s₀ v₀ ((v₂ * v₁) ^ 2) v₂) :=
+      (State t₀ t₁ t₂ n₀ s₀ v₀ ((v₂ * v₁) ^ 2) v₂ z₀ (z₂ ∨ z₁) z₂) :=
   inter_run V env.v7 env.v8 env.v7 env.v7 env.v7 env.c1 (by rfl)
     (mulStepC ids) (sqrStepC ids) ps
 
@@ -798,13 +824,13 @@ limbs, and the final state is the entry state plus that one splice, up to
 `popFrame` (`popFrame_equiv_splice` -- the frame is pinned to
 `s₀.alloc.nextFreeBlock`, which that lemma wants). -/
 lemma bb13_run {t₀ t₁ t₂ a o : Pointer} {s₀ : GlobalState}
-    {v₀ v₁ v₂ : ZMod p} {u : GlobalState}
+    {v₀ v₁ v₂ : ZMod p} {z₀ z₁ z₂ : Prop} {u : GlobalState}
     {V : fd_f25519_pow22523.Γout.Valuation}
     (hs₀ : s₀.WF) (ho : IsFieldElemPtr s₀.mem o) (ha : IsFieldElemPtr s₀.mem a)
     (halimb : LimbBounds.Loose ha)
     (ids : Ids t₀ t₁ t₂ a o s₀.alloc.nextFreeBlock)
     (env : EntryEnv t₀ t₁ t₂ a o V)
-    (ps : State t₀ t₁ t₂ s₀.alloc.nextFreeBlock s₀ v₀ v₁ v₂ u) :
+    (ps : State t₀ t₁ t₂ s₀.alloc.nextFreeBlock s₀ v₀ v₁ v₂ z₀ z₁ z₂ u) :
     ∃ (out : Fin 5 → BitVec 64) (final : GlobalState),
       StateT.run (fd_f25519_pow22523.blocks.run V (seg 12)) u
         = .value ([.value o]ₕ, final)
@@ -812,21 +838,22 @@ lemma bb13_run {t₀ t₁ t₂ a o : Pointer} {s₀ : GlobalState}
           = (v₁ * v₀) ^ 4 * readFieldElem ha
       ∧ LimbBounds (isFieldElemPtr_splice (p := o) (x := packLimbs out) ho)
       ∧ ({ s₀ with mem := s₀.mem.splice o (packLimbs out) } : GlobalState)
-          ≈ s₀.popFrame final.mem := by
+          ≈ s₀.popFrame final.mem
+      ∧ (ZeroLimbs o (s₀.mem.splice o (packLimbs out)) → (z₁ ∨ z₀) ∨ ZeroLimbs a s₀.mem) := by
   -- `t₀ ← t₁·t₀`, `t₀ ← t₀²`, `t₀ ← t₀²`
-  obtain ⟨u₁, hrun₁, st₁⟩ :=
-    mul_step ps.wf ps.p₀ ps.p₁ ps.p₀ ps.v₁h ps.v₀h ps.b₁.loose ps.b₀.loose
-  have ps₁ := State.update₀ ids ps st₁
-  obtain ⟨u₂, hrun₂, st₂⟩ := sqr_step ps₁.wf ps₁.p₀ ps₁.p₀ ps₁.v₀h ps₁.b₀.loose
-  have ps₂ := State.update₀ ids ps₁ st₂
-  obtain ⟨u₃, hrun₃, st₃⟩ := sqr_step ps₂.wf ps₂.p₀ ps₂.p₀ ps₂.v₀h ps₂.b₀.loose
-  have ps₃ := State.update₀ ids ps₂ st₃
+  obtain ⟨u₁, hrun₁, st₁, hz₁⟩ :=
+    mul_step' ps.wf ps.p₀ ps.p₁ ps.p₀ ps.v₁h ps.v₀h ps.b₁.loose ps.b₀.loose
+  have ps₁ := State.update₀ ids ps st₁ fun h => (hz₁ h).imp ps.zh₁ ps.zh₀
+  obtain ⟨u₂, hrun₂, st₂, hz₂⟩ := sqr_step' ps₁.wf ps₁.p₀ ps₁.p₀ ps₁.v₀h ps₁.b₀.loose
+  have ps₂ := State.update₀ ids ps₁ st₂ fun h => ps₁.zh₀ (hz₂ h)
+  obtain ⟨u₃, hrun₃, st₃, hz₃⟩ := sqr_step' ps₂.wf ps₂.p₀ ps₂.p₀ ps₂.v₀h ps₂.b₀.loose
+  have ps₃ := State.update₀ ids ps₂ st₃ fun h => ps₂.zh₀ (hz₃ h)
   -- `o ← t₀·a`: both operands live below the frame
   have po : IsFieldElemPtr u₃.mem o :=
     isFieldElemPtr_of_live?_eq (ps₃.fb o.id ids.ido) ho
   obtain ⟨pa, hva, hba⟩ := ps₃.operand_facts ids.ida ha halimb
-  obtain ⟨u₄, hrun₄, st₄⟩ :=
-    mul_step ps₃.wf po ps₃.p₀ pa ps₃.v₀h hva ps₃.b₀.loose hba
+  obtain ⟨u₄, hrun₄, st₄, hz₄⟩ :=
+    mul_step' ps₃.wf po ps₃.p₀ pa ps₃.v₀h hva ps₃.b₀.loose hba
   obtain ⟨x, hx⟩ := st₄.splice
   -- `o` in the final state is the entry `o` plus the last write
   have hlive : (s₀.mem.splice o x).live? o.id = u₄.mem.live? o.id :=
@@ -834,7 +861,10 @@ lemma bb13_run {t₀ t₁ t₂ a o : Pointer} {s₀ : GlobalState}
   refine ⟨fun i => x.extractLsb' (64 * i.toNat) 64, u₄, ?run, ?rest⟩
   case rest =>
     rw [packLimbs_extractLsb']
-    refine ⟨?val, ?bnd, ?equiv⟩
+    refine ⟨?val, ?bnd, ?equiv, fun h => ?zero⟩
+    case zero =>
+      exact (hz₄ (ZeroLimbs.of_live?_eq hlive h)).imp ps₃.zh₀
+        (ZeroLimbs.of_live?_eq (ps₃.fb a.id ids.ida))
     case val =>
       refine (readFieldElem_eq_of
         ((readFieldElem?_of_live?_eq hlive).trans
@@ -901,9 +931,10 @@ theorem fd_f25519_pow22523_conforms (o a : Pointer) (s : GlobalState)
           = readFieldElem ha ^ (2 ^ 252 - 3)
       ∧ LimbBounds (isFieldElemPtr_splice (p := o) (x := packLimbs out) ho)
       ∧ ({ s with mem := s.mem.splice o (packLimbs out) } : GlobalState)
-          ≈ s.popFrame final.mem by
-    obtain ⟨out, final, hrun, hval, hbnd, heq⟩ := h
-    exact ⟨out, hval, hbnd, s.popFrame final.mem, run_runFunction hrun, heq⟩
+          ≈ s.popFrame final.mem
+      ∧ (ZeroLimbs o (s.mem.splice o (packLimbs out)) → ZeroLimbs a s.mem) by
+    obtain ⟨out, final, hrun, hval, hbnd, heq, hzero⟩ := h
+    exact ⟨out, hval, hbnd, ⟨s.popFrame final.mem, run_runFunction hrun, heq⟩, hzero⟩
   -- Everything left is the walk from `^bb2` with the counter at `1`.
   rw [hentry]
   clear hentry
@@ -921,7 +952,8 @@ theorem fd_f25519_pow22523_conforms (o a : Pointer) (s : GlobalState)
   obtain ⟨u, hu, ps⟩ := bb11_run ids env ps; rw [hu]; rename_i u' st'; clear hu st' u'
   obtain ⟨u, hu, ps⟩ := bb14_run ids env ps; rw [hu]; rename_i u' st'; clear hu st' u'
   obtain ⟨out, u, hu, ps⟩ := bb13_run hs ho ha halimb ids env ps; rw [hu]; rename_i u' st'; clear hu st' u'
-  refine ⟨out, u, by rfl, ?_, ps.right⟩
+  -- the flags are towers of the input's all-zero limbs
+  refine ⟨out, u, by rfl, ?_, ps.2.1, ps.2.2.1, fun h => by simpa only [or_self] using ps.2.2.2 h⟩
 
   rw [ps.left]
   ring

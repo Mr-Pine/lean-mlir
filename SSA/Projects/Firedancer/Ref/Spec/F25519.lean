@@ -2,6 +2,7 @@ import Mathlib.Data.Fin.VecNotation
 import SSA.Projects.Firedancer.Curve
 import SSA.Projects.Firedancer.Ed25519
 import SSA.Projects.SLLVM.Dialect
+import SSA.Projects.Firedancer.ByteBuf
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -66,37 +67,15 @@ theorem readFieldElem?_isSome {m : MemoryState} {p : Pointer} (h : IsFieldElemPt
       fun i => (Option.some_get _).symm⟩
   simp [readFieldElem?, hl]
 
-/-- The 32-byte little-endian buffer at `p`, read as one 256-bit word. -/
-def readBuf? (p: Pointer) (m: MemoryState) : Option (BitVec 256) := do
-  let liveBlock ← m.live? p.id
-  return liveBlock.bytes.extractLsb' p.offsetInBits 256
-
 /-- `fiat_25519_from_bytes` masks the top byte to 7 bits, so only the low 255
 bits of the buffer contribute. Non-canonical encodings are accepted: the result
 is reduced mod `p`, not rejected. -/
 def decodeBytes (buf: BitVec 256) : ZMod p := ((buf.extractLsb' 0 255).toNat : ZMod p)
 
-abbrev IsByteBufPtr (m: MemoryState) (p: Pointer) : Prop :=
-  Fits m p (32 * 8) ∧ p.offset.toNat + 32 ≤ 2^64
-
-theorem readBuf?_isSome {m : MemoryState} {p : Pointer} (h : IsByteBufPtr m p) :
-    (readBuf? p m).isSome := by
-  obtain ⟨⟨block, hblk, -⟩, -⟩ := h
-  have hlive : m.live? p.id = some block := by
-    simp only [MemoryState.live?, hblk]
-  simp [readBuf?, hlive]
-
-def readBuf {p: Pointer} {m: MemoryState} (h: IsByteBufPtr m p) := (readBuf? p m).get (readBuf?_isSome h)
-
 /-- A store leaves live blocks and their sizes alone, so a field element that
 fitted at `q` before still fits after a splice anywhere. -/
 theorem isFieldElemPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitVec w}
     (h : IsFieldElemPtr m q) : IsFieldElemPtr (m.splice p x) q :=
-  ⟨fits_splice h.left, h.right⟩
-
-/-- The buffer counterpart of `isFieldElemPtr_splice`. -/
-theorem isByteBufPtr_splice {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitVec w}
-    (h : IsByteBufPtr m q) : IsByteBufPtr (m.splice p x) q :=
   ⟨fits_splice h.left, h.right⟩
 
 def readFieldElem {p: Pointer} {m: MemoryState} (h: IsFieldElemPtr m p) := (readFieldElem? p m).get (readFieldElem?_isSome h)
@@ -160,5 +139,18 @@ theorem limbBounds_of_equiv {s s' : GlobalState} (h : s ≈ s') {q : Pointer}
 theorem readFieldElem?_of_equiv {s s' : GlobalState} (h : s ≈ s') (p : Pointer) :
     readFieldElem? p s.mem = readFieldElem? p s'.mem := by
   simp only [readFieldElem?, readLimb?_of_equiv h]
+
+/-- All five limbs at `p` read `0`: the one representation of zero that
+`fiat_25519_opp` maps to `2 · p` rather than to a pattern of zero. -/
+abbrev ZeroLimbs (p : Pointer) (m : MemoryState) : Prop := ∀ i : Fin 5, readLimb? p i m = some 0
+
+/-- `ZeroLimbs` reads only `p`'s block. -/
+theorem ZeroLimbs.of_live?_eq {m m' : MemoryState} {p : Pointer}
+    (h : m'.live? p.id = m.live? p.id) (hz : ZeroLimbs p m') : ZeroLimbs p m := by
+  intro i; rw [← hz i]; simp only [readLimb?, h]
+
+/-- ... and so survives `≈`. -/
+theorem ZeroLimbs.of_equiv {s s' : GlobalState} (h : s ≈ s') {p : Pointer}
+    (hz : ZeroLimbs p s'.mem) : ZeroLimbs p s.mem := fun i => (readLimb?_of_equiv h p i).trans (hz i)
 
 end Firedancer.Ref

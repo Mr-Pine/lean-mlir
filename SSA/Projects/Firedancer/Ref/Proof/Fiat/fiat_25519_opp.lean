@@ -68,10 +68,13 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
             StateT.run (runFunction (fiat_25519_opp.denote
                 (Ctxt.Valuation.ofHVector [.value q, .value o]ₕ))) s = .value ([]ₕ, s')
           ∧ output_state ≈ s')
-        ∧ readFieldElem? o output_state.mem = Neg.neg <$> readFieldElem? q s.mem
-        ∧ BiasBounds? o output_state.mem by
-      obtain ⟨out, hrun, hval, hbnd⟩ := h
-      refine ⟨out, ?_, biasBounds_of_readLimb? _ hbnd, hrun⟩
+        ∧ (readFieldElem? o output_state.mem = Neg.neg <$> readFieldElem? q s.mem
+          ∧ BiasBounds? o output_state.mem)
+        ∧ ∀ (i : Fin 5) (l : ℕ), readLimb? q i s.mem = some l →
+            readLimb? o i output_state.mem = some (biasLimb i - l) by
+      obtain ⟨out, hrun, ⟨hval, hbnd⟩, hlimbs⟩ := h
+      refine ⟨out, ?_, biasBounds_of_readLimb? _ hbnd, hrun,
+        fun i => hlimbs i _ (Option.some_get _).symm⟩
       refine readFieldElem_eq_of ?_
       rw [hval, show readFieldElem? q s.mem = some (readFieldElem hq) from (Option.some_get _).symm]
       rfl
@@ -82,9 +85,16 @@ theorem fiat_25519_opp_conforms (o q: Pointer) (s: GlobalState)
     let output := opp_repr qinput
     let outputBV := BitVec.ofNat 64 ∘ output
 
-    refine ⟨packLimbs outputBV, ?_⟩
-
-    constructor
+    refine ⟨packLimbs outputBV, ?left, ?right, ?limbs⟩
+    case limbs =>
+      intro i l hl
+      have hql : qinput i = l := Option.some.inj ((hqinput i).symm.trans hl)
+      have hlt : output i < 2 ^ 64 :=
+        ((opp_repr_bounds qinput i).trans (biasLimb_le i)).trans_lt (by norm_num)
+      rw [limbReadbackPack s.mem o outputBV ho.left i]
+      show some (BitVec.ofNat 64 (output i)).toNat = _
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, ← hql]
+      fin_cases i <;> rfl
     case right =>
       simp [readFieldElem?, hqinput, ho, limbReadbackPack, outputBV]
       have qinput_bounds (j: Fin 5) : qinput j ≤ biasLimb j := by

@@ -1,6 +1,6 @@
 import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+import SSA.Projects.Firedancer.Ref.Spec.Bias
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -21,5 +21,7 @@ abbrev fiat_25519_sub_spec (o p q: Pointer) (s: GlobalState)
     -- no carry, so the limbs come back at the loose bound
     ∧ LimbBounds.Loose (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ (∃ s' : GlobalState , result = .value ([]ₕ, s') ∧ output_state ≈ s')
+    -- limbwise `bias + p - q`
+    ∧ (∀ i, readLimb? o i output_state.mem = some (biasLimb i + readLimb i hp - readLimb i hq))
 
 end Firedancer.Ref

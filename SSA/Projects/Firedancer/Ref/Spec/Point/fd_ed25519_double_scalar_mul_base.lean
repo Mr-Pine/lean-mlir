@@ -21,7 +21,7 @@ def BaseTableHolds (s : GlobalState) (Bt : ℕ → Ed25519.PrecomputedPoint) : P
 
 /-- With `a` a well-formed point at `Z = 1` and the base-point table holding `(2k+1)·B`: returns
 `r`, writes nothing but `r`, stored `X, Y, Z, T` (byte offsets 0, 40, 120, 80), and `r` then
-represents `(n₁ mod 2²⁵⁵)·a + (n₂ mod 2²⁵⁵)·B`. -/
+represents `(n₁ mod 2²⁵⁵)·a + (n₂ mod 2²⁵⁵)·B`, its limbs tight. -/
 abbrev fd_ed25519_double_scalar_mul_base_spec (r n1 a n2 : Pointer) (s : GlobalState) : Prop :=
   let invocation := runFunction (fd_ed25519_double_scalar_mul_base.denote
     (Ctxt.Valuation.ofHVector [.value n2, .value a, .value n1, .value r]ₕ))
@@ -43,5 +43,6 @@ abbrev fd_ed25519_double_scalar_mul_base_spec (r n1 a n2 : Pointer) (s : GlobalS
     output_state ≈ s'
     ∧ (readPoint hpt).Represents (((readBuf hn1).toNat % 2 ^ 255) • (readPoint ha).toAffine hA
       + ((readBuf hn2).toNat % 2 ^ 255) • Ed25519.basePoint.toAffine Ed25519.wellFormed_basePoint)
+    ∧ AllLimbBounds hpt
 
 end Firedancer.Ref

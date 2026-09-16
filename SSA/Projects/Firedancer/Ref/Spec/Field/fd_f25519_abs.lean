@@ -31,5 +31,7 @@ abbrev fd_f25519_abs_spec (o a : Pointer) (s : GlobalState)
     ∧ BiasBounds (m := output_state.mem) (isFieldElemPtr_splice ho)
     ∧ limbSum (m := output_state.mem) (isFieldElemPtr_splice ho) < 2 ^ 256 - 38
     ∧ (∃ s' : GlobalState , result = .value ([.value o]ₕ, s') ∧ output_state ≈ s')
+    -- all-zero limbs come only from an all-zero `a`: `-a`'s never are
+    ∧ (ZeroLimbs o output_state.mem → ZeroLimbs a s.mem)
 
 end Firedancer.Ref

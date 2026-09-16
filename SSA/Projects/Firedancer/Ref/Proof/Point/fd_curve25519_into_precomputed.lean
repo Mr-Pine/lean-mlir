@@ -52,6 +52,38 @@ theorem set_step {dst src : Pointer} {w : GlobalState} (hw : w.WF)
     limbBounds_of_readLimb? _ fun i l hi =>
       limbBounds_readLimb? h.ptr h.bnd i l ((hl i).symm.trans hi)⟩
 
+/-- `addNr_step` with `src₁` below `0xffffffffffffe`, as a bias-bounded `X` is. -/
+theorem addNr_step' {dst src₀ src₁ : Pointer} {w : GlobalState} (hw : w.WF)
+    (hd : IsFieldElemPtr w.mem dst) {x₀ x₁ : ZMod _root_.p}
+    (h₀ : Holds w.mem src₀ x₀ 0x8000000000000) (h₁ : Holds w.mem src₁ x₁ 0xffffffffffffe)
+    {P : Prop}
+    (k : ∀ w', StateT.run (runFunction (fd_f25519_add_nr.denote
+        (Ctxt.Valuation.ofHVector [.value src₁, .value src₀, .value dst]ₕ))) w
+        = .value ([.value dst]ₕ, w') →
+      Wrote dst w w' → Holds w'.mem dst (x₀ + x₁) 0x18000000000000 → P) : P := by
+  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ :=
+    fd_f25519_add_nr_conforms dst src₀ src₁ w hw (limbBounds_readLimb? h₀.ptr h₀.bnd)
+      (limbBounds_readLimb? h₁.ptr h₁.bnd) hd h₀.ptr h₁.ptr
+  have st := Wrote.of_splice hw hd heq
+  exact k w' hrun st ⟨st.ptr, (readFieldElem_eq_splice hd heq).trans
+    (hval.trans (by rw [h₀.val, h₁.val])), limbBounds_of_splice heq (limbBounds_readLimb? _ hbnd)⟩
+
+/-- `subNr_step` with `src₁` bias-bounded. -/
+theorem subNr_step' {dst src₀ src₁ : Pointer} {w : GlobalState} (hw : w.WF)
+    (hd : IsFieldElemPtr w.mem dst) {x₀ x₁ : ZMod _root_.p}
+    (h₀ : Holds w.mem src₀ x₀ 0x8000000000000) (h₁ : Holds w.mem src₁ x₁ 0xffffffffffffe)
+    (hb₁ : BiasBounds h₁.ptr) {P : Prop}
+    (k : ∀ w', StateT.run (runFunction (fd_f25519_sub_nr.denote
+        (Ctxt.Valuation.ofHVector [.value src₁, .value src₀, .value dst]ₕ))) w
+        = .value ([.value dst]ₕ, w') →
+      Wrote dst w w' → Holds w'.mem dst (x₀ - x₁) 0x18000000000000 → P) : P := by
+  obtain ⟨out, hval, hbnd, w', hrun, heq⟩ :=
+    fd_f25519_sub_nr_conforms dst src₀ src₁ w hw (limbBounds_readLimb? h₀.ptr h₀.bnd)
+      (biasBounds_readLimb? h₁.ptr hb₁) hd h₀.ptr h₁.ptr
+  have st := Wrote.of_splice hw hd heq
+  exact k w' hrun st ⟨st.ptr, (readFieldElem_eq_splice hd heq).trans
+    (hval.trans (by rw [h₀.val, h₁.val])), limbBounds_of_splice heq (limbBounds_readLimb? _ hbnd)⟩
+
 theorem mul_step' {dst src₀ src₁ : Pointer} {w : GlobalState} (hw : w.WF)
     (hd : IsFieldElemPtr w.mem dst) {x₀ x₁ : ZMod _root_.p}
     (h₀ : Holds w.mem src₀ x₀ 0x18000000000000) (h₁ : Holds w.mem src₁ x₁ 0x18000000000000)
@@ -105,8 +137,10 @@ theorem fd_curve25519_into_precomputed_conforms (r : Pointer) (s : GlobalState)
   have hcr : IsFieldElemPtr s.mem r := coordPtr_zero r ▸ isCoordPtr hr 0
   have hP := readPoint_eq_of hr (h0 := hcr) (h1 := isCoordPtr hr 1)
     (h2 := isCoordPtr hr 2) (h3 := isCoordPtr hr 3) rfl rfl rfl rfl
-  have hX : Holds sL.mem r (readPoint hr).X 0x8000000000000 :=
-    Holds.carry ⟨hcr, (congrArg Point.X hP).symm, hbX⟩ (fb r.id hnr)
+  have hX : Holds sL.mem r (readPoint hr).X 0xffffffffffffe :=
+    Holds.carry ⟨hcr, (congrArg Point.X hP).symm, fun i => (hbX i).trans (biasLimb_le i)⟩
+      (fb r.id hnr)
+  have hXb : BiasBounds hX.ptr := carryBias (fb r.id hnr) hbX
   have hY : Holds sL.mem (r.withOffset 40) (readPoint hr).Y 0x8000000000000 :=
     Holds.carry ⟨_, (congrArg Point.Y hP).symm, hbY⟩ (fb r.id hnr)
   have hT : Holds sL.mem (r.withOffset 80) (readPoint hr).T 0x18000000000000 :=
@@ -115,13 +149,13 @@ theorem fd_curve25519_into_precomputed_conforms (r : Pointer) (s : GlobalState)
     Holds.carry ⟨hgk.ptr, hgk.value, hgk.bnd.loose⟩ (fb pk.id hnk)
 
   -- `%5`: `add = r->Y + r->X`
-  refine addNr_step hwf (hlf 0) hY hX fun u₁ hrun₁ st₁ HA => ?_
+  refine addNr_step' hwf (hlf 0) hY hX fun u₁ hrun₁ st₁ HA => ?_
   peel_call hrun₁
 
   -- `%6`: `sub = r->Y - r->X`
-  refine subNr_step st₁.wf (st₁.isFieldElemPtr (hlf 1))
+  refine subNr_step' st₁.wf (st₁.isFieldElemPtr (hlf 1))
     (st₁.holds hY (.inl (fieldLocal_ne_below hnr))) (st₁.holds hX (.inl (fieldLocal_ne_below hnr)))
-    fun u₂ hrun₂ st₂ HS => ?_
+    (carryBias (st₁.live _ (fieldLocal_ne_below hnr)) hXb) fun u₂ hrun₂ st₂ HS => ?_
   peel_call hrun₂
 
   -- `%7`: `r->X = sub`

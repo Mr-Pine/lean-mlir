@@ -28,6 +28,12 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
 
+/-- `limbBounds_congr` for `BiasBounds`. -/
+theorem biasBounds_congr {m : MemoryState} {q₁ q₂ : Pointer} (hq : q₁ = q₂)
+    {h₁ : IsFieldElemPtr m q₁} {h₂ : IsFieldElemPtr m q₂} (hb : BiasBounds h₁) :
+    BiasBounds h₂ := by
+  subst hq; exact hb
+
 namespace Dbln
 
 /-! ### Later stores at `r` absorb earlier ones -/
@@ -109,10 +115,16 @@ theorem coordBounds {m : MemoryState} {p : Pointer} {B : ℕ} (h : IsPointPtr m 
     ∀ (j : Fin 5) (l : ℕ), readLimb? q j m = some l → l ≤ B := by
   subst hq; exact limbBounds_readLimb? _ hb
 
+/-- ... and `BiasBounds`. -/
+theorem coordBias {m : MemoryState} {p : Pointer} (h : IsPointPtr m p) (i : Fin 4)
+    (q : Pointer) (hq : p.withOffset (i * (5 * 8)) = q) (hb : BiasBounds (isCoordPtr h i)) :
+    BiasBounds? q m := by
+  subst hq; exact biasBounds_readLimb? _ hb
+
 /-- `partial_dbl(t, src)`: `t` becomes `partialDbl src`, nothing but `t`'s block moves. -/
 theorem partialDbl_step {t src : Pointer} {w : GlobalState} (hw : w.WF)
     (ht : IsPointPtr w.mem t) (hsrc : IsPointPtr w.mem src)
-    (bX : ∀ (i : Fin 5) (l : ℕ), readLimb? src i w.mem = some l → l ≤ 0x8000000000000)
+    (bX : BiasBounds? src w.mem)
     (bY : ∀ (i : Fin 5) (l : ℕ), readLimb? (src.withOffset 40) i w.mem = some l → l ≤ 0x8000000000000)
     (bZ : ∀ (i : Fin 5) (l : ℕ), readLimb? (src.withOffset 120) i w.mem = some l → l ≤ 0x18000000000000) :
     ∃ w' : GlobalState,
@@ -271,7 +283,7 @@ theorem loop_step {s : GlobalState} {r a t : Pointer} {n : BitVec 32} {P : Point
     proj_step inv.wf hrt inv.hr inv.ht inv.bX inv.bY inv.bZ inv.bT
   have ht₁ : IsPointPtr u₁.mem t := isPointPtr_of_live?_eq (hfr₁ t.id hrt) inv.ht
   obtain ⟨u₂, hrun₂, hu₂, hfr₂, ht₂, hv₂, bX₂, bY₂, bZ₂, bT₂⟩ :=
-    partialDbl_step hu₁ ht₁ hr₁ bX₁ bY₁ bZ₁
+    partialDbl_step hu₁ ht₁ hr₁ (biasBounds?_of_limbBounds bX₁) bY₁ bZ₁
   have hlr₂ : u₂.mem.live? r.id = u₁.mem.live? r.id := hfr₂ r.id (Ne.symm hrt)
   refine ⟨?Vout, u₂, ?run, ?inv⟩
   case inv =>
@@ -309,7 +321,7 @@ end Dbln
 
 theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : GlobalState)
     (hs : s.WF) (hr : IsPointPtr s.mem r) (ha : IsPointPtr s.mem a)
-    (haX : LimbBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
+    (haX : BiasBounds (isCoordPtr ha 0)) (haY : LimbBounds (isCoordPtr ha 1))
     (haZ : LimbBounds.Loose (isCoordPtr ha 3))
     (hn : n.toInt < 256) :
     fd_ed25519_point_dbln_spec r a n s hr ha := by
@@ -346,7 +358,8 @@ theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : Glob
   -- `partial_dbl(t, a)`
   obtain ⟨u₀, hrun₀, hu₀, hfr₀, ht₀, hv₀, bX₀, bY₀, bZ₀, bT₀⟩ :=
     Dbln.partialDbl_step hs₁ ht₁ ha₁
-      (limbBounds_of_live?_eq (p := a) hla (Dbln.coordBounds ha 0 a (coordPtr_zero a) haX))
+      (Dbln.coordBias ha₁ 0 a (coordPtr_zero a)
+        (biasBounds_of_live?_eq (q := a.withOffset ((0 : Fin 4) * (5 * 8))) hla haX))
       (limbBounds_of_live?_eq (p := a.withOffset 40) hla (Dbln.coordBounds ha 1 _ rfl haY))
       (limbBounds_of_live?_eq (p := a.withOffset 120) hla (Dbln.coordBounds ha 3 _ rfl haZ))
   have hlr₀ : u₀.mem.live? r.id = s.mem.live? r.id := (hfr₀ r.id (Ne.symm hrt)).trans hlr

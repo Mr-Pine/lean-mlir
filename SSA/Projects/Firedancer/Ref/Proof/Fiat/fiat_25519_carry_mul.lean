@@ -39,7 +39,7 @@ theorem fiat_25519_carry_mul_conforms (o p q: Pointer) (s: GlobalState)
       show (BitVec.ofNat 64 (output i)).toNat = output i
       rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hi]
 
-    refine ⟨packLimbs outputBV, ?repr, ?exec, ?bound⟩
+    refine ⟨packLimbs outputBV, ?repr, ?exec, ?bound, ?zero⟩
     case repr =>
       have hext : (fun i : Fin 5 =>
           ((packLimbs outputBV).extractLsb' (64 * i.toNat) 64).toNat) = output := by
@@ -55,6 +55,15 @@ theorem fiat_25519_carry_mul_conforms (o p q: Pointer) (s: GlobalState)
       rw [limbReadbackPack s.mem o outputBV (show Fits s.mem o (5 * 64) from ho.left) i] at hl
       rw [← Option.some.inj hl]
       fin_cases i <;> simpa [hlimb] using hcb _
+    case zero =>
+      intro hz
+      have h0 : ∀ i, output i = 0 := fun i => by
+        have := (limbReadbackPack s.mem o outputBV ho.left i).symm.trans (hz i)
+        rw [hlimb i] at this
+        exact Option.some.inj this
+      rcases carry_product_repr_eq_zero pinput qinput hpb hqb h0 with h | h
+      · exact Or.inl fun i => (hpinput i).trans (by rw [h i])
+      · exact Or.inr fun i => (hqinput i).trans (by rw [h i])
 
     obtain ⟨outMem, houtMem⟩ : ∃ m : MemoryState,
         m = ((((s.mem.splice o (outputBV 0)).splice (o.withOffset 8) (outputBV 1)).splice
