@@ -176,15 +176,27 @@ the goal small. -/
 elab "reduce_cfg_indices" : tactic => do
   liftMetaTactic1 fun g => do
     let ty ← instantiateMVars (← g.getType)
+    -- v4.34: a callee whose `entry`/`blocks` are still folded keeps `cfg.Γout`/`cfg.sigs`
+    -- in *its own* type, so reducing the copies beside it only breaks the `BlockCom.call`
+    -- node. Collect those programs first and leave their projections alone.
+    let folded ← IO.mkRef (#[] : Array Expr)
+    let _ ← Meta.transform ty (post := fun e => do
+      if e.isAppOfArity ``BlockCom.call 13 then
+        let centry := e.getAppArgs[9]!
+        if centry.getAppNumArgs == 3 && centry.getAppFn.isConstOf ``Cfg.entry then
+          folded.modify (·.push centry.appArg!)
+      return .continue)
+    let keep ← folded.get
     let hit ← IO.mkRef false
     let ty' ← Meta.transform ty (post := fun e => do
       if e.getAppNumArgs == 3 then
         let f := e.getAppFn
         if f.isConstOf ``Cfg.Γout || f.isConstOf ``Cfg.sigs then
-          let e' ← whnf e
-          unless e' == e do
-            hit.set true
-            return .done e'
+          unless keep.any (· == e.appArg!) do
+            let e' ← whnf e
+            unless e' == e do
+              hit.set true
+              return .done e'
       return .continue)
     if ← hit.get then return some (← g.change ty' (checkDefEq := false)) else return some g
 

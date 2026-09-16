@@ -526,7 +526,7 @@ elab "limb_facts " k:num ", " u:term ", " f:term : tactic => do
     fits_of_live?_eq (($f).fb ($qq).id ($hcells).idq) ($hqq).left))
   evalTactic (← `(tactic| let $qp:ident := ($qq).withOffset (($off) : BitVec 64)))
   evalTactic (← `(tactic| have $hqp:ident : Fits ($u).mem $qp $rem := by
-    simpa using remainingFits ($u).mem $qq $hqu ($off) (by simp)))
+    simpa [$qp:ident] using remainingFits ($u).mem $qq $hqu ($off) (by simp)))
   evalTactic (← `(tactic| refine fits_elim $hqp fun $qblk $hqblk $hqlen => ?_))
 
 open Lean Elab Tactic in
