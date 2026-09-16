@@ -21,6 +21,28 @@ namespace LeanMLIR
 namespace SLLVM
 open InstCombine (LLVM)
 
+-- v4.34: `LLVM.Ty` is `Dialect.Ty LLVM`, and with `LLVM` semireducible it no longer reduces
+-- to `InstCombine.MTy 0` when applications are type-checked at `implicit` transparency --
+-- which makes every `⟦bitvec w⟧` under a vector ill-typed to `rw`.
+-- TODO: belongs (unscoped) on the `def` in `LeanMLIR/Dialects/LLVM/Basic.lean`.
+-- ... and `⟦·⟧` at an LLVM type is `LLVM.Ty.denote`, which has to reduce for the same reason.
+attribute [local implicit_reducible] InstCombine.LLVM InstCombine.LLVM.Ty.denote
+
+/-! ## `MemorySSAM.run`
+
+v4.34: a memory `do`-block now exposes `MonadStateOf.get`/`.modifyGet` where it used to
+expose `getThe`/`modifyThe`, so `MemorySSAM.run_getThe`/`run_modifyThe` no longer fire and
+the whole `StateT` chain stalls at its first step. These are their unfolded counterparts.
+TODO: they belong next to the others in `Semantics/EffectM.lean`. -/
+
+@[simp, simp_denote, simp_sllvm]
+lemma _root_.LeanMLIR.MemorySSAM.run_get (m : MemoryState) :
+    StateT.run (get : MemorySSAM MemoryState) m = .value (m, m) := rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma _root_.LeanMLIR.MemorySSAM.run_modifyGet {α} (f : MemoryState → α × MemoryState)
+    (m : MemoryState) : StateT.run (modifyGet f : MemorySSAM α) m = .value (f m) := rfl
+
 /-! ## Well-addressed pointers -/
 
 /-- `MemoryState`'s `GetElem?` is the underlying map's, definitionally; naming
@@ -343,7 +365,8 @@ theorem run_load_of_splice {t : LLVM.Ty} {x : TyDenote.toType t}
   rw [run_load hm' hlen,
     show (({ block with bytes := spliceBits block.bytes p.offsetInBits b } : LiveBlock).bytes)
       = spliceBits block.bytes p.offsetInBits b from rfl,
-    extractLsb'_spliceBits _ _ _ hlen, LLVM.Ty.unflatten_flatten t x b hx]
+    extractLsb'_spliceBits block.bytes p.offsetInBits b hlen,
+    LLVM.Ty.unflatten_flatten t x b hx]
 
 /-- **Load after store, same pointer**: what was written reads back. -/
 theorem run_load_splice_self {t : LLVM.Ty} {x : TyDenote.toType t}
@@ -418,10 +441,11 @@ theorem bitcast_bytes_lane (w : Vector (LLVM.IntW 64) 8) (k : Nat) (hk : k < 64)
     LLVM.Ty.extractLsb'_poisonMask_vector (l := 8) (e := LLVM.Ty.bitvec 64) w (k / 8) (by omega)]
   rcases hlane : w[k / 8]'(show k / 8 < 8 by omega) with _ | b
   · simp only [LLVM.Ty.unflattenMasked, LLVM.Ty.poisonMask, LLVM.Ty.flattenBV]
-    rw [if_neg hne]
+    -- v4.34: `simp only` leaves a stale `Decidable` instance in the `ite`, which `rw`
+    -- cannot match through but `exact` can.
+    exact if_neg hne
   · simp only [LLVM.Ty.unflattenMasked, LLVM.Ty.poisonMask, LLVM.Ty.flattenBV]
-    rw [if_pos hz]
-    rfl
+    exact if_pos hz
 
 /-- **Bytes read back as a `<8 x i64>`**, one lane. On a fully defined source
 there is no poison to place, so lane `j` is just its eight bytes packed. -/
