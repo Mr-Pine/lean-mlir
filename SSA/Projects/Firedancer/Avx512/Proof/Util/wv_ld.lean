@@ -33,7 +33,7 @@ theorem unflatten_readWv {m : MemoryState} {p : Pointer} (h : IsWvPtr m p)
   simp [readWv, readWv?, hblk, LLVM.Ty.unflatten]
   show (blk.bytes.extractLsb' p.offsetInBits 256).extractLsb' (i * 64) 64
       = blk.bytes.extractLsb' (p.offsetInBits + 64 * i) 64
-  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 256 from by omega), Nat.mul_comm i 64]
+  rw [BitVec.extractLsb'_extractLsb'_add_of_le (show i * 64 + 64 ≤ 256 from by omega), Nat.mul_comm i 64]
 
 theorem wv_ld_conforms (p : Pointer) (s : GlobalState) (hs : s.WF) (hp : IsWvPtr s.mem p) :
     wv_ld_spec p s hp := by

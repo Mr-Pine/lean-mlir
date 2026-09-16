@@ -218,7 +218,7 @@ theorem denote_rewritePeephole (fuel : ℕ)
 #guard_msgs in #print axioms denote_rewritePeephole
 
 variable {d : Dialect} [DialectSignature d] [DecidableEq (Dialect.Ty d)] [DecidableEq (Dialect.Op d)]
-[TyDenote d.Ty] [DialectDenote d] [Monad d.m] in
+    [TyDenote d.Ty] [DialectDenote d] [Monad d.m] in
 /--  rewrite with the list of peephole optimizations `prs` at the `target` program, at location `ix`
 and later, running at most `fuel` steps. -/
 def multiRewritePeepholeAt (fuel : ℕ) (prs : List (Σ Γ, Σ ty, PeepholeRewrite d Γ ty))
@@ -230,7 +230,7 @@ def multiRewritePeepholeAt (fuel : ℕ) (prs : List (Σ Γ, Σ ty, PeepholeRewri
     multiRewritePeepholeAt fuel' prs (ix + 1) target'
 
 variable {d : Dialect} [DialectSignature d] [DecidableEq (Dialect.Ty d)] [DecidableEq (Dialect.Op d)]
-[TyDenote d.Ty] [DialectDenote d] [Monad d.m] in
+    [TyDenote d.Ty] [DialectDenote d] [Monad d.m] in
 /-- rewrite with the list of peephole optimizations `prs` at the `target` program, running at most
 `fuel` steps starting at location 0. -/
 def multiRewritePeephole (fuel : ℕ)

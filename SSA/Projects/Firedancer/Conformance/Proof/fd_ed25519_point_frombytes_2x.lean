@@ -225,7 +225,7 @@ theorem readWv_eq_extractLsb' {m m' : MemoryState} {q q' : Pointer}
   rw [hW]
   refine Vector.ext fun j hj => ?_
   simp [Avx512.readWv, Avx512.readWv?, hl']
-  rw [BitVec.extractLsb'_extractLsb'_of_le (by omega)]
+  rw [BitVec.extractLsb'_extractLsb'_add_of_le (by omega)]
 
 /-- ... so both sides name the same `y`. -/
 theorem decodeBytes_eq_wvY {m m' : MemoryState} {q q' : Pointer}

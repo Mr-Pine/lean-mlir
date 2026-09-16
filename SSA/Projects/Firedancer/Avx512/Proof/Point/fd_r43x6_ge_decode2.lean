@@ -232,7 +232,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
           (BitVec.extractLsb' vsa.offsetInBits (8 * 32) hvsa'.choose.bytes)) = _
     rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
       Nat.add_sub_cancel_left,
-      BitVec.extractLsb'_extractLsb'_of_le (show 64 * j + 64 ≤ 8 * 32 from by omega)]
+      BitVec.extractLsb'_extractLsb'_add_of_le (show 64 * j + 64 ≤ 8 * 32 from by omega)]
     simp [readWv, readWv?, hliveVsa]
   have hoffPa : pa_high.offsetInBits = (slotPtr s Slot.sa).offsetInBits + 64 * 3 := by
     simp [pa_high, Pointer.withOffset, Pointer.offsetInBits, slots.off Slot.sa]
@@ -275,7 +275,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
           (BitVec.extractLsb' vsb.offsetInBits (8 * 32) hvsb''.choose.bytes)) = _
     rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
       Nat.add_sub_cancel_left,
-      BitVec.extractLsb'_extractLsb'_of_le (show 64 * j + 64 ≤ 8 * 32 from by omega)]
+      BitVec.extractLsb'_extractLsb'_add_of_le (show 64 * j + 64 ≤ 8 * 32 from by omega)]
     simp [readWv, readWv?, hliveVsb]
   have hoffPb : pb_high.offsetInBits = (slotPtr s Slot.sb).offsetInBits + 64 * 3 := by
     simp [pb_high, Pointer.withOffset, Pointer.offsetInBits, slots.off Slot.sb]

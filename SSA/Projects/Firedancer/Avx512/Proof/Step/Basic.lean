@@ -107,7 +107,7 @@ theorem unflatten_readVec {m : MemoryState} {p : Pointer} (h : IsVecPtr m p)
   simp [readVec, readVec?, hblk, LLVM.Ty.unflatten]
   show (blk.bytes.extractLsb' p.offsetInBits 512).extractLsb' (i * 64) 64
       = blk.bytes.extractLsb' (p.offsetInBits + 64 * i) 64
-  rw [BitVec.extractLsb'_extractLsb'_of_le (show i * 64 + 64 ≤ 512 from by omega),
+  rw [BitVec.extractLsb'_extractLsb'_add_of_le (show i * 64 + 64 ≤ 512 from by omega),
     Nat.mul_comm i 64]
 
 /-- `peel_load_vec v, p, hp, hval, s` runs the next whole-vector load at a slot

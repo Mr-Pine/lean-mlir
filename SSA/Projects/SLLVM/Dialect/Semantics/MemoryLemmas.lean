@@ -401,7 +401,7 @@ theorem bitcast_bytes_lane (w : Vector (LLVM.IntW 64) 8) (k : Nat) (hk : k < 64)
     intro x
     show x.extractLsb' (k * 8) 8
       = (x.extractLsb' ((k / 8) * 64) 64).extractLsb' (8 * (k % 8)) 8
-    rw [BitVec.extractLsb'_extractLsb'_of_le (show 8 * (k % 8) + 8 ≤ 64 from by omega)]
+    rw [BitVec.extractLsb'_extractLsb'_add_of_le (show 8 * (k % 8) + 8 ≤ 64 from by omega)]
     congr 1
     omega
   have hne : (BitVec.allOnes 64).extractLsb' (8 * (k % 8)) 8 ≠ 0 := by

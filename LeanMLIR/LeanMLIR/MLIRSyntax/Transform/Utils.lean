@@ -177,7 +177,9 @@ def mkExprOf (Γ : Ctxt d.Ty) (parsedOp : d.Op)
       rfl,
       EffectKind.le_refl _,
       ← args.withSignature _,
-      have : DialectSignature.regSig parsedOp = [] := by simpa using h_noRegions
+      -- v4.34: `regSig` is a `Function.comp`; unfold it so the hypothesis' head matches.
+      have : DialectSignature.regSig parsedOp = [] := by
+        simpa [DialectSignature.regSig] using h_noRegions
       this ▸ .nil
     ⟩⟩
 

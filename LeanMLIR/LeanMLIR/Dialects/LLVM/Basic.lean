@@ -722,7 +722,7 @@ theorem _root_.BitVec.extractLsb'_packLanes_run {we : Nat} {n : Nat} (v : Vector
       simp
 
 /-- An inner extract window sits at the sum of the two offsets. -/
-theorem _root_.BitVec.extractLsb'_extractLsb'_of_le {w : Nat} {x : BitVec w} {s n s' n' : Nat}
+theorem _root_.BitVec.extractLsb'_extractLsb'_add_of_le {w : Nat} {x : BitVec w} {s n s' n' : Nat}
     (h : s' + n' ≤ n) :
     (x.extractLsb' s n).extractLsb' s' n' = x.extractLsb' (s + s') n' := by
   apply BitVec.eq_of_getLsbD_eq
@@ -1052,6 +1052,17 @@ def binaryDenote {w : Nat} : MOp.BinaryOp → LLVM.IntW w → LLVM.IntW w → LL
   | .sdiv flag => fun x y => LLVM.sdiv x y flag
   | .udiv flag => fun x y => LLVM.udiv x y flag
 
+/-- Discharges the index bound on `op.getN`. v4.34: the derived `MOp` constructors have to
+be unfolded before the signature's `match` reduces. -/
+macro "sig_index" : tactic =>
+  `(tactic| first
+      | (simp [DialectSignature.sig, signature, List.length, Function.comp_def,
+          MOp.neg, MOp.not, MOp.copy, MOp.freeze, MOp.sext, MOp.zext, MOp.and, MOp.xor,
+          MOp.urem, MOp.srem, MOp.or, MOp.trunc, MOp.shl, MOp.add, MOp.mul, MOp.sub,
+          MOp.lshr, MOp.ashr, MOp.sdiv, MOp.udiv]; done)
+      | exact Nat.zero_lt_succ _
+      | exact Nat.succ_lt_succ (Nat.zero_lt_succ _))
+
 @[simp]
 def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig o)) :
     (TyDenote.toType (β := LLVM.Ty) o.outTy) :=
@@ -1060,51 +1071,51 @@ def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig 
   | LLVM.Op.poison t       => LLVM.Ty.poison t
   | LLVM.Op.constDense t vs => LLVM.Ty.dense t vs
   | LLVM.Op.insertelement _ _ _ =>
-      LLVM.Ty.insertelement (op.getN 0 (by simp [DialectSignature.sig, signature]))
-                            (op.getN 1 (by simp [DialectSignature.sig, signature]))
-                            (op.getN 2 (by simp [DialectSignature.sig, signature]))
+      LLVM.Ty.insertelement (op.getN 0 (by sig_index))
+                            (op.getN 1 (by sig_index))
+                            (op.getN 2 (by sig_index))
   | LLVM.Op.extractelement _ _ _ =>
-      LLVM.Ty.extractelement (op.getN 0 (by simp [DialectSignature.sig, signature]))
-                             (op.getN 1 (by simp [DialectSignature.sig, signature]))
+      LLVM.Ty.extractelement (op.getN 0 (by sig_index))
+                             (op.getN 1 (by sig_index))
   | LLVM.Op.shufflevector _ _ mask =>
-      LLVM.Ty.shufflevector mask (op.getN 0 (by simp [DialectSignature.sig, signature]))
-                                 (op.getN 1 (by simp [DialectSignature.sig, signature]))
+      LLVM.Ty.shufflevector mask (op.getN 0 (by sig_index))
+                                 (op.getN 1 (by sig_index))
   | LLVM.Op.vectorBinary l w bop =>
       -- the ascriptions force `⟦sig[i]⟧` to reduce to a `Vector`, which is what
       -- lets `GetElem` fire below
-      let a : Vector (LLVM.IntW w) l := op.getN 0 (by simp [DialectSignature.sig, signature])
-      let b : Vector (LLVM.IntW w) l := op.getN 1 (by simp [DialectSignature.sig, signature])
+      let a : Vector (LLVM.IntW w) l := op.getN 0 (by sig_index)
+      let b : Vector (LLVM.IntW w) l := op.getN 1 (by sig_index)
       Vector.ofFn fun i => binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)
   | LLVM.Op.vpmadd52 hi _ =>
-      LLVM.Ty.vpmadd52 hi (op.getN 0 (by simp [DialectSignature.sig, signature]))
-                          (op.getN 1 (by simp [DialectSignature.sig, signature]))
-                          (op.getN 2 (by simp [DialectSignature.sig, signature]))
+      LLVM.Ty.vpmadd52 hi (op.getN 0 (by sig_index))
+                          (op.getN 1 (by sig_index))
+                          (op.getN 2 (by sig_index))
   | LLVM.Op.vpermi2var _ =>
-      LLVM.Ty.vpermi2var (op.getN 0 (by simp [DialectSignature.sig, signature]))
-                         (op.getN 1 (by simp [DialectSignature.sig, signature]))
-                         (op.getN 2 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.copy _         =>               (op.getN 0 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.neg _          => LLVM.neg      (op.getN 0 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.trunc w w'    flags => LLVM.trunc w' (op.getN 0 (by simp [DialectSignature.sig, signature])) flags
-  | LLVM.Op.zext w w' flag => LLVM.zext  w' (op.getN 0 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.sext w w'      => LLVM.sext  w' (op.getN 0 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.and _          => LLVM.and      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.or _ flag      => LLVM.or       (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.xor _          => LLVM.xor      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.shl _ flags    => LLVM.shl      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flags
-  | LLVM.Op.lshr _ flag    => LLVM.lshr     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.ashr _ flag    => LLVM.ashr     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.sub _ flags    => LLVM.sub      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flags
-  | LLVM.Op.add _ flags    => LLVM.add      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flags
-  | LLVM.Op.mul _ flags    => LLVM.mul      (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flags
-  | LLVM.Op.sdiv _ flag    => LLVM.sdiv     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.udiv _ flag    => LLVM.udiv     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) flag
-  | LLVM.Op.urem _         => LLVM.urem     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.srem _         => LLVM.srem     (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.icmp c _       => LLVM.icmp  c  (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature]))
-  | LLVM.Op.select _       => LLVM.select   (op.getN 0 (by simp [DialectSignature.sig, signature])) (op.getN 1 (by simp [DialectSignature.sig, signature])) (op.getN 2 (by simp [DialectSignature.sig, signature]))
+      LLVM.Ty.vpermi2var (op.getN 0 (by sig_index))
+                         (op.getN 1 (by sig_index))
+                         (op.getN 2 (by sig_index))
+  | LLVM.Op.copy _         =>               (op.getN 0 (by sig_index))
+  | LLVM.Op.freeze _       => LLVM.freeze   (op.getN 0 (by sig_index))
+  | LLVM.Op.not _          => LLVM.not      (op.getN 0 (by sig_index))
+  | LLVM.Op.neg _          => LLVM.neg      (op.getN 0 (by sig_index))
+  | LLVM.Op.trunc w w'    flags => LLVM.trunc w' (op.getN 0 (by sig_index)) flags
+  | LLVM.Op.zext w w' flag => LLVM.zext  w' (op.getN 0 (by sig_index)) flag
+  | LLVM.Op.sext w w'      => LLVM.sext  w' (op.getN 0 (by sig_index))
+  | LLVM.Op.and _          => LLVM.and      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index))
+  | LLVM.Op.or _ flag      => LLVM.or       (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flag
+  | LLVM.Op.xor _          => LLVM.xor      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index))
+  | LLVM.Op.shl _ flags    => LLVM.shl      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flags
+  | LLVM.Op.lshr _ flag    => LLVM.lshr     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flag
+  | LLVM.Op.ashr _ flag    => LLVM.ashr     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flag
+  | LLVM.Op.sub _ flags    => LLVM.sub      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flags
+  | LLVM.Op.add _ flags    => LLVM.add      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flags
+  | LLVM.Op.mul _ flags    => LLVM.mul      (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flags
+  | LLVM.Op.sdiv _ flag    => LLVM.sdiv     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flag
+  | LLVM.Op.udiv _ flag    => LLVM.udiv     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) flag
+  | LLVM.Op.urem _         => LLVM.urem     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index))
+  | LLVM.Op.srem _         => LLVM.srem     (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index))
+  | LLVM.Op.icmp c _       => LLVM.icmp  c  (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index))
+  | LLVM.Op.select _       => LLVM.select   (op.getN 0 (by sig_index)) (op.getN 1 (by sig_index)) (op.getN 2 (by sig_index))
 
 instance : DialectDenote LLVM := ⟨
   fun o args _ => [Op.denote o args]ₕ
