@@ -48,6 +48,14 @@ end Firedancer.StepTactic
 variable {d : Dialect} [TyDenote d.Ty] [DialectSignature d] [DialectDenote d]
   [Monad d.m] [LawfulMonad d.m]
 
+/-- v4.34: `Ctxt.Valuation.cons_append` and `.nil_append` are stated with a `no_index` LHS,
+which `simp` no longer finds in its discrimination tree. This is the one instance of them
+every step lemma below needs; `exact` still applies them directly. -/
+theorem Ctxt.Valuation.cons_nil_append {Ty : Type} [TyDenote Ty] {Γ : Ctxt Ty} {t : Ty}
+    (x : TyDenote.toType t) (V : Ctxt.Valuation Γ) :
+    ((x ::ᵥ Ctxt.Valuation.nil) ++ V) = x ::ᵥ V :=
+  Ctxt.Valuation.cons_append.trans (congrArg _ Ctxt.Valuation.nil_append)
+
 /-- `Expr.denoteOp`, at the `HVector` type it definitionally has for a pure
 expression. Having this as its own definition gives the stepping tactic a
 stable head symbol to generalize, with a type that type-class resolution is
@@ -85,8 +93,8 @@ theorem Com.denote_var_pure_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty}
   case cons a as =>
     cases as
     show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
-    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-      Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
+    exact Ctxt.Valuation.cons_nil_append ..
 
 /-- The impure counterpart of `Com.denote_var_pure`.
 
@@ -117,8 +125,8 @@ theorem Com.denote_var_pureOp_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty
   case cons a as =>
     cases as
     show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
-    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-      Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
+    exact Ctxt.Valuation.cons_nil_append ..
 
 /-! ## The CFG layer
 
@@ -152,8 +160,8 @@ theorem BlockCom.denote_var_pureOp_single {Γ Γout : Ctxt SLLVM.Ty} {t rets suc
   rename_i a as
   cases as
   · show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
-    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-      Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+    simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
+    exact Ctxt.Valuation.cons_nil_append ..
 
 /-! ### Peeling an impure instruction
 
@@ -177,8 +185,8 @@ theorem EffectM.run_bind_of_value {α β} {x : EffectM α} {f : α → EffectM �
 private theorem single_append {Γ : Ctxt SLLVM.Ty} {t} (x : ⟦t⟧) (V : Γ.Valuation) :
     ((x ::ₕ .nil : HVector _ [t]) ++ V) = x ::ᵥ V := by
   show (Ctxt.Valuation.ofHVector (x ::ₕ .nil)) ++ V = x ::ᵥ V
-  simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil,
-    Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append]
+  simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
+  exact Ctxt.Valuation.cons_nil_append ..
 
 /-- One impure instruction, given that it succeeds with value `x` and leaves
 the state at `s'`. -/
@@ -212,7 +220,8 @@ private theorem nil_append {Γ : Ctxt SLLVM.Ty} (V : Γ.Valuation) :
     ((.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) = V := by
   show (Ctxt.Valuation.ofHVector
       (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty))) ++ V = V
-  simp only [Ctxt.Valuation.ofHVector_nil, Ctxt.Valuation.nil_append]
+  simp only [Ctxt.Valuation.ofHVector_nil]
+  exact Ctxt.Valuation.nil_append
 
 /-- One impure instruction that binds no variable -- a `store` -- given that it
 succeeds and leaves the state at `s'`. The valuation is untouched, so unlike

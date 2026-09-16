@@ -106,7 +106,8 @@ theorem lt_nextFreeBlock_of_live {s : GlobalState} (hs : s.WF) {q : BlockId} {b 
     (h : s.mem.live? q = some b) : q.id < s.alloc.nextFreeBlock := by
   by_contra hcon
   rw [hs q (by omega)] at h
-  exact Option.noConfusion h
+  -- v4.34: `noConfusion` no longer picks a motive here
+  simp at h
 
 /-- `lt_nextFreeBlock_of_live` in `Fits` form: anything the caller can address
 predates the frame, so no frame kill or fresh `alloca` touches it. -/
