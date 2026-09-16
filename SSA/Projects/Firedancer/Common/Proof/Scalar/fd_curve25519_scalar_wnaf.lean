@@ -1111,7 +1111,7 @@ theorem step_bb23 {u : GlobalState} {w : BitVec 4096} (hu : u ≈ Sw s slides w)
       (Ctxt.Valuation.ofHVector (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv m₀ p u' := by
   dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
-  exact term_ret ⟨fun _ _ => ⟨w, hu, hw, hI⟩, fun _ h => by exact nomatch h⟩
+  exact term_ret ⟨fun _ _ => ⟨w, hu, hw, hI⟩, fun _ h => absurd h (by simp)⟩
 
 theorem step_bb1 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides) {u : GlobalState}
     {w : BitVec 4096} (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w 255)
@@ -1416,7 +1416,7 @@ theorem step_bb11 {u : GlobalState}
   denote_step_reduce v 66 [LLVM.const?] fold
   simp only [simp_spine] at hv63 hv64 hv65 hv66
   refine term_condBr (by simp only [simp_spine, hv66]; rfl)
-    ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+    ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   split
   · simp only [Target.denote_mk, HVector.map, simp_spine, hv63]
@@ -1440,7 +1440,7 @@ theorem step_bb12 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
       simp only [simp_spine, hV.c8]
       rw [run_liftM (run_store_slot hsl hu (by omega) 0#16)]; rfl)]
   have hu' := store_slot_equiv hsl.2 hu (show j + 1 < 256 by omega) 0#16
-  refine term_br ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine]
   exact ⟨Reach.bb19 (j + 1) m y64 y43 y44 y45 (by omega) (by omega) hu'
@@ -1461,7 +1461,7 @@ theorem step_bb13 {u : GlobalState}
   denote_step_reduce v 70 [LLVM.const?] fold
   simp only [simp_spine] at hv67 hv68 hv69 hv70
   refine term_condBr (by simp only [simp_spine, hv70]; rfl)
-    ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+    ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   split
   · simp only [Target.denote_mk, HVector.map, simp_spine, hv67, trunc32 (show j + 1 < 2 ^ 32 by omega)]
@@ -1531,7 +1531,7 @@ theorem step_bb15 {u : GlobalState}
   denote_number_from 77
   denote_step_reduce v 77 [LLVM.const?] fold
   try simp only [simp_spine] at hv77
-  refine term_br ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hv77, sext64 (show c < 2 ^ 31 by omega)]
   exact ⟨Reach.bb18 c m y68 y43 y44 y45 hmc hc hu ht hK hti hw hI, by rank_lt⟩
@@ -1547,7 +1547,7 @@ theorem step_bb16 {u : GlobalState}
   denote_number_from 78
   denote_step_reduce v 78 [LLVM.const?] fold
   try simp only [simp_spine] at hv78
-  refine term_br ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hv78, trunc32 (show c < 2 ^ 32 by omega)]
   exact ⟨Reach.bb17 c m y68 y43 y44 y45 hmc hc hu ht hK hti hw hI, by rank_lt⟩
@@ -1565,7 +1565,7 @@ theorem step_bb17 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
       simp only [simp_spine, hV.c5]
       rw [run_liftM (run_store_slot hsl hu (by omega) 1#16)]; rfl)]
   have hu' := store_slot_equiv hsl.2 hu (show c < 256 by omega) 1#16
-  refine term_br ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine]
   refine ⟨Reach.bb22 c m y68 y43 y44 y45 hmc hc hu' ?_ hK hti (hw.store256 bnd_one (by omega))
@@ -1674,7 +1674,7 @@ theorem step_bb21 {u : GlobalState}
   denote_number_from 93
   denote_step_reduce v 93 [LLVM.const?] fold
   try simp only [simp_spine] at hv93
-  refine term_br ⟨fun _ h => by exact nomatch h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hv93, trunc32 (show c < 2 ^ 32 by omega)]
   exact ⟨Reach.bb22 c m y52 y43 y44 y45 hmc (by omega) hu (Or.inl ht) hK hti hw hI, by rank_lt⟩

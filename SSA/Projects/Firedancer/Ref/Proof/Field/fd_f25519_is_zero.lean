@@ -37,7 +37,8 @@ theorem zeroRep_of_limbBounds {p : Pointer} {m : MemoryState}
   -- `= 0` in `ZMod p` is divisibility by `p` on the underlying natural.
   intro hzero
   have hdvd : _root_.p ∣ (e 0 + e 1 * 2^51 + e 2 * 2^102 + e 3 * 2^153 + e 4 * 2^204) :=
-    (ZMod.natCast_eq_zero_iff _ _).mp (by simpa [decodeFieldElem] using hzero)
+    -- v4.34: `simp` evaluates the powers in the target but not in `hzero`
+    (ZMod.natCast_eq_zero_iff _ _).mp (by simpa [decodeFieldElem, -Nat.reducePow] using hzero)
   rcases limbs_of_dvd (hbound 0) (hbound 1) (hbound 2) (hbound 3) (hbound 4) hdvd with
     ⟨r0, r1, r2, r3, r4⟩ | ⟨r0, r1, r2, r3, r4⟩
   · exact Or.inl fun i => by fin_cases i <;> simp_all
@@ -66,7 +67,7 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
     have hp0 : ((0x7ffffffffffed + 0x7ffffffffffff * 2^51 + 0x7ffffffffffff * 2^102
         + 0x7ffffffffffff * 2^153 + 0x7ffffffffffff * 2^204 : ℕ) : ZMod _root_.p) = 0 :=
       (ZMod.natCast_eq_zero_iff _ _).mpr (by norm_num [_root_.p])
-    simpa [decodeFieldElem, r] using hp0
+    simpa [decodeFieldElem, r, -Nat.reducePow] using hp0
 
 open Lean Elab Tactic
 elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
