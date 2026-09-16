@@ -603,8 +603,11 @@ NOTE the multiplication is written `width e * l` rather than `l * width e`.
 `Nat.mul` recurses on its *second* argument, so with this order
 `width (vector (n+1) e) = width (vector n e) + width e` holds definitionally,
 which is what lets `BitVec.packLanes` below build the flat encoding by plain
-`BitVec.append` with no `BitVec.cast` anywhere. -/
-def width : LLVM.Ty → Nat
+`BitVec.append` with no `BitVec.cast` anywhere.
+
+v4.34: `implicit_reducible` so that `width (vector l e)` still reduces to `width e * l`
+when applications are type-checked at `implicit` transparency. -/
+@[implicit_reducible] def width : LLVM.Ty → Nat
   | bitvec w => w
   | vector l e => width e * l
 
@@ -713,7 +716,6 @@ theorem _root_.BitVec.extractLsb'_packLanes_run {we : Nat} {n : Nat} (v : Vector
                 v[i + q.val]'(by have := q.isLt; omega))[1 + k]'(by omega) := by simp
         rw [hk']
         simp only [Vector.getElem_ofFn, ← Nat.add_assoc]
-        simp
       have hlane : (BitVec.packLanes v).extractLsb' (we * i) we = v[i]'(by omega) := by
         rw [Nat.mul_comm we i]
         exact BitVec.extractLsb'_packLanes _ i (by omega)
@@ -879,7 +881,8 @@ def unflattenMasked : (t : LLVM.Ty) → BitVec (width t) → BitVec (width t) �
 there. The `Defined` case of every `bitcast`. -/
 theorem unflattenMasked_zero : ∀ (t : LLVM.Ty) (b : BitVec (width t)),
     unflattenMasked t b 0 = unflatten t b
-  | bitvec _, b => by simp [unflattenMasked, unflatten]
+  -- v4.34: `simp` leaves the reflexivity goal; its closing `rfl` is too weak a transparency.
+  | bitvec _, b => by simp [unflattenMasked, unflatten]; rfl
   | vector l e, b => by
       show (Vector.ofFn _ : Vector (TyDenote.toType e) l) = Vector.ofFn _
       ext i hi
@@ -1061,7 +1064,8 @@ macro "sig_index" : tactic =>
           MOp.urem, MOp.srem, MOp.or, MOp.trunc, MOp.shl, MOp.add, MOp.mul, MOp.sub,
           MOp.lshr, MOp.ashr, MOp.sdiv, MOp.udiv]; done)
       | exact Nat.zero_lt_succ _
-      | exact Nat.succ_lt_succ (Nat.zero_lt_succ _))
+      | exact Nat.succ_lt_succ (Nat.zero_lt_succ _)
+      | exact Nat.succ_lt_succ (Nat.succ_lt_succ (Nat.zero_lt_succ _)))
 
 @[simp]
 def Op.denote (o : LLVM.Op) (op : HVector TyDenote.toType (DialectSignature.sig o)) :
