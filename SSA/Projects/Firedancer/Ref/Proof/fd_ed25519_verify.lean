@@ -46,42 +46,11 @@ theorem wf_pointOutMem {t : GlobalState} {m : MemoryState} {r : Pointer}
 
 end Firedancer.Ref
 
-/-! ### Staged: SHA-512 call specs
-
-`Common/Spec/SHA` states only footprints for `fd_sha512_append` and
-`fd_sha512_fini`. The walk below needs each call to return and its effect to be
-`sha512AppendBlock`/`sha512FiniDigest` of what it reads -- functions left
-unspecified -- so those are stated here and assumed. They belong in `Common/Spec/SHA` and `Common/Proof/SHA`. -/
+/-! ### `fd_sha512_init`'s memory, and the round constants across a call -/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
-
-/-- A hash state at `off` in `blk` that `append` and `fini` accept: 256 bytes that fit without
-wrapping, and `buf_used` (byte 200) below the 128-byte block. -/
-def sha512Valid (blk : Option LiveBlock) (off : BitVec 64) : Prop :=
-  ∃ b, blk = some b ∧ off.toNat + 256 ≤ 2 ^ 64 ∧ off.toNat + 256 ≤ b.length
-    ∧ (b.bytes.extractLsb' (8 * (off.toNat + 200)) 64).toNat < 128
-
-theorem sha512Valid_initBlock {m : MemoryState} {sha : Pointer} (h : IsSha512Ptr m sha)
-    (ho : sha.offset.toNat + 256 ≤ 2 ^ 64) :
-    sha512Valid (sha512InitBlock sha.offset (m.live? sha.id)) sha.offset := by
-  obtain ⟨b, hb, hlen⟩ := h
-  have hl : m.live? sha.id = some b := by simp only [MemoryState.live?, hb]
-  have h200 : (sha.offset + 200).toNat = sha.offset.toNat + 200 := by
-    rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by simp; omega)]; rfl
-  simp only [LiveBlock.lengthInBits, Pointer.offsetInBits] at hlen
-  rw [hl]
-  refine ⟨_, rfl, ho, by simp only [spliceAt]; omega, ?_⟩
-  simp only [spliceAt, h200]
-  generalize spliceBits (spliceBits _ _ (sha512IV 6)) _ (sha512IV 7) = x
-  suffices e : (BitVec.extractLsb' (8 * (sha.offset.toNat + 200)) 64
-      (spliceBits x (8 * (sha.offset.toNat + 200)) (BitVec.replicate 24 0#8))) = 0#64 by
-    rw [e]; decide
-  ext i hi
-  simp only [BitVec.getElem_extractLsb', getLsbD_spliceBits, BitVec.getElem_zero]
-  rw [if_pos ⟨by omega, by omega, by omega⟩]
-  simp
 
 theorem live?_sha512InitMem_self {m : MemoryState} {sha : Pointer} :
     (sha512InitMem m sha).live? sha.id = sha512InitBlock sha.offset (m.live? sha.id) := by
@@ -131,43 +100,6 @@ directly, the kernel unfolds the nine splices. -/
 theorem wf_of_equiv_sha512InitMem {s t : GlobalState} {sha : Pointer} (hs : s.WF)
     (he : t ≈ ({ s with mem := sha512InitMem s.mem sha } : GlobalState)) : t.WF := fun q hq =>
   (Ref.live?_of_equiv_mem he q).trans (live?_sha512InitMem_eq_none (hs q (by rw [he.alloc] at hq; exact hq)))
-
-/-- **`fd_sha512_append`'s effect depends only on what it reads.** It returns
-`sha`, writes only `sha`'s block, and leaves there `sha512AppendBlock` of that
-block, `sha`'s offset and the `sz` bytes `w` at `data`. -/
-abbrev fd_sha512_append_spec (sha data : Pointer) (sz : BitVec 64) (s : GlobalState)
-    (w : BitVec (sz.toNat * 8)) : Prop :=
-  let invocation := runFunction (fd_sha512_append.denote
-    (Ctxt.Valuation.ofHVector [.value sz, .value data, .value sha]ₕ))
-  ∃ s' : GlobalState, StateT.run invocation s = .value ([.value sha]ₕ, s')
-    ∧ s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
-    ∧ (∀ b : BlockId, b ≠ sha.id → s'.mem.live? b = s.mem.live? b)
-    ∧ s'.mem.live? sha.id = sha512AppendBlock (s.mem.live? sha.id) sha.offset (bytesOf w)
-    ∧ sha512Valid (s'.mem.live? sha.id) sha.offset
-
-theorem fd_sha512_append_conforms (sha data : Pointer) (sz : BitVec 64) (s : GlobalState)
-    (hs : s.WF) (hdata : Fits s.mem data (sz.toNat * 8))
-    (hoff : data.offset.toNat + sz.toNat ≤ 2 ^ 64) (hne : sha.id ≠ data.id)
-    (hv : sha512Valid (s.mem.live? sha.id) sha.offset) (hK : Sha512KHolds s sha)
-    {w : BitVec (sz.toNat * 8)} (hw : readWord hdata = w) :
-    fd_sha512_append_spec sha data sz s w := sorry
-
-/-- **`fd_sha512_fini`'s digest depends only on what it reads.** It returns
-`hash`, writes only `sha`'s and `hash`'s blocks, and the 64 bytes at `hash` are
-`sha512FiniDigest` of the two blocks and offsets. -/
-abbrev fd_sha512_fini_spec (sha hash : Pointer) (s : GlobalState) : Prop :=
-  let invocation := runFunction (fd_sha512_fini.denote
-    (Ctxt.Valuation.ofHVector [.value hash, .value sha]ₕ))
-  ∃ s' : GlobalState, StateT.run invocation s = .value ([.value hash]ₕ, s')
-    ∧ s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
-    ∧ (∀ b : BlockId, ¬(b = sha.id ∨ b = hash.id) → s'.mem.live? b = s.mem.live? b)
-    ∧ ∃ h : Fits s'.mem hash (64 * 8), readWord h
-        = sha512FiniDigest (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset
-
-theorem fd_sha512_fini_conforms (sha hash : Pointer) (s : GlobalState) (hs : s.WF)
-    (hhash : Fits s.mem hash (64 * 8)) (hoff : hash.offset.toNat + 64 ≤ 2 ^ 64)
-    (hne : sha.id ≠ hash.id) (hv : sha512Valid (s.mem.live? sha.id) sha.offset)
-    (hK : Sha512KHolds s sha) : fd_sha512_fini_spec sha hash s := sorry
 
 end Firedancer.Common
 
@@ -313,10 +245,16 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
     (hsignull : sig.id ≠ SLLVM.nullBlock)
-    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) :
-    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f := by
+    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
+    (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
+    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
+    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f fApp fFini := by
   simp only [fd_ed25519_verify_spec, Cfg.denote]
-  intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hf Bt hTbl hB w hw
+  intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hf hApp hFini Bt hTbl hB
+    dig hdig w hw
+  -- the digest's chain: three appends and the fini, each of which returned
+  simp only [ed25519Digest, Option.bind_eq_some_iff] at hdig
+  obtain ⟨b₁, hb₁, b₂, hb₂, b₃, hb₃, hfin⟩ := hdig
   refine run_runFunction_ret
     (fun ret : BitVec 32 => ([.value ret]ₕ : HVector toType [SLLVM.Ty.bitvec 32])) _ ?_
 
@@ -602,9 +540,6 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   have hwf₉ : s₉.WF := wf_of_equiv_sha512InitMem hwf₈ heq₂₂
   have hblk₉ : s₉.mem.live? sha.id = sha512InitBlock sha.offset (s.mem.live? sha.id) := by
     rw [live?_of_equiv_mem heq₂₂ sha.id, live?_sha512InitMem_self, fb₈ _ (hlt hsha)]
-  have hv₉ : sha512Valid (s₉.mem.live? sha.id) sha.offset := by
-    rw [live?_of_equiv_mem heq₂₂ sha.id, live?_sha512InitMem_self]
-    exact sha512Valid_initBlock hsha₈ hshaoff
   have fr₉ : ∀ b : BlockId, b ≠ sha.id → s₉.mem.live? b = s₈.mem.live? b :=
     fun b hb => (live?_of_equiv_mem heq₂₂ b).trans (live?_sha512InitMem_ne (Ne.symm hb))
   have hg₉ : s₉.globals = s.globals :=
@@ -616,10 +551,11 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   -- `%23`: `fd_sha512_append( sha, r, 32 )`
   have hl₉ : s₉.mem.live? sig.id = s.mem.live? sig.id :=
     (fr₉ _ hshasig.symm).trans (fb₈ _ (hlt hr.1))
-  obtain ⟨s₁₀, hrun₂₃, hwf₁₀, -, hg₁₀, fr₁₀, hblk₁₀, hv₁₀⟩ :=
-    fd_sha512_append_conforms sha sig 32#64 s₉ hwf₉ (fits_of_live?_eq hl₉ hr.1)
-      (by show sig.offset.toNat + 32 ≤ 2 ^ 64; exact hr.2) hshasig hv₉ hK₉
-      (w := readBuf hr) (readWord_eq_of_live?_eq hl₉ hr.1)
+  have hw₉ : readWord (fits_of_live?_eq hl₉ hr.1) = readBuf hr := readWord_eq_of_live?_eq hl₉ hr.1
+  obtain ⟨hret₂₃, -⟩ := hApp sha sig 32#64 s₉ hwf₉
+    (by show sig.offset.toNat + 32 ≤ 2 ^ 64; exact hr.2) hshasig hK₉ (fits_of_live?_eq hl₉ hr.1)
+  rw [hblk₉, hw₉] at hret₂₃
+  obtain ⟨s₁₀, hrun₂₃, hwf₁₀, -, hg₁₀, fr₁₀, hblk₁₀⟩ := hret₂₃ b₁ hb₁
   subst hv5
   peel_call hrun₂₃
   have hK₁₀ : Sha512KHolds s₁₀ sha :=
@@ -628,10 +564,12 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   -- `%24`: `fd_sha512_append( sha, public_key, 32 )`
   have hl₁₀ : s₁₀.mem.live? pk.id = s.mem.live? pk.id :=
     (fr₁₀ _ hshapk.symm).trans ((fr₉ _ hshapk.symm).trans (fb₈ _ (hlt ha.1)))
-  obtain ⟨s₁₁, hrun₂₄, hwf₁₁, -, hg₁₁, fr₁₁, hblk₁₁, hv₁₁⟩ :=
-    fd_sha512_append_conforms sha pk 32#64 s₁₀ hwf₁₀ (fits_of_live?_eq hl₁₀ ha.1)
-      (by show pk.offset.toNat + 32 ≤ 2 ^ 64; exact ha.2) hshapk hv₁₀ hK₁₀
-      (w := readBuf ha) (readWord_eq_of_live?_eq hl₁₀ ha.1)
+  have hw₁₀ : readWord (fits_of_live?_eq hl₁₀ ha.1) = readBuf ha :=
+    readWord_eq_of_live?_eq hl₁₀ ha.1
+  obtain ⟨hret₂₄, -⟩ := hApp sha pk 32#64 s₁₀ hwf₁₀
+    (by show pk.offset.toNat + 32 ≤ 2 ^ 64; exact ha.2) hshapk hK₁₀ (fits_of_live?_eq hl₁₀ ha.1)
+  rw [hblk₁₀, hw₁₀] at hret₂₄
+  obtain ⟨s₁₁, hrun₂₄, hwf₁₁, -, hg₁₁, fr₁₁, hblk₁₁⟩ := hret₂₄ b₂ hb₂
   peel_call hrun₂₄
   have hK₁₁ : Sha512KHolds s₁₁ sha :=
     hK.of_live?_eq hm.wf (hg₁₁.trans (hg₁₀.trans hg₉)) fun b hb hb' =>
@@ -641,9 +579,12 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   have hl₁₁ : s₁₁.mem.live? msg.id = s.mem.live? msg.id :=
     (fr₁₁ _ hshamsg.symm).trans ((fr₁₀ _ hshamsg.symm).trans
       ((fr₉ _ hshamsg.symm).trans (fb₈ _ (hlt hmsg))))
-  obtain ⟨s₁₂, hrun₂₅, hwf₁₂, -, hg₁₂, fr₁₂, hblk₁₂, hv₁₂⟩ :=
-    fd_sha512_append_conforms sha msg sz s₁₁ hwf₁₁ (fits_of_live?_eq hl₁₁ hmsg) hmsgoff hshamsg
-      hv₁₁ hK₁₁ (w := readWord hmsg) (readWord_eq_of_live?_eq hl₁₁ hmsg)
+  have hw₁₁ : readWord (fits_of_live?_eq hl₁₁ hmsg) = readWord hmsg :=
+    readWord_eq_of_live?_eq hl₁₁ hmsg
+  obtain ⟨hret₂₅, -⟩ := hApp sha msg sz s₁₁ hwf₁₁ hmsgoff hshamsg hK₁₁
+    (fits_of_live?_eq hl₁₁ hmsg)
+  rw [hblk₁₁, hw₁₁] at hret₂₅
+  obtain ⟨s₁₂, hrun₂₅, hwf₁₂, -, hg₁₂, fr₁₂, hblk₁₂⟩ := hret₂₅ b₃ hb₃
   peel_call hrun₂₅
   have hK₁₂ : Sha512KHolds s₁₂ sha :=
     hK.of_live?_eq hm.wf (hg₁₂.trans (hg₁₁.trans (hg₁₀.trans hg₉))) fun b hb hb' =>
@@ -656,20 +597,16 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     rw [fr₁₂ _ hkpsha.symm, fr₁₁ _ hkpsha.symm, fr₁₀ _ hkpsha.symm, fr₉ _ hkpsha.symm, hkpblk₈,
       hs₃def, hkpdef]
     exact live?_afterAlloca_self s₂ (64 * 8)
-  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hk⟩ :=
-    fd_sha512_fini_conforms sha kp s₁₂ hwf₁₂ (fits_of_live?_eq
+  obtain ⟨hret₂₆, -⟩ := hFini sha kp s₁₂ hwf₁₂ (fits_of_live?_eq
       ((fr₁₂ _ hkpsha.symm).trans ((fr₁₁ _ hkpsha.symm).trans
         ((fr₁₀ _ hkpsha.symm).trans (fr₉ _ hkpsha.symm)))) hkp₈)
-      (by rw [hkpoff]; simp) hkpsha hv₁₂ hK₁₂
+      (by rw [hkpoff]; simp) hkpsha hK₁₂
+  rw [hblk₁₂, hkpblk₁₂, hkpoff] at hret₂₆
+  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hk⟩ := hret₂₆ dig hfin
   peel_call hrun₂₆
 
-  -- `k` is the digest of `sha`'s entry block, `R`, `A` and the message
+  -- `k` holds the digest
   obtain ⟨hk₁₃, hkval⟩ := hk
-  replace hkval : readWord hk₁₃
-      = ed25519Digest (s.mem.live? sha.id) sha.offset (readBuf hr) (readBuf ha)
-          (bytesOf (readWord hmsg)) := by
-    rw [hkval, hblk₁₂, hblk₁₁, hblk₁₀, hblk₉, hkpblk₁₂, hkpoff]
-    rfl
 
   -- `%27`: `fd_curve25519_scalar_reduce( k, k )`
   have hkbuf₁₃ : IsByteBufPtr s₁₃.mem kp := ⟨Fits.mono hk₁₃ (by decide), by rw [hkpoff]; simp⟩

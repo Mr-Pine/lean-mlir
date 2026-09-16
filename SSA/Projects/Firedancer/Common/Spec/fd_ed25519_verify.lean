@@ -3,16 +3,21 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_init
+import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_append
+import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_fini
 import SSA.Projects.Firedancer.Proof.Globals
 
 /-!
 # The return codes and digest of `fd_ed25519_verify` (common)
 
-SHA-512 is not specified. What is: each hashing call's effect is an opaque
-function of exactly what it reads, so the digest in `k` is a function of `sha`'s
-block, `R`, `A` and the message, and of nothing else. The compression function
-reads its round constants from the global `fd_sha512_core_ref.K`, which must
-therefore hold them.
+SHA-512 is not specified. What is: each hashing call is decided by what it reads, in the shape
+`ScalarReduceBy` uses for `fd_curve25519_scalar_reduce` -- one function of those inputs gives
+both whether the call returns and what it leaves behind. The digest in `k` is then a function of
+`sha`'s block, `R`, `A` and the message, and of nothing else. The compression function reads its
+round constants from the global `fd_sha512_core_ref.K`, which must therefore hold them.
+
+That such functions exist is assumed (`sha512Append_determined`, `sha512Fini_determined`): it is
+the SHA-512 regions' side of the comparison, which nothing here proves.
 -/
 
 namespace Firedancer.Common
@@ -59,14 +64,6 @@ def Sha512KHolds (s : GlobalState) (sha : Pointer) : Prop :=
 def bytesOf {n : Nat} (w : BitVec (n * 8)) : List (BitVec 8) :=
   List.ofFn fun i : Fin n => w.extractLsb' (i * 8) 8
 
-/-- The block `fd_sha512_append` leaves for a state at offset `off` in `blk`,
-after absorbing `data`. -/
-opaque sha512AppendBlock : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option LiveBlock
-
-/-- The 64 bytes `fd_sha512_fini` writes, little-endian, for a state at `off` in
-`blk` into a hash at `hoff` in `hblk`. -/
-opaque sha512FiniDigest : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → BitVec 512
-
 /-- `b` with `x` stored at byte `k` past offset `off`. -/
 def spliceAt (off k : BitVec 64) {w : Nat} (x : BitVec w) (b : LiveBlock) : LiveBlock :=
   { length := b.length, bytes := spliceBits b.bytes (8 * (off + k).toNat) x }
@@ -78,13 +75,59 @@ def sha512InitBlock (off : BitVec 64) (blk : Option LiveBlock) : Option LiveBloc
     spliceAt off 160 (sha512IV 4) <| spliceAt off 152 (sha512IV 3) <|
     spliceAt off 144 (sha512IV 2) <| spliceAt off 136 (sha512IV 1) <| spliceAt off 128 (sha512IV 0) b
 
-/-- The digest `fd_ed25519_verify` writes to `k`: a state at `off` in `blk`
-initialised, `R`, `A` and `msg` appended, then finished into `k`, a fresh
-64-byte local. -/
-def ed25519Digest (blk : Option LiveBlock) (off : BitVec 64) (r a : BitVec 256)
-    (msg : List (BitVec 8)) : BitVec 512 :=
-  let st := sha512AppendBlock (sha512AppendBlock (sha512AppendBlock (sha512InitBlock off blk) off
-    (bytesOf (n := 32) r)) off (bytesOf (n := 32) a)) off msg
-  sha512FiniDigest st off (some { length := 64, bytes := 0#_ }) 0
+/-- **`fd_sha512_append` is decided by what it reads.** `f` gives the block the call leaves at
+`sha` -- `none` if it does not return -- from the block that was there, `sha`'s offset and the
+bytes at `data`. What that block is stays open; the rest is the footprint. -/
+def Sha512AppendBy
+    (f : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock)) : Prop :=
+  ∀ (sha data : Pointer) (sz : BitVec 64) (s : GlobalState), s.WF →
+    data.offset.toNat + sz.toNat ≤ 2 ^ 64 → sha.id ≠ data.id → Sha512KHolds s sha →
+    ∀ hdata : Fits s.mem data (sz.toNat * 8),
+      let invocation := runFunction (fd_sha512_append.denote
+        (Ctxt.Valuation.ofHVector [.value sz, .value data, .value sha]ₕ))
+      (∀ blk, f (s.mem.live? sha.id) sha.offset (bytesOf (readWord hdata)) = some blk →
+          ∃ s' : GlobalState, StateT.run invocation s = .value ([.value sha]ₕ, s')
+            ∧ s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
+            ∧ (∀ b : BlockId, b ≠ sha.id → s'.mem.live? b = s.mem.live? b)
+            ∧ s'.mem.live? sha.id = blk)
+        ∧ (f (s.mem.live? sha.id) sha.offset (bytesOf (readWord hdata)) = none →
+            StateT.run invocation s = .poison)
+
+/-- **`fd_sha512_fini` is decided by what it reads.** `f` gives the 64 bytes it writes at `hash`
+from the two blocks and offsets, `none` if it does not return. -/
+def Sha512FiniBy
+    (f : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
+    Prop :=
+  ∀ (sha hash : Pointer) (s : GlobalState), s.WF → Fits s.mem hash (64 * 8) →
+    hash.offset.toNat + 64 ≤ 2 ^ 64 → sha.id ≠ hash.id → Sha512KHolds s sha →
+      let invocation := runFunction (fd_sha512_fini.denote
+        (Ctxt.Valuation.ofHVector [.value hash, .value sha]ₕ))
+      (∀ d, f (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset = some d →
+          ∃ s' : GlobalState, StateT.run invocation s = .value ([.value hash]ₕ, s')
+            ∧ s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
+            ∧ (∀ b : BlockId, ¬(b = sha.id ∨ b = hash.id) → s'.mem.live? b = s.mem.live? b)
+            ∧ ∃ h : Fits s'.mem hash (64 * 8), readWord h = d)
+        ∧ (f (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset = none →
+            StateT.run invocation s = .poison)
+
+/-- Assumed: `fd_sha512_append` reads nothing else. -/
+axiom sha512Append_determined : ∃ f, Sha512AppendBy f
+
+/-- Assumed: `fd_sha512_fini` reads nothing else. -/
+axiom sha512Fini_determined : ∃ f, Sha512FiniBy f
+
+/-- The digest `fd_ed25519_verify` writes to `k`: a state at `off` in `blk` initialised, `R`, `A`
+and `msg` appended, then finished into `k`, a fresh 64-byte local. `none` if any call fails to
+return. -/
+def ed25519Digest
+    (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
+    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+    (blk : Option LiveBlock) (off : BitVec 64) (r a : BitVec 256) (msg : List (BitVec 8)) :
+    Option (BitVec 512) :=
+  -- `bind`, not `do`: the latter desugars to a `match`, which `Option.bind_eq_some_iff` misses
+  (fApp (sha512InitBlock off blk) off (bytesOf (n := 32) r)).bind fun b₁ =>
+    (fApp b₁ off (bytesOf (n := 32) a)).bind fun b₂ =>
+      (fApp b₂ off msg).bind fun b₃ =>
+        fFini b₃ off (some { length := 64, bytes := 0#_ }) 0
 
 end Firedancer.Common

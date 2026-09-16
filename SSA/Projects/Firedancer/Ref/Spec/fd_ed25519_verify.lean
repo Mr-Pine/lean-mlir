@@ -19,9 +19,9 @@ else the first failing check's code -- `FD_ED25519_ERR_SIG`, `_PUBKEY` or `_MSG`
 
 Decoding is `IsDecoding`'s: non-canonical `y` accepted, and `x = 0` with the
 sign bit set too. `S ≥ ℓ` is rejected. Neither hash nor reduction is specified: the digest is
-`ed25519Digest`, some function of `sha`'s block, `R`, `A` and `M` alone, and the scalar is the
-`w` that `scalar_reduce` makes of it (taken mod `2²⁵⁵`, as `double_scalar_mul_base` reads it),
-for the `f` the caller supplies. A run in which that call does not return is not covered.
+`ed25519Digest`, built from the caller's `fApp`/`fFini`, and the scalar is the `w` that
+`scalar_reduce` makes of it (taken mod `2²⁵⁵`, as `double_scalar_mul_base` reads it). Runs in
+which one of those calls does not return are not covered: they are the `none` cases.
 
 Only `sha` is written, and only once every check before the hash has passed.
 -/
@@ -38,22 +38,26 @@ def Encodes (bytes : BitVec 256) (V : Edwards.Point curve) : Prop :=
 abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
-    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) : Prop :=
+    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
+    (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
+    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
+    Prop :=
   let invocation := runFunction (fd_ed25519_verify.denote
     (Ctxt.Valuation.ofHVector [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ))
   let result := StateT.run invocation s
   let r := readBuf hr
   let S := (readBuf hS).toNat
   let a := readBuf ha
-  let digest := ed25519Digest (s.mem.live? sha.id) sha.offset r a (bytesOf (readWord hmsg))
+  let digest := ed25519Digest fApp fFini (s.mem.live? sha.id) sha.offset r a
+    (bytesOf (readWord hmsg))
   let B := basePoint.toAffine wellFormed_basePoint
 
   sig.offset.toNat + 64 ≤ 2 ^ 64 → msg.offset.toNat + sz.toNat ≤ 2 ^ 64 →
   IsSha512Ptr s.mem sha → sha.offset.toNat + 256 ≤ 2 ^ 64 → Sha512KHolds s sha →
   sha.id ≠ sig.id → sha.id ≠ pk.id → sha.id ≠ msg.id →
-  s.RefWF [sha] → ScalarReduceBy f →
+  s.RefWF [sha] → ScalarReduceBy f → Sha512AppendBy fApp → Sha512FiniBy fFini →
   ∀ Bt, BaseTableHolds s Bt → BaseVals Bt basePoint wellFormed_basePoint →
-  ∀ w, f digest = some w →
+  ∀ dig, digest = some dig → ∀ w, f dig = some w →
   ∃ (s' : GlobalState) (ret : BitVec 32),
     result = .value ([.value ret]ₕ, s')
     ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals
