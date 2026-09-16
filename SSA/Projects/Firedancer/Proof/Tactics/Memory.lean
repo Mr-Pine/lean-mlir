@@ -4,6 +4,7 @@ import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Avx512.Spec.Quad
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
@@ -99,8 +100,11 @@ elab "peel_store " x:term ", " p:term ", " hp:term ", " st:term
 the state nor the valuation; the block's last instruction included. -/
 macro "peel_lifetime" : tactic =>
   -- v4.34: the `Cfg` index projections have to go before the pattern will match.
-  `(tactic| (reduce_cfg_indices
-             first | rw [BlockCom.run_bind_denote_lifetime] | rw [BlockCom.run_denote_lifetime]))
+  `(tactic|
+    ( reduce_cfg_indices
+      first
+      | rw [BlockCom.run_bind_denote_lifetime]
+      | rw [BlockCom.run_denote_lifetime]))
 
 open Lean Elab Tactic Meta in
 /-- `peel_load t, blk, p, hblk, s` runs the next `llvm.load` of type `t`,
@@ -113,28 +117,36 @@ binding the value the live block `blk` holds at `p`.
 `s : GlobalState` -/
 elab "peel_load " t:term ", " blk:term ", " p:term ", " hblk:term ", " st:term : tactic =>
   withMainContext do
-    let isVec : Bool ← withoutModifyingState do
-      let ty ← Term.elabTerm (← `((($t) : LLVM.Ty))) none
-      return (← whnf (← instantiateMVars ty)).isAppOf ``InstCombine.MTy.vector
+    let isVec : Bool ←
+      withoutModifyingState do
+          let ty ← Term.elabTerm (← `((($t) : LLVM.Ty))) none
+          return (← whnf (← instantiateMVars ty)).isAppOf ``InstCombine.MTy.vector
     -- the loaded width, as a literal: the `omega` obligation below needs one
-    let width ← withoutModifyingState do
-      let e ← Term.elabTerm (← `((LLVM.Ty.width (($t) : LLVM.Ty) : Nat))) none
-      let some n := (← whnf (← instantiateMVars e)).rawNatLit?
-        | throwError "peel_load: cannot reduce the width of {← ppExpr e} to a literal"
-      `(term| $(Syntax.mkNumLit (toString n)):num)
+    let width ←
+      withoutModifyingState do
+          let e ← Term.elabTerm (← `((LLVM.Ty.width (($t) : LLVM.Ty) : Nat))) none
+          let some n := (← whnf (← instantiateMVars e)).rawNatLit?
+            | throwError "peel_load: cannot reduce the width of {← ppExpr e} to a literal"
+          `(term| $(Syntax.mkNumLit (toString n)):num)
     -- a vector decodes lane by lane, a scalar is the extract itself
-    let val ← if isVec then
+    let val ←
+      if isVec then
         `(LLVM.Ty.unflatten $t (($blk).bytes.extractLsb' ($p).offsetInBits $width))
       else
         `(PoisonOr.value (($blk).bytes.extractLsb' ($p).offsetInBits $width))
-    evalTactic (← `(tactic|
-     (try simp only [bind_assoc]
-      reduce_cfg_indices
-      rw [BlockCom.run_bind_denote_var_of_value (x := $val) (s' := $st)
-        (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-            rw [run_liftM (run_load (t := $t) ($hblk)
-              (by show ($p).offsetInBits + $width ≤ _; omega))]
-            rfl)])))
+    evalTactic
+        (←
+          `(tactic|
+              ( try simp only [bind_assoc]
+                reduce_cfg_indices
+                rw [BlockCom.run_bind_denote_var_of_value (x := $val) (s' := $st)
+                    (by
+                      simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+                      rw [run_liftM
+                          (run_load (t := $t) ($hblk)
+                            (by
+                              show ($p).offsetInBits + $width ≤ _; omega))]
+                      rfl)])))
 
 open Lean Elab Tactic in
 /-- `peel_gep off with p, hp, s as x` peels back a `getelementptr` instruction
@@ -175,17 +187,18 @@ filling `len` bytes with the byte `b` at `p`.
 `s : GlobalState` -/
 macro "peel_memset " b:term ", " len:term ", " p:term ", " hp:term ", " st:term : tactic =>
   `(tactic|
-   (try simp only [bind_assoc]
-    reduce_cfg_indices
-    rw [BlockCom.run_bind_denote_var_of_nil
-      (s' := { $st with mem := ($st).mem.splice $p (BitVec.replicate $len $b) })
-      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          rw [run_liftM (run_memset (b := $b) (len := BitVec.ofNat 64 $len)
-            (show Fits (($st).mem) $p (8 * (BitVec.ofNat 64 $len).toNat) from
-              Fits.mono $hp (by simp)))]
-          rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
-          rfl)
-    ]))
+    ( try simp only [bind_assoc]
+      reduce_cfg_indices
+      rw [BlockCom.run_bind_denote_var_of_nil (s' :=
+          { $st with mem := ($st).mem.splice $p (BitVec.replicate $len $b) })
+          (by
+            simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+            rw [run_liftM
+                (run_memset (b := $b) (len := BitVec.ofNat 64 $len)
+                  (show Fits (($st).mem) $p (8 * (BitVec.ofNat 64 $len).toNat) from
+                    Fits.mono $hp (by simp)))]
+            rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+            rfl)]))
 
 open Lean Elab Tactic in
 open Lean Elab Tactic in
@@ -202,28 +215,44 @@ over, and every later `isDefEq` would walk that term rather than an `fvar`.
 
 `memcpy` reads before it writes, so what lands at `dst` is the source block's
 bytes in the *pre-copy* state. -/
-elab "peel_memcpy " len:term ", " dst:term ", " src:term ", "
-    hsrc:term ", " hdst:term ", " st:term named:(stateNaming)? : tactic => do
-  let (stOut, putBack) ← match named with
-    | some n => do
+elab "peel_memcpy " len:term ", " dst:term ", " src:term ", " hsrc:term ", " hdst:term ", " st:term
+  named:(stateNaming)? : tactic => do
+  let (stOut, putBack) ←
+    match named with
+    | some n =>
+      do
         let st' : Term := ⟨n.raw[1]⟩
         let hst' : Term := ⟨n.raw[3]⟩
         pure (st', ← `(tactic| (rw [$hst':term]; rfl)))
-    | none => do
-        pure (← `({ $st with mem := ($st).mem.splice $dst (BitVec.extractLsb' (($src).offsetInBits) (8 * $len) ($hsrc).choose.bytes) }), ← `(tactic| rfl))
-  evalTactic (← `(tactic|
-   (try simp only [bind_assoc]
-    reduce_cfg_indices
-    rw [BlockCom.run_bind_denote_var_of_nil (s' := $stOut)
-      (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
-          rw [run_liftM (run_memcpy (len := BitVec.ofNat 64 $len)
-            (($hsrc).choose_spec.1)
-            (by have := ($hsrc).choose_spec.2
-                rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
-                omega)
-            (by rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]; exact $hdst))]
-          rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
-          $putBack:tactic)])))
+    | none =>
+      do
+        pure
+            (←
+                `({ $st with
+                      mem :=
+                        ($st).mem.splice $dst
+                          (BitVec.extractLsb' (($src).offsetInBits) (8 * $len)
+                            ($hsrc).choose.bytes) }),
+              ← `(tactic| rfl))
+  evalTactic
+      (←
+        `(tactic|
+            ( try simp only [bind_assoc]
+              reduce_cfg_indices
+              rw [BlockCom.run_bind_denote_var_of_nil (s' := $stOut)
+                  (by
+                    simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
+                    rw [run_liftM
+                        (run_memcpy (len := BitVec.ofNat 64 $len) (($hsrc).choose_spec.1)
+                          (by
+                            have := ($hsrc).choose_spec.2
+                            rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+                            omega)
+                          (by
+                            rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp];
+                            exact $hdst))]
+                    rw [show (BitVec.ofNat 64 $len).toNat = $len from by simp]
+                    $putBack:tactic)])))
 
 /-- `peel_addressof hg` runs the next `llvm.mlir.addressof`, binding the
 global's address. Simpler than every other peel: the operation only reads the
@@ -232,18 +261,21 @@ symbol table, so the state does not move.
 `hg : GlobalPtr s name p` -- or `h.ptr` from a `HoldsGlobal`. What the global
 *holds* is spent later, by the `peel_load`s that read through the pointer. -/
 macro "peel_addressof " hg:term : tactic =>
-  `(tactic| (reduce_cfg_indices
-             first
-    | rw [BlockCom.run_bind_denote_var_of_value
-        (x := PoisonOr.value _)
-        (by simp only [denoteOp_addressof, EffectM.run_map]
-            rw [run_addressof $hg]
-            rfl)]
-    | rw [BlockCom.run_denote_var_of_value
-        (x := PoisonOr.value _)
-        (by simp only [denoteOp_addressof, EffectM.run_map]
-            rw [run_addressof $hg]
-            rfl)]))
+  `(tactic|
+    ( reduce_cfg_indices
+      first
+      |
+        rw [BlockCom.run_bind_denote_var_of_value (x := PoisonOr.value _)
+            (by
+              simp only [denoteOp_addressof, EffectM.run_map]
+              rw [run_addressof $hg]
+              rfl)]
+      |
+        rw [BlockCom.run_denote_var_of_value (x := PoisonOr.value _)
+            (by
+              simp only [denoteOp_addressof, EffectM.run_map]
+              rw [run_addressof $hg]
+              rfl)]))
 
 /-- `peel_alloca from s as t with ht` runs the next `llvm.alloca` instruction,
 binding the fresh pointer `⟨⟨s.alloc.nextFreeBlock⟩, 0⟩` and advancing the state
@@ -254,29 +286,35 @@ to `t`. `t` and `ht` are the first two facts
 `t : GlobalState`
 `ht : t = s.afterAlloca w` -/
 macro "peel_alloca" " from " st:term " as " t:term " with " ht:term : tactic =>
-  `(tactic| (reduce_cfg_indices
-             first
-    | rw [BlockCom.run_bind_denote_var_of_value
-        (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
-        (by simp only [denoteOp_alloca, EffectM.run_map]
-            rw [run_alloca, $ht:term]
-            rfl)]
-    | rw [BlockCom.run_denote_var_of_value
-        (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
-        (by simp only [denoteOp_alloca, EffectM.run_map]
-            rw [run_alloca, $ht:term]
-            rfl)]))
+  `(tactic|
+    ( reduce_cfg_indices
+      first
+      |
+        rw [BlockCom.run_bind_denote_var_of_value (x :=
+            PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩) (s' := $t)
+            (by
+              simp only [denoteOp_alloca, EffectM.run_map]
+              rw [run_alloca, $ht:term]
+              rfl)]
+      |
+        rw [BlockCom.run_denote_var_of_value (x := PoisonOr.value ⟨⟨($st).alloc.nextFreeBlock⟩, 0⟩)
+            (s' := $t)
+            (by
+              simp only [denoteOp_alloca, EffectM.run_map]
+              rw [run_alloca, $ht:term]
+              rfl)]))
 
 open Lean Elab Tactic in
 /-- `peel_alloca_chain s, cw, 21` runs the 21 `alloca`s of `s.allocaChain cw`. -/
 elab "peel_alloca_chain " st:term ", " w:term ", " n:num : tactic => do
-  for k in [0 : n.getNat] do
+  for k in [0:n.getNat] do
     let ki := Syntax.mkNumLit (toString k)
     let ki1 := Syntax.mkNumLit (toString (k + 1))
-    evalTactic (← `(tactic|
-      peel_alloca from (GlobalState.allocaChain $st $w $ki)
-        as (GlobalState.allocaChain $st $w $ki1)
-        with (allocaChain_step $st $w $ki $ki1 rfl)))
+    evalTactic
+        (←
+          `(tactic|
+              peel_alloca from (GlobalState.allocaChain $st $w $ki) as
+                (GlobalState.allocaChain $st $w $ki1) with (allocaChain_step $st $w $ki $ki1 rfl)))
 
 open Lean Elab Tactic in
 /-- `fold_cells s, cw, cellPtr, n` folds the `n` chain pointers an `alloca`

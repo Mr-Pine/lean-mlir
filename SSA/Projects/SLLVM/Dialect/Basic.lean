@@ -8,6 +8,7 @@ import LeanMLIR.Dialects.LLVM.Basic
 import SSA.Projects.SLLVM.Dialect.Semantics
 
 namespace LeanMLIR
+
 open InstCombine (LLVM)
 
 /-!
@@ -148,14 +149,16 @@ inductive SLLVMOp where
 scalar is the scalar. This is what makes `insertvalue`'s move from a field
 *width* to a field *type* behaviour-preserving for every field that already
 was a `bitvec`. -/
-@[simp] theorem _root_.InstCombine.LLVM.Ty.flatten_bitvec {w : Nat} (x : LLVM.IntW w) :
+@[simp]
+theorem _root_.InstCombine.LLVM.Ty.flatten_bitvec {w : Nat} (x : LLVM.IntW w) :
     LLVM.Ty.flatten (.bitvec w) x = x := by
   obtain ⟨_ | b⟩ := x <;>
     simp [LLVM.Ty.flatten, LLVM.Ty.flattenBV, LLVM.Ty.Defined, LLVM.Ty.ofBitvec,
       PoisonOr.value_ne_poison]
 
 -- v4.34: reducible, so `SLLVM.Op`/`SLLVM.m` still unfold at `implicit` transparency.
-@[implicit_reducible] def SLLVM : Dialect where
+@[implicit_reducible]
+def SLLVM : Dialect where
   Op := SLLVMOp
   Ty := SLLVMTy
   m := EffectM
@@ -164,19 +167,30 @@ namespace SLLVM
 
 instance : TyDenote SLLVM.Ty where
   toType
-  | .arith t => ⟦t⟧
-  | .ptr => SLLVM.Ptr
-  | .mem => MemorySSAState
+    | .arith t => ⟦t⟧
+    | .ptr => SLLVM.Ptr
+    | .mem => MemorySSAState
 
-instance : DecidableEq SLLVM.Op := by unfold SLLVM; infer_instance
-instance : DecidableEq SLLVM.Ty := by unfold SLLVM; infer_instance
-instance : Lean.ToExpr SLLVM.Op := by unfold SLLVM; infer_instance
-instance : Lean.ToExpr SLLVM.Ty := by unfold SLLVM; infer_instance
+instance : DecidableEq SLLVM.Op := by
+  unfold SLLVM; infer_instance
 
-instance : Monad SLLVM.m        := by unfold SLLVM; infer_instance
-instance : LawfulMonad SLLVM.m  := by unfold SLLVM; infer_instance
+instance : DecidableEq SLLVM.Ty := by
+  unfold SLLVM; infer_instance
 
-open Qq in instance : DialectToExpr SLLVM where
+instance : Lean.ToExpr SLLVM.Op := by
+  unfold SLLVM; infer_instance
+
+instance : Lean.ToExpr SLLVM.Ty := by
+  unfold SLLVM; infer_instance
+
+instance : Monad SLLVM.m := by
+  unfold SLLVM; infer_instance
+
+instance : LawfulMonad SLLVM.m := by
+  unfold SLLVM; infer_instance
+
+open Qq in
+instance : DialectToExpr SLLVM where
   toExprDialect := q(SLLVM)
   toExprM := q(Id.{0})
 
@@ -184,62 +198,162 @@ open Qq in instance : DialectToExpr SLLVM where
 theorem m_eq : SLLVM.m α = EffectM α := by rfl
 
 /-! ### Aliasses -/
+
 section Alias
+
 open InstCombine.LLVM SLLVMOp
 
-@[match_pattern] nonrec abbrev Ty.arith : LLVM.Ty → SLLVM.Ty := .arith
+@[match_pattern]
+nonrec abbrev Ty.arith : LLVM.Ty → SLLVM.Ty :=
+  .arith
 
-@[match_pattern] abbrev Ty.bitvec (w : Nat) : SLLVM.Ty := .arith (.bitvec w)
-@[match_pattern] abbrev Ty.ptr : SLLVM.Ty := .ptr
-@[match_pattern] abbrev Ty.mem : SLLVM.Ty := .mem
+@[match_pattern]
+abbrev Ty.bitvec (w : Nat) : SLLVM.Ty :=
+  .arith (.bitvec w)
 
-@[match_pattern] nonrec abbrev Op.arith : LLVM.Op → SLLVM.Op := .arith
+@[match_pattern]
+abbrev Ty.ptr : SLLVM.Ty :=
+  .ptr
 
-@[match_pattern] nonrec abbrev Op.neg (w : Nat) : SLLVM.Op := arith <| Op.neg w
-@[match_pattern] nonrec abbrev Op.not (w : Nat) : SLLVM.Op := arith <| Op.not w
-@[match_pattern] nonrec abbrev Op.copy (w : Nat) : SLLVM.Op := arith <| Op.copy w
-@[match_pattern] nonrec abbrev Op.freeze (w : Nat) : SLLVM.Op := arith <| Op.freeze w
-@[match_pattern] nonrec abbrev Op.sext (w w' : Nat) : SLLVM.Op := arith <| Op.sext w w'
-@[match_pattern] nonrec abbrev Op.zext (w w' : Nat) (flag : LLVM.NonNegFlag := { }) : SLLVM.Op := arith <| Op.zext w w' flag
-@[match_pattern] nonrec abbrev Op.trunc (w w' : Nat) (flags : LLVM.NoWrapFlags := { }) : SLLVM.Op := arith <| Op.trunc w w' flags
+@[match_pattern]
+abbrev Ty.mem : SLLVM.Ty :=
+  .mem
 
-@[match_pattern] nonrec abbrev Op.and (w : Nat) : SLLVM.Op := arith <| Op.and w
-@[match_pattern] nonrec abbrev Op.or (w : Nat) (flag : LLVM.DisjointFlag := { }) : SLLVM.Op := arith <| Op.or w flag
-@[match_pattern] nonrec abbrev Op.xor (w : Nat) : SLLVM.Op := arith <| Op.xor w
-@[match_pattern] nonrec abbrev Op.shl (w : Nat) (flags : LLVM.NoWrapFlags := { }) : SLLVM.Op := arith <| Op.shl w flags
-@[match_pattern] nonrec abbrev Op.lshr (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.lshr w flag
-@[match_pattern] nonrec abbrev Op.ashr (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.ashr w flag
-@[match_pattern] nonrec abbrev Op.add (w : Nat) (flags : LLVM.NoWrapFlags := { }) : SLLVM.Op := arith <| Op.add w flags
-@[match_pattern] nonrec abbrev Op.mul (w : Nat) (flags : LLVM.NoWrapFlags := { }) : SLLVM.Op := arith <| Op.mul w flags
-@[match_pattern] nonrec abbrev Op.sub (w : Nat) (flags : LLVM.NoWrapFlags := { }) : SLLVM.Op := arith <| Op.sub w flags
+@[match_pattern]
+nonrec abbrev Op.arith : LLVM.Op → SLLVM.Op :=
+  .arith
 
-@[match_pattern] nonrec abbrev Op.icmp (c : LLVM.IntPred) (w : Nat) : SLLVM.Op := arith <| Op.icmp c w
-@[match_pattern] nonrec abbrev Op.const (w : Nat) (val : Int) : SLLVM.Op := arith <| Op.const w val
-@[match_pattern] nonrec abbrev Op.select (w : Nat) : SLLVM.Op := arith <| Op.select w
-@[match_pattern] nonrec abbrev Op.poison (t : LLVM.Ty) : SLLVM.Op := arith <| Op.poison t
-@[match_pattern] nonrec abbrev Op.constDense (t : LLVM.Ty) (vals : List Int) : SLLVM.Op :=
+@[match_pattern]
+nonrec abbrev Op.neg (w : Nat) : SLLVM.Op :=
+  arith <| Op.neg w
+
+@[match_pattern]
+nonrec abbrev Op.not (w : Nat) : SLLVM.Op :=
+  arith <| Op.not w
+
+@[match_pattern]
+nonrec abbrev Op.copy (w : Nat) : SLLVM.Op :=
+  arith <| Op.copy w
+
+@[match_pattern]
+nonrec abbrev Op.freeze (w : Nat) : SLLVM.Op :=
+  arith <| Op.freeze w
+
+@[match_pattern]
+nonrec abbrev Op.sext (w w' : Nat) : SLLVM.Op :=
+  arith <| Op.sext w w'
+
+@[match_pattern]
+nonrec abbrev Op.zext (w w' : Nat) (flag : LLVM.NonNegFlag := {}) : SLLVM.Op :=
+  arith <| Op.zext w w' flag
+
+@[match_pattern]
+nonrec abbrev Op.trunc (w w' : Nat) (flags : LLVM.NoWrapFlags := {}) : SLLVM.Op :=
+  arith <| Op.trunc w w' flags
+
+@[match_pattern]
+nonrec abbrev Op.and (w : Nat) : SLLVM.Op :=
+  arith <| Op.and w
+
+@[match_pattern]
+nonrec abbrev Op.or (w : Nat) (flag : LLVM.DisjointFlag := {}) : SLLVM.Op :=
+  arith <| Op.or w flag
+
+@[match_pattern]
+nonrec abbrev Op.xor (w : Nat) : SLLVM.Op :=
+  arith <| Op.xor w
+
+@[match_pattern]
+nonrec abbrev Op.shl (w : Nat) (flags : LLVM.NoWrapFlags := {}) : SLLVM.Op :=
+  arith <| Op.shl w flags
+
+@[match_pattern]
+nonrec abbrev Op.lshr (w : Nat) (flag : LLVM.ExactFlag := {}) : SLLVM.Op :=
+  arith <| Op.lshr w flag
+
+@[match_pattern]
+nonrec abbrev Op.ashr (w : Nat) (flag : LLVM.ExactFlag := {}) : SLLVM.Op :=
+  arith <| Op.ashr w flag
+
+@[match_pattern]
+nonrec abbrev Op.add (w : Nat) (flags : LLVM.NoWrapFlags := {}) : SLLVM.Op :=
+  arith <| Op.add w flags
+
+@[match_pattern]
+nonrec abbrev Op.mul (w : Nat) (flags : LLVM.NoWrapFlags := {}) : SLLVM.Op :=
+  arith <| Op.mul w flags
+
+@[match_pattern]
+nonrec abbrev Op.sub (w : Nat) (flags : LLVM.NoWrapFlags := {}) : SLLVM.Op :=
+  arith <| Op.sub w flags
+
+@[match_pattern]
+nonrec abbrev Op.icmp (c : LLVM.IntPred) (w : Nat) : SLLVM.Op :=
+  arith <| Op.icmp c w
+
+@[match_pattern]
+nonrec abbrev Op.const (w : Nat) (val : Int) : SLLVM.Op :=
+  arith <| Op.const w val
+
+@[match_pattern]
+nonrec abbrev Op.select (w : Nat) : SLLVM.Op :=
+  arith <| Op.select w
+
+@[match_pattern]
+nonrec abbrev Op.poison (t : LLVM.Ty) : SLLVM.Op :=
+  arith <| Op.poison t
+
+@[match_pattern]
+nonrec abbrev Op.constDense (t : LLVM.Ty) (vals : List Int) : SLLVM.Op :=
   arith <| Op.constDense t vals
-@[match_pattern] nonrec abbrev Op.insertelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
+
+@[match_pattern]
+nonrec abbrev Op.insertelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
   arith <| Op.insertelement e l w
-@[match_pattern] nonrec abbrev Op.extractelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
+
+@[match_pattern]
+nonrec abbrev Op.extractelement (e : LLVM.Ty) (l w : Nat) : SLLVM.Op :=
   arith <| Op.extractelement e l w
-@[match_pattern] nonrec abbrev Op.shufflevector (e : LLVM.Ty) (l : Nat) (mask : List Int) :
-    SLLVM.Op := arith <| Op.shufflevector e l mask
-@[match_pattern] nonrec abbrev Op.vpmadd52 (hi : Bool) (l : Nat) : SLLVM.Op :=
+
+@[match_pattern]
+nonrec abbrev Op.shufflevector (e : LLVM.Ty) (l : Nat) (mask : List Int) : SLLVM.Op :=
+  arith <| Op.shufflevector e l mask
+
+@[match_pattern]
+nonrec abbrev Op.vpmadd52 (hi : Bool) (l : Nat) : SLLVM.Op :=
   arith <| Op.vpmadd52 hi l
-@[match_pattern] nonrec abbrev Op.vpermi2var (l : Nat) : SLLVM.Op :=
+
+@[match_pattern]
+nonrec abbrev Op.vpermi2var (l : Nat) : SLLVM.Op :=
   arith <| Op.vpermi2var l
-@[match_pattern] nonrec abbrev Op.vectorBinary (l w : Nat) (bop : InstCombine.MOp.BinaryOp) :
-    SLLVM.Op := arith <| Op.vectorBinary l w bop
 
-@[match_pattern] nonrec abbrev Op.udiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.udiv w flag
-@[match_pattern] nonrec abbrev Op.sdiv (w : Nat) (flag : LLVM.ExactFlag := { }) : SLLVM.Op := arith <| Op.sdiv w flag
-@[match_pattern] nonrec abbrev Op.urem : Nat → SLLVM.Op := arith ∘ Op.urem
-@[match_pattern] nonrec abbrev Op.srem : Nat → SLLVM.Op := arith ∘ Op.srem
+@[match_pattern]
+nonrec abbrev Op.vectorBinary (l w : Nat) (bop : InstCombine.MOp.BinaryOp) : SLLVM.Op :=
+  arith <| Op.vectorBinary l w bop
 
+@[match_pattern]
+nonrec abbrev Op.udiv (w : Nat) (flag : LLVM.ExactFlag := {}) : SLLVM.Op :=
+  arith <| Op.udiv w flag
 
-@[simp, simp_denote] theorem toType_arith : toType (Ty.arith t) = toType t := rfl
-@[simp, simp_denote] theorem toType_bitvec : toType (Ty.bitvec w) = LLVM.IntW w := rfl
+@[match_pattern]
+nonrec abbrev Op.sdiv (w : Nat) (flag : LLVM.ExactFlag := {}) : SLLVM.Op :=
+  arith <| Op.sdiv w flag
+
+@[match_pattern]
+nonrec abbrev Op.urem : Nat → SLLVM.Op :=
+  arith ∘ Op.urem
+
+@[match_pattern]
+nonrec abbrev Op.srem : Nat → SLLVM.Op :=
+  arith ∘ Op.srem
+
+@[simp, simp_denote]
+theorem toType_arith : toType (Ty.arith t) = toType t :=
+  rfl
+
+@[simp, simp_denote]
+theorem toType_bitvec : toType (Ty.bitvec w) = LLVM.IntW w :=
+  rfl
 
 end Alias
 
@@ -249,94 +363,100 @@ open Ty in
 /- The signature of each operation is the same as in LLVM. -/
 def_signature for SLLVM
   -- New operations
-  | .ptradd          => (ptr, bitvec 64) -> ptr
-  | .gep _ _         => (ptr, bitvec 64) -> ptr
-  | .gepConst _      => (ptr) -> ptr
-  | .gep2 _ _ _ _    => (ptr, bitvec 64, bitvec 64) -> ptr
-  | .load t          => (ptr) -[.impure]-> Ty.arith t
-  | .loadPure t      => (mem, ptr) -> [mem, Ty.arith t]
-  | .store t         => (ptr, Ty.arith t) -[.impure]-> []
-  | .storePure t     => (mem, ptr, Ty.arith t) -> [mem]
-  | .alloca _w       => () -[.impure]-> ptr
-  | .memset          => (ptr, bitvec 8, bitvec 64) -[.impure]-> []
-  | .memcpy          => (ptr, ptr, bitvec 64) -[.impure]-> []
+  | .ptradd => (ptr,bitvec 64) -> ptr
+  | .gep _ _ => (ptr,bitvec 64) -> ptr
+  | .gepConst _ => (ptr) -> ptr
+  | .gep2 _ _ _ _ => (ptr,bitvec 64,bitvec 64) -> ptr
+  | .load t => (ptr) -[.impure]-> Ty.arith t
+  | .loadPure t => (mem,ptr) -> [mem, Ty.arith t]
+  | .store t => (ptr,Ty.arith t) -[.impure]-> []
+  | .storePure t => (mem,ptr,Ty.arith t) -> [mem]
+  | .alloca _w => () -[.impure]-> ptr
+  | .memset => (ptr,bitvec 8,bitvec 64) -[.impure]-> []
+  | .memcpy => (ptr,ptr,bitvec 64) -[.impure]-> []
   | .bitcast src dst => (Ty.arith src) -> Ty.arith dst
-  | .vselect l w     => (Ty.arith (.vector l (.bitvec 1)), Ty.arith (.vector l (.bitvec w)),
-                          Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w))
-  | .vicmp l w _     => (Ty.arith (.vector l (.bitvec w)), Ty.arith (.vector l (.bitvec w)))
-                          -> Ty.arith (.vector l (.bitvec 1))
-  | .lifetime _      => (ptr) -[.impure]-> []
+  | .vselect l w =>
+    (Ty.arith
+      (.vector l (.bitvec 1)),Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
+    Ty.arith (.vector l (.bitvec w))
+  | .vicmp l w _ => (Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
+    Ty.arith (.vector l (.bitvec 1))
+  | .lifetime _ => (ptr) -[.impure]-> []
   -- LLVM operations with modified effect signature
-  | Op.urem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
-  | Op.srem w        => (bitvec w, bitvec w) -[.impure]-> bitvec w
-  | Op.sdiv w _flag  => (bitvec w, bitvec w) -[.impure]-> bitvec w
-  | Op.udiv w _flag  => (bitvec w, bitvec w) -[.impure]-> bitvec w
+  | Op.urem w => (bitvec w,bitvec w) -[.impure]-> bitvec w
+  | Op.srem w => (bitvec w,bitvec w) -[.impure]-> bitvec w
+  | Op.sdiv w _flag => (bitvec w,bitvec w) -[.impure]-> bitvec w
+  | Op.udiv w _flag => (bitvec w,bitvec w) -[.impure]-> bitvec w
   -- Other LLVM operations
-  | Op.neg w         => (bitvec w) -> bitvec w
-  | Op.not w         => (bitvec w) -> bitvec w
-  | Op.copy w        => (bitvec w) -> bitvec w
-  | Op.freeze w      => (bitvec w) -> bitvec w
-  | Op.sext w w'     => (bitvec w) -> bitvec w'
-  | Op.zext w w' _flag   => (bitvec w) -> bitvec w'
+  | Op.neg w => (bitvec w) -> bitvec w
+  | Op.not w => (bitvec w) -> bitvec w
+  | Op.copy w => (bitvec w) -> bitvec w
+  | Op.freeze w => (bitvec w) -> bitvec w
+  | Op.sext w w' => (bitvec w) -> bitvec w'
+  | Op.zext w w' _flag => (bitvec w) -> bitvec w'
   | Op.trunc w w' _flags => (bitvec w) -> bitvec w'
-  | Op.and w         => (bitvec w, bitvec w) -> bitvec w
-  | Op.xor w         => (bitvec w, bitvec w) -> bitvec w
-  | Op.or w _flag    => (bitvec w, bitvec w) -> bitvec w
-  | Op.shl w _flags  => (bitvec w, bitvec w) -> bitvec w
-  | Op.add w _flags  => (bitvec w, bitvec w) -> bitvec w
-  | Op.mul w _flags  => (bitvec w, bitvec w) -> bitvec w
-  | Op.sub w _flags  => (bitvec w, bitvec w) -> bitvec w
-  | Op.lshr w _flag  => (bitvec w, bitvec w) -> bitvec w
-  | Op.ashr w _flag  => (bitvec w, bitvec w) -> bitvec w
-  | Op.icmp _c w     => (bitvec w, bitvec w) -> bitvec 1
-  | Op.select w      => (bitvec 1, bitvec w, bitvec w) -> bitvec w
-  | Op.const w _val  => () -> bitvec w
-  | Op.poison t      => () -> Ty.arith t
+  | Op.and w => (bitvec w,bitvec w) -> bitvec w
+  | Op.xor w => (bitvec w,bitvec w) -> bitvec w
+  | Op.or w _flag => (bitvec w,bitvec w) -> bitvec w
+  | Op.shl w _flags => (bitvec w,bitvec w) -> bitvec w
+  | Op.add w _flags => (bitvec w,bitvec w) -> bitvec w
+  | Op.mul w _flags => (bitvec w,bitvec w) -> bitvec w
+  | Op.sub w _flags => (bitvec w,bitvec w) -> bitvec w
+  | Op.lshr w _flag => (bitvec w,bitvec w) -> bitvec w
+  | Op.ashr w _flag => (bitvec w,bitvec w) -> bitvec w
+  | Op.icmp _c w => (bitvec w,bitvec w) -> bitvec 1
+  | Op.select w => (bitvec 1,bitvec w,bitvec w) -> bitvec w
+  | Op.const w _val => () -> bitvec w
+  | Op.poison t => () -> Ty.arith t
   | Op.constDense t _vals => () -> Ty.arith t
-  | SLLVMOp.insertvalue aggW _off fieldTy =>
-      (bitvec aggW, Ty.arith fieldTy) -> bitvec aggW
+  | SLLVMOp.insertvalue aggW _off fieldTy => (bitvec aggW,Ty.arith fieldTy) -> bitvec aggW
   | SLLVMOp.addressof _name => () -[.impure]-> Ty.ptr
-  | SLLVMOp.nullptr  => () -> Ty.ptr
-  | SLLVMOp.ptricmp _ => (Ty.ptr, Ty.ptr) -> bitvec 1
-  | SLLVMOp.ptrselect => (bitvec 1, Ty.ptr, Ty.ptr) -> Ty.ptr
-  | SLLVMOp.fshl w => (bitvec w, bitvec w, bitvec w) -> bitvec w
-  | SLLVMOp.fshr w => (bitvec w, bitvec w, bitvec w) -> bitvec w
+  | SLLVMOp.nullptr => () -> Ty.ptr
+  | SLLVMOp.ptricmp _ => (Ty.ptr,Ty.ptr) -> bitvec 1
+  | SLLVMOp.ptrselect => (bitvec 1,Ty.ptr,Ty.ptr) -> Ty.ptr
+  | SLLVMOp.fshl w => (bitvec w,bitvec w,bitvec w) -> bitvec w
+  | SLLVMOp.fshr w => (bitvec w,bitvec w,bitvec w) -> bitvec w
   | SLLVMOp.bswap w => (bitvec w) -> bitvec w
-  | SLLVMOp.smin w => (bitvec w, bitvec w) -> bitvec w
-  | Op.insertelement e l w =>
-      (Ty.arith (.vector l e), Ty.arith e, bitvec w) -> Ty.arith (.vector l e)
-  | Op.extractelement e l w =>
-      (Ty.arith (.vector l e), bitvec w) -> Ty.arith e
-  | Op.shufflevector e l mask =>
-      (Ty.arith (.vector l e), Ty.arith (.vector l e)) -> Ty.arith (.vector mask.length e)
+  | SLLVMOp.smin w => (bitvec w,bitvec w) -> bitvec w
+  | Op.insertelement e l w => (Ty.arith (.vector l e),Ty.arith e,bitvec w) -> Ty.arith (.vector l e)
+  | Op.extractelement e l w => (Ty.arith (.vector l e),bitvec w) -> Ty.arith e
+  | Op.shufflevector e l mask => (Ty.arith (.vector l e),Ty.arith (.vector l e)) ->
+    Ty.arith (.vector mask.length e)
   | Op.vectorBinary l w _bop =>
-      (Ty.arith (.vector l (LLVM.Ty.bitvec w)), Ty.arith (.vector l (LLVM.Ty.bitvec w)))
-        -> Ty.arith (.vector l (LLVM.Ty.bitvec w))
+    (Ty.arith (.vector l (LLVM.Ty.bitvec w)),Ty.arith (.vector l (LLVM.Ty.bitvec w))) ->
+    Ty.arith (.vector l (LLVM.Ty.bitvec w))
   | Op.vpmadd52 _hi l =>
-      (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
-       Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
+    (Ty.arith
+      (.vector l
+        (LLVM.Ty.bitvec
+          64)),Ty.arith (.vector l (LLVM.Ty.bitvec 64)),Ty.arith (.vector l (LLVM.Ty.bitvec 64))) ->
+    Ty.arith (.vector l (LLVM.Ty.bitvec 64))
   | Op.vpermi2var l =>
-      (Ty.arith (.vector l (LLVM.Ty.bitvec 64)), Ty.arith (.vector l (LLVM.Ty.bitvec 64)),
-       Ty.arith (.vector l (LLVM.Ty.bitvec 64))) -> Ty.arith (.vector l (LLVM.Ty.bitvec 64))
+    (Ty.arith
+      (.vector l
+        (LLVM.Ty.bitvec
+          64)),Ty.arith (.vector l (LLVM.Ty.bitvec 64)),Ty.arith (.vector l (LLVM.Ty.bitvec 64))) ->
+    Ty.arith (.vector l (LLVM.Ty.bitvec 64))
   -- The one operation with a region: the callee's body. `${…}` is
   -- `def_signature`'s antiquotation for an argument or return list that is a
   -- term rather than a literal, which a call needs since neither arity is
   -- fixed.
-  | SLLVMOp.call _callee argTys retTys eff =>
-      { ${Ctxt.ofList argTys.reverse} → retTys } → ${argTys} -[eff]-> ${retTys}
+  | SLLVMOp.call _callee argTys retTys eff => {${Ctxt.ofList argTys.reverse} → retTys} →
+    ${argTys} -[eff]-> ${retTys}
 
 attribute [local irreducible] EffectM
+
 -- ^^ This is needed so that `EffectM` doesn't get unfolded in the `def_denote` macro
 
 def_denote for SLLVM
   -- New operations
-  | .ptradd   => fun p x => [SLLVM.ptradd p x]ₕ
+  | .ptradd => fun p x => [SLLVM.ptradd p x]ₕ
   | .gep sz off => fun p i => [SLLVM.gep p sz off i]ₕ
   | .gepConst off => fun p => [SLLVM.gepConst p off]ₕ
   | .gep2 s₀ o₀ s₁ o₁ => fun p i j => [SLLVM.gep2 p s₀ o₀ s₁ o₁ i j]ₕ
-  | .load t   => fun p   => ([·]ₕ) <$> SLLVM.load p t
+  | .load t => fun p => ([·]ₕ) <$> SLLVM.load p t
   | .loadPure t => fun m p => HVector.ofPair <| SLLVM.loadPure m p t
-  | .store t  => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
+  | .store t => fun p x => (fun _ => []ₕ) <$> SLLVM.store p t x
   | .storePure t => fun m p x => [SLLVM.storePure m p t x]ₕ
   | .alloca w => ([·]ₕ) <$> SLLVM.alloca w
   | .memset => fun p b len => (fun _ => []ₕ) <$> SLLVM.memset p b len
@@ -345,8 +465,8 @@ def_denote for SLLVM
   | .vselect _l _w => fun c x y => [SLLVM.vselect c x y]ₕ
   | .vicmp _l _w c => fun x y => [SLLVM.vicmp c x y]ₕ
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
-  | SLLVMOp.insertvalue _aggW off fieldTy =>
-      fun agg v => [SLLVM.insertvalue off agg (InstCombine.LLVM.Ty.flatten fieldTy v)]ₕ
+  | SLLVMOp.insertvalue _aggW off fieldTy => fun agg v =>
+    [SLLVM.insertvalue off agg (InstCombine.LLVM.Ty.flatten fieldTy v)]ₕ
   | SLLVMOp.addressof name => ([·]ₕ) <$> SLLVM.addressof name
   | SLLVMOp.nullptr => [SLLVM.Ptr.null]ₕ
   | SLLVMOp.ptricmp eq => fun x y => [SLLVM.ptricmp eq x y]ₕ
@@ -358,38 +478,37 @@ def_denote for SLLVM
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
-  | Op.urem _w      => fun x y => ([·]ₕ) <$> SLLVM.urem x y
-  | Op.srem _w      => fun x y => ([·]ₕ) <$> SLLVM.srem x y
+  | Op.urem _w => fun x y => ([·]ₕ) <$> SLLVM.urem x y
+  | Op.srem _w => fun x y => ([·]ₕ) <$> SLLVM.srem x y
   -- Other LLVM operations
-  | Op.neg _w       => fun x => [LLVM.neg x]ₕ
-  | Op.not _w       => fun x => [LLVM.not x]ₕ
-  | Op.copy _w      => fun x => [x]ₕ
-  | Op.freeze _w    => fun x => [LLVM.freeze x]ₕ
-  | Op.sext _w w'   => fun x => [LLVM.sext w' x]ₕ
-  | Op.zext _w w' flag   => fun x => [LLVM.zext w' x flag]ₕ
+  | Op.neg _w => fun x => [LLVM.neg x]ₕ
+  | Op.not _w => fun x => [LLVM.not x]ₕ
+  | Op.copy _w => fun x => [x]ₕ
+  | Op.freeze _w => fun x => [LLVM.freeze x]ₕ
+  | Op.sext _w w' => fun x => [LLVM.sext w' x]ₕ
+  | Op.zext _w w' flag => fun x => [LLVM.zext w' x flag]ₕ
   | Op.trunc _w w' flags => fun x => [LLVM.trunc w' x flags]ₕ
-  | Op.and _w       => fun x y => [LLVM.and x y]ₕ
-  | Op.xor _w       => fun x y => [LLVM.xor x y]ₕ
-  | Op.or _w flag   => fun x y => [LLVM.or x y flag]ₕ
+  | Op.and _w => fun x y => [LLVM.and x y]ₕ
+  | Op.xor _w => fun x y => [LLVM.xor x y]ₕ
+  | Op.or _w flag => fun x y => [LLVM.or x y flag]ₕ
   | Op.shl _w flags => fun x y => [LLVM.shl x y flags]ₕ
   | Op.add _w flags => fun x y => [LLVM.add x y flags]ₕ
   | Op.mul _w flags => fun x y => [LLVM.mul x y flags]ₕ
   | Op.sub _w flags => fun x y => [LLVM.sub x y flags]ₕ
   | Op.lshr _w flag => fun x y => [LLVM.lshr x y flag]ₕ
   | Op.ashr _w flag => fun x y => [LLVM.ashr x y flag]ₕ
-  | Op.icmp c _w    => fun x y => [LLVM.icmp c x y]ₕ
-  | Op.select _w    => fun c x y => [LLVM.select c x y]ₕ
+  | Op.icmp c _w => fun x y => [LLVM.icmp c x y]ₕ
+  | Op.select _w => fun c x y => [LLVM.select c x y]ₕ
   | Op.const _w val => [LLVM.const? _ val]ₕ
-  | Op.poison t     => [LLVM.Ty.poison t]ₕ
+  | Op.poison t => [LLVM.Ty.poison t]ₕ
   | Op.constDense t vals => [LLVM.Ty.dense t vals]ₕ
   | Op.insertelement .. => fun v x i => [LLVM.Ty.insertelement v x i]ₕ
   | Op.extractelement .. => fun v i => [LLVM.Ty.extractelement v i]ₕ
   | Op.shufflevector _e _l mask => fun a b => [LLVM.Ty.shufflevector mask a b]ₕ
   | Op.vpmadd52 hi _l => fun a b c => [LLVM.Ty.vpmadd52 hi a b c]ₕ
   | Op.vpermi2var _l => fun a idx b => [LLVM.Ty.vpermi2var a idx b]ₕ
-  | Op.vectorBinary _l _w bop =>
-      fun a b => [Vector.ofFn fun i =>
-        InstCombine.binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)]ₕ
+  | Op.vectorBinary _l _w bop => fun a b =>
+    [Vector.ofFn fun i => InstCombine.binaryDenote bop (a[i.val]'i.isLt) (b[i.val]'i.isLt)]ₕ
   -- A call is its region applied to its arguments -- the same shape as
   -- `Scf.run`, generalised to any arity. The `reverse` is load bearing: block
   -- arguments enter a `Ctxt` in reverse declaration order, so without it the
@@ -401,47 +520,46 @@ def_denote for SLLVM
   -- return and the counter is back where it was, as when a real callee
   -- returns. A pointer into the frame that escaped the call is dangling.
   | SLLVMOp.call _ _ _ .impure => fun args f =>
-      runFunction (f (Ctxt.Valuation.ofHVector args.reverse))
+    runFunction (f (Ctxt.Valuation.ofHVector args.reverse))
 
 /-! ### Printing -/
+
 section Print
+
 open DialectPrint
 
 instance : DialectPrint SLLVM where
   printOpName
     | .arith llvmOp => printOpName llvmOp
-    | .storePure _
-    | .store _t   => "ptr.store"
-    | .loadPure _
-    | .load _t    => "ptr.load"
-    | .ptradd     => "ptr.add"
-    | .gep ..     => "llvm.getelementptr"
+    | .storePure _ | .store _t => "ptr.store"
+    | .loadPure _ | .load _t => "ptr.load"
+    | .ptradd => "ptr.add"
+    | .gep .. => "llvm.getelementptr"
     | .gepConst _ => "llvm.getelementptr"
-    | .gep2 ..    => "llvm.getelementptr"
-    | .alloca _w  => "ptr.alloca"
-    | .memset     => "llvm.intr.memset"
+    | .gep2 .. => "llvm.getelementptr"
+    | .alloca _w => "ptr.alloca"
+    | .memset => "llvm.intr.memset"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
-    | .call ..    => "llvm.call"
+    | .call .. => "llvm.call"
     | .insertvalue .. => "llvm.insertvalue"
     | .addressof _ => "llvm.mlir.addressof"
-    | .nullptr    => "llvm.mlir.zero"
-    | .memcpy     => "llvm.intr.memcpy"
+    | .nullptr => "llvm.mlir.zero"
+    | .memcpy => "llvm.intr.memcpy"
     | .bitcast .. => "llvm.bitcast"
     | .vselect .. => "llvm.select"
-    | .vicmp ..   => "llvm.icmp"
-    | .ptricmp _  => "llvm.icmp"
-    | .ptrselect  => "llvm.select"
-    | .fshl _     => "llvm.intr.fshl"
-    | .fshr _     => "llvm.intr.fshr"
-    | .bswap _    => "llvm.intr.bswap"
-    | .smin _     => "llvm.intr.smin"
+    | .vicmp .. => "llvm.icmp"
+    | .ptricmp _ => "llvm.icmp"
+    | .ptrselect => "llvm.select"
+    | .fshl _ => "llvm.intr.fshl"
+    | .fshr _ => "llvm.intr.fshr"
+    | .bswap _ => "llvm.intr.bswap"
+    | .smin _ => "llvm.intr.smin"
   printAttributes
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
     | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"
     | .gepConst off => s!"\{offsetBytes = {off}}"
-    | .gep2 s₀ o₀ s₁ o₁ =>
-        s!"\{strideBytes = [{s₀}, {s₁}], offsetBytes = [{o₀}, {o₁}]}"
+    | .gep2 s₀ o₀ s₁ o₁ => s!"\{strideBytes = [{s₀}, {s₁}], offsetBytes = [{o₀}, {o₁}]}"
     | .insertvalue _ off _ => s!"\{offsetBits = {off}}"
     | .addressof name => s!"\{global_name = @{name}}"
     | _ => ""

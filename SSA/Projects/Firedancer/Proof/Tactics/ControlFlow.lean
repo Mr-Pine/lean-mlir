@@ -4,6 +4,7 @@ import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Avx512.Spec.Quad
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
@@ -35,8 +36,8 @@ heartbeat budget rather than falling over. Hence the dispatch, rather than a
 def callArgsAreOfHVector (h : Term) : TacticM Bool :=
   withMainContext do
     withoutModifyingState do
-      let ty ← instantiateMVars (← inferType (← Term.elabTerm h none))
-      return (ty.find? (·.isAppOf ``Ctxt.Valuation.ofHVector)).isSome
+        let ty ← instantiateMVars (← inferType (← Term.elabTerm h none))
+        return (ty.find? (·.isAppOf ``Ctxt.Valuation.ofHVector)).isSome
 
 open Lean Meta Elab Tactic in
 /-- The body of `peel_call`. `extra` are extra lemmas for
@@ -162,14 +163,16 @@ This is what lets one `peel_call` cover both families: the choice was never a
 judgement call, it is written in the lemma the caller already has. -/
 def callReturnsValue (h : Term) : TacticM Bool :=
   withMainContext do
-    let ty ← withoutModifyingState do
-      whnf (← instantiateMVars (← inferType (← Term.elabTerm h none)))
+    let ty ←
+      withoutModifyingState do
+          whnf (← instantiateMVars (← inferType (← Term.elabTerm h none)))
     let some (_, _, rhs) := ty.eq?
       | throwError "peel_call: {← ppExpr ty} is not a run equation"
     -- `.value (rets, t')` -- the `rets` is the first component of the pair
-    let rets ← withoutModifyingState do
-      let some pair := rhs.getAppArgs.back? | throwError "peel_call: no `.value` payload"
-      whnf (← instantiateMVars (pair.getAppArgs[2]?.getD pair))
+    let rets ←
+      withoutModifyingState do
+          let some pair := rhs.getAppArgs.back? | throwError "peel_call: no `.value` payload"
+          whnf (← instantiateMVars (pair.getAppArgs[2]?.getD pair))
     return !rets.isAppOf ``HVector.nil
 
 open Lean Elab Tactic in
@@ -177,12 +180,12 @@ open Lean Elab Tactic in
 def peelCallNames (value : Bool) : Name × Name × Name :=
   if value then
     (``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value,
-     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_value,
-     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value)
+      ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_value,
+      ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_value)
   else
     (``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_nil,
-     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_nil,
-     ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil)
+      ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_nil,
+      ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_of_nil)
 
 open Lean Elab Tactic in
 /-- `peel_call h` runs the next call, given the callee's run equation `h` --
@@ -221,7 +224,8 @@ elab "peel_call " h:term " with " l:term,+ : tactic => do
   peelCallCore a b c h l.getElems
 
 macro "simp_return" : tactic =>
-  `(tactic| simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm,
+  `(tactic|
+    simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm,
       Ctxt.Valuation.singleton])
 
 end Firedancer

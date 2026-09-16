@@ -21,11 +21,14 @@ them from the one hypothesis the caller has, `BcpPre (2^20) l`.
 -/
 
 namespace Firedancer.Avx512
+
 open R43x6 (FitsLong)
 
 /-- The bias, the mask and the `19` as `long`s. -/
 theorem fitsLong_bias : FitsLong (-((2 : ℤ) ^ 20)) := by simp [R43x6.FitsLong]
+
 theorem fitsLong_bias' : FitsLong ((2 : ℤ) ^ 20) := by simp [R43x6.FitsLong]
+
 theorem fitsLong_19 : FitsLong (19 : ℤ) := by simp [R43x6.FitsLong]
 
 /-- `q = y >> 255` is zero exactly below `2^40`, on the non-negative chain the
@@ -104,8 +107,8 @@ one limb. -/
 theorem reduceFacts {l : Fin R43x6.limbCount → ℤ} (hpre : BcpPre (2 ^ 20) l) :
     ReduceFacts l (bcp (2 ^ 20) l) := by
   have fa := bcpA_fitsLong (b := 2 ^ 20) (x := l) (by norm_num) (by norm_num) hpre
-  obtain ⟨fmul, f54, f55⟩ := bcp_aux_fitsLong (b := 2 ^ 20)
-    (x := l) (by norm_num) (by norm_num) hpre
+  obtain ⟨fmul, f54, f55⟩ :=
+    bcp_aux_fitsLong (b := 2 ^ 20) (x := l) (by norm_num) (by norm_num) hpre
   obtain ⟨hbl, hb5⟩ := bcp_limbs (b := 2 ^ 20) (x := l) (by norm_num) (by norm_num) hpre
   have hb0 := hbl 0 (by decide)
   have hb1 := hbl 1 (by decide)
@@ -114,77 +117,157 @@ theorem reduceFacts {l : Fin R43x6.limbCount → ℤ} (hpre : BcpPre (2 ^ 20) l)
   have hb4 := hbl 4 (by decide)
   have hmnr := bcp_nearlyReduced hpre
   have f71 := mnr_limb5_fitsLong hmnr
-  have h71 : (mnrE (bcp (2 ^ 20) l) 4 >>> 43) + mnrA (bcp (2 ^ 20) l) 5 % (2 : ℤ) ^ 40
-      = mnr (bcp (2 ^ 20) l) 5 := by simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+  have h71 :
+    (mnrE (bcp (2 ^ 20) l) 4 >>> 43) + mnrA (bcp (2 ^ 20) l) 5 % (2 : ℤ) ^ 40 =
+      mnr (bcp (2 ^ 20) l) 5 := by
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five];
+    ring
   have hm0 : mnr (bcp (2 ^ 20) l) 0 = mnrE (bcp (2 ^ 20) l) 0 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five]
   have hm1 : mnr (bcp (2 ^ 20) l) 1 = mnrE (bcp (2 ^ 20) l) 1 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five]
   have hm2 : mnr (bcp (2 ^ 20) l) 2 = mnrE (bcp (2 ^ 20) l) 2 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five]
   have hm3 : mnr (bcp (2 ^ 20) l) 3 = mnrE (bcp (2 ^ 20) l) 3 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five]
   have hm4 : mnr (bcp (2 ^ 20) l) 4 = mnrE (bcp (2 ^ 20) l) 4 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+      R43x6.limbs6_four, R43x6.limbs6_five]
   exact
     { fa := fa
       fmul := fmul
-      fmul' := by rw [mul_comm] at fmul; exact fmul
+      fmul' := by
+        rw [mul_comm] at fmul; exact fmul
       f54 := f54
       f55 := f55
-      ha5 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      ha0 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      ha1 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      ha2 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      ha3 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      ha4 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha5 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      ha0 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      ha1 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      ha2 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      ha3 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      ha4 := by
+        simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
       hmul19 := mul_comm _ _
-      hy0 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hy1 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hy2 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hy3 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hy4 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hy5 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      hy0 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hy1 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hy2 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hy3 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hy4 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hy5 := by
+        simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
       hb0 := hb0
       hb1 := hb1
       hb2 := hb2
       hb3 := hb3
       hb4 := hb4
-      fy0 := by simp only [R43x6.FitsLong]; omega
-      fy1 := by simp only [R43x6.FitsLong]; omega
-      fy2 := by simp only [R43x6.FitsLong]; omega
-      fy3 := by simp only [R43x6.FitsLong]; omega
-      fy4 := by simp only [R43x6.FitsLong]; omega
-      fy5 := by simp only [R43x6.FitsLong]; omega
+      fy0 := by
+        simp only [R43x6.FitsLong]; omega
+      fy1 := by
+        simp only [R43x6.FitsLong]; omega
+      fy2 := by
+        simp only [R43x6.FitsLong]; omega
+      fy3 := by
+        simp only [R43x6.FitsLong]; omega
+      fy4 := by
+        simp only [R43x6.FitsLong]; omega
+      fy5 := by
+        simp only [R43x6.FitsLong]; omega
       hy5nn := by omega
       fA := mnrA_fitsLong hmnr
       fE := mnrE_fitsLong hmnr
       fA0 := mnrA_nonneg hmnr
-      hA0 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hA1 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hA2 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hA3 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hA4 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hA5 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA0 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hA1 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hA2 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hA3 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hA4 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hA5 := by
+        simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
       hqlt := mnrQ_eq_zero_iff (mnrA_nonneg hmnr 5)
       fif := by split <;> simp [R43x6.FitsLong]
-      hE0 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
-      hE1 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      hE2 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      hE3 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
-      hE4 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      hE0 := by
+        simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five]
+      hE1 := by
+        simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      hE2 := by
+        simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      hE3 := by
+        simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
+      hE4 := by
+        simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three,
+          R43x6.limbs6_four, R43x6.limbs6_five];
+        ring
       h71 := h71
-      f72 := by rw [h71]; exact f71
+      f72 := by
+        rw [h71]; exact f71
       hm0 := hm0
       hm1 := hm1
       hm2 := hm2
       hm3 := hm3
       hm4 := hm4
-      fm0 := by rw [hm0]; exact fitsLong_emod _ (by norm_num)
-      fm1 := by rw [hm1]; exact fitsLong_emod _ (by norm_num)
-      fm2 := by rw [hm2]; exact fitsLong_emod _ (by norm_num)
-      fm3 := by rw [hm3]; exact fitsLong_emod _ (by norm_num)
-      fm4 := by rw [hm4]; exact fitsLong_emod _ (by norm_num)
-      fm5 := by rw [← h71, add_comm]; simpa using f71 }
+      fm0 := by
+        rw [hm0]; exact fitsLong_emod _ (by norm_num)
+      fm1 := by
+        rw [hm1]; exact fitsLong_emod _ (by norm_num)
+      fm2 := by
+        rw [hm2]; exact fitsLong_emod _ (by norm_num)
+      fm3 := by
+        rw [hm3]; exact fitsLong_emod _ (by norm_num)
+      fm4 := by
+        rw [hm4]; exact fitsLong_emod _ (by norm_num)
+      fm5 := by
+        rw [← h71, add_comm]; simpa using f71 }
 
 end Firedancer.Avx512

@@ -28,16 +28,15 @@ open LeanMLIR
 call's arguments. Note the `reverse`: block arguments enter a `Ctxt` in
 reverse declaration order, so the operand list has to be turned around before
 it becomes a valuation of the callee's context. -/
-@[simp_denote] theorem denoteOp_call {Γ : Ctxt SLLVM.Ty}
-    {callee : String} {argTys retTys : List SLLVM.Ty}
-    (args : HVector (Ctxt.Var Γ) argTys)
-    (com : Com SLLVM (Ctxt.ofList argTys.reverse) .pure retTys)
+@[simp_denote]
+theorem denoteOp_call {Γ : Ctxt SLLVM.Ty} {callee : String} {argTys retTys : List SLLVM.Ty}
+    (args : HVector (Ctxt.Var Γ) argTys) (com : Com SLLVM (Ctxt.ofList argTys.reverse) .pure retTys)
     (V : Ctxt.Valuation Γ) :
     Expr.denoteOp
-      (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .pure)
-        (SLLVMOp.call callee argTys retTys .pure) rfl (EffectKind.le_refl _) args
-        (Regions.cons com Regions.nil)) V
-      = com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse) := by
+        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .pure) (SLLVMOp.call callee argTys retTys .pure) rfl
+          (EffectKind.le_refl _) args (Regions.cons com Regions.nil))
+        V =
+      com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse) := by
   rfl
 
 /-- **Denotation of an impure call**: the callee's denotation applied to the
@@ -46,16 +45,15 @@ every block allocated during the call, i.e. with id at least the counter's
 value at entry -- is dead in the state the call returns and the counter is
 restored. A pointer into the frame that escaped the call takes the
 freed-already UB path on use, as a real dangling stack pointer would. -/
-@[simp_denote] theorem denoteOp_call_impure {Γ : Ctxt SLLVM.Ty}
-    {callee : String} {argTys retTys : List SLLVM.Ty}
+@[simp_denote]
+theorem denoteOp_call_impure {Γ : Ctxt SLLVM.Ty} {callee : String} {argTys retTys : List SLLVM.Ty}
     (args : HVector (Ctxt.Var Γ) argTys)
-    (com : Com SLLVM (Ctxt.ofList argTys.reverse) .impure retTys)
-    (V : Ctxt.Valuation Γ) :
+    (com : Com SLLVM (Ctxt.ofList argTys.reverse) .impure retTys) (V : Ctxt.Valuation Γ) :
     Expr.denoteOp
-      (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
-        (SLLVMOp.call callee argTys retTys .impure) rfl (EffectKind.le_refl _) args
-        (Regions.cons com Regions.nil)) V
-      = runFunction (com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)) := by
+        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure) (SLLVMOp.call callee argTys retTys .impure)
+          rfl (EffectKind.le_refl _) args (Regions.cons com Regions.nil))
+        V =
+      runFunction (com.denote (Ctxt.Valuation.ofHVector (args.map V).reverse)) := by
   rfl
 
 end LeanMLIR.SLLVM

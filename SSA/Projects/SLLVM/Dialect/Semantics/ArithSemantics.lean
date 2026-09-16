@@ -15,7 +15,9 @@ def LLVM.IntW.canBe (x : LLVM.IntW w) (y : BitVec w) : Bool :=
 namespace LeanMLIR.SLLVM
 
 /-- An LLVM pointer, or `poison` -/
-@[implicit_reducible] def Ptr : Type := PoisonOr Pointer
+@[implicit_reducible]
+def Ptr : Type :=
+  PoisonOr Pointer
 
 /-- The block `llvm.mlir.zero` points at. Reserved: it is the one id no
 `alloca` may hand out and no global may be loaded at, so that a null pointer
@@ -24,12 +26,14 @@ so a state whose counter starts above `0` -- which every loaded module's does,
 `GlobalState.withGlobal` allocating the same way -- never names it. The model
 does not *enforce* the reservation: `ptricmp` compares pointers, so a spec
 whose region null-checks a live pointer carries `id ≠ nullBlock` itself. -/
-def nullBlock : BlockId := ⟨0⟩
+def nullBlock : BlockId :=
+  ⟨0⟩
 
 /-- The null pointer, `llvm.mlir.zero` at `!llvm.ptr`. Not poison: C code
 returns it as a sentinel and branches on it, so it is a definite value -- one
 that is never live, by `nullBlock`'s reservation. -/
-def Ptr.null : SLLVM.Ptr := .value ⟨nullBlock, 0#64⟩
+def Ptr.null : SLLVM.Ptr :=
+  .value ⟨nullBlock, 0#64⟩
 
 /-- `llvm.icmp eq`/`ne` at `!llvm.ptr` (`eq` selects which): the null check a
 caller does on a failure sentinel. Poison in either operand is poison out;
@@ -44,12 +48,14 @@ def ptricmp (eq : Bool) (x y : SLLVM.Ptr) : LLVM.IntW 1 :=
 
 @[simp_sllvm]
 theorem ptricmp_value (eq : Bool) (a b : Pointer) :
-    ptricmp eq (.value a) (.value b) = .value (if (a == b) == eq then 1#1 else 0#1) := rfl
+    ptricmp eq (.value a) (.value b) = .value (if (a == b) == eq then 1#1 else 0#1) :=
+  rfl
 
 /-- Not a `simp` lemma: specs state the sentinel as `Ptr.null`, and rewriting
 it away would leave both spellings in play. `ptricmp`'s reduction wants it, so
 it is named. -/
-theorem null_eq_value : Ptr.null = .value ⟨nullBlock, 0#64⟩ := rfl
+theorem null_eq_value : Ptr.null = .value ⟨nullBlock, 0#64⟩ :=
+  rfl
 
 /-- `llvm.select` at `!llvm.ptr`: `LLVM.select`'s rule at pointer type. A
 poison condition is poison out; otherwise the chosen operand, poison or not,
@@ -62,7 +68,8 @@ def ptrselect (c : LLVM.IntW 1) (x y : SLLVM.Ptr) : SLLVM.Ptr :=
 
 @[simp_sllvm]
 theorem ptrselect_value (b : BitVec 1) (x y : SLLVM.Ptr) :
-    ptrselect (.value b) x y = if b = 1#1 then x else y := rfl
+    ptrselect (.value b) x y = if b = 1#1 then x else y :=
+  rfl
 
 /-! ### funnel shift -/
 
@@ -84,7 +91,8 @@ def fshl {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
 
 @[simp_sllvm]
 theorem fshl_value {w : Nat} (a b n : BitVec w) :
-    fshl (.value a) (.value b) (.value n) = .value (fshlBV a b n) := rfl
+    fshl (.value a) (.value b) (.value n) = .value (fshlBV a b n) :=
+  rfl
 
 /-- `llvm.intr.fshr` on bare bitvectors: the low `w` bits of `a ++ b` shifted
 right by `n mod w`. -/
@@ -100,7 +108,8 @@ def fshr {w : Nat} (a b n : LLVM.IntW w) : LLVM.IntW w :=
 
 @[simp_sllvm]
 theorem fshr_value {w : Nat} (a b n : BitVec w) :
-    fshr (.value a) (.value b) (.value n) = .value (fshrBV a b n) := rfl
+    fshr (.value a) (.value b) (.value n) = .value (fshrBV a b n) :=
+  rfl
 
 /-- Byte-reverse a `w`-bit value: byte `i` of the result is byte `k-1-i` of the
 input, where `k = w / 8`. A `w` that is not a multiple of 8 keeps only the whole
@@ -117,7 +126,8 @@ def bswap {w : Nat} (x : LLVM.IntW w) : LLVM.IntW w :=
   | .poison => .poison
 
 @[simp_sllvm]
-theorem bswap_value {w : Nat} (x : BitVec w) : bswap (.value x) = .value (bswapBV x) := rfl
+theorem bswap_value {w : Nat} (x : BitVec w) : bswap (.value x) = .value (bswapBV x) :=
+  rfl
 
 /-! ### min / max -/
 
@@ -131,7 +141,8 @@ def smin {w : Nat} (a b : LLVM.IntW w) : LLVM.IntW w :=
 
 @[simp_sllvm]
 theorem smin_value {w : Nat} (a b : BitVec w) :
-    smin (.value a) (.value b) = .value (if a.slt b then a else b) := rfl
+    smin (.value a) (.value b) = .value (if a.slt b then a else b) :=
+  rfl
 
 /-! ### div / rem -/
 
@@ -173,8 +184,8 @@ aggregate -- except when the field covers every bit of the aggregate, which is
 what `undef` followed by one `insertvalue` produces, and where LLVM's answer is
 just the field. LLVM tracks poison per field and `IntW` only per bitvector, so
 outside that case the model is deliberately the conservative one. -/
-def insertvalue {aggW fieldW : Nat} (offBits : Nat)
-    (agg : LLVM.IntW aggW) (v : LLVM.IntW fieldW) : LLVM.IntW aggW := do
+def insertvalue {aggW fieldW : Nat} (offBits : Nat) (agg : LLVM.IntW aggW) (v : LLVM.IntW fieldW) :
+    LLVM.IntW aggW := do
   let v ← v
   if offBits = 0 ∧ fieldW = aggW then
     return v.setWidth aggW
@@ -187,7 +198,7 @@ def insertvalue {aggW fieldW : Nat} (offBits : Nat)
 def ptradd (p : SLLVM.Ptr) (x : LLVM.IntW 64) : SLLVM.Ptr := do
   let p ← p
   let x ← x
-  return { p with offset := p.offset + x}
+  return { p with offset := p.offset + x }
 
 /-- `getelementptr` with one leading dynamic index and constant trailing
 indices: `ptradd` by `strideBytes * i + offsetBytes`, where the stride is the
@@ -205,8 +216,7 @@ def gepConst (p : SLLVM.Ptr) (offsetBytes : Nat) : SLLVM.Ptr :=
 `elem_type`s and the constants after it walk to an array, which the second
 indexes. That is exactly a `gep` into the array's address, so it is defined as
 one -- lemmas about `gep` apply to each stage. -/
-def gep2 (p : SLLVM.Ptr) (stride₀ offset₀ stride₁ offset₁ : Nat) (i j : LLVM.IntW 64) :
-    SLLVM.Ptr :=
+def gep2 (p : SLLVM.Ptr) (stride₀ offset₀ stride₁ offset₁ : Nat) (i j : LLVM.IntW 64) : SLLVM.Ptr :=
   gep (gep p stride₀ offset₀ i) stride₁ offset₁ j
 
 /-!

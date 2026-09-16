@@ -18,8 +18,7 @@ variable {α : Type u} {A B : α → Type*} {as : List α}
 -/
 
 --TODO: this should be derived when this becomes possible
-protected instance decidableEq [∀ a, DecidableEq (A a)] :
-    ∀ {l : List α}, DecidableEq (HVector A l)
+protected instance decidableEq [∀ a, DecidableEq (A a)] : ∀ {l : List α}, DecidableEq (HVector A l)
   | _, .nil, .nil => isTrue rfl
   | _, .cons x₁ v₁, .cons x₂ v₂ =>
     letI d := HVector.decidableEq v₁ v₂
@@ -31,33 +30,30 @@ def head : HVector A (a :: as) → A a
 def tail : HVector A (a :: as) → HVector A as
   | .cons _ xs => xs
 
-def map (f : ∀ (a : α), A a → B a) :
-    ∀ {l : List α}, HVector A l → HVector B l
-  | [],   .nil        => .nil
-  | t::_, .cons a as  => .cons (f t a) (map f as)
+def map (f : ∀ (a : α), A a → B a) : ∀ {l : List α}, HVector A l → HVector B l
+  | [], .nil => .nil
+  | t :: _, .cons a as => .cons (f t a) (map f as)
 
 /-- An alternative to `map` which also maps a function over the index list -/
 def map' {A : α → Type*} {B : β → Type*} (f' : α → β) (f : ∀ (a : α), A a → B (f' a)) :
     ∀ {l : List α}, HVector A l → HVector B (l.map f')
-  | [],   .nil        => .nil
-  | t::_, .cons a as  => .cons (f t a) (map' f' f as)
+  | [], .nil => .nil
+  | t :: _, .cons a as => .cons (f t a) (map' f' f as)
 
-def mapM [Monad m] {α : Type 0} {A : α → Type} {B : α → Type}
-    (f : ∀ (a : α), A a → m (B a)) :
+def mapM [Monad m] {α : Type 0} {A : α → Type} {B : α → Type} (f : ∀ (a : α), A a → m (B a)) :
     ∀ {l : List α}, HVector A l → m (HVector B l)
   | [], .nil => return .nil
-  | t :: _ts, .cons a as => do return HVector.cons (← f t a) (← HVector.mapM f as)
+  | t :: _ts, .cons a as => do
+    return HVector.cons (← f t a) (← HVector.mapM f as)
 
 /-- Folds a function over an hvector from the left, where the accumulator has a fixed type. -/
-def foldl {B : Type*} (f : ∀ (a : α), B → A a → B) :
-    ∀ {l : List α}, B → HVector A l → B
-  | [],   b, .nil       => b
-  | t::_, b, .cons a as => foldl f (f t b a) as
+def foldl {B : Type*} (f : ∀ (a : α), B → A a → B) : ∀ {l : List α}, B → HVector A l → B
+  | [], b, .nil => b
+  | t :: _, b, .cons a as => foldl f (f t b a) as
 
-def foldr {β : Type*} (f : ∀ (a : α), A a → β → β) :
-    ∀ {l : List α}, (init : β) → HVector A l → β
-  | [],   b, .nil       => b
-  | t::_, b, .cons a as =>
+def foldr {β : Type*} (f : ∀ (a : α), A a → β → β) : ∀ {l : List α}, (init : β) → HVector A l → β
+  | [], b, .nil => b
+  | t :: _, b, .cons a as =>
     let b' := foldr f b as
     f t a b'
 
@@ -72,30 +68,29 @@ result of that fold.
 def foldld {β : Type*} (B : β → Type*) (fType : β → α → β)
     (fElem : {b : β} → {a : α} → B b → A a → B (fType b a)) :
     {as : List α} → HVector A as → {b : β} → (init : B b) → B (as.foldl fType b)
-  | [], .nil, _, init         => init
-  | _::_, .cons a as, _, init => foldld B fType fElem as (fElem init a)
+  | [], .nil, _, init => init
+  | _ :: _, .cons a as, _, init => foldld B fType fElem as (fElem init a)
 
 def foldlM {B : Type*} [Monad m] (f : ∀ (a : α), B → A a → m B) :
     ∀ {l : List α}, (init : B) → (as : HVector A l) → m B
-  | [],   b, .nil       => return b
-  | t::_, b, .cons a as => do foldlM f (← f t b a) as
+  | [], b, .nil => return b
+  | t :: _, b, .cons a as => do
+    foldlM f (← f t b a) as
 
 /--
 Simultaneous map on the type and value level of an HVector while
 performing monadic effects for value translation.-/
-def mapM' [Monad m] {α : Type 0} {A : α → Type} {B : β → Type}
-    {l : List α}
-    {F : α → β}
-    (f : (a : α) → (v : A a) → m (B (F a)) )
-    (as : HVector A l) : m (HVector B (F <$> l)) :=
+def mapM' [Monad m] {α : Type 0} {A : α → Type} {B : β → Type} {l : List α} {F : α → β}
+    (f : (a : α) → (v : A a) → m (B (F a))) (as : HVector A l) : m (HVector B (F <$> l)) :=
   match l, as with
   | [], .nil => return .nil
-  | t :: _ts, .cons a as => do return HVector.cons (← f t a) (← HVector.mapM' f as)
+  | t :: _ts, .cons a as => do
+    return HVector.cons (← f t a) (← HVector.mapM' f as)
 
 def get {as} : HVector A as → (i : Fin as.length) → A (as.get i)
   | .nil, i => i.elim0
-  | .cons x  _, ⟨0,   _⟩  => x
-  | .cons _ xs, ⟨i+1, h⟩  => get xs ⟨i, Nat.succ_lt_succ_iff.mp h⟩
+  | .cons x _, ⟨0, _⟩ => x
+  | .cons _ xs, ⟨i + 1, h⟩ => get xs ⟨i, Nat.succ_lt_succ_iff.mp h⟩
 
 /-- To be used as an auto-tactic to prove that the index of getN is within bounds -/
 macro "hvector_get_elem_tactic" : tactic =>
@@ -118,19 +113,24 @@ abbrev getN (x : HVector A as) (i : Nat) (hi : i < as.length := by hvector_get_e
 
 /-! ## Notation -/
 
-syntax "[" withoutPosition(term,*) "]ₕ"  : term
+syntax "[" withoutPosition(term,*) "]ₕ" : term
+
 -- Copied from core for List
 macro_rules
-  | `([ $elems,* ]ₕ) => do
-    let rec expandListLit (i : Nat) (skip : Bool) (result : Lean.TSyntax `term) : Lean.MacroM Lean.Syntax := do
+  | `([$elems,*]ₕ) => do
+    let rec expandListLit (i : Nat) (skip : Bool) (result : Lean.TSyntax `term) :
+      Lean.MacroM Lean.Syntax := do
       match i, skip with
-      | 0,   _     => pure result
-      | i+1, true  => expandListLit i false result
-      | i+1, false => expandListLit i true  (← ``(HVector.cons $(⟨elems.elemsAndSeps[i]!⟩) $result))
+      | 0, _ =>
+        pure result
+      | i + 1, true =>
+        expandListLit i false result
+      | i + 1, false =>
+        expandListLit i true (← ``(HVector.cons $(⟨elems.elemsAndSeps[i]!⟩) $result))
     if elems.elemsAndSeps.size < 64 then
       expandListLit elems.elemsAndSeps.size false (← ``(HVector.nil))
     else
-      `(%[ $elems,* | List.nil ])
+      `(%[$elems,* | List.nil])
 
 infixr:50 "::ₕ" => HVector.cons
 
@@ -149,12 +149,16 @@ def toTuple {as} : HVector A as → ToTupleType A as
   | .cons x .nil => x
   | .cons x₁ <| .cons x₂ xs => (x₁, (cons x₂ xs).toTuple)
 
-abbrev toSingle : HVector A [a₁] → A a₁ := toTuple
-abbrev toPair   : HVector A [a₁, a₂] → A a₁ × A a₂ := toTuple
-abbrev toTriple : HVector A [a₁, a₂, a₃] → A a₁ × A a₂ × A a₃ := toTuple
+abbrev toSingle : HVector A [a₁] → A a₁ :=
+  toTuple
 
-def ofPair : (A a₁ × A a₂) → HVector A [a₁, a₂] :=
-  fun ⟨x, y⟩ => [x, y]ₕ
+abbrev toPair : HVector A [a₁, a₂] → A a₁ × A a₂ :=
+  toTuple
+
+abbrev toTriple : HVector A [a₁, a₂, a₃] → A a₁ × A a₂ × A a₃ :=
+  toTuple
+
+def ofPair : (A a₁ × A a₂) → HVector A [a₁, a₂] := fun ⟨x, y⟩ => [x, y]ₕ
 
 /-! ## isEmpty-/
 
@@ -172,7 +176,8 @@ def isEmpty : HVector A as → Bool
 /-- Convert an hvector where every element provably has the same type β into
 a `List` of βs-/
 def toListOf {A : α → _} {as} (β : Type _)
-    (hα : ∀ a ∈ as, A a = β := by intros; rfl) :
+    (hα : ∀ a ∈ as, A a = β := by
+      intros; rfl) :
     HVector A as → List β
   | .nil => []
   | .cons x xs =>
@@ -201,84 +206,102 @@ instance [∀ a, Repr (f a)] : Repr (HVector f as) where
 
 /-! ## get -/
 
-@[simp] theorem cons_get_zero {A : α → Type*} {a: α} {as : List α} {e : A a} {vec : HVector A as} :
-   (HVector.cons e vec).get (@OfNat.ofNat (Fin (as.length + 1)) 0 Fin.instOfNat) = e :=
+@[simp]
+theorem cons_get_zero {A : α → Type*} {a : α} {as : List α} {e : A a} {vec : HVector A as} :
+    (HVector.cons e vec).get (@OfNat.ofNat (Fin (as.length + 1)) 0 Fin.instOfNat) = e :=
   rfl
 
-@[simp] theorem cons_get_succ {A : α → Type*} {a: α} {as : List α} {e : A a} {vec : HVector A as} {i : Fin as.length} :
-   (HVector.cons e vec).get (i.succ) = vec.get i :=
+@[simp]
+theorem cons_get_succ {A : α → Type*} {a : α} {as : List α} {e : A a} {vec : HVector A as}
+    {i : Fin as.length} : (HVector.cons e vec).get (i.succ) = vec.get i :=
   rfl
 
 /-! ## map -/
 
-@[simp] theorem map_nil {A B : α → Type u} {f : (a : α) → A a → B a} :
-    map f (nil : HVector A []) = nil := rfl
+@[simp]
+theorem map_nil {A B : α → Type u} {f : (a : α) → A a → B a} : map f (nil : HVector A []) = nil :=
+  rfl
 
-@[simp] theorem map_cons {A B : α → Type u} {as : List α} {f : (a : α) → A a → B a}
-    {x : A a} {xs : HVector A as} :
-    map f (cons x xs) = cons (f _ x) (map f xs) := by
+@[simp]
+theorem map_cons {A B : α → Type u} {as : List α} {f : (a : α) → A a → B a} {x : A a}
+    {xs : HVector A as} : map f (cons x xs) = cons (f _ x) (map f xs) := by
   induction xs <;> simp_all [map]
 
-theorem map_map {A B C : α → Type*} {l : List α} (t : HVector A l)
-    (f : ∀ a, A a → B a) (g : ∀ a, B a → C a) :
-    (t.map f).map g = t.map (fun a v => g a (f a v)) := by
+theorem map_map {A B C : α → Type*} {l : List α} (t : HVector A l) (f : ∀ a, A a → B a)
+    (g : ∀ a, B a → C a) : (t.map f).map g = t.map (fun a v => g a (f a v)) := by
   induction t <;> simp_all [map]
 
 /-- `get` at a literal index. Without these, a `Fin` literal no longer reduces through `get`'s
 `match`, and every `simp` that used to see through a cons stalls. -/
-@[simp] theorem get_cons_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) :
-    (HVector.cons x xs).get 0 = x := rfl
+@[simp]
+theorem get_cons_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) :
+    (HVector.cons x xs).get 0 = x :=
+  rfl
 
-@[simp] theorem get_cons_mk_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) (h) :
-    (HVector.cons x xs).get ⟨0, h⟩ = x := rfl
+@[simp]
+theorem get_cons_mk_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) (h) :
+    (HVector.cons x xs).get ⟨0, h⟩ = x :=
+  rfl
 
-@[simp] theorem get_cons_succ {a : α} {as : List α} (x : A a) (xs : HVector A as)
-    (i : Fin as.length) : (HVector.cons x xs).get i.succ = xs.get i := rfl
+@[simp]
+theorem get_cons_succ {a : α} {as : List α} (x : A a) (xs : HVector A as) (i : Fin as.length) :
+    (HVector.cons x xs).get i.succ = xs.get i :=
+  rfl
 
-@[simp] theorem get_cons_mk_succ {a : α} {as : List α} (x : A a) (xs : HVector A as) (i : Nat)
+@[simp]
+theorem get_cons_mk_succ {a : α} {as : List α} (x : A a) (xs : HVector A as) (i : Nat)
     (h : i + 1 < (a :: as).length) :
-    (HVector.cons x xs).get ⟨i + 1, h⟩ = xs.get ⟨i, Nat.succ_lt_succ_iff.mp h⟩ := rfl
+    (HVector.cons x xs).get ⟨i + 1, h⟩ = xs.get ⟨i, Nat.succ_lt_succ_iff.mp h⟩ :=
+  rfl
 
-@[simp] theorem map_id (xs : HVector A as) : xs.map (fun _ v => v) = xs := by
+@[simp]
+theorem map_id (xs : HVector A as) : xs.map (fun _ v => v) = xs := by
   induction xs <;> simp_all [map]
 
-@[simp] theorem get_map (xs : HVector A as) (f : (a : α) → A a → B a) :
+@[simp]
+theorem get_map (xs : HVector A as) (f : (a : α) → A a → B a) :
     (xs.map f).get i = f _ (xs.get i) := by
   induction xs with
-  | nil     => exact i.elim0
+  | nil => exact i.elim0
   | cons x xs ih =>
     cases i using Fin.succRecOn
     · rfl
     · simp_all [map]
 
 /-! ## map' -/
+
 section Map'
 
-@[simp] theorem map'_cons : map' f g (cons x xs) = cons (g _ x) (map' f g xs) := rfl
-@[simp] theorem map'_nil : map' f g nil = nil := rfl
+@[simp]
+theorem map'_cons : map' f g (cons x xs) = cons (g _ x) (map' f g xs) :=
+  rfl
+
+@[simp]
+theorem map'_nil : map' f g nil = nil :=
+  rfl
 
 end Map'
 
 /-! ## fold -/
 
-@[simp] theorem foldl_cons :
-    foldl f b (cons x xs) = foldl f (f _ b x) xs :=
+@[simp]
+theorem foldl_cons : foldl f b (cons x xs) = foldl f (f _ b x) xs :=
   rfl
 
-@[simp] theorem foldl_map :
-    foldl f b (map g xs) = foldl (fun a x b => f a x (g _ b)) b xs := by
+@[simp]
+theorem foldl_map : foldl f b (map g xs) = foldl (fun a x b => f a x (g _ b)) b xs := by
   induction xs generalizing f b with
   | nil => rfl
   | cons _ _ ih => simp [map, ih]
 
 /-! ## misc -/
 
-theorem eq_of_type_eq_nil {A : α → Type*} {l : List α}
-    {t₁ t₂ : HVector A l} (h : l = []) : t₁ = t₂ := by
+theorem eq_of_type_eq_nil {A : α → Type*} {l : List α} {t₁ t₂ : HVector A l} (h : l = []) :
+    t₁ = t₂ := by
   cases h; cases t₁; cases t₂; rfl
 
-@[ext] theorem ext {xs ys : HVector A as}
-    (h : ∀ i, xs.get i = ys.get i) : xs = ys := by
+@[ext]
+theorem ext {xs ys : HVector A as} (h : ∀ i, xs.get i = ys.get i) : xs = ys := by
   induction xs <;> cases ys
   case nil => rfl
   case cons ih _ _ =>
@@ -286,21 +309,23 @@ theorem eq_of_type_eq_nil {A : α → Type*} {l : List α}
     specialize h (0 : Fin <| _ + 1)
     simp_all
 
-
 /-!
   ## OfFn
 -/
+
 section OfFn
 
-def ofFn (A : α → Type _) (as : List α) (f : (i : Fin as.length) → A as[i]) :
-    HVector A as :=
+def ofFn (A : α → Type _) (as : List α) (f : (i : Fin as.length) → A as[i]) : HVector A as :=
   match as with
-  | _ :: as => f (0 : Fin (_ + 1)) ::ₕ ofFn A as (fun i => f i.succ)
+  | _ :: as => f (0 : Fin (_ + 1))::ₕofFn A as (fun i => f i.succ)
   | [] => .nil
 
-@[simp] theorem ofFn_nil : ofFn A [] f = .nil := rfl
+@[simp]
+theorem ofFn_nil : ofFn A [] f = .nil :=
+  rfl
 
-@[simp] theorem get_ofFn : (ofFn A as f).get i = f i := by
+@[simp]
+theorem get_ofFn : (ofFn A as f).get i = f i := by
   induction as
   case nil => exact i.elim0
   case cons ih =>
@@ -313,21 +338,29 @@ end OfFn
 /-!
 ## Append
 -/
+
 section Append
 
 def append {as bs} : HVector A as → HVector A bs → HVector A (as ++ bs)
   | .nil, ys => ys
-  | x ::ₕ xs, ys => x ::ₕ (append xs ys)
+  | x::ₕxs, ys => x::ₕ(append xs ys)
 
 instance : HAppend (HVector A as) (HVector A bs) (HVector A (as ++ bs)) where
   hAppend := append
 
 variable {bs} {xs : HVector A as} {ys : HVector A bs}
 
-@[simp] theorem append_eq : append xs ys = xs ++ ys := rfl
+@[simp]
+theorem append_eq : append xs ys = xs ++ ys :=
+  rfl
 
-@[simp] theorem nil_append : nil (f:=A) ++ ys = ys := rfl
-@[simp] theorem cons_append : (x ::ₕ xs) ++ ys = (x ::ₕ (xs ++ ys)) := rfl
+@[simp]
+theorem nil_append : nil (f := A) ++ ys = ys :=
+  rfl
+
+@[simp]
+theorem cons_append : (x::ₕxs) ++ ys = (x::ₕ(xs ++ ys)) :=
+  rfl
 
 /-! ## Reverse
 
@@ -344,34 +377,43 @@ definition, so nothing is cast. `reverse_cons_eqRec` recovers the old
 recursion. -/
 
 /-- `List.reverseAux` on an `HVector`: `xs` reversed onto the accumulator `acc`. -/
-def reverseAux : {as : List α} → HVector A as → {bs : List α} → HVector A bs →
-    HVector A (as.reverseAux bs)
+def reverseAux :
+    {as : List α} → HVector A as → {bs : List α} → HVector A bs → HVector A (as.reverseAux bs)
   | _, .nil, _, acc => acc
-  | _, .cons x xs, _, acc => reverseAux xs (x ::ₕ acc)
+  | _, .cons x xs, _, acc => reverseAux xs (x::ₕacc)
 
-@[simp] theorem reverseAux_nil {bs} (acc : HVector A bs) :
-    reverseAux (.nil : HVector A []) acc = acc := rfl
-@[simp] theorem reverseAux_cons {a as bs} (x : A a) (xs : HVector A as) (acc : HVector A bs) :
-    reverseAux (x ::ₕ xs) acc = reverseAux xs (x ::ₕ acc) := rfl
+@[simp]
+theorem reverseAux_nil {bs} (acc : HVector A bs) : reverseAux (.nil : HVector A []) acc = acc :=
+  rfl
+
+@[simp]
+theorem reverseAux_cons {a as bs} (x : A a) (xs : HVector A as) (acc : HVector A bs) :
+    reverseAux (x::ₕxs) acc = reverseAux xs (x::ₕacc) :=
+  rfl
 
 /-- Reverse an `HVector`, reversing its type-level index list with it. -/
 def reverse {as : List α} (xs : HVector A as) : HVector A as.reverse :=
   reverseAux xs .nil
 
-@[simp] theorem reverse_nil : reverse (.nil : HVector A []) = .nil := rfl
-@[simp] theorem reverse_cons {a as} (x : A a) (xs : HVector A as) :
-    reverse (x ::ₕ xs) = reverseAux xs (x ::ₕ .nil) := rfl
+@[simp]
+theorem reverse_nil : reverse (.nil : HVector A []) = .nil :=
+  rfl
+
+@[simp]
+theorem reverse_cons {a as} (x : A a) (xs : HVector A as) :
+    reverse (x::ₕxs) = reverseAux xs (x::ₕ.nil) :=
+  rfl
 
 /-! `HEq` congruences for the index-changing operations, for relating
 `reverseAux` to `reverse` and `append`, whose indices agree only
 propositionally. -/
 
-theorem cons_heq_cons {a : α} {l₁ l₂ : List α} (h : l₁ = l₂) {t₁ : HVector A l₁}
-    {t₂ : HVector A l₂} (ht : HEq t₁ t₂) (x : A a) : HEq (x ::ₕ t₁) (x ::ₕ t₂) := by
+theorem cons_heq_cons {a : α} {l₁ l₂ : List α} (h : l₁ = l₂) {t₁ : HVector A l₁} {t₂ : HVector A l₂}
+    (ht : HEq t₁ t₂) (x : A a) : HEq (x::ₕt₁) (x::ₕt₂) := by
   subst h; cases ht; rfl
 
-theorem append_heq_left {l₁ l₂ cs : List α} (h : l₁ = l₂) {t₁ : HVector A l₁}
-    {t₂ : HVector A l₂} (ht : HEq t₁ t₂) (zs : HVector A cs) : HEq (t₁ ++ zs) (t₂ ++ zs) := by
+theorem append_heq_left {l₁ l₂ cs : List α} (h : l₁ = l₂) {t₁ : HVector A l₁} {t₂ : HVector A l₂}
+    (ht : HEq t₁ t₂) (zs : HVector A cs) : HEq (t₁ ++ zs) (t₂ ++ zs) := by
   subst h; cases ht; rfl
 
 theorem append_assoc_heq {cs} (xs : HVector A as) (ys : HVector A bs) (zs : HVector A cs) :
@@ -387,17 +429,17 @@ theorem reverseAux_heq (xs : HVector A as) (acc : HVector A bs) :
   | nil => rfl
   | cons x xs ih =>
     rw [reverseAux_cons, reverse_cons]
-    refine (ih (x ::ₕ acc)).trans ?_
-    refine (append_assoc_heq (reverse xs) (x ::ₕ .nil) acc).symm.trans ?_
-    exact append_heq_left List.reverseAux_eq.symm (ih (x ::ₕ .nil)).symm acc
+    refine (ih (x::ₕacc)).trans ?_
+    refine (append_assoc_heq (reverse xs) (x::ₕ.nil) acc).symm.trans ?_
+    exact append_heq_left List.reverseAux_eq.symm (ih (x::ₕ.nil)).symm acc
 
 /-- **The old definition of `reverse`**, as a theorem: `reverse (x ::ₕ xs)` is
 `reverse xs ++ [x]`, cast along `List.reverse_cons`. -/
 theorem reverse_cons_eqRec {a as} (x : A a) (xs : HVector A as) :
-    reverse (x ::ₕ xs) = (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil) := by
+    reverse (x::ₕxs) = (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil) := by
   apply eq_of_heq
   rw [reverse_cons]
-  exact (reverseAux_heq xs (x ::ₕ .nil)).trans (eqRec_heq _ _).symm
+  exact (reverseAux_heq xs (x::ₕ.nil)).trans (eqRec_heq _ _).symm
 
 end Append
 
@@ -405,6 +447,7 @@ end Append
   # ToExpr and other Meta helpers
 -/
 section ToExprPi
+
 open Lean Qq
 
 class ToExprPi {α : Type u} (A : α → Type v) [∀ a, ToExpr (A a)] where
@@ -421,31 +464,25 @@ construct an expression of type `@HVector α f _`, where
 -/
 def mkOfElems (u₁ u₂ : Level) (α f : Expr) (elems : Array (Expr × Expr)) : MetaM Expr := do
   let us := [u₁, u₂]
-  let init := (
-    mkApp (.const ``List.nil [u₁]) α,
-    mkApp2 (.const ``HVector.nil us) α f
-  )
-  let res := elems.foldr (init := init) fun (a, elem) (as, vec) => (
-      mkApp3 (.const ``List.nil [u₁]) α a as,
-      mkApp6 (.const ``HVector.cons us) α f as a elem vec
-    )
+  let init := (mkApp (.const ``List.nil [u₁]) α, mkApp2 (.const ``HVector.nil us) α f)
+  let res :=
+    elems.foldr (init := init) fun (a, elem) (as, vec) =>
+      (mkApp3 (.const ``List.nil [u₁]) α a as, mkApp6 (.const ``HVector.cons us) α f as a elem vec)
   return res.snd
 
-instance [Lean.ToExpr α] [∀ a, Lean.ToExpr (A a)] [HVector.ToExprPi A]
-    [Lean.ToLevel.{u}] [Lean.ToLevel.{v}] :
-    Lean.ToExpr (HVector A as) :=
+instance [Lean.ToExpr α] [∀ a, Lean.ToExpr (A a)] [HVector.ToExprPi A] [Lean.ToLevel.{u}]
+    [Lean.ToLevel.{v}] : Lean.ToExpr (HVector A as) :=
   let α := toTypeExpr α
   let AE := ToExprPi.toTypeExpr A
   let us := [toLevel.{u}, toLevel.{v}]
   let rec toExpr : {as : List _} → HVector A as → Lean.Expr
-  | [], .nil =>
-    mkApp2 (.const ``HVector.nil us) α AE
-  | a::as, .cons x xs =>
-    let a := Lean.toExpr a
-    let as := Lean.toExpr as
-    let x := Lean.toExpr x
-    let xs := toExpr xs
-    mkApp6 (.const ``HVector.cons us) α AE as a x xs
+    | [], .nil => mkApp2 (.const ``HVector.nil us) α AE
+    | a :: as, .cons x xs =>
+      let a := Lean.toExpr a
+      let as := Lean.toExpr as
+      let x := Lean.toExpr x
+      let xs := toExpr xs
+      mkApp6 (.const ``HVector.cons us) α AE as a x xs
   { toTypeExpr :=
       let as := Lean.toExpr as
       mkApp2 (.const ``HVector us) AE as
@@ -455,26 +492,23 @@ end ToExprPi
 
 /- ### cast -/
 
-def castFun {A B : α → Type u} {as}
-    (h : ∀ (i : Fin as.length), A as[i] = B as[i]) :
+def castFun {A B : α → Type u} {as} (h : ∀ (i : Fin as.length), A as[i] = B as[i]) :
     HVector A as → HVector B as
   | .nil => .nil
-  | x ::ₕ xs =>
+  | x::ₕxs =>
     let x := h (0 : Fin (_ + 1)) ▸ x
     let xs := xs.castFun (fun i => h i.succ)
-    x ::ₕ xs
+    x::ₕxs
 
 def cast {A : α → Type u} {B : β → Type u} {as : List α} {bs : List β}
-    (h_len : as.length = bs.length)
-    (h_elem : ∀ i (_ : i < as.length), A as[i] = B bs[i])
+    (h_len : as.length = bs.length) (h_elem : ∀ i (_ : i < as.length), A as[i] = B bs[i])
     (xs : HVector A as) : HVector B bs :=
   match bs, xs with
-  | [], .nil        => .nil
-  | _::_, x ::ₕ xs  =>
+  | [], .nil => .nil
+  | _ :: _, x::ₕxs =>
       have h₀ := h_elem 0 (by simp)
-      let xs := xs.cast (by simpa using h_len)
-                        (fun i => by simpa using h_elem i.succ)
-      (h₀ ▸ x) ::ₕ xs
+      let xs := xs.cast (by simpa using h_len) (fun i => by simpa using h_elem i.succ)
+      (h₀ ▸ x)::ₕxs
 
 /-!
 ## Find
@@ -483,27 +517,26 @@ def cast {A : α → Type u} {B : β → Type u} {as : List α} {bs : List β}
 def idxOf? (x : A a) {as} [DecidableEq α] [∀ a, DecidableEq (A a)] :
     HVector A as → Option { i : Fin <| as.length // as.get i = a }
   | .nil => none
-  | .cons (a:=b) y ys =>
-      if h : ∃ h : a = b, x = h ▸ y then
-        some ⟨(0 : Fin <| _ + 1), h.1 ▸ rfl⟩
-      else
-        (ys.idxOf? x).map fun ⟨i, h⟩ =>
-          ⟨i.succ, by simpa⟩
+  | .cons (a := b) y ys =>
+    if h : ∃ h : a = b, x = h ▸ y then some ⟨(0 : Fin <| _ + 1), h.1 ▸ rfl⟩
+    else (ys.idxOf? x).map fun ⟨i, h⟩ => ⟨i.succ, by simpa⟩
 
 section Lemmas
+
 variable [DecidableEq α] [∀ a, DecidableEq (A a)]
 variable (xs : HVector A as) {a : α} (x : A a)
 
-@[simp] theorem idxOf?_cons_same :
-    idxOf? x (x ::ₕ xs) = some ⟨(0 : Fin <| _ + 1), rfl⟩ := by
-  simp [idxOf?]
+@[simp]
+theorem idxOf?_cons_same : idxOf? x (x::ₕxs) = some ⟨(0 : Fin <| _ + 1), rfl⟩ := by simp [idxOf?]
 
 end Lemmas
 
 /-!
 ## Meta helpers & simprocs
 -/
+
 section Meta
+
 open Lean Meta Qq
 
 structure HVectorLiteral where
@@ -518,8 +551,8 @@ array of element expressions.
 Returns `none` if the passed expression is not a recognized literal. -/
 def litExpr? : Expr → (Option HVectorLiteral)
   | mkApp6 (.const ``HVector.cons _) _α _A _as a x xs => do
-      let ret ← litExpr? xs
-      some { ret with elems := ret.elems.push ⟨ a, x ⟩ }
+    let ret ← litExpr? xs
+    some { ret with elems := ret.elems.push ⟨a, x⟩ }
   | mkApp2 (.const ``HVector.nil [u, v]) α A => some { u, v, α, A, elems := #[] }
   | _ => none
 

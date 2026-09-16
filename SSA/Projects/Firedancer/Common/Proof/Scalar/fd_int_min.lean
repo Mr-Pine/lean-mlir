@@ -10,6 +10,7 @@ import SSA.Projects.Firedancer.Proof.Tactics
 -/
 
 namespace Firedancer.Common
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 

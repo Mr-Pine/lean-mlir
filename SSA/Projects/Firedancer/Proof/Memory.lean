@@ -2,61 +2,63 @@ import SSA.Projects.SLLVM.Dialect
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 
 namespace Firedancer
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-lemma splicedLive (m: MemoryState) (p: Pointer) (b : LiveBlock) (hb: m.live? p.id = .some b) {w : Nat} (d: BitVec w) : (m.splice p d).live? p.id = .some { length := b.length, bytes := spliceBits b.bytes p.offsetInBits d } := by
+lemma splicedLive (m : MemoryState) (p : Pointer) (b : LiveBlock) (hb : m.live? p.id = .some b)
+    {w : Nat} (d : BitVec w) :
+    (m.splice p d).live? p.id =
+      .some { length := b.length, bytes := spliceBits b.bytes p.offsetInBits d } := by
   rw [MemoryState.splice]
-
   simp [MemoryState.live?] at hb
   replace hb : m[p.id]? = some (Block.live b) := by split at hb <;> simp_all
   simp [hb, MemoryState.live?, MemoryState.getElem?_eq]
 
 /-- The `getElem?` form of a live block. -/
-theorem getElem?_of_live? {m : MemoryState} {q : BlockId} {b : LiveBlock}
-    (h : m.live? q = some b) : m[q]? = some (.live b) := by
+theorem getElem?_of_live? {m : MemoryState} {q : BlockId} {b : LiveBlock} (h : m.live? q = some b) :
+    m[q]? = some (.live b) := by
   unfold MemoryState.live? at h
   split at h <;> simp_all
 
 /-- A store leaves the blocks below the one it addresses alone. -/
-theorem live?_splice_of_lt {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w}
-    {b : BlockId} (h : b.id < p.id.id) : (m.splice p x).live? b = m.live? b :=
-  live?_splice_ne (by rintro rfl; omega)
+theorem live?_splice_of_lt {m : MemoryState} {p : Pointer} {w : Nat} {x : BitVec w} {b : BlockId}
+    (h : b.id < p.id.id) : (m.splice p x).live? b = m.live? b :=
+  live?_splice_ne
+    (by
+      rintro rfl; omega)
 
 /-- Two stores at *adjacent* ranges through the same base pointer are one
 store of the concatenation -- the `MemoryState` counterpart of
 `spliceBits_append`. `ho` is the no-wraparound side condition: the gep'd
 pointer really is `w` bits further in, not wrapped around. -/
-theorem splice_splice_append_equiv {s : GlobalState} {p : Pointer} {o : BitVec 64}
-    {w w' : Nat} (x : BitVec w) (y : BitVec w')
-    (ho : (p.withOffset o).offsetInBits = p.offsetInBits + w) :
-    ({ s with mem := (s.mem.splice p x).splice (p.withOffset o) y } : GlobalState)
-      ≈ { s with mem := s.mem.splice p (y ++ x) } := by
+theorem splice_splice_append_equiv {s : GlobalState} {p : Pointer} {o : BitVec 64} {w w' : Nat}
+    (x : BitVec w) (y : BitVec w') (ho : (p.withOffset o).offsetInBits = p.offsetInBits + w) :
+    ({ s with mem := (s.mem.splice p x).splice (p.withOffset o) y } : GlobalState) ≈
+      { s with mem := s.mem.splice p (y ++ x) } := by
   refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
     -- `(p.withOffset o).id` is `p.id`, but only up to projection-of-constructor,
     -- which `rw`'s syntactic matching will not do for it.
-    show ((s.mem.splice p x).splice (p.withOffset o) y).live? (p.withOffset o).id
-      = (s.mem.splice p (y ++ x)).live? p.id
+    show
+      ((s.mem.splice p x).splice (p.withOffset o) y).live? (p.withOffset o).id =
+        (s.mem.splice p (y ++ x)).live? p.id
     cases hb : s.mem.live? p.id with
     | none =>
-        rw [splicedDead (m := s.mem.splice p x) (p := p.withOffset o) (splicedDead hb),
-          splicedDead hb]
+      rw [splicedDead (m := s.mem.splice p x) (p := p.withOffset o) (splicedDead hb),
+        splicedDead hb]
     | some b =>
-        rw [splicedLive _ (p.withOffset o) _ (splicedLive s.mem p b hb x) y,
-          splicedLive s.mem p b hb (y ++ x), ho, spliceBits_append]
-  · show ((s.mem.splice p x).splice (p.withOffset o) y).live? q
-      = (s.mem.splice p (y ++ x)).live? q
+      rw [splicedLive _ (p.withOffset o) _ (splicedLive s.mem p b hb x) y,
+        splicedLive s.mem p b hb (y ++ x), ho, spliceBits_append]
+  · show ((s.mem.splice p x).splice (p.withOffset o) y).live? q = (s.mem.splice p (y ++ x)).live? q
     rw [live?_splice_ne (p := p.withOffset o) hq, live?_splice_ne (p := p) hq,
       live?_splice_ne (p := p) hq]
 
 /-- Splicing the same bits at the same pointer preserves equivalence: the block
 written is fixed by the (equal) live block there, and no other block moves. -/
-theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
-    (h : s ≈ s') :
-    ({ s with mem := s.mem.splice p x } : GlobalState)
-      ≈ { s' with mem := s'.mem.splice p x } := by
+theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w} (h : s ≈ s') :
+    ({ s with mem := s.mem.splice p x } : GlobalState) ≈ { s' with mem := s'.mem.splice p x } := by
   refine ⟨h.1, h.globals, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
@@ -69,21 +71,21 @@ theorem splice_equiv {s s' : GlobalState} {p : Pointer} {w : Nat} {x : BitVec w}
 every block it could kill is dead already. -/
 theorem killFrom_equiv_of_none {s : GlobalState} {m : MemoryState}
     (hnone : ∀ q : BlockId, s.alloc.nextFreeBlock ≤ q.id → m.live? q = none) :
-    ({ s with mem := m.killFrom s.alloc.nextFreeBlock } : GlobalState)
-      ≈ { s with mem := m } := by
+    ({ s with mem := m.killFrom s.alloc.nextFreeBlock } : GlobalState) ≈ { s with mem := m } := by
   refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : q.id < s.alloc.nextFreeBlock
   · exact live?_killFrom_of_lt hq
   · rw [live?_killFrom_of_le (by omega), hnone q (by omega)]
 
 /-- `Fits` is antitone in the size demanded. -/
-theorem Fits.mono {m : MemoryState} {p : Pointer} {n n' : Nat} (h : Fits m p n)
-    (hle : n' ≤ n) : Fits m p n' :=
-  let ⟨blk, hblk, hlen⟩ := h; ⟨blk, hblk, by omega⟩
+theorem Fits.mono {m : MemoryState} {p : Pointer} {n n' : Nat} (h : Fits m p n) (hle : n' ≤ n) :
+    Fits m p n' :=
+  let ⟨blk, hblk, hlen⟩ := h;
+  ⟨blk, hblk, by omega⟩
 
 /-- Stepping `o` bytes into a block leaves the same block, with `o * 8` fewer
 bits available. -/
-theorem remainingFits (m: MemoryState) (p: Pointer) (hp: Fits m p n) (o: BitVec 64)
+theorem remainingFits (m : MemoryState) (p : Pointer) (hp : Fits m p n) (o : BitVec 64)
     (ho : o.toNat * 8 ≤ n) : Fits m (p.withOffset o) (n - (o.toNat * 8)) := by
   obtain ⟨blk, hblk, hlen⟩ := hp
   refine ⟨blk, hblk, ?_⟩
@@ -114,8 +116,9 @@ predates the frame, so no frame kill or fresh `alloca` touches it. -/
 theorem lt_nextFreeBlock_of_fits {s : GlobalState} (hs : s.WF) {p : Pointer} {n : Nat}
     (h : Fits s.mem p n) : p.id.id < s.alloc.nextFreeBlock := by
   obtain ⟨blk, hblk, -⟩ := h
-  exact lt_nextFreeBlock_of_live hs (show s.mem.live? p.id = some blk by
-    simp only [MemoryState.live?, hblk])
+  exact
+    lt_nextFreeBlock_of_live hs
+      (show s.mem.live? p.id = some blk by simp only [MemoryState.live?, hblk])
 
 /-- The block an `alloca w` hands back: `w` bits at offset 0. -/
 theorem fits_afterAlloca_self (s : GlobalState) (w : Nat) :
@@ -127,9 +130,8 @@ theorem fits_afterAlloca_self (s : GlobalState) (w : Nat) :
     omega
 
 /-- An `alloca` leaves alone every block the caller could already address. -/
-theorem live?_afterAlloca_of_fits {s : GlobalState} (hs : s.WF) (w : Nat) {p : Pointer}
-    {n : Nat} (h : Fits s.mem p n) :
-    (s.afterAlloca w).mem.live? p.id = s.mem.live? p.id :=
+theorem live?_afterAlloca_of_fits {s : GlobalState} (hs : s.WF) (w : Nat) {p : Pointer} {n : Nat}
+    (h : Fits s.mem p n) : (s.afterAlloca w).mem.live? p.id = s.mem.live? p.id :=
   live?_afterAlloca_of_lt (lt_nextFreeBlock_of_fits hs h)
 
 /-! ## Locals frames
@@ -168,13 +170,12 @@ state their facts over. -/
 def readWord {p : Pointer} {w : Nat} {m : MemoryState} (h : Fits m p w) : BitVec w :=
   (readWord? p w m).get (readWord?_isSome h)
 
-theorem readWord_eq_of {m : MemoryState} {p : Pointer} {w : Nat} {h : Fits m p w}
-    {x : BitVec w} (hv : readWord? p w m = some x) : readWord h = x := by
-  simp only [readWord, hv, Option.get_some]
+theorem readWord_eq_of {m : MemoryState} {p : Pointer} {w : Nat} {h : Fits m p w} {x : BitVec w}
+    (hv : readWord? p w m = some x) : readWord h = x := by simp only [readWord, hv, Option.get_some]
 
 /-- `readWord` back into the proof-free `readWord?` form. -/
-theorem readWord?_eq_some {m : MemoryState} {p : Pointer} {w : Nat} (h : Fits m p w)
-    {x : BitVec w} (hv : readWord h = x) : readWord? p w m = some x := by
+theorem readWord?_eq_some {m : MemoryState} {p : Pointer} {w : Nat} (h : Fits m p w) {x : BitVec w}
+    (hv : readWord h = x) : readWord? p w m = some x := by
   rw [← hv]; exact (Option.some_get _).symm
 
 /-- A cell reads back what was just written to it. -/
@@ -205,15 +206,14 @@ theorem readWord_splice_self {m : MemoryState} {p : Pointer} {w : Nat} (x : BitV
 theorem readWord_splice_ne {m : MemoryState} {p q : Pointer} {w w' : Nat} {x : BitVec w'}
     (hq : q.id ≠ p.id) (hp : Fits m p w) :
     ∃ h : Fits (m.splice q x) p w, readWord h = readWord hp :=
-  ⟨fits_splice hp, readWord_eq_of
-    ((readWord?_splice_ne hq).trans (readWord?_eq_some hp rfl))⟩
+  ⟨fits_splice hp, readWord_eq_of ((readWord?_splice_ne hq).trans (readWord?_eq_some hp rfl))⟩
 
 /-- Transport a cell across a state that agrees on its block. -/
 theorem readWord_of_live?_eq {m m' : MemoryState} {p : Pointer} {w : Nat}
     (hl : m'.live? p.id = m.live? p.id) (hp : Fits m p w) :
     ∃ h : Fits m' p w, readWord h = readWord hp :=
-  ⟨fits_of_live?_eq hl hp, readWord_eq_of
-    ((readWord?_of_live?_eq hl).trans (readWord?_eq_some hp rfl))⟩
+  ⟨fits_of_live?_eq hl hp,
+    readWord_eq_of ((readWord?_of_live?_eq hl).trans (readWord?_eq_some hp rfl))⟩
 
 /-! ### Alloca chains
 
@@ -223,21 +223,20 @@ A region that opens with several `alloca`s -- 3 for `pow22523`, 21 for
 is what `peel_alloca` wants for its defining hypothesis. -/
 
 /-- The state after `k` successive `alloca`s of widths `w 0, …, w (k-1)`. -/
-def _root_.LeanMLIR.GlobalState.allocaChain (s : GlobalState) (w : Nat → Nat) :
-    Nat → GlobalState
+def _root_.LeanMLIR.GlobalState.allocaChain (s : GlobalState) (w : Nat → Nat) : Nat → GlobalState
   | 0 => s
   | k + 1 => (s.allocaChain w k).afterAlloca (w k)
 
 /-- The pointer the `k`-th `alloca` of the chain returns. -/
-def _root_.LeanMLIR.GlobalState.chainPtr (s : GlobalState) (w : Nat → Nat) (k : Nat) :
-    Pointer :=
+def _root_.LeanMLIR.GlobalState.chainPtr (s : GlobalState) (w : Nat → Nat) (k : Nat) : Pointer :=
   ⟨⟨(s.allocaChain w k).alloc.nextFreeBlock⟩, 0⟩
 
 namespace GlobalState
 
 variable {s : GlobalState} {w : Nat → Nat}
 
-@[simp] theorem nextFreeBlock_allocaChain :
+@[simp]
+theorem nextFreeBlock_allocaChain :
     ∀ k, (s.allocaChain w k).alloc.nextFreeBlock = s.alloc.nextFreeBlock + k
   | 0 => rfl
   | k + 1 => by
@@ -245,11 +244,13 @@ variable {s : GlobalState} {w : Nat → Nat}
     rw [nextFreeBlock_allocaChain k]; omega
 
 /-- Consecutive ids from the entry counter: the whole separation story. -/
-@[simp] theorem chainPtr_id (k : Nat) :
-    (s.chainPtr w k).id.id = s.alloc.nextFreeBlock + k := by
+@[simp]
+theorem chainPtr_id (k : Nat) : (s.chainPtr w k).id.id = s.alloc.nextFreeBlock + k := by
   simp only [GlobalState.chainPtr, nextFreeBlock_allocaChain]
 
-@[simp] theorem chainPtr_offset (k : Nat) : (s.chainPtr w k).offset = 0 := rfl
+@[simp]
+theorem chainPtr_offset (k : Nat) : (s.chainPtr w k).offset = 0 :=
+  rfl
 
 theorem WF.allocaChain (hs : s.WF) : ∀ k, (s.allocaChain w k).WF
   | 0 => hs
@@ -257,15 +258,19 @@ theorem WF.allocaChain (hs : s.WF) : ∀ k, (s.allocaChain w k).WF
 
 /-- A later `alloca` leaves an earlier cell alone: its id is strictly smaller. -/
 theorem live?_allocaChain_of_lt {j : Nat} :
-    ∀ k, j < k → (s.allocaChain w k).mem.live? (s.chainPtr w j).id
-      = (s.allocaChain w (j + 1)).mem.live? (s.chainPtr w j).id := by
+    ∀ k,
+      j < k →
+        (s.allocaChain w k).mem.live? (s.chainPtr w j).id =
+          (s.allocaChain w (j + 1)).mem.live? (s.chainPtr w j).id := by
   intro k hk
   induction k with
   | zero => omega
   | succ n ih =>
     rcases Nat.lt_or_ge j n with h | h
     · rw [show (s.allocaChain w (n + 1)) = (s.allocaChain w n).afterAlloca (w n) from rfl,
-        live?_afterAlloca_of_lt (by simp only [chainPtr_id, nextFreeBlock_allocaChain]; omega)]
+        live?_afterAlloca_of_lt
+          (by
+            simp only [chainPtr_id, nextFreeBlock_allocaChain]; omega)]
       exact ih h
     · have : j = n := by omega
       subst this; rfl
@@ -292,34 +297,34 @@ variable {n₀ : Nat} {s s' s'' : GlobalState}
 protected theorem refl (n₀ : Nat) (s : GlobalState) : FrameBelow n₀ s s := fun _ _ => rfl
 
 protected theorem trans (h : FrameBelow n₀ s s') (h' : FrameBelow n₀ s' s'') :
-    FrameBelow n₀ s s'' :=
-  fun b hb => (h' b hb).trans (h b hb)
+    FrameBelow n₀ s s'' := fun b hb => (h' b hb).trans (h b hb)
 
 /-- An `alloca` in a state whose counter is at or above `n₀` allocates outside
 the frame. -/
 theorem afterAlloca {w : Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock) (hf : FrameBelow n₀ s s') :
-    FrameBelow n₀ s (s'.afterAlloca w) :=
-  fun b hb => (live?_afterAlloca_of_lt (by omega)).trans (hf b hb)
+    FrameBelow n₀ s (s'.afterAlloca w) := fun b hb =>
+  (live?_afterAlloca_of_lt (by omega)).trans (hf b hb)
 
 /-- A run of `n` successive `alloca`s allocates outside the frame. -/
-theorem allocaChain {w : Nat → Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock)
-    (hf : FrameBelow n₀ s s') : ∀ k, FrameBelow n₀ s (s'.allocaChain w k)
+theorem allocaChain {w : Nat → Nat} (h : n₀ ≤ s'.alloc.nextFreeBlock) (hf : FrameBelow n₀ s s') :
+    ∀ k, FrameBelow n₀ s (s'.allocaChain w k)
   | 0 => hf
   | k + 1 =>
-    FrameBelow.afterAlloca (by rw [GlobalState.nextFreeBlock_allocaChain]; omega)
+    FrameBelow.afterAlloca
+      (by
+        rw [GlobalState.nextFreeBlock_allocaChain]; omega)
       (FrameBelow.allocaChain h hf k)
 
 /-- A store to a local -- a pointer whose block id is at or above `n₀` --
 stays outside the frame. -/
 theorem splice {t : Pointer} {w : Nat} {x : BitVec w} (ht : n₀ ≤ t.id.id)
-    (hf : FrameBelow n₀ s s') :
-    FrameBelow n₀ s { s' with mem := s'.mem.splice t x } :=
-  fun b hb => (live?_splice_ne fun h => absurd (h ▸ hb) (by omega)).trans (hf b hb)
+    (hf : FrameBelow n₀ s s') : FrameBelow n₀ s { s' with mem := s'.mem.splice t x } := fun b hb =>
+  (live?_splice_ne fun h => absurd (h ▸ hb) (by omega)).trans (hf b hb)
 
 /-- A callee's result state is equivalent to a splice state; the frame
 transports along the equivalence. -/
-theorem of_equiv (he : s' ≈ s'') (hf : FrameBelow n₀ s s') : FrameBelow n₀ s s'' :=
-  fun b hb => (he.live b).symm.trans (hf b hb)
+theorem of_equiv (he : s' ≈ s'') (hf : FrameBelow n₀ s s') : FrameBelow n₀ s s'' := fun b hb =>
+  (he.live b).symm.trans (hf b hb)
 
 /-- The `popFrame` ending: a region entered at `s` whose final state kept the
 frame restores `s` up to equivalence. -/
@@ -364,8 +369,7 @@ puts there -- typically via `live?_splice_congr` and the frame up to the final
 write. -/
 theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} {w : Nat}
     {x : BitVec w} (hs : s.WF) (ho : o.id.id < s.alloc.nextFreeBlock)
-    (hf : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o.id →
-      m.live? b = s.mem.live? b)
+    (hf : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o.id → m.live? b = s.mem.live? b)
     (hoval : m.live? o.id = (s.mem.splice o x).live? o.id) :
     ({ s with mem := s.mem.splice o x } : GlobalState) ≈ s.popFrame m := by
   refine ⟨rfl, rfl, fun b => ?_⟩
@@ -376,17 +380,19 @@ theorem popFrame_equiv_splice {s : GlobalState} {m : MemoryState} {o : Pointer} 
     · rw [hbo, ← hoval]
     · rw [hf b hb hbo, live?_splice_ne (fun h => hbo h.symm)]
   · rw [live?_killFrom_of_le (by omega),
-      live?_splice_ne (fun h => by rw [← h] at hb; omega), hs b (by omega)]
+      live?_splice_ne
+        (fun h => by
+          rw [← h] at hb; omega),
+      hs b (by omega)]
 
 /-- `popFrame_equiv_splice` for a region that wrote more than once: `written`
 names the caller blocks it touched, `n` is any memory agreeing with `s.mem`
 off them, and the caller supplies the readback at each. -/
-theorem popFrame_equiv_written {s : GlobalState} {m n : MemoryState}
-    (written : BlockId → Prop) [DecidablePred written] (hs : s.WF)
+theorem popFrame_equiv_written {s : GlobalState} {m n : MemoryState} (written : BlockId → Prop)
+    [DecidablePred written] (hs : s.WF)
     (hbelow : ∀ b : BlockId, written b → b.id < s.alloc.nextFreeBlock)
-    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → ¬ written b →
-      m.live? b = s.mem.live? b)
-    (hfn : ∀ b : BlockId, ¬ written b → n.live? b = s.mem.live? b)
+    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → ¬written b → m.live? b = s.mem.live? b)
+    (hfn : ∀ b : BlockId, ¬written b → n.live? b = s.mem.live? b)
     (hval : ∀ b : BlockId, written b → m.live? b = n.live? b) :
     s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) := by
   refine ⟨rfl, rfl, fun b => ?_⟩
@@ -399,12 +405,10 @@ theorem popFrame_equiv_written {s : GlobalState} {m n : MemoryState}
 
 /-- ... and the single-block case: a region writing only its out-parameter,
 `fd_ed25519_point_from`'s four coordinate stores included. -/
-theorem popFrame_equiv_block {s : GlobalState} {m n : MemoryState} {o : BlockId}
-    (hs : s.WF) (ho : o.id < s.alloc.nextFreeBlock)
-    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o →
-      m.live? b = s.mem.live? b)
-    (hfn : ∀ b : BlockId, b ≠ o → n.live? b = s.mem.live? b)
-    (hoval : m.live? o = n.live? o) :
+theorem popFrame_equiv_block {s : GlobalState} {m n : MemoryState} {o : BlockId} (hs : s.WF)
+    (ho : o.id < s.alloc.nextFreeBlock)
+    (hfm : ∀ b : BlockId, b.id < s.alloc.nextFreeBlock → b ≠ o → m.live? b = s.mem.live? b)
+    (hfn : ∀ b : BlockId, b ≠ o → n.live? b = s.mem.live? b) (hoval : m.live? o = n.live? o) :
     s.popFrame m ≈ ({ alloc := s.alloc, mem := n, globals := s.globals } : GlobalState) :=
   popFrame_equiv_written (· = o) hs (fun _ h => h ▸ ho) hfm hfn (fun _ h => h ▸ hoval)
 

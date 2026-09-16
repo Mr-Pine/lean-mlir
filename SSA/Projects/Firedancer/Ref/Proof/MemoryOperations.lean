@@ -5,13 +5,14 @@ import SSA.Projects.Firedancer.Proof.Memory
 import SSA.Projects.Firedancer.Proof.Tactics.Memory
 
 namespace Firedancer.Ref
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
 /-- A store overwritten by a second store at the same pointer is invisible. -/
 theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : BitVec w) :
-    ({ s with mem := (s.mem.splice p x).splice p y } : GlobalState)
-      ≈ { s with mem := s.mem.splice p y } := by
+    ({ s with mem := (s.mem.splice p x).splice p y } : GlobalState) ≈
+      { s with mem := s.mem.splice p y } := by
   refine ⟨rfl, rfl, fun q => ?_⟩
   by_cases hq : p.id = q
   · subst hq
@@ -23,8 +24,8 @@ theorem splice_splice_equiv {s : GlobalState} {p : Pointer} {w : Nat} (x y : Bit
   · rw [live?_splice_ne hq, live?_splice_ne hq, live?_splice_ne hq]
 
 @[simp_sllvm]
-theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n: Nat}
-    (hs: s ≈ s') (h : Fits s.mem p n) : Fits s'.mem p n := by
+theorem fits_equiv {s s' : GlobalState} {p : Pointer} {n : Nat} (hs : s ≈ s') (h : Fits s.mem p n) :
+    Fits s'.mem p n := by
   obtain ⟨block, hblk, hlen⟩ := h
   have block_equiv := hs.live p.id
   simp only [MemoryState.live?, hblk] at block_equiv
@@ -41,10 +42,8 @@ equation carries `IsFieldElemPtr`, the limb reads and the limb bounds together.
 Chain the equations with `.trans` rather than re-deriving each consequence. -/
 
 /-- A limb read looks only at the block the pointer addresses. -/
-theorem readLimb?_of_live?_eq {m m' : MemoryState} {p : Pointer}
-    (h : m'.live? p.id = m.live? p.id) (i : Fin 5) :
-    readLimb? p i m' = readLimb? p i m := by
-  simp only [readLimb?, h]
+theorem readLimb?_of_live?_eq {m m' : MemoryState} {p : Pointer} (h : m'.live? p.id = m.live? p.id)
+    (i : Fin 5) : readLimb? p i m' = readLimb? p i m := by simp only [readLimb?, h]
 
 /-- ... and so does `IsFieldElemPtr`. -/
 theorem isFieldElemPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
@@ -60,24 +59,23 @@ theorem isByteBufPtr_of_live?_eq {m m' : MemoryState} {p : Pointer}
 := m }`: the equation comes back in terms of `m`, so the caller never reduces
 a projection under the callee's write chain. -/
 theorem live?_of_equiv_mem {w s : GlobalState} {m : MemoryState}
-    (he : w ≈ ({ s with mem := m } : GlobalState)) (b : BlockId) :
-    w.mem.live? b = m.live? b := he.live b
+    (he : w ≈ ({ s with mem := m } : GlobalState)) (b : BlockId) : w.mem.live? b = m.live? b :=
+  he.live b
 
 /-- A buffer that fitted in the memory a callee returned still fits in the
 state it returned. Stated over `{ s with mem := m }` rather than over a second
 state: `m` then unifies as a whole, instead of the caller's write chain being
 compared against a projection limb by limb. -/
 theorem isByteBufPtr_of_equiv {w s : GlobalState} {m : MemoryState} {q : Pointer}
-    (he : w ≈ ({ s with mem := m } : GlobalState)) (h : IsByteBufPtr m q) :
-    IsByteBufPtr w.mem q :=
+    (he : w ≈ ({ s with mem := m } : GlobalState)) (h : IsByteBufPtr m q) : IsByteBufPtr w.mem q :=
   isByteBufPtr_of_live?_eq (live?_of_equiv_mem he q.id) h
 
 /-- ... and the limb bounds, in the `readLimb?`-shaped form. -/
 theorem limbBounds_of_live?_eq {m m' : MemoryState} {p : Pointer} {n : ℕ}
     (h : m'.live? p.id = m.live? p.id)
     (hb : ∀ (i : Fin 5) (l : ℕ), readLimb? p i m = some l → l ≤ n) :
-    ∀ (i : Fin 5) (l : ℕ), readLimb? p i m' = some l → l ≤ n :=
-  fun i l hl => hb i l ((readLimb?_of_live?_eq h i).symm.trans hl)
+    ∀ (i : Fin 5) (l : ℕ), readLimb? p i m' = some l → l ≤ n := fun i l hl =>
+  hb i l ((readLimb?_of_live?_eq h i).symm.trans hl)
 
 /-- ... and a whole field-element read. -/
 theorem readFieldElem?_of_live?_eq {m m' : MemoryState} {p : Pointer}
@@ -99,10 +97,9 @@ lemma extractLimb (q b c d e : BitVec 64) (i : Fin 5) :
     (e ++ d ++ c ++ b ++ q).extractLsb' (64 * i.toNat) 64 = ![q, b, c, d, e] i := by
   fin_cases i <;> simp <;> bv_decide
 
-lemma limbReadback (m : MemoryState) (p : Pointer) (a b c d e : BitVec 64)
-    (hp : Fits m p 320) (i : Fin 5) :
-    readLimb? p i (m.splice p (e ++ d ++ c ++ b ++ a))
-      = .some (![a, b, c, d, e] i).toNat := by
+lemma limbReadback (m : MemoryState) (p : Pointer) (a b c d e : BitVec 64) (hp : Fits m p 320)
+    (i : Fin 5) :
+    readLimb? p i (m.splice p (e ++ d ++ c ++ b ++ a)) = .some (![a, b, c, d, e] i).toNat := by
   obtain ⟨blk, hblk, hfits⟩ := hp
   have hb : m.live? p.id = .some blk := by simp [MemoryState.live?, hblk]
   have hi : i.toNat < 5 := i.isLt
@@ -125,8 +122,8 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
   have hi : i.toNat < 5 := i.isLt
   simp only [readLimb?, splicedLive m p blk hb _, Option.bind_eq_bind, Option.bind_some,
     Option.pure_def]
-  rw [extractLsb'_spliceBits_of_subrange blk.bytes p.offsetInBits (p.offsetInBits + 64 * i.toNat)
-      x (by omega) (by omega) hfits,
+  rw [extractLsb'_spliceBits_of_subrange blk.bytes p.offsetInBits (p.offsetInBits + 64 * i.toNat) x
+      (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
 
 /-- `limbReadback` for limbs given as a function rather than five variables --
@@ -140,47 +137,52 @@ lemma limbReadbackPack (m : MemoryState) (p : Pointer) (l : Fin 5 → BitVec 64)
 whatever the block underneath held. -/
 theorem readFieldElem?_splice {m : MemoryState} {p : Pointer} (x : BitVec (5 * 64))
     (hp : Fits m p (5 * 64)) :
-    readFieldElem? p (m.splice p x)
-      = some (decodeFieldElem fun i => (x.extractLsb' (64 * i.toNat) 64).toNat) := by
-  obtain ⟨f, hfdef⟩ : ∃ f : Fin 5 → ℕ,
-      f = fun i : Fin 5 => (x.extractLsb' (64 * i.toNat) 64).toNat := ⟨_, rfl⟩
+    readFieldElem? p (m.splice p x) =
+      some (decodeFieldElem fun i => (x.extractLsb' (64 * i.toNat) 64).toNat) := by
+  obtain ⟨f, hfdef⟩ :
+    ∃ f : Fin 5 → ℕ, f = fun i : Fin 5 => (x.extractLsb' (64 * i.toNat) 64).toNat := ⟨_, rfl⟩
   have hf : ∀ i : Fin 5, readLimb? p i (m.splice p x) = some (f i) := by
     rw [hfdef]; exact fun i => limbSpliceReadback _ _ _ hp i
-  have hvec : (![f 0, f 1, f 2, f 3, f 4] : Fin 5 → ℕ) = f := by funext i; fin_cases i <;> rfl
+  have hvec : (![f 0, f 1, f 2, f 3, f 4] : Fin 5 → ℕ) = f := by
+    funext i; fin_cases i <;> rfl
   rw [← hfdef]
   simp only [readFieldElem?, hf, Option.bind_eq_bind, Option.bind_some, Option.pure_def, hvec]
 
 /-- A limb read passes over a splice that misses it: another block, or a
 disjoint bit range of the same one. -/
-theorem readLimb?_splice_of_disjoint {m : MemoryState} {p q : Pointer} {w : Nat}
-    {x : BitVec w} (i : Fin 5)
-    (h : q.id ≠ p.id ∨ q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat
-       ∨ p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits) :
+theorem readLimb?_splice_of_disjoint {m : MemoryState} {p q : Pointer} {w : Nat} {x : BitVec w}
+    (i : Fin 5)
+    (h :
+      q.id ≠ p.id ∨
+        q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat ∨
+        p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits) :
     readLimb? p i (m.splice q x) = readLimb? p i m := by
   by_cases hid : q.id = p.id
-  case neg =>
-    simp only [readLimb?, live?_splice_ne hid]
+  case neg => simp only [readLimb?, live?_splice_ne hid]
   case pos =>
     cases hb : m.live? q.id with
     | none =>
-        have : m.splice q x = m := by
-          unfold MemoryState.splice
-          unfold MemoryState.live? at hb
-          split at hb <;> simp_all
-        rw [this]
-    | some blk =>
-        have hdisj : q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat
-            ∨ p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits := by
-          rcases h with h | h | h
-          · exact absurd hid h
-          · exact .inl h
-          · exact .inr h
-        have hlive : (m.splice q x).live? p.id = some
-            { length := blk.length, bytes := spliceBits blk.bytes q.offsetInBits x } := by
-          rw [← hid]; exact splicedLive m q blk hb x
-        have hb' : m.live? p.id = some blk := hid ▸ hb
-        simp only [readLimb?, hlive, hb', Option.bind_eq_bind, Option.bind_some]
-        rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)]
+      have : m.splice q x = m := by
+        unfold MemoryState.splice
+        unfold MemoryState.live? at hb
+        split at hb <;> simp_all
+      rw [this]
+    | some
+      blk =>
+      have hdisj :
+        q.offsetInBits + w ≤ p.offsetInBits + 64 * i.toNat ∨
+          p.offsetInBits + 64 * i.toNat + 64 ≤ q.offsetInBits := by
+        rcases h with h | h | h
+        · exact absurd hid h
+        · exact .inl h
+        · exact .inr h
+      have hlive :
+        (m.splice q x).live? p.id =
+          some { length := blk.length, bytes := spliceBits blk.bytes q.offsetInBits x } := by
+        rw [← hid]; exact splicedLive m q blk hb x
+      have hb' : m.live? p.id = some blk := hid ▸ hb
+      simp only [readLimb?, hlive, hb', Option.bind_eq_bind, Option.bind_some]
+      rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)]
 
 /-- `Pointer.withOffset` in `offsetInBits` form, given the offset does not
 wrap: the general shape behind `limbOffsetInBits`. -/
@@ -194,8 +196,8 @@ lemma withOffset_offsetInBits {p : Pointer} {off : BitVec 64}
 
 /-- Limb `i` sits exactly `64 * i` bits into the block: the element fits, so
 the offset cannot wrap. -/
-lemma limbOffsetInBits {p : Pointer} (hp : p.offset.toNat + 5 * 8 ≤ 2 ^ 64)
-    {k : ℕ} {off : BitVec 64} (hk : k ≤ 4) (hoff : off.toNat = 8 * k) :
+lemma limbOffsetInBits {p : Pointer} (hp : p.offset.toNat + 5 * 8 ≤ 2 ^ 64) {k : ℕ}
+    {off : BitVec 64} (hk : k ≤ 4) (hoff : off.toNat = 8 * k) :
     (p.withOffset off).offsetInBits = p.offsetInBits + 64 * k := by
   have hadd : (p.offset + off).toNat = p.offset.toNat + off.toNat := by
     rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
@@ -206,15 +208,15 @@ lemma limbOffsetInBits {p : Pointer} (hp : p.offset.toNat + 5 * 8 ≤ 2 ^ 64)
 lemma exists_limbs {m : MemoryState} {p : Pointer} {blk : LiveBlock}
     (hblk : m[p.id]? = some (Block.live blk)) :
     ∃ l : Fin 5 → ℕ, ∀ i, readLimb? p i m = some (l i) :=
-  ⟨fun i => (blk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat,
-    fun i => by simp [readLimb?, MemoryState.live?, hblk]⟩
+  ⟨fun i => (blk.bytes.extractLsb' (p.offsetInBits + 64 * i.toNat) 64).toNat, fun i => by
+    simp [readLimb?, MemoryState.live?, hblk]⟩
 
 /-- ... and what the block holds at limb `i`. The offset is a parameter, since
 what a load leaves behind is only equal to `p.offsetInBits + 64 * i`, not
 syntactically it. -/
 lemma limbBits {m : MemoryState} {p : Pointer} {blk : LiveBlock} {l : Fin 5 → ℕ}
-    (hblk : m[p.id]? = some (Block.live blk)) (hl : ∀ i, readLimb? p i m = some (l i))
-    (i : Fin 5) {off : ℕ} (hoff : off = p.offsetInBits + 64 * i.toNat) :
+    (hblk : m[p.id]? = some (Block.live blk)) (hl : ∀ i, readLimb? p i m = some (l i)) (i : Fin 5)
+    {off : ℕ} (hoff : off = p.offsetInBits + 64 * i.toNat) :
     blk.bytes.extractLsb' off 64 = BitVec.ofNat 64 (l i) := by
   subst hoff
   have h := hl i
@@ -228,10 +230,13 @@ the same thing, but leaves each step nested inside the next one's
 structure-update, which does not unify in reasonable time. -/
 theorem splice5_equiv {s : GlobalState} {p : Pointer} (a b c d e : BitVec 64)
     (hp : IsFieldElemPtr s.mem p) :
-    ({ s with mem := ((((s.mem.splice p a).splice (p.withOffset 8) b).splice
-        (p.withOffset 16) c).splice (p.withOffset 24) d).splice (p.withOffset 32) e }
-      : GlobalState)
-      ≈ { s with mem := s.mem.splice p (e ++ d ++ c ++ b ++ a) } := by
+    ({ s with
+          mem :=
+            ((((s.mem.splice p a).splice (p.withOffset 8) b).splice (p.withOffset 16) c).splice
+                  (p.withOffset 24) d).splice
+              (p.withOffset 32) e } :
+        GlobalState) ≈
+      { s with mem := s.mem.splice p (e ++ d ++ c ++ b ++ a) } := by
   obtain ⟨blk, hblk, hlen⟩ := id hp.left
   simp [GlobalState.equiv_def]
   intro q
@@ -274,8 +279,8 @@ theorem splice5_equiv {s : GlobalState} {p : Pointer} (a b c d e : BitVec 64)
     rw [hid] at k₄
     rw [k₄, o₁, o₂, o₃, o₄]
     simp only [Option.some.injEq, LiveBlock.mk.injEq, true_and, spliceBits_append]
-    rw [show (e ++ d ++ c ++ b ++ a : BitVec (64 + 64 + 64 + 64 + 64))
-        = e ++ (d ++ (c ++ (b ++ a))) from by simp only [BitVec.append_assoc, BitVec.cast_eq]]
+    rw [show (e ++ d ++ c ++ b ++ a : BitVec (64 + 64 + 64 + 64 + 64)) = e ++ (d ++ (c ++ (b ++ a)))
+        from by simp only [BitVec.append_assoc, BitVec.cast_eq]]
 
 /-- `₀`-style index for the per-limb names the tactics below generate. -/
 def subscript (i : Nat) : String :=
@@ -332,8 +337,8 @@ A trailing ident is the stem for the value the load produces: `x` names it
 operands can be peeled side by side without their limbs colliding.
 
 Expects the state `s` in scope, under that name. -/
-elab "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
-    basehblk:ident ", " nm:ident : tactic => do
+elab "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", " basehblk:ident ", "
+  nm:ident : tactic => do
   let s := subscript i.getNat
   let blk := mkIdent (Name.mkSimple (baseblk.getId.eraseMacroScopes.toString ++ s))
   let hblk := mkIdent (Name.mkSimple (basehblk.getId.eraseMacroScopes.toString ++ s))
@@ -345,15 +350,24 @@ elab "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
   -- byte offset of limb `i`, and the bits still left after it
   evalTactic (← `(tactic| obtain ⟨$blk, $hblk, $hlen⟩ := id $hptr))
   evalTactic (← `(tactic| peel_load (.bitvec (.concrete 64)), $blk, $ptr, $hblk, $st))
-  evalTactic (← `(tactic| set $limb:ident := (($blk).bytes.extractLsb' ($ptr).offsetInBits 64) with $hlimb:ident))
+  evalTactic
+      (←
+        `(tactic|
+            set $limb:ident := (($blk).bytes.extractLsb' ($ptr).offsetInBits 64) with $hlimb:ident))
   -- `$ptr` is a `let`-bound pointer for i > 0 and must be in the simp set to
   -- zeta-unfold; at limb 0 it is the plain fvar `p`, which simp would reject.
   if i.getNat == 0 then
-    evalTactic (← `(tactic| have hblkeq : $baseblk = $blk := by
-        simpa [Pointer.withOffset, $basehblk:ident] using $hblk))
+    evalTactic
+        (←
+          `(tactic|
+              have hblkeq : $baseblk = $blk := by
+                simpa [Pointer.withOffset, $basehblk:ident] using $hblk))
   else
-    evalTactic (← `(tactic| have hblkeq : $baseblk = $blk := by
-        simpa [$ptr:ident, Pointer.withOffset, $basehblk:ident] using $hblk))
+    evalTactic
+        (←
+          `(tactic|
+              have hblkeq : $baseblk = $blk := by
+                simpa [$ptr:ident, Pointer.withOffset, $basehblk:ident] using $hblk))
   evalTactic (← `(tactic| subst hblkeq))
   evalTactic (← `(tactic| clear $hblk $hlen))
 
@@ -370,32 +384,33 @@ macro "peel_limb " i:num ", " ptr:ident ", " hptr:term ", " baseblk:ident ", "
 `Ref/Proof/MemoryOperations.lean` once it is finished. -/
 
 /-- The 32-byte buffer read is the 256-bit scalar read. -/
-theorem readBuf?_eq_readWord? (p : Pointer) (m : MemoryState) :
-    readBuf? p m = readWord? p 256 m := rfl
+theorem readBuf?_eq_readWord? (p : Pointer) (m : MemoryState) : readBuf? p m = readWord? p 256 m :=
+  rfl
 
-theorem readBuf?_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
-    (hp : Fits m p (32 * 8)) : readBuf? p (m.splice p x) = some x :=
+theorem readBuf?_splice {m : MemoryState} {p : Pointer} (x : BitVec 256) (hp : Fits m p (32 * 8)) :
+    readBuf? p (m.splice p x) = some x :=
   readWord?_splice_self x hp
 
 /-- ... and the same across a callee's return, in `isByteBufPtr_of_equiv`'s
 shape and for the same reason. -/
 theorem readBuf_of_equiv {w s : GlobalState} {m : MemoryState} {q : Pointer}
-    (he : w ≈ ({ s with mem := m } : GlobalState))
-    {h : IsByteBufPtr w.mem q} {h' : IsByteBufPtr m q} : readBuf h = readBuf h' :=
+    (he : w ≈ ({ s with mem := m } : GlobalState)) {h : IsByteBufPtr w.mem q}
+    {h' : IsByteBufPtr m q} : readBuf h = readBuf h' :=
   readBuf_of_live?_eq (live?_of_equiv_mem he q.id)
 
-theorem readBuf_splice {m : MemoryState} {p : Pointer} (x : BitVec 256)
-    (hp : IsByteBufPtr m p) :
+theorem readBuf_splice {m : MemoryState} {p : Pointer} (x : BitVec 256) (hp : IsByteBufPtr m p) :
     readBuf (m := m.splice p x) (isByteBufPtr_splice hp) = x := by
   simp only [readBuf, readBuf?_splice x hp.left, Option.get_some]
 
 /-- The remaining room at byte `k` of a 32-byte buffer. `peel_gep_byte` proves
 this inline with `simpa`, which is the same arithmetic once per store; proved
 here it is one application each. Staged; belongs beside `byteOffsetInBits`. -/
-lemma byteFits {m : MemoryState} {p : Pointer} (hp : Fits m p (32 * 8))
-    {k : Nat} {off : BitVec 64} (hk : k ≤ 31) (hoff : off.toNat = k) :
-    Fits m (p.withOffset off) (256 - k * 8) := by
-  simpa [hoff] using remainingFits m p hp off (by rw [hoff]; omega)
+lemma byteFits {m : MemoryState} {p : Pointer} (hp : Fits m p (32 * 8)) {k : Nat} {off : BitVec 64}
+    (hk : k ≤ 31) (hoff : off.toNat = k) : Fits m (p.withOffset off) (256 - k * 8) := by
+  simpa [hoff] using
+    remainingFits m p hp off
+      (by
+        rw [hoff]; omega)
 
 open Lean Elab Tactic in
 /-- `peel_gep_byte i, p, hp, s, x` is `peel_gep_limb` at byte granularity: the
@@ -456,8 +471,8 @@ theorem readFieldElem_of_zeroLimbs {m : MemoryState} {p : Pointer} (h : IsFieldE
   simp [readFieldElem_eq_decode h, decodeFieldElem, hl]
 
 /-- A copy of `q`'s limbs spliced at `p` is all-zero only if `q`'s are. -/
-theorem zeroLimbs_of_splice_readLimb {m m' : MemoryState} {p q : Pointer}
-    (hp : Fits m p (5 * 64)) (hq : IsFieldElemPtr m' q)
+theorem zeroLimbs_of_splice_readLimb {m m' : MemoryState} {p q : Pointer} (hp : Fits m p (5 * 64))
+    (hq : IsFieldElemPtr m' q)
     (hz : ZeroLimbs p (m.splice p (packLimbs fun i => (readLimb i hq : BitVec 64)))) :
     ZeroLimbs q m' := fun i => by
   have h := hz i
@@ -471,21 +486,22 @@ are `readWord?` at the gep'd pointer, and the spec, which is `readLimb` at the
 base. -/
 theorem readLimb_eq_of_readWord? {m : MemoryState} {p q : Pointer} {k : Fin 5} {v : BitVec 64}
     (hp : IsFieldElemPtr m p) (hid : q.id = p.id)
-    (hoff : q.offsetInBits = p.offsetInBits + 64 * k.toNat)
-    (hv : readWord? q 64 m = some v) :
+    (hoff : q.offsetInBits = p.offsetInBits + 64 * k.toNat) (hv : readWord? q 64 m = some v) :
     ((readLimb k hp : ℕ) : BitVec 64) = v := by
   have hread : readLimb? p k m = some v.toNat := by
     simp only [readWord?, hid, hoff] at hv
     cases hb : m.live? p.id with
-    | none => rw [hb] at hv; simp at hv
+    | none =>
+      rw [hb] at hv; simp at hv
     | some blk =>
       rw [hb] at hv
       simp only [Option.bind_eq_bind, Option.bind_some, Option.pure_def, Option.some.injEq] at hv
       simp only [readLimb?, hb, Option.bind_eq_bind, Option.bind_some, Option.pure_def, hv]
   simp [readLimb, hread]
 
-@[simp] theorem withOffset_id (p : Pointer) (o : BitVec 64) :
-    (p.withOffset o).id = p.id := rfl
+@[simp]
+theorem withOffset_id (p : Pointer) (o : BitVec 64) : (p.withOffset o).id = p.id :=
+  rfl
 
 /-- Splicing a zero-width value changes nothing. -/
 theorem spliceBits_zero {n : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec 0) :
@@ -497,8 +513,8 @@ theorem spliceBits_zero {n : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec 0) 
   subst hx
   simp [spliceBits]
 
-theorem spliceBits_cast {n w v : Nat} (bytes : BitVec n) (off : Nat) (h : w = v)
-    (x : BitVec w) : spliceBits bytes off (BitVec.cast h x) = spliceBits bytes off x := by
+theorem spliceBits_cast {n w v : Nat} (bytes : BitVec n) (off : Nat) (h : w = v) (x : BitVec w) :
+    spliceBits bytes off (BitVec.cast h x) = spliceBits bytes off x := by
   subst h; rfl
 
 /-- The memory after writing `b 0 … b (n-1)` at `p`, `p+1`, …, `p+(n-1)`. -/
@@ -515,21 +531,25 @@ def packBytes (b : Nat → BitVec 8) : (n : Nat) → BitVec (8 * n)
 theorem live?_spliceBytes {m : MemoryState} {p : Pointer} {blk : LiveBlock}
     (hb : m.live? p.id = some blk) (b : Nat → BitVec 8)
     (hoff : ∀ k, (p.withOffset (BitVec.ofNat 64 k)).offsetInBits = p.offsetInBits + 8 * k) :
-    ∀ n, (spliceBytes m p b n).live? p.id
-      = some ⟨blk.length, spliceBits blk.bytes p.offsetInBits (packBytes b n)⟩
+    ∀ n,
+      (spliceBytes m p b n).live? p.id =
+        some ⟨blk.length, spliceBits blk.bytes p.offsetInBits (packBytes b n)⟩
   | 0 => by rw [spliceBytes, hb, packBytes, spliceBits_zero]
   | n + 1 => by
     have ih := live?_spliceBytes hb b hoff n
     rw [spliceBytes]
     -- the write is through an offset pointer, which addresses the same block;
     -- `rw` needs that in matching form, not merely definitionally
-    show ((spliceBytes m p b n).splice (p.withOffset (BitVec.ofNat 64 n)) (b n)).live?
-        (p.withOffset (BitVec.ofNat 64 n)).id = _
-    rw [splicedLive _ (p.withOffset (BitVec.ofNat 64 n)) _ ih (b n), hoff n, packBytes, spliceBits_cast, spliceBits_append]
+    show
+      ((spliceBytes m p b n).splice (p.withOffset (BitVec.ofNat 64 n)) (b n)).live?
+          (p.withOffset (BitVec.ofNat 64 n)).id =
+        _
+    rw [splicedLive _ (p.withOffset (BitVec.ofNat 64 n)) _ ih (b n), hoff n, packBytes,
+      spliceBits_cast, spliceBits_append]
 
 /-- The byte offset of byte `k`, when the buffer's end cannot wrap. -/
-lemma byteOffsetInBits {p : Pointer} (hp : p.offset.toNat + 32 ≤ 2 ^ 64)
-    {k : ℕ} {off : BitVec 64} (hk : k ≤ 31) (hoff : off.toNat = k) :
+lemma byteOffsetInBits {p : Pointer} (hp : p.offset.toNat + 32 ≤ 2 ^ 64) {k : ℕ} {off : BitVec 64}
+    (hk : k ≤ 31) (hoff : off.toNat = k) :
     (p.withOffset off).offsetInBits = p.offsetInBits + 8 * k := by
   have hadd : (p.offset + off).toNat = p.offset.toNat + off.toNat := by
     rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
@@ -626,7 +646,6 @@ elab "store_limbs " x:term ", " p:ident ", " hp:term ", " st:ident : tactic => d
 
 /-- `skip_lifetime` steps the next instruction, which must be a lifetime
 marker. It moves neither state nor valuation, so it takes no arguments. -/
-macro "skip_lifetime" : tactic =>
-  `(tactic| rw [BlockCom.run_bind_denote_lifetime])
+macro "skip_lifetime" : tactic => `(tactic| rw [BlockCom.run_bind_denote_lifetime])
 
 end Firedancer.Ref

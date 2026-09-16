@@ -288,6 +288,8 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
       HVector.map f (.nil : HVector A []) = .nil := fun _ => rfl
   -- `^bb5`: `b_is_precomputed ≠ 0`, so no `mul` by `k`
   denote_enter_block
+  -- v4.34: the entered block is literal but the goal still names the `Cfg` indices.
+  reduce_cfg_indices
   simp only [BlockCom.denote_term]
   rw [Terminator.denote_condBr_value (b := 0#1) (by exact hv1)]
   simp only [simp_denote, simp_sllvm]

@@ -32,48 +32,52 @@ step equation is transported through that as well as through `StateT.run`.
 
 -- Index bounds before core's `Vector` rule, which runs `rw … at *` and
 -- `dsimp +zetaDelta … at *` over a walk's whole context.
-macro_rules | `(tactic| get_elem_tactic_extensible) => `(tactic| first | decide | exact Fin.isLt _ | omega)
+macro_rules
+  | `(tactic| get_elem_tactic_extensible) =>
+    `(tactic|
+      first
+      | decide
+      | exact Fin.isLt _
+      | omega)
 
 /-- `simp_peephole` without its `funext_iff` prelude, a failed `rw` over the
 whole term unless it is an equation between functions of a valuation. -/
 macro "simp_denote_only" loc:(Lean.Parser.Tactic.location)? : tactic =>
-  `(tactic| simp (config := {failIfUnchanged := false}) only
-      [Expr.denote_castPureToEff, simp_denote] $[$loc]?)
+  `(tactic|
+    simp (config := { failIfUnchanged := false }) only [Expr.denote_castPureToEff,
+      simp_denote]$[$loc]?)
 
 namespace Firedancer.StepTactic
 -- NOTE: `Expr`/`Com` live in the root namespace, so our helper defs do too;
 -- this namespace only scopes the section variables.
 end Firedancer.StepTactic
 
-variable {d : Dialect} [TyDenote d.Ty] [DialectSignature d] [DialectDenote d]
-  [Monad d.m] [LawfulMonad d.m]
+variable {d : Dialect} [TyDenote d.Ty] [DialectSignature d] [DialectDenote d] [Monad d.m]
+  [LawfulMonad d.m]
 
 /-- v4.34: `Ctxt.Valuation.cons_append` and `.nil_append` are stated with a `no_index` LHS,
 which `simp` no longer finds in its discrimination tree. This is the one instance of them
 every step lemma below needs; `exact` still applies them directly. -/
 theorem Ctxt.Valuation.cons_nil_append {Ty : Type} [TyDenote Ty] {Γ : Ctxt Ty} {t : Ty}
-    (x : TyDenote.toType t) (V : Ctxt.Valuation Γ) :
-    ((x ::ᵥ Ctxt.Valuation.nil) ++ V) = x ::ᵥ V :=
+    (x : TyDenote.toType t) (V : Ctxt.Valuation Γ) : ((x::ᵥCtxt.Valuation.nil) ++ V) = x::ᵥV :=
   Ctxt.Valuation.cons_append.trans (congrArg _ Ctxt.Valuation.nil_append)
 
 /-- `Expr.denoteOp`, at the `HVector` type it definitionally has for a pure
 expression. Having this as its own definition gives the stepping tactic a
 stable head symbol to generalize, with a type that type-class resolution is
 happy with. -/
-def Expr.denoteOpPure {Γ : Ctxt d.Ty} {ts : List d.Ty}
-    (e : Expr d Γ .pure ts) (V : Γ.Valuation) : HVector TyDenote.toType ts :=
+def Expr.denoteOpPure {Γ : Ctxt d.Ty} {ts : List d.Ty} (e : Expr d Γ .pure ts) (V : Γ.Valuation) :
+    HVector TyDenote.toType ts :=
   e.denoteOp V
 
 /-- The head value of a pure single-result expression. -/
-def Expr.denoteOp1 {Γ : Ctxt d.Ty} {t : d.Ty}
-    (e : Expr d Γ .pure [t]) (V : Γ.Valuation) : TyDenote.toType t :=
+def Expr.denoteOp1 {Γ : Ctxt d.Ty} {t : d.Ty} (e : Expr d Γ .pure [t]) (V : Γ.Valuation) :
+    TyDenote.toType t :=
   (e.denoteOpPure V).head
 
-theorem Com.denote_var_pure {Γ : Ctxt d.Ty} {ts' ts : List d.Ty}
-    (e : Expr d Γ .pure ts') (body : Com d e.outContext .pure ts)
-    (V : Γ.Valuation) :
-    (Com.var e body).denote V
-      = body.denote (e.denoteOpPure V ++ V) := by
+theorem Com.denote_var_pure {Γ : Ctxt d.Ty} {ts' ts : List d.Ty} (e : Expr d Γ .pure ts')
+    (body : Com d e.outContext .pure ts) (V : Γ.Valuation) :
+    (Com.var e body).denote V = body.denote (e.denoteOpPure V ++ V) := by
   rcases e with ⟨op, rfl, eff_le, args, regArgs⟩
   simp only [Com.denote_var, Expr.denote, Expr.denoteOpPure, Expr.denoteOp]
   rfl
@@ -81,18 +85,16 @@ theorem Com.denote_var_pure {Γ : Ctxt d.Ty} {ts' ts : List d.Ty}
 /-- As `Com.denote_var_pure`, but for the (common) single-result case, pushing
 the value into the valuation as a `Valuation.cons`. -/
 theorem Com.denote_var_pure_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty}
-    (e : Expr d Γ .pure [t]) (body : Com d e.outContext .pure ts)
-    (V : Γ.Valuation) :
-    (Com.var e body).denote V
-      = body.denote (e.denoteOp1 V ::ᵥ V) := by
+    (e : Expr d Γ .pure [t]) (body : Com d e.outContext .pure ts) (V : Γ.Valuation) :
+    (Com.var e body).denote V = body.denote (e.denoteOp1 V::ᵥV) := by
   rw [Com.denote_var_pure]
   congr 1
-  show e.denoteOpPure V ++ V = (e.denoteOpPure V).head ::ᵥ V
+  show e.denoteOpPure V ++ V = (e.denoteOpPure V).head::ᵥV
   generalize e.denoteOpPure V = w
   cases w
   case cons a as =>
     cases as
-    show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
+    show (Ctxt.Valuation.ofHVector (a::ₕ.nil)) ++ V = a::ᵥV
     simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
     exact Ctxt.Valuation.cons_nil_append ..
 
@@ -103,9 +105,8 @@ instruction in it -- including all the arithmetic -- is an `Expr … .impure …
 carrying `eff_le : .pure ≤ .impure`. `Com.denote_var_pure` does not apply, but
 the denotation still collapses: `Expr.denote` of a pure-op expression is
 `pure (…)`, and `pure x >>= f = f x`. -/
-theorem Com.denote_var_pureOp {Γ : Ctxt d.Ty} {ts' ts : List d.Ty}
-    (e : Expr d Γ .impure ts') (h : e.HasPureOp)
-    (body : Com d e.outContext .impure ts) (V : Γ.Valuation) :
+theorem Com.denote_var_pureOp {Γ : Ctxt d.Ty} {ts' ts : List d.Ty} (e : Expr d Γ .impure ts')
+    (h : e.HasPureOp) (body : Com d e.outContext .impure ts) (V : Γ.Valuation) :
     (Com.var e body).denote V = body.denote ((e.toPure h).denoteOpPure V ++ V) := by
   simp only [Com.denote_var, Expr.denote_unfold]
   rw [← Expr.pure_denoteOp_toPure e h]
@@ -114,17 +115,16 @@ theorem Com.denote_var_pureOp {Γ : Ctxt d.Ty} {ts' ts : List d.Ty}
 /-- As `Com.denote_var_pureOp`, for the single-result case, pushing the value
 into the valuation as a `Valuation.cons`. -/
 theorem Com.denote_var_pureOp_single {Γ : Ctxt d.Ty} {t : d.Ty} {ts : List d.Ty}
-    (e : Expr d Γ .impure [t]) (h : e.HasPureOp)
-    (body : Com d e.outContext .impure ts) (V : Γ.Valuation) :
-    (Com.var e body).denote V = body.denote ((e.toPure h).denoteOp1 V ::ᵥ V) := by
+    (e : Expr d Γ .impure [t]) (h : e.HasPureOp) (body : Com d e.outContext .impure ts)
+    (V : Γ.Valuation) : (Com.var e body).denote V = body.denote ((e.toPure h).denoteOp1 V::ᵥV) := by
   rw [Com.denote_var_pureOp e h]
   congr 1
-  show (e.toPure h).denoteOpPure V ++ V = ((e.toPure h).denoteOpPure V).head ::ᵥ V
+  show (e.toPure h).denoteOpPure V ++ V = ((e.toPure h).denoteOpPure V).head::ᵥV
   generalize (e.toPure h).denoteOpPure V = w
   cases w
   case cons a as =>
     cases as
-    show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
+    show (Ctxt.Valuation.ofHVector (a::ₕ.nil)) ++ V = a::ᵥV
     simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
     exact Ctxt.Valuation.cons_nil_append ..
 
@@ -139,8 +139,8 @@ namespace LeanMLIR.SLLVM
 
 /-- `Com.denote_var_pureOp`, for a CFG block. -/
 theorem BlockCom.denote_var_pureOp {Γ Γout : Ctxt SLLVM.Ty} {ts rets succs}
-    (e : Expr SLLVM Γ .impure ts) (h : e.HasPureOp)
-    (body : BlockCom (ts ++ Γ) Γout rets succs) (V : Γ.Valuation) :
+    (e : Expr SLLVM Γ .impure ts) (h : e.HasPureOp) (body : BlockCom (ts ++ Γ) Γout rets succs)
+    (V : Γ.Valuation) :
     (BlockCom.var e body).denote V = body.denote ((e.toPure h).denoteOpPure V ++ V) := by
   simp only [BlockCom.denote_var, Expr.denote_unfold]
   rw [← Expr.pure_denoteOp_toPure e h]
@@ -149,17 +149,17 @@ theorem BlockCom.denote_var_pureOp {Γ Γout : Ctxt SLLVM.Ty} {ts rets succs}
 /-- As `BlockCom.denote_var_pureOp`, for the single-result case, pushing the
 value into the valuation as a `Valuation.cons`. -/
 theorem BlockCom.denote_var_pureOp_single {Γ Γout : Ctxt SLLVM.Ty} {t rets succs}
-    (e : Expr SLLVM Γ .impure [t]) (h : e.HasPureOp)
-    (body : BlockCom ([t] ++ Γ) Γout rets succs) (V : Γ.Valuation) :
-    (BlockCom.var e body).denote V = body.denote ((e.toPure h).denoteOp1 V ::ᵥ V) := by
+    (e : Expr SLLVM Γ .impure [t]) (h : e.HasPureOp) (body : BlockCom ([t] ++ Γ) Γout rets succs)
+    (V : Γ.Valuation) :
+    (BlockCom.var e body).denote V = body.denote ((e.toPure h).denoteOp1 V::ᵥV) := by
   rw [BlockCom.denote_var_pureOp e h]
   congr 1
-  show (e.toPure h).denoteOpPure V ++ V = ((e.toPure h).denoteOpPure V).head ::ᵥ V
+  show (e.toPure h).denoteOpPure V ++ V = ((e.toPure h).denoteOpPure V).head::ᵥV
   generalize (e.toPure h).denoteOpPure V = w
   cases w
   rename_i a as
   cases as
-  · show (Ctxt.Valuation.ofHVector (a ::ₕ .nil)) ++ V = a ::ᵥ V
+  · show (Ctxt.Valuation.ofHVector (a::ₕ.nil)) ++ V = a::ᵥV
     simp only [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.ofHVector_nil]
     exact Ctxt.Valuation.cons_nil_append ..
 
@@ -175,30 +175,35 @@ reduces exactly those two projections and leaves `cfg.blocks` folded, which is w
 the goal small. -/
 elab "reduce_cfg_indices" : tactic => do
   liftMetaTactic1 fun g => do
-    let ty ← instantiateMVars (← g.getType)
-    -- v4.34: a callee whose `entry`/`blocks` are still folded keeps `cfg.Γout`/`cfg.sigs`
-    -- in *its own* type, so reducing the copies beside it only breaks the `BlockCom.call`
-    -- node. Collect those programs first and leave their projections alone.
-    let folded ← IO.mkRef (#[] : Array Expr)
-    let _ ← Meta.transform ty (post := fun e => do
-      if e.isAppOfArity ``BlockCom.call 13 then
-        let centry := e.getAppArgs[9]!
-        if centry.getAppNumArgs == 3 && centry.getAppFn.isConstOf ``Cfg.entry then
-          folded.modify (·.push centry.appArg!)
-      return .continue)
-    let keep ← folded.get
-    let hit ← IO.mkRef false
-    let ty' ← Meta.transform ty (post := fun e => do
-      if e.getAppNumArgs == 3 then
-        let f := e.getAppFn
-        if f.isConstOf ``Cfg.Γout || f.isConstOf ``Cfg.sigs then
-          unless keep.any (· == e.appArg!) do
-            let e' ← whnf e
-            unless e' == e do
-              hit.set true
-              return .done e'
-      return .continue)
-    if ← hit.get then return some (← g.change ty' (checkDefEq := false)) else return some g
+      let ty ← instantiateMVars (← g.getType)
+      -- v4.34: a callee whose `entry`/`blocks` are still folded keeps `cfg.Γout`/`cfg.sigs`
+      -- in *its own* type, so reducing the copies beside it only breaks the `BlockCom.call`
+      -- node. Collect those programs first and leave their projections alone.
+      let folded ← IO.mkRef (#[] : Array Expr)
+      let _ ←
+        Meta.transform ty (post := fun e => do
+            if e.isAppOfArity ``BlockCom.call 13 then
+              let centry := e.getAppArgs[9]!
+              if centry.getAppNumArgs == 3 && centry.getAppFn.isConstOf ``Cfg.entry then
+                folded.modify (·.push centry.appArg!)
+            return .continue)
+      let keep ← folded.get
+      let hit ← IO.mkRef false
+      let ty' ←
+        Meta.transform ty (post := fun e => do
+            if e.getAppNumArgs == 3 then
+              let f := e.getAppFn
+              if f.isConstOf ``Cfg.Γout || f.isConstOf ``Cfg.sigs then
+                unless keep.any (· == e.appArg!) do
+                  let e' ← whnf e
+                  unless e' == e do
+                    hit.set true
+                    return .done e'
+            return .continue)
+      if ← hit.get then
+        return some (← g.change ty' (checkDefEq := false))
+      else
+        return some g
 
 /-! ### Peeling an impure instruction
 
@@ -212,8 +217,8 @@ rather than unfolding into `do`-notation. The `>>= k` variant is the one a
 
 /-- Sequencing on a *successful* `EffectM` step: the continuation runs at the
 state the first step produced. -/
-theorem EffectM.run_bind_of_value {α β} {x : EffectM α} {f : α → EffectM β}
-    {s s' : GlobalState} {a : α} (h : StateT.run x s = .value (a, s')) :
+theorem EffectM.run_bind_of_value {α β} {x : EffectM α} {f : α → EffectM β} {s s' : GlobalState}
+    {a : α} (h : StateT.run x s = .value (a, s')) :
     StateT.run (x >>= f) s = StateT.run (f a) s' := by
   rw [EffectM.run_bind, h]; rfl
 
@@ -255,8 +260,11 @@ theorem BlockCom.run_bind_denote_var_of_value {Γ Γout : Ctxt SLLVM.Ty} {t rets
 instructions that bind nothing. -/
 private theorem nil_append {Γ : Ctxt SLLVM.Ty} (V : Γ.Valuation) :
     ((.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) = V := by
-  show (Ctxt.Valuation.ofHVector
-      (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty))) ++ V = V
+  show
+    (Ctxt.Valuation.ofHVector
+          (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty))) ++
+        V =
+      V
   simp only [Ctxt.Valuation.ofHVector_nil]
   exact Ctxt.Valuation.nil_append
 
@@ -264,42 +272,46 @@ private theorem nil_append {Γ : Ctxt SLLVM.Ty} (V : Γ.Valuation) :
 succeeds and leaves the state at `s'`. The valuation is untouched, so unlike
 `run_bind_denote_var_of_value` this does not extend the `cons` spine. -/
 theorem BlockCom.run_bind_denote_var_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
-    {e : Expr SLLVM Γ .impure []}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {e : Expr SLLVM Γ .impure []} {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
     (h : StateT.run (e.denoteOp V) s = .value (.nil, s')) :
-    StateT.run ((BlockCom.var e body).denote V >>= k) s
-      = StateT.run (body.denote V >>= k) s' := by
+    StateT.run ((BlockCom.var e body).denote V >>= k) s = StateT.run (body.denote V >>= k) s' := by
   rw [BlockCom.denote_var, bind_assoc, Expr.denote_unfold,
-    EffectM.run_bind_of_value
-      (a := (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) (s' := s')
-      (by rw [EffectM.run_map, h]; rfl),
+    EffectM.run_bind_of_value (a :=
+      (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)) ++ V) (s' := s')
+      (by
+        rw [EffectM.run_map, h]; rfl),
     nil_append]
 
 /-- Step a lifetime marker: it denotes to `pure []ₕ`, so neither the state nor
 the valuation moves. Unlike `run_bind_denote_var_of_nil` this leaves no `s'`
 for the use site to determine, so it applies as a bare `rw`. -/
-theorem BlockCom.run_bind_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
-    {start : Bool} {p : Ctxt.Var Γ .ptr}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+theorem BlockCom.run_bind_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs β} {start : Bool}
+    {p : Ctxt.Var Γ .ptr} {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {k : _ → EffectM β} {s : GlobalState} :
-    StateT.run ((BlockCom.var
-        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
-          (SLLVMOp.lifetime start) rfl (EffectKind.le_refl _)
-          (p ::ₕ .nil) Regions.nil) body).denote V >>= k) s
-      = StateT.run (body.denote V >>= k) s :=
+    StateT.run
+        ((BlockCom.var
+                (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure) (SLLVMOp.lifetime start) rfl
+                  (EffectKind.le_refl _) (p::ₕ.nil) Regions.nil)
+                body).denote
+            V >>=
+          k)
+        s =
+      StateT.run (body.denote V >>= k) s :=
   BlockCom.run_bind_denote_var_of_nil (by simp only [denoteOp_lifetime, EffectM.run_pure])
 
 /-- `run_bind_denote_lifetime` without a continuation: a marker in a tail block. -/
-theorem BlockCom.run_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
-    {start : Bool} {p : Ctxt.Var Γ .ptr}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+theorem BlockCom.run_denote_lifetime {Γ Γout : Ctxt SLLVM.Ty} {rets succs} {start : Bool}
+    {p : Ctxt.Var Γ .ptr} {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {s : GlobalState} :
-    StateT.run ((BlockCom.var
-        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure)
-          (SLLVMOp.lifetime start) rfl (EffectKind.le_refl _)
-          (p ::ₕ .nil) Regions.nil) body).denote V) s
-      = StateT.run (body.denote V) s := by
+    StateT.run
+        ((BlockCom.var
+              (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure) (SLLVMOp.lifetime start) rfl
+                (EffectKind.le_refl _) (p::ₕ.nil) Regions.nil)
+              body).denote
+          V)
+        s =
+      StateT.run (body.denote V) s := by
   simpa only [bind_pure] using
     (BlockCom.run_bind_denote_lifetime (k := pure) (body := body) (p := p) (V := V) (s := s))
 
@@ -309,24 +321,26 @@ a `Cfg` in `h`, which is the form its own conformance theorem is stated in, so
 a proven callee is a single rewrite here rather than a re-derivation. -/
 theorem BlockCom.run_bind_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
     {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
-    {callee : String}
-    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
-    {cblocks : Blocks cΓout [] csigs csigs}
-    {args : HVector Γ.Var argTys}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
-    {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
-    (h : StateT.run (runFunction
-        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
-      = .value (.nil, s')) :
-    StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= k) s
-      = StateT.run (body.denote V >>= k) s' := by
+    {callee : String} {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
+    {cblocks : Blocks cΓout [] csigs csigs} {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs} {V : Γ.Valuation}
+    {k : _ → EffectM β} {s s' : GlobalState}
+    (h :
+      StateT.run
+          (runFunction
+            (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse)))
+          s =
+        .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= k) s =
+      StateT.run (body.denote V >>= k) s' := by
   -- `denote_call` inlines the callee rather than naming it, and its `match`es
   -- are a different auxiliary from `Cfg.denote`'s, so the two forms have to be
   -- reconciled by destructing rather than by `rfl`.
-  have hcall : BlockCom.denote (.call callee centry cblocks args body) V
-      = (runFunction (Cfg.denote ⟨centry, cblocks⟩
-            (Ctxt.Valuation.ofHVector (args.map V).reverse))
-          >>= fun rs => body.denote (rs ++ V)) := by
+  have hcall :
+    BlockCom.denote (.call callee centry cblocks args body) V =
+      (runFunction
+          (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse)) >>=
+        fun rs => body.denote (rs ++ V)) := by
     rw [BlockCom.denote_call]
     refine congrArg (fun m => runFunction m >>= fun rs => body.denote (rs ++ V)) ?_
     simp only [Cfg.denote]
@@ -335,9 +349,8 @@ theorem BlockCom.run_bind_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets su
     obtain ⟨Vc, r⟩ := x
     cases r <;> rfl
   rw [hcall, bind_assoc,
-    EffectM.run_bind_of_value
-      (a := (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)))
-      (s' := s') h,
+    EffectM.run_bind_of_value (a :=
+      (HVector.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty))) (s' := s') h,
     nil_append]
 
 /-- As `run_bind_denote_call_of_nil`, for a call that binds its result: the
@@ -379,19 +392,21 @@ above, in the shape a loop-body goal actually has. -/
 
 theorem BlockCom.run_denote_call_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
     {argTys : List SLLVM.Ty} {csigs : List (List SLLVM.Ty)} {cΓout : Ctxt SLLVM.Ty}
-    {callee : String}
-    {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
-    {cblocks : Blocks cΓout [] csigs csigs}
-    {args : HVector Γ.Var argTys}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
-    {V : Γ.Valuation} {s s' : GlobalState}
-    (h : StateT.run (runFunction
-        (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse))) s
-      = .value (.nil, s')) :
-    StateT.run ((BlockCom.call callee centry cblocks args body).denote V) s
-      = StateT.run (body.denote V) s' := by
-  have h2 : StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= pure) s
-      = StateT.run (body.denote V >>= pure) s' :=
+    {callee : String} {centry : BlockCom (Ctxt.ofList argTys.reverse) cΓout [] csigs}
+    {cblocks : Blocks cΓout [] csigs csigs} {args : HVector Γ.Var argTys}
+    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs} {V : Γ.Valuation}
+    {s s' : GlobalState}
+    (h :
+      StateT.run
+          (runFunction
+            (Cfg.denote ⟨centry, cblocks⟩ (Ctxt.Valuation.ofHVector (args.map V).reverse)))
+          s =
+        .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V) s =
+      StateT.run (body.denote V) s' := by
+  have h2 :
+    StateT.run ((BlockCom.call callee centry cblocks args body).denote V >>= pure) s =
+      StateT.run (body.denote V >>= pure) s' :=
     BlockCom.run_bind_denote_call_of_nil h
   simpa only [bind_pure] using h2
 
@@ -464,36 +479,34 @@ the operand vector against the block's valuation by `whnf`. That cost grows
 with every instruction already peeled, so in a long block the later calls
 dominate everything else. Staged here; belongs in `MLIR/DenoteStep.lean`
 beside its non-bind sibling. -/
-theorem BlockCom.run_bind_denote_call_cfg_of_nil
-    {Γ Γout : Ctxt SLLVM.Ty} {rets succs β} {argTys : List SLLVM.Ty} {callee : String}
-    {c : Cfg (Ctxt.ofList argTys.reverse) []}
-    {args : HVector Γ.Var argTys}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+theorem BlockCom.run_bind_denote_call_cfg_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs β}
+    {argTys : List SLLVM.Ty} {callee : String} {c : Cfg (Ctxt.ofList argTys.reverse) []}
+    {args : HVector Γ.Var argTys} {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
     {V : Γ.Valuation} {k : _ → EffectM β} {s s' : GlobalState}
-    {argVals : HVector toType argTys.reverse}
-    (hargs : (args.map V).reverse = argVals)
-    (h : StateT.run (runFunction (c.denote (Ctxt.Valuation.ofHVector argVals))) s
-      = .value (.nil, s')) :
-    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V >>= k) s
-      = StateT.run (body.denote V >>= k) s' :=
-  BlockCom.run_bind_denote_call_of_nil (by rw [Cfg.denote_mk_self, hargs]; exact h)
+    {argVals : HVector toType argTys.reverse} (hargs : (args.map V).reverse = argVals)
+    (h :
+      StateT.run (runFunction (c.denote (Ctxt.Valuation.ofHVector argVals))) s =
+        .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V >>= k) s =
+      StateT.run (body.denote V >>= k) s' :=
+  BlockCom.run_bind_denote_call_of_nil
+    (by
+      rw [Cfg.denote_mk_self, hargs]; exact h)
 
 /-- `run_denote_call_cfg_of_value`, for a callee that returns nothing. -/
 theorem BlockCom.run_denote_call_cfg_of_nil {Γ Γout : Ctxt SLLVM.Ty} {rets succs}
-    {argTys : List SLLVM.Ty} {callee : String}
-    {c : Cfg (Ctxt.ofList argTys.reverse) []}
-    {args : HVector Γ.Var argTys}
-    {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
-    {V : Γ.Valuation} {s s' : GlobalState}
-    {argVals : HVector toType argTys.reverse}
+    {argTys : List SLLVM.Ty} {callee : String} {c : Cfg (Ctxt.ofList argTys.reverse) []}
+    {args : HVector Γ.Var argTys} {body : BlockCom (([] : List SLLVM.Ty) ++ Γ) Γout rets succs}
+    {V : Γ.Valuation} {s s' : GlobalState} {argVals : HVector toType argTys.reverse}
     (hargs : (args.map V).reverse = argVals)
-    (h : StateT.run (runFunction
-        (c.denote (Ctxt.Valuation.ofHVector argVals))) s
-      = .value (.nil, s')) :
-    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V) s
-      = StateT.run (body.denote V) s' :=
+    (h :
+      StateT.run (runFunction (c.denote (Ctxt.Valuation.ofHVector argVals))) s =
+        .value (.nil, s')) :
+    StateT.run ((BlockCom.call callee c.entry c.blocks args body).denote V) s =
+      StateT.run (body.denote V) s' :=
   BlockCom.run_denote_call_of_nil
-    (by rw [Cfg.denote_mk_self, hargs]; exact h)
+    (by
+      rw [Cfg.denote_mk_self, hargs]; exact h)
 
 /-! ### The valuation spine
 
@@ -512,16 +525,14 @@ whose spine is `ofHVector HVector.nil.reverse ++ Vamb`: without it the reverse
 does not reduce, so `ofHVector_nil` and `nil_append` never fire and the whole
 spine stands. -/
 
-attribute [simp_spine]
-  HVector.map HVector.reverse_nil HVector.reverse_cons
-  HVector.reverseAux_nil HVector.reverseAux_cons
-  Ctxt.Valuation.ofHVector_cons Ctxt.Valuation.ofHVector_nil
-  Ctxt.Valuation.cons_append Ctxt.Valuation.nil_append
-  Ctxt.Valuation.cons_succ Ctxt.Var.last Ctxt.Valuation.cons_zero
+attribute [simp_spine] HVector.map HVector.reverse_nil HVector.reverse_cons HVector.reverseAux_nil
+  HVector.reverseAux_cons Ctxt.Valuation.ofHVector_cons Ctxt.Valuation.ofHVector_nil
+  Ctxt.Valuation.cons_append Ctxt.Valuation.nil_append Ctxt.Valuation.cons_succ Ctxt.Var.last
+  Ctxt.Valuation.cons_zero
 
 -- Lookups by index in one step, before `cons_succ` walks the spine a `cons` at a
 -- time. Named in a simp list the simproc would run post, after `cons_succ`.
-attribute [simp_spine ↓] SSA.simpValuationApply
+attribute [simp_spine↓] SSA.simpValuationApply
 
 /-! ### Entering a block
 
@@ -537,35 +548,43 @@ definition. -/
 step runs the block at `t k` and lands on `t (k + 1)`. After `n` iterations
 the walk stands at `t n` -- typically the loop's exit target -- with `Inv n`.
 Proof-time only: `n` is supplied here, the transform never computes it. -/
-theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop {Γamb : Ctxt SLLVM.Ty}
-    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
-    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
     (Inv : Nat → GlobalState → Prop) (t : Nat → SuccArgs all) (n : Nat)
-    (hstep : ∀ k s, k < n → Inv k s → ∃ Vout s',
-      StateT.run ((bs.get (t k).idx (t k).hidx).2.denote
-          (Ctxt.Valuation.ofHVector (t k).args.reverse ++ Vamb)) s
-        = .value ((Vout, .inr (t (k + 1))), s') ∧ Inv (k + 1) s')
+    (hstep :
+      ∀ k s,
+        k < n →
+          Inv k s →
+          ∃ Vout s',
+            StateT.run
+                  ((bs.get (t k).idx (t k).hidx).2.denote
+                    (Ctxt.Valuation.ofHVector (t k).args.reverse ++ Vamb))
+                  s =
+                .value ((Vout, .inr (t (k + 1))), s') ∧
+              Inv (k + 1) s')
     {s₀ : GlobalState} (h₀ : Inv 0 s₀) :
-    ∃ s', StateT.run (bs.run Vamb (t 0)) s₀ = StateT.run (bs.run Vamb (t n)) s'
-      ∧ Inv n s' := by
-  suffices h : ∀ d k s, n = k + d → Inv k s → ∃ s',
-      StateT.run (bs.run Vamb (t k)) s = StateT.run (bs.run Vamb (t n)) s'
-        ∧ Inv n s' from h n 0 s₀ (by omega) h₀
+    ∃ s', StateT.run (bs.run Vamb (t 0)) s₀ = StateT.run (bs.run Vamb (t n)) s' ∧ Inv n s' := by
+  suffices h :
+    ∀ d k s,
+      n = k + d →
+        Inv k s →
+        ∃ s', StateT.run (bs.run Vamb (t k)) s = StateT.run (bs.run Vamb (t n)) s' ∧ Inv n s'
+    from h n 0 s₀ (by omega) h₀
   intro d
   induction d with
   | zero =>
-      intro k s hkd hInv
-      have hk : k = n := by omega
-      subst hk
-      exact ⟨s, rfl, hInv⟩
+    intro k s hkd hInv
+    have hk : k = n := by omega
+    subst hk
+    exact ⟨s, rfl, hInv⟩
   | succ d ih =>
-      intro k s hkd hInv
-      obtain ⟨Vout, s', hrun, hInv'⟩ := hstep k s (by omega) hInv
-      obtain ⟨s'', heq, hInvn⟩ := ih (k + 1) s' (by omega) hInv'
-      refine ⟨s'', ?_, hInvn⟩
-      rw [Blocks.run_step (t := t k), EffectM.run_bind, hrun, PoisonOr.value_bind]
-      show StateT.run (bs.run Vamb (t (k + 1))) s' = _
-      exact heq
+    intro k s hkd hInv
+    obtain ⟨Vout, s', hrun, hInv'⟩ := hstep k s (by omega) hInv
+    obtain ⟨s'', heq, hInvn⟩ := ih (k + 1) s' (by omega) hInv'
+    refine ⟨s'', ?_, hInvn⟩
+    rw [Blocks.run_step (t := t k), EffectM.run_bind, hrun, PoisonOr.value_bind]
+    show StateT.run (bs.run Vamb (t (k + 1))) s' = _
+    exact heq
 
 /-- `run_loop` for a header whose φs carry data: the target at each iteration
 is produced by the step rather than fixed in advance, so the loop-carried
@@ -573,95 +592,107 @@ values need no closed form. `Inv k t s` is the invariant at iteration `k`,
 standing at program point `t` in state `s`; after `n` iterations the walk
 stands at some `t'` with `Inv n t' s'`. `run_loop` is the special case where
 `t` is a function of `k` alone. -/
-theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop_args {Γamb : Ctxt SLLVM.Ty}
-    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
-    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_loop_args {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
     (Inv : Nat → SuccArgs all → GlobalState → Prop) (n : Nat)
-    (hstep : ∀ k t s, k < n → Inv k t s → ∃ Vout t' s',
-      StateT.run ((bs.get t.idx t.hidx).2.denote
-          (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s
-        = .value ((Vout, .inr t'), s') ∧ Inv (k + 1) t' s')
+    (hstep :
+      ∀ k t s,
+        k < n →
+          Inv k t s →
+          ∃ Vout t' s',
+            StateT.run
+                  ((bs.get t.idx t.hidx).2.denote (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb))
+                  s =
+                .value ((Vout, .inr t'), s') ∧
+              Inv (k + 1) t' s')
     {t₀ : SuccArgs all} {s₀ : GlobalState} (h₀ : Inv 0 t₀ s₀) :
     ∃ (t' : SuccArgs all) (s' : GlobalState),
-      StateT.run (bs.run Vamb t₀) s₀ = StateT.run (bs.run Vamb t') s'
-        ∧ Inv n t' s' := by
-  suffices h : ∀ d k t s, n = k + d → Inv k t s → ∃ t' s',
-      StateT.run (bs.run Vamb t) s = StateT.run (bs.run Vamb t') s'
-        ∧ Inv n t' s' from h n 0 t₀ s₀ (by omega) h₀
+      StateT.run (bs.run Vamb t₀) s₀ = StateT.run (bs.run Vamb t') s' ∧ Inv n t' s' := by
+  suffices h :
+    ∀ d k t s,
+      n = k + d →
+        Inv k t s →
+        ∃ t' s', StateT.run (bs.run Vamb t) s = StateT.run (bs.run Vamb t') s' ∧ Inv n t' s'
+    from h n 0 t₀ s₀ (by omega) h₀
   intro d
   induction d with
   | zero =>
-      intro k t s hkd hInv
-      have hk : k = n := by omega
-      subst hk
-      exact ⟨t, s, rfl, hInv⟩
+    intro k t s hkd hInv
+    have hk : k = n := by omega
+    subst hk
+    exact ⟨t, s, rfl, hInv⟩
   | succ d ih =>
-      intro k t s hkd hInv
-      obtain ⟨Vout, t', s', hrun, hInv'⟩ := hstep k t s (by omega) hInv
-      obtain ⟨t'', s'', heq, hInvn⟩ := ih (k + 1) t' s' (by omega) hInv'
-      refine ⟨t'', s'', ?_, hInvn⟩
-      rw [Blocks.run_step (t := t), EffectM.run_bind, hrun, PoisonOr.value_bind]
-      exact heq
+    intro k t s hkd hInv
+    obtain ⟨Vout, t', s', hrun, hInv'⟩ := hstep k t s (by omega) hInv
+    obtain ⟨t'', s'', heq, hInvn⟩ := ih (k + 1) t' s' (by omega) hInv'
+    refine ⟨t'', s'', ?_, hInvn⟩
+    rw [Blocks.run_step (t := t), EffectM.run_bind, hrun, PoisonOr.value_bind]
+    exact heq
 
 /-- The general termination rule: any walk whose steps preserve `Inv` and
 strictly decrease `μ` until a `ret` fires ends in a state satisfying `Q`.
 Covers multi-block and nested loops -- it never mentions loop structure. -/
-theorem _root_.LeanMLIR.SLLVM.Blocks.run_of_variant {Γamb : Ctxt SLLVM.Ty}
-    {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
-    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
-    (Inv : SuccArgs all → GlobalState → Prop)
-    (μ : SuccArgs all → GlobalState → Nat)
+theorem _root_.LeanMLIR.SLLVM.Blocks.run_of_variant {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
+    {all : List (List SLLVM.Ty)} {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+    (Inv : SuccArgs all → GlobalState → Prop) (μ : SuccArgs all → GlobalState → Nat)
     (Q : HVector toType rets → GlobalState → Prop)
-    (hstep : ∀ t s, Inv t s → ∃ p s',
-      StateT.run ((bs.get t.idx t.hidx).2.denote
-          (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s = .value (p, s')
-      ∧ (∀ res, p.2 = .inl res → Q res s')
-      ∧ (∀ t', p.2 = .inr t' → Inv t' s' ∧ μ t' s' < μ t s))
+    (hstep :
+      ∀ t s,
+        Inv t s →
+          ∃ p s',
+            StateT.run
+                  ((bs.get t.idx t.hidx).2.denote (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb))
+                  s =
+                .value (p, s') ∧
+              (∀ res, p.2 = .inl res → Q res s') ∧
+              (∀ t', p.2 = .inr t' → Inv t' s' ∧ μ t' s' < μ t s))
     {t₀ : SuccArgs all} {s₀ : GlobalState} (h₀ : Inv t₀ s₀) :
     ∃ rs s', StateT.run (bs.run Vamb t₀) s₀ = .value (rs, s') ∧ Q rs s' := by
-  suffices h : ∀ m t s, μ t s ≤ m → Inv t s → ∃ rs s',
-      StateT.run (bs.run Vamb t) s = .value (rs, s') ∧ Q rs s' from
-    h (μ t₀ s₀) t₀ s₀ le_rfl h₀
+  suffices h :
+    ∀ m t s, μ t s ≤ m → Inv t s → ∃ rs s', StateT.run (bs.run Vamb t) s = .value (rs, s') ∧ Q rs s'
+    from h (μ t₀ s₀) t₀ s₀ le_rfl h₀
   intro m
   induction m with
   | zero =>
-      intro t s hμ hInv
-      obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
-      cases r with
-      | inl res =>
-          refine ⟨res, s', ?_, hinl res rfl⟩
-          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
-          rfl
-      | inr t' => exact absurd (hinr t' rfl).2 (by omega)
+    intro t s hμ hInv
+    obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
+    cases r with
+    | inl res =>
+      refine ⟨res, s', ?_, hinl res rfl⟩
+      rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+      rfl
+    | inr t' => exact absurd (hinr t' rfl).2 (by omega)
   | succ m ih =>
-      intro t s hμ hInv
-      obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
-      cases r with
-      | inl res =>
-          refine ⟨res, s', ?_, hinl res rfl⟩
-          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
-          rfl
-      | inr t' =>
-          obtain ⟨hInv', hlt⟩ := hinr t' rfl
-          obtain ⟨rs, s'', heq, hQ⟩ := ih t' s' (by omega) hInv'
-          refine ⟨rs, s'', ?_, hQ⟩
-          rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
-          exact heq
+    intro t s hμ hInv
+    obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := hstep t s hInv
+    cases r with
+    | inl res =>
+      refine ⟨res, s', ?_, hinl res rfl⟩
+      rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+      rfl
+    | inr t' =>
+      obtain ⟨hInv', hlt⟩ := hinr t' rfl
+      obtain ⟨rs, s'', heq, hQ⟩ := ih t' s' (by omega) hInv'
+      refine ⟨rs, s'', ?_, hQ⟩
+      rw [Blocks.run_step, EffectM.run_bind, hrun, PoisonOr.value_bind]
+      exact heq
 
 /-- From `t` in `s` the block walk returns with `Q`. -/
-def Blocks.Runs {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
-    {all : List (List SLLVM.Ty)} (bs : Blocks Γamb rets all all) (Vamb : Γamb.Valuation)
+def Blocks.Runs {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
+    (bs : Blocks Γamb rets all all) (Vamb : Γamb.Valuation)
     (Q : HVector toType rets → GlobalState → Prop) (t : SuccArgs all) (s : GlobalState) : Prop :=
   ∃ rs s', StateT.run (bs.run Vamb t) s = .value (rs, s') ∧ Q rs s'
 
 /-- Run block `t`, then run on from its successor. -/
-theorem Blocks.Runs.step {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty}
-    {all : List (List SLLVM.Ty)} {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
+theorem Blocks.Runs.step {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} {all : List (List SLLVM.Ty)}
+    {bs : Blocks Γamb rets all all} {Vamb : Γamb.Valuation}
     {Q : HVector toType rets → GlobalState → Prop} {t : SuccArgs all} {s : GlobalState}
-    (h : ∃ p s', StateT.run ((bs.get t.idx t.hidx).2.denote
-      (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s = .value (p, s')
-      ∧ (∀ rs, p.2 = .inl rs → Q rs s')
-      ∧ (∀ t', p.2 = .inr t' → bs.Runs Vamb Q t' s')) :
+    (h :
+      ∃ p s',
+        StateT.run
+              ((bs.get t.idx t.hidx).2.denote (Ctxt.Valuation.ofHVector t.args.reverse ++ Vamb)) s =
+            .value (p, s') ∧
+          (∀ rs, p.2 = .inl rs → Q rs s') ∧ (∀ t', p.2 = .inr t' → bs.Runs Vamb Q t' s')) :
     bs.Runs Vamb Q t s := by
   obtain ⟨⟨Vout, r⟩, s', hrun, hinl, hinr⟩ := h
   cases r with
@@ -682,7 +713,8 @@ open Lean Meta in
 as deep as the walk, which every defeq against the program's context unfolds. -/
 private def consAt (e x V : Lean.Expr) : MetaM Lean.Expr := do
   let args := (← whnfR (← inferType e)).getAppArgs
-  unless args.size ≥ 5 do return ← mkAppM ``Ctxt.Valuation.cons #[x, V]
+  unless args.size ≥ 5 do
+    return ← mkAppM ``Ctxt.Valuation.cons #[x, V]
   mkAppOptM ``Ctxt.Valuation.cons #[none, none, some args[2]!, none, some x, some V]
 
 open Lean Meta in
@@ -695,10 +727,14 @@ private def operandValue (V var t : Lean.Expr) : MetaM (Option Lean.Expr) := do
   let mut k := 0
   while k < n do
     match_expr W with
-    | Ctxt.Valuation.cons _ _ _ _ _ W' => W := W'; k := k + 1
-    | _ => break
+    | Ctxt.Valuation.cons _ _ _ _ _ W' =>
+      W := W';
+      k := k + 1
+    | _ =>
+      break
   if k == n then
-    if let some x := (match_expr W with
+    if let some x :=
+        (match_expr W with
         | Ctxt.Valuation.cons _ _ _ _ x _ => some x
         | _ => none) then
       return some x
@@ -716,7 +752,8 @@ private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V :
     MetaM (Option Lean.Expr) := do
   try
     let eArgs := e.getAppArgs
-    unless e.isAppOf ``Expr.mk && eArgs.size == 10 do return none
+    unless e.isAppOf ``Expr.mk && eArgs.size == 10 do
+      return none
     let mut ops : Array (Lean.Expr × Lean.Expr) := #[]
     let mut nodes : Array Lean.Expr := #[]
     let mut cur := eArgs[8]!
@@ -725,14 +762,16 @@ private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V :
       nodes := nodes.push cur
       ops := ops.push (cs[3]!, cs[4]!)
       cur := cs[5]!
-    unless cur.isAppOf ``HVector.nil do return none
+    unless cur.isAppOf ``HVector.nil do
+      return none
     let nilNode := cur
     let mut vals : Array Lean.Expr := #[]
     for (t, var) in ops do
       let some x ← operandValue V var t | return none
       vals := vals.push x
     let VT ← whnfR (← inferType V)
-    unless VT.getAppNumArgs ≥ 2 do return none
+    unless VT.getAppNumArgs ≥ 2 do
+      return none
     let Ty := VT.getAppArgs[0]!
     let inst := VT.getAppArgs[1]!
     let m := ops.size
@@ -742,8 +781,12 @@ private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V :
     let mut Vs := Array.replicate (m + 1) (← mkAppOptM ``Ctxt.Valuation.nil #[some Ty, some inst])
     for j in (List.range m).reverse do
       ctxs := ctxs.set! j (← mkAppM ``Ctxt.cons #[ops[j]!.1, ctxs[j + 1]!])
-      Vs := Vs.set! j (← mkAppOptM ``Ctxt.Valuation.cons
-        #[some Ty, some inst, some ctxs[j + 1]!, some ops[j]!.1, some vals[j]!, some Vs[j + 1]!])
+      Vs :=
+        Vs.set! j
+          (←
+            mkAppOptM ``Ctxt.Valuation.cons
+                #[some Ty, some inst, some ctxs[j + 1]!, some ops[j]!.1, some vals[j]!,
+                  some Vs[j + 1]!])
     let Γs := ctxs[0]!
     let fNew := mkApp2 (mkConst ``Ctxt.Var) Ty Γs
     let mut args := mkAppN nilNode.getAppFn #[nilNode.getAppArgs[0]!, fNew]
@@ -754,17 +797,24 @@ private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V :
       let cs := nodes[j]!.getAppArgs
       args := mkAppN nodes[j]!.getAppFn #[cs[0]!, fNew, cs[2]!, cs[3]!, v, args]
     let pureK := mkConst ``EffectKind.pure
-    let effLe ← match hProof? with
-      | some h => do
-        let ek := mkApp3 (mkConst ``DialectSignature.effectKind) eArgs[0]! eArgs[1]! eArgs[5]!
-        pure (mkApp3 (mkConst ``EffectKind.le_of_eq) ek pureK (← mkExpectedTypeHint h (← mkEq ek pureK)))
-      | none => pure eArgs[7]!
-    let e' := mkAppN e.getAppFn
-      #[eArgs[0]!, eArgs[1]!, pureK, Γs, eArgs[4]!, eArgs[5]!, eArgs[6]!, effLe, args, eArgs[9]!]
+    let effLe ←
+      match hProof? with
+      | some h =>
+        do
+          let ek := mkApp3 (mkConst ``DialectSignature.effectKind) eArgs[0]! eArgs[1]! eArgs[5]!
+          pure
+              (mkApp3 (mkConst ``EffectKind.le_of_eq) ek pureK
+                (← mkExpectedTypeHint h (← mkEq ek pureK)))
+      | none =>
+        pure eArgs[7]!
+    let e' :=
+      mkAppN e.getAppFn
+        #[eArgs[0]!, eArgs[1]!, pureK, Γs, eArgs[4]!, eArgs[5]!, eArgs[6]!, effLe, args, eArgs[9]!]
     let tArgs := tVal.getAppArgs.map fun a => if a == eArgs[3]! then Γs else a
     let tArgs := (tArgs.set! (tArgs.size - 2) e').set! (tArgs.size - 1) Vs[0]!
     return some (mkAppN tVal.getAppFn tArgs)
-  catch _ => return none
+  catch _ =>
+    return none
 
 open Lean Meta in
 /-- Peel the wrappers that can sit between the goal's left-hand side and the
@@ -797,8 +847,8 @@ open Lean Meta in
 /-- Is this the denotation a stepper works on? -/
 private def isDenoteTerm (e : Lean.Expr) : MetaM Bool := do
   let (core, _, _) ← peelWrappers e
-  return core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote
-    || core.isAppOf ``LeanMLIR.SLLVM.Cfg.denote
+  return core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote ||
+      core.isAppOf ``LeanMLIR.SLLVM.Cfg.denote
 
 open Lean Meta in
 /-- The denotation a stepper works on, and the goal's own right-hand side when
@@ -820,13 +870,15 @@ private partial def findDenoteTerm? (tgt : Lean.Expr) :
   -- an equation goal is what the steppers have always worked on: its left-hand
   -- side is the term, whatever it denotes -- `Blocks.run` included
   if let some (_, lhs, rhs) := tgt.eq? then
-    if lhs.hasLooseBVars then return none
+    if lhs.hasLooseBVars then
+      return none
     return some (lhs, some rhs)
   if tgt.isAppOf ``Exists || tgt.isAppOf ``And then
     for arg in tgt.getAppArgs do
       let body := if arg.isLambda then arg.bindingBody! else arg
-      if let some (lhs, _) ← findDenoteTerm? body then
-        unless lhs.hasLooseBVars do return some (lhs, none)
+      if let some (lhs, _)← findDenoteTerm? body then
+        unless lhs.hasLooseBVars do
+          return some (lhs, none)
   return none
 
 open Lean Meta in
@@ -845,12 +897,15 @@ private def mkPurityProof? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
       let xs := e'.getAppArgs
       let ek := mkApp3 (mkConst ``DialectSignature.effectKind) xs[0]! xs[1]! xs[5]!
       let p ← mkEq ek (mkConst ``EffectKind.pure)
-      unless (← whnf (← mkDecide p)).isConstOf ``Bool.true do return none
+      unless (← whnf (← mkDecide p)).isConstOf ``Bool.true do
+        return none
       return some (← mkExpectedTypeHint (← mkDecideProof p) (← mkAppM ``Expr.HasPureOp #[e]))
     let hasPure ← mkAppM ``Expr.HasPureOp #[e]
-    unless (← whnf (← mkDecide hasPure)).isConstOf ``Bool.true do return none
+    unless (← whnf (← mkDecide hasPure)).isConstOf ``Bool.true do
+      return none
     return some (← mkDecideProof hasPure)
-  catch _ => return none
+  catch _ =>
+    return none
 
 open Lean Meta in
 /-- The program argument of a `denote`, reduced far enough to expose its head
@@ -863,7 +918,10 @@ private def whnfProgram (e : Lean.Expr) : MetaM Lean.Expr := do
   let e' ← whnfR e
   if e'.isAppOf ``Com.var || e'.isAppOf ``LeanMLIR.SLLVM.BlockCom.var then
     return e'
-  try whnf e catch _ => return e'
+  try
+    whnf e
+  catch _ =>
+    return e'
 
 open Lean Meta Elab Tactic in
 /-- One step of `denote_step_all`: if the main goal has the shape
@@ -873,8 +931,8 @@ with `hv<i> : v<i> = e.denoteOp1 V` -- restated by `compactDenote` over just
 `e`'s operands where that applies, so the hypothesis does not grow with the
 walk -- and return the goal `body.denote (v<i> ::ᵥ V) = rhs`. Returns `none`
 if the goal is not of that shape (i.e. the program is exhausted). -/
-private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
-    (inline : Bool := false) : MetaM (Option MVarId) :=
+private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) (inline : Bool := false) :
+    MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (lhs, rhs?) ← findDenoteTerm? tgt | return none
@@ -884,15 +942,18 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
         `simp only [Cfg.denote]` first, which splits it into the entry block \
         and the dispatch on its terminator; the entry block is what steps."
     let isBlock := core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote
-    unless core.isAppOf ``Com.denote || isBlock do return none
+    unless core.isAppOf ``Com.denote || isBlock do
+      return none
     let coreArgs := core.getAppArgs
-    unless coreArgs.size ≥ 2 do return none
+    unless coreArgs.size ≥ 2 do
+      return none
     let com ← whnfProgram coreArgs[coreArgs.size - 2]!
     let V := coreArgs[coreArgs.size - 1]!
     unless com.isAppOf (if isBlock then ``LeanMLIR.SLLVM.BlockCom.var else ``Com.var) do
       return none
     let comArgs := com.getAppArgs
-    unless comArgs.size ≥ 2 do return none
+    unless comArgs.size ≥ 2 do
+      return none
     let e := comArgs[comArgs.size - 2]!
     let body := comArgs[comArgs.size - 1]!
     -- stepEq : (Com.var e body).denote V = body.denote (e.denoteOp1 V ::ᵥ V)
@@ -911,11 +972,12 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
       if isBlock then
         let some hProof ← mkPurityProof? e | return none
         try
-          let stepEq ← mkAppM ``LeanMLIR.SLLVM.BlockCom.denote_var_pureOp_single
-            #[e, hProof, body, V]
+          let stepEq ←
+            mkAppM ``LeanMLIR.SLLVM.BlockCom.denote_var_pureOp_single #[e, hProof, body, V]
           let tVal ← mkAppM ``Expr.denoteOp1 #[← mkAppM ``Expr.toPure #[e, hProof], V]
           return some (stepEq, tVal)
-        catch _ => return none
+        catch _ =>
+          return none
       try
         let stepEq ← mkAppM ``Com.denote_var_pure_single #[e, body, V]
         let tVal ← mkAppM ``Expr.denoteOp1 #[e, V]
@@ -932,16 +994,20 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
           -- downstream tactic working unchanged.
           let tVal ← mkAppM ``Expr.denoteOp1 #[← mkAppM ``Expr.toPure #[e, hProof], V]
           return some (stepEq, tVal)
-        catch _ => return none
+        catch _ =>
+          return none
     let some (stepEq, tVal) ← mkStep | return none
-    let tVal' ← do
-      let inner := tVal.getAppArgs
-      let pe := inner[inner.size - 2]!
-      let c? ← if pe.isAppOf ``Expr.toPure then
-          let ps := pe.getAppArgs
-          compactDenote tVal (← whnfR ps[ps.size - 2]!) (some ps[ps.size - 1]!) V
-        else compactDenote tVal (← whnfR pe) none V
-      pure (c?.getD tVal)
+    let tVal' ←
+      do
+        let inner := tVal.getAppArgs
+        let pe := inner[inner.size - 2]!
+        let c? ←
+          if pe.isAppOf ``Expr.toPure then
+            let ps := pe.getAppArgs
+            compactDenote tVal (← whnfR ps[ps.size - 2]!) (some ps[ps.size - 1]!) V
+          else
+            compactDenote tVal (← whnfR pe) none V
+        pure (c?.getD tVal)
     -- Transport the denote-level step equation through whatever wrappers the
     -- goal has around the denotation: `congrArg (fun X => <wrappers> X)`.
     let stepEq ←
@@ -958,18 +1024,21 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
     -- inside a larger goal, by `Eq.mpr` through the abstraction.
     let mkNewGoal (newLhs : Lean.Expr) : MetaM Lean.Expr := do
       match rhs? with
-      | some rhs => mkEq newLhs rhs
-      | none => return (← kabstract tgt lhs).instantiate1 newLhs
+      | some rhs =>
+        mkEq newLhs rhs
+      | none =>
+        return (← kabstract tgt lhs).instantiate1 newLhs
     let close (contPrf : Lean.Expr) : MetaM Lean.Expr := do
       match rhs? with
-      | some _ => mkEqTrans stepEq contPrf
+      | some _ =>
+        mkEqTrans stepEq contPrf
       | none =>
         let motive := Lean.Expr.lam `X (← inferType lhs) (← kabstract tgt lhs) .default
         mkEqMPR (← mkCongrArg motive stepEq) contPrf
     if inline then
       let consV ← consAt e tVal V
-      let newLhs ← mkAppM
-        (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
+      let newLhs ←
+        mkAppM (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
       let newLhs := if wrapped then rebuild newLhs else newLhs
       let newGoal ← mkFreshExprSyntheticOpaqueMVar (← mkNewGoal newLhs)
       goal.assign (← close newGoal)
@@ -979,15 +1048,16 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
     -- newType : ∀ v, v = tVal' → body.denote (v ::ᵥ V) = rhs
     -- (oriented `v = def` so `simp only [*]` expands uses of `v` on demand);
     -- the conclusion's left-hand side keeps whatever wrappers it had.
-    let newType ← withLocalDeclD vName (← inferType tVal) fun v => do
-      let defEq ← mkEq v tVal'
-      let consV ← consAt e v V
-      let newLhs ← mkAppM
-        (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote) #[body, consV]
-      let newLhs := if wrapped then rebuild newLhs else newLhs
-      let concl ← mkNewGoal newLhs
-      withLocalDeclD hName defEq fun h =>
-        mkForallFVars #[v, h] concl
+    let newType ←
+      withLocalDeclD vName (← inferType tVal) fun v => do
+          let defEq ← mkEq v tVal'
+          let consV ← consAt e v V
+          let newLhs ←
+            mkAppM (if isBlock then ``LeanMLIR.SLLVM.BlockCom.denote else ``Com.denote)
+                #[body, consV]
+          let newLhs := if wrapped then rebuild newLhs else newLhs
+          let concl ← mkNewGoal newLhs
+          withLocalDeclD hName defEq fun h => mkForallFVars #[v, h] concl
     let newGoal ← mkFreshExprSyntheticOpaqueMVar newType
     -- oldGoal := (goal at the stepped denotation) tVal rfl, cast back; the `rfl`
     -- is hinted at `tVal = tVal'`, which holds by construction of `tVal'`.
@@ -1000,10 +1070,10 @@ private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat)
 /-- Marker hypothesis pinning the stepper's numbering: the value that sits at
 valuation depth `depth` is MLIR's `%base`. `nextStepIndex` offsets by it, so
 the `v<i>` keep matching the source once the two have drifted apart. -/
-structure DenoteNumbering (base depth : Nat) : Prop where
-  intro ::
+structure DenoteNumbering (base depth : Nat) : Prop where intro ::
 
-theorem denoteNumbering (base depth : Nat) : DenoteNumbering base depth := ⟨⟩
+theorem denoteNumbering (base depth : Nat) : DenoteNumbering base depth :=
+  ⟨⟩
 
 open Lean Meta in
 /-- The number of `HVector.cons`es in an `HVector`, after reduction -- a
@@ -1013,7 +1083,8 @@ private partial def hvectorLength (X : Lean.Expr) : MetaM Nat := do
   let X ← whnf X
   if X.isAppOf ``HVector.cons then
     let args := X.getAppArgs
-    if args.size ≥ 1 then return (← hvectorLength args[args.size - 1]!) + 1
+    if args.size ≥ 1 then
+      return (← hvectorLength args[args.size - 1]!) + 1
   return 0
 
 open Lean Meta in
@@ -1030,7 +1101,8 @@ entry block's numbering rather than restarting at `v0`. -/
 private partial def valuationDepth (V : Lean.Expr) : MetaM Nat := do
   if V.isAppOf ``Ctxt.Valuation.cons then
     let args := V.getAppArgs
-    if args.size ≥ 1 then return (← valuationDepth args[args.size - 1]!) + 1
+    if args.size ≥ 1 then
+      return (← valuationDepth args[args.size - 1]!) + 1
   if V.isAppOf ``HAppend.hAppend then
     let args := V.getAppArgs
     if args.size ≥ 2 then
@@ -1038,7 +1110,10 @@ private partial def valuationDepth (V : Lean.Expr) : MetaM Nat := do
       let hvec ←
         if lhs.isAppOf ``Ctxt.Valuation.ofHVector then
           let a := lhs.getAppArgs
-          if a.size ≥ 1 then hvectorLength a[a.size - 1]! else pure 0
+          if a.size ≥ 1 then
+            hvectorLength a[a.size - 1]!
+          else
+            pure 0
         else
           valuationDepth lhs
       return hvec + (← valuationDepth args[args.size - 1]!)
@@ -1076,13 +1151,14 @@ def nextStepIndex (goal : MVarId) : MetaM Nat :=
     unless core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote do
       return 0
     let args := core.getAppArgs
-    unless args.size ≥ 1 do return 0
+    unless args.size ≥ 1 do
+      return 0
     let depth ← valuationDepth args[args.size - 1]!
     match ← denoteNumberingMarker with
-    | some (base, markDepth) => return base + (depth - markDepth)
-    | none => return depth
-
-
+    | some (base, markDepth) =>
+      return base + (depth - markDepth)
+    | none =>
+      return depth
 
 open Lean Meta Elab Tactic in
 /-- `denote_number_from 12` says that the *next* instruction the stepper peels
@@ -1100,20 +1176,25 @@ and later `denote_step_all`s in the same block pick it up. -/
 elab "denote_number_from" n:num : tactic => do
   let goal ← getMainGoal
   let base := n.getNat
-  let depth ← goal.withContext do
-    let tgt ← whnfR (← instantiateMVars (← goal.getType))
-    let some (lhs, _) ← findDenoteTerm? tgt
-      | throwError "denote_number_from: no denotation in the goal"
-    let (core, _, _) ← peelWrappers lhs
-    let args := core.getAppArgs
-    if args.size ≥ 1 then valuationDepth args[args.size - 1]! else pure 0
+  let depth ←
+    goal.withContext do
+        let tgt ← whnfR (← instantiateMVars (← goal.getType))
+        let some (lhs, _) ←
+          findDenoteTerm? tgt | throwError "denote_number_from: no denotation in the goal"
+        let (core, _, _) ← peelWrappers lhs
+        let args := core.getAppArgs
+        if args.size ≥ 1 then
+          valuationDepth args[args.size - 1]!
+        else
+          pure 0
   -- drop any previous marker, so the tactic is idempotent per block
-  let goal ← goal.withContext do
-    let mut g := goal
-    for decl in ← getLCtx do
-      if (← instantiateMVars decl.type).isAppOf ``DenoteNumbering then
-        g ← g.tryClear decl.fvarId
-    return g
+  let goal ←
+    goal.withContext do
+        let mut g := goal
+        for decl in ← getLCtx do
+          if (← instantiateMVars decl.type).isAppOf ``DenoteNumbering then
+            g ← g.tryClear decl.fvarId
+        return g
   let ty ← mkAppM ``DenoteNumbering #[mkNatLit base, mkNatLit depth]
   let val ← mkAppM ``denoteNumbering #[mkNatLit base, mkNatLit depth]
   let goal ← goal.assert `_denote_numbering ty val
@@ -1133,7 +1214,8 @@ private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
     let lemConst ← mkConstWithFreshMVarLevels lem
     let (mvars, _, concl) ← forallMetaTelescope (← inferType lemConst)
     let some (_, lemLhs, lemRhs) := concl.eq? | return none
-    unless ← isDefEq lemLhs core do return none
+    unless ← isDefEq lemLhs core do
+      return none
     let proof := mkAppN lemConst mvars
     let newCore ← instantiateMVars lemRhs
     let newLhs := if wrapped then rebuild newCore else newCore
@@ -1165,13 +1247,14 @@ a `Blocks.run_loop` step obligation, which states one block's run;
 `denote_step_all` takes over from there. -/
 elab "denote_reduce_get" : tactic => do
   let goal ← getMainGoal
-  let goal ← goal.withContext do
-    let tgt ← instantiateMVars (← goal.getType)
-    let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)
-      | throwError "denote_reduce_get: no `Blocks.get` in the goal"
-    let reduced ← whnf getApp
-    let tgt' := tgt.replace fun e => if e == getApp then some reduced else none
-    goal.replaceTargetDefEq tgt'
+  let goal ←
+    goal.withContext do
+        let tgt ← instantiateMVars (← goal.getType)
+        let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)
+          | throwError "denote_reduce_get: no `Blocks.get` in the goal"
+        let reduced ← whnf getApp
+        let tgt' := tgt.replace fun e => if e == getApp then some reduced else none
+        goal.replaceTargetDefEq tgt'
   replaceMainGoal [goal]
   evalTactic (← `(tactic| dsimp only))
 
@@ -1179,8 +1262,8 @@ open Lean Meta Elab Tactic in
 /-- `denote_enter_block` steps a `Blocks.run bs Vamb t` goal into the block
 `t` selects: `Blocks.run_step`, then `denote_reduce_get`. -/
 elab "denote_enter_block" : tactic => do
-  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.run_step
-    | throwError "denote_enter_block: the goal is not a `Blocks.run … t`. \
+  let some g ← rewriteCore (← getMainGoal) ``LeanMLIR.SLLVM.Blocks.run_step |
+    throwError "denote_enter_block: the goal is not a `Blocks.run … t`. \
         Resolve the terminator first, so the target is a concrete `SuccArgs`."
   replaceMainGoal [g]
   evalTactic (← `(tactic| denote_reduce_get))
@@ -1190,21 +1273,23 @@ open Lean Meta Elab Tactic in
 stepping it, for a block that opens with an impure instruction. -/
 elab "denote_expose" : tactic => do
   let goal ← getMainGoal
-  let goal ← goal.withContext do
-    let tgt ← instantiateMVars (← goal.getType)
-    let some (lhs, _) ← findDenoteTerm? tgt
-      | throwError "denote_expose: no denotation in the goal"
-    let (core, _, _) ← peelWrappers lhs
-    unless core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote do
-      throwError "denote_expose: the goal is not a `Com` or `BlockCom` denotation"
-    let args := core.getAppArgs
-    let prog := args[args.size - 2]!
-    let prog' ← whnfProgram prog
-    if prog == prog' then return goal
-    let abst ← kabstract tgt prog
-    unless abst.hasLooseBVars do
-      throwError "denote_expose: cannot locate the program in the goal"
-    goal.replaceTargetDefEq (abst.instantiate1 prog')
+  let goal ←
+    goal.withContext do
+        let tgt ← instantiateMVars (← goal.getType)
+        let some (lhs, _) ←
+          findDenoteTerm? tgt | throwError "denote_expose: no denotation in the goal"
+        let (core, _, _) ← peelWrappers lhs
+        unless core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote do
+          throwError "denote_expose: the goal is not a `Com` or `BlockCom` denotation"
+        let args := core.getAppArgs
+        let prog := args[args.size - 2]!
+        let prog' ← whnfProgram prog
+        if prog == prog' then
+          return goal
+        let abst ← kabstract tgt prog
+        unless abst.hasLooseBVars do
+          throwError "denote_expose: cannot locate the program in the goal"
+        goal.replaceTargetDefEq (abst.instantiate1 prog')
   replaceMainGoal [goal]
 
 open Lean Meta Elab Tactic in
@@ -1269,8 +1354,8 @@ elab "denote_step_all" base:ident target:(num)? : tactic => do
       throwError "denote_step_all: already positioned at %{start}, which is \
         past the requested %{target}"
     for i in [start:target + 1] do
-      let some goal2 ← denoteStep1 (← getMainGoal) baseName i
-        | throwError "denote_step_all: the program has no instruction %{i}, \
+      let some goal2 ← denoteStep1 (← getMainGoal) baseName i |
+        throwError "denote_step_all: the program has no instruction %{i}, \
             so it cannot be stepped to %{target}"
       replaceMainGoal [goal2]
 
@@ -1288,15 +1373,15 @@ being an error, so a range may freely span `v<i>`s that have been `subst`ed
 away or whose `hv<i>` has been `clear`ed. -/
 private def denoteHyps (base : Name) (lo hi : Nat) : TacticM (Array Ident) := do
   (← getMainGoal).withContext do
-    let lctx ← getLCtx
-    let mut hyps : Array Ident := #[]
-    for i in [lo:hi + 1] do
-      let n := Name.mkSimple ("h" ++ base.toString ++ toString i)
-      if (lctx.findFromUserName? n).isSome then
-        hyps := hyps.push (mkIdent n)
-    if hyps.isEmpty then
-      throwError "no `h{base}<i>` hypothesis with {lo} ≤ i ≤ {hi}"
-    return hyps
+      let lctx ← getLCtx
+      let mut hyps : Array Ident := #[]
+      for i in [lo:hi + 1] do
+        let n := Name.mkSimple ("h" ++ base.toString ++ toString i)
+        if (lctx.findFromUserName? n).isSome then
+          hyps := hyps.push (mkIdent n)
+      if hyps.isEmpty then
+        throwError "no `h{base}<i>` hypothesis with {lo} ≤ i ≤ {hi}"
+      return hyps
 
 open Lean Elab Tactic in
 /-- `denote_eval v 4 27` evaluates the stepping hypotheses `hv4 … hv27` in
@@ -1341,11 +1426,13 @@ elab "denote_step " base:ident target:num : tactic => do
     throwError "denote_step: already positioned at %{start}, which is past the \
       requested %{target}"
   for i in [start:target] do
-    let some g ← denoteStep1 (← getMainGoal) baseName i (inline := true)
-      | throwError "denote_step: the program has no instruction %{i}"
+    let some g ←
+      denoteStep1 (← getMainGoal) baseName i (inline :=
+          true) | throwError "denote_step: the program has no instruction %{i}"
     replaceMainGoal [g]
-  let some g ← denoteStep1 (← getMainGoal) baseName target
-    | throwError "denote_step: the program has no instruction %{target}"
+  let some g ←
+    denoteStep1 (← getMainGoal) baseName
+        target | throwError "denote_step: the program has no instruction %{target}"
   replaceMainGoal [g]
 
 open Lean Meta Elab Tactic in
@@ -1370,15 +1457,16 @@ elab "denote_clear " base:ident lo:num hi:num : tactic => do
   let lo := lo.getNat
   let hi := hi.getNat
   let goal ← getMainGoal
-  let fvars ← goal.withContext do
-    let lctx ← getLCtx
-    let mut fvars : Array FVarId := #[]
-    -- `hv<i>` mentions `v<i>`, so it has to be cleared first.
-    for name in [("h" ++ baseName.toString), baseName.toString] do
-      for i in [lo:hi + 1] do
-        if let some d := lctx.findFromUserName? (Name.mkSimple (name ++ toString i)) then
-          fvars := fvars.push d.fvarId
-    return fvars
+  let fvars ←
+    goal.withContext do
+        let lctx ← getLCtx
+        let mut fvars : Array FVarId := #[]
+        -- `hv<i>` mentions `v<i>`, so it has to be cleared first.
+        for name in [("h" ++ baseName.toString), baseName.toString] do
+          for i in [lo:hi + 1] do
+            if let some d := lctx.findFromUserName? (Name.mkSimple (name ++ toString i)) then
+              fvars := fvars.push d.fvarId
+        return fvars
   if fvars.isEmpty then
     throwError "no `{baseName}<i>` or `h{baseName}<i>` hypothesis with \
       {lo} ≤ i ≤ {hi}"
@@ -1389,21 +1477,22 @@ elab "denote_clear " base:ident lo:num hi:num : tactic => do
   for fvar in fvars do
     goal ← goal.tryClear fvar
   -- Whatever survived the clear is depended upon; hide it instead.
-  let survivors ← goal.withContext do
-    let lctx ← getLCtx
-    return fvars.filter fun f => (lctx.find? f).isSome
+  let survivors ←
+    goal.withContext do
+        let lctx ← getLCtx
+        return fvars.filter fun f => (lctx.find? f).isSome
   if survivors.isEmpty then
     replaceMainGoal [goal]
   else
     goal.withContext do
-      let mut lctx ← getLCtx
-      for f in survivors do
-        lctx := lctx.setKind f .implDetail
-      let newGoal ← mkFreshExprMVarAt lctx (← getLocalInstances) (← goal.getType)
-                      .syntheticOpaque (← goal.getTag)
-      goal.assign newGoal
-      replaceMainGoal [newGoal.mvarId!]
-
+        let mut lctx ← getLCtx
+        for f in survivors do
+          lctx := lctx.setKind f .implDetail
+        let newGoal ←
+          mkFreshExprMVarAt lctx (← getLocalInstances) (← goal.getType) .syntheticOpaque
+              (← goal.getTag)
+        goal.assign newGoal
+        replaceMainGoal [newGoal.mvarId!]
 
 /-! ### Stepping and reducing in one go
 
@@ -1469,8 +1558,8 @@ folded `hv1` into `hv2 … hv5`, and so on -- so the last hypothesis of the rang
 is stated over the values that entered it rather than over the `v<i>` before it.
 A fan-out costs no more than a chain, and a hypothesis mentioning none of its
 predecessors is left alone rather than being an error. -/
-elab "reduce_hv " base:ident lo:num hi:num only:(&" only")? extra:(reduceArgs)?
-    fold:(&" fold")? : tactic => do
+elab "reduce_hv " base:ident lo:num hi:num only:(&" only")? extra:(reduceArgs)? fold:(&" fold")? :
+  tactic => do
   reduceHypsAt base lo.getNat hi.getNat only.isSome (reduceArgTerms extra) fold.isSome
 
 open Lean Meta Elab Tactic in
@@ -1499,20 +1588,23 @@ failure surfaces many lines later, wherever the unreduced term first has to be
 matched. This is the check that turns that into an error at the block that
 caused it. -/
 elab "denote_assert_folded " base:ident lo:num hi:num heads:(reduceArgs)? : tactic => do
-  let extra ← (reduceArgTerms heads).mapM fun t => do
-    unless t.raw.isIdent do throwError "denote_assert_folded: {t} is not a name"
-    realizeGlobalConstNoOverload t.raw
+  let extra ←
+    (reduceArgTerms heads).mapM fun t => do
+        unless t.raw.isIdent do
+          throwError "denote_assert_folded: {t} is not a name"
+        realizeGlobalConstNoOverload t.raw
   let allowed := extra.push ``PoisonOr.value
   let hyps ← denoteHyps base.getId lo.getNat hi.getNat
   (← getMainGoal).withContext do
-    for h in hyps do
-      let some decl := (← getLCtx).findFromUserName? h.getId | continue
-      let ty ← instantiateMVars decl.type
-      let some (_, _, rhs) := ty.eq?
-        | throwError "denote_assert_folded: {h.getId} is not an equation"
-      let ok := match rhs.getAppFn with
-        | .const n _ => allowed.contains n
-        | _ => false
-      unless ok do
-        throwError "denote_assert_folded: {h.getId} did not reduce to a value -- a \
+      for h in hyps do
+        let some decl := (← getLCtx).findFromUserName? h.getId | continue
+        let ty ← instantiateMVars decl.type
+        let some (_, _, rhs) := ty.eq?
+          | throwError "denote_assert_folded: {h.getId} is not an equation"
+        let ok :=
+          match rhs.getAppFn with
+          | .const n _ => allowed.contains n
+          | _ => false
+        unless ok do
+          throwError "denote_assert_folded: {h.getId} did not reduce to a value -- a \
           lemma of this block's `denote_step_reduce` did not fire:{indentExpr rhs}"
