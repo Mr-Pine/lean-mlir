@@ -541,7 +541,8 @@ def Expr.denoteOpIntoSubtype (e : Expr d Γ_in eff tys) (Γv : Valuation Γ_in) 
     | some ePure => pure ⟨ePure.denoteOp Γv, by simp [IsDenotationForPureE, h_pure]⟩
     | none => (Subtype.mk · (by simp [IsDenotationForPureE, h_pure])) <$> (e.denoteOp Γv)
 
-def Lets.ValidDenotation (lets : Lets d Γ_in eff Γ_out) :=
+-- v4.34: has to unfold to its subtype, or the monad laws cannot see the `Subtype.val`
+@[implicit_reducible] def Lets.ValidDenotation (lets : Lets d Γ_in eff Γ_out) :=
   { V // ∀ {t ts} {v : Var _ t} {w : Var ⟨ts⟩ t} {e} ,
           lets.getPureExpr v = some ⟨ts, w, e⟩
           → (e.pdenoteOp V)[w] = V v }
@@ -606,7 +607,7 @@ end DenoteIntoSubtype
     = let xs : HVector .. := e.denoteOp (lets.denote V_in)
       xs[v] := by
   show e.denote (lets.denote _) _ = _
-  simp [Expr.denote_unfold, Id.map_eq']
+  simp [Expr.denote_unfold, EffectKind.pureMonad_map_eq]
 
 variable {Γ_in Γ_out Δ_in Δ_out : Ctxt d.Ty}
     {lets : Lets d Γ_in eff Γ_out}
@@ -626,12 +627,13 @@ theorem denote_matchVar
     (matchLets.denote (mapOut.val.mapValuation V.val) w)
     = V.val v := by
   induction matchLets generalizing v mapIn t
-  case nil => simp [Id.pure_eq']
+  case nil => simp [EffectKind.pureMonad_pure_eq]
   case var t' matchLets matchExpr ih =>
     cases w using Var.appendCases with
     | right w =>
       specialize ih mapOut.eqvVarLeft
-      simpa [Id.bind_eq'] using ih
+      simp [EffectKind.pureMonad_bind_eq]
+      exact ih
     | left w =>
       let mapOut' := mapOut.toArgResult
       have h := Exists.choose_spec mapOut.getPureExpr_eq_some

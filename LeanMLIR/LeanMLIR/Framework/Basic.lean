@@ -661,6 +661,11 @@ the congruence, you can do: `rw [← Lets.denotePure]; congr`
 /-! ### simp-lemmas about `denote` functions -/
 section Lemmas
 
+/-- Comapping along `contextHom` drops whatever was appended, denotation or not. -/
+@[simp] theorem Expr.comap_append_contextHom (e : Expr d Γ eff ty) (vals : HVector toType ty)
+    (V : Γ.Valuation) : Valuation.comap (vals ++ V) e.contextHom = V := by
+  funext t v; simp [contextHom]
+
 @[simp] theorem Expr.comap_denote_contextHom (e : Expr d Γ .pure ty) (V : Γ.Valuation) :
     (Valuation.comap (e.denote V) e.contextHom) = V := by
   funext t v

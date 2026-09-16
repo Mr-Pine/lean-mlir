@@ -129,8 +129,6 @@ def getValFromCtxt (Γ : Ctxt d.Ty) (name : String) (expectedType : d.Ty) :
     if h : t = expectedType then
       return ⟨index, by
         simp [← h, t, Ctxt.getElem?_eq_toList_getElem?]
-        -- v4.34: `simp` stops one step short of `getElem?_eq_getElem`
-        exact List.getElem?_eq_getElem _
       ⟩
     else
       throw <| .typeError (toString expectedType) (toString t)
