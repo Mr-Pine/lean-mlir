@@ -643,29 +643,12 @@ theorem scalarReduce_determined : ScalarReduceDetermined := by
     denote_step_all v 454
     det_range k 61 454
 
-    -- `out` is still a 32-byte buffer at the state the loads left
-    have heqs : s ≈ t7 :=
-      he0.trans (he1.trans (he2.trans (he3.trans (he4.trans (he5.trans (he6.trans he7))))))
-    have hout7 : Fits t7.mem out (32 * 8) := fits_of_live?_eq (heqs.live out.id).symm hout.left
-
-    -- the first store, `out + 0`. Poison here is UB, and UB is the whole run.
-    refine poison_cases (v := v454) (fun hb0 => ?_) (fun b0 hb0 => ?_)
-    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
-      · refine BlockCom.run_bind_denote_var_of_poison ?_
-        simp only [Expr.denoteOp, hb0, simp_denote, simp_sllvm]
-        rfl
-      · -- pin here, not before the run: the witness is the whole reduction as a term, and a
-        -- `simp` over the run would then walk it
-        det_pin d454
-        intro w hw
-        rw [← d454.eq, hb0] at hw
-        simp [wordsOf] at hw
-    refine name_of ({ t7 with mem := t7.mem.splice out b0 } : GlobalState) fun u₀ hu₀ => ?_
-    rw [hb0]
-    peel_store b0, out, hout7, t7 as u₀ := hu₀
-    have hout₀ : Fits u₀.mem out (32 * 8) := by rw [hu₀]; exact fits_splice hout7
+    -- The four stores are what remains. The draft is in this branch's history (`3cad8b107`):
+    -- `poison_cases` per store, `det_pin` inside the `wordsOf` subgoals so the run's `simp`
+    -- never meets the witness. It still exhausts `maxRecDepth` at the first store's
+    -- `simp only [Expr.denoteOp, …]`, which is the next thing to solve.
     sorry
-  -- the four witnesses, left for the walk above to assign
+  -- the four witnesses, assigned once the stores above are real
   all_goals exact sorry
 
 end Firedancer.Common
