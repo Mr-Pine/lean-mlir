@@ -650,12 +650,14 @@ theorem scalarReduce_determined : ScalarReduceDetermined := by
 
     -- the first store, `out + 0`. Poison here is UB, and UB is the whole run.
     refine poison_cases (v := v454) (fun hb0 => ?_) (fun b0 hb0 => ?_)
-    · det_pin d454
-      refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
+    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
       · refine BlockCom.run_bind_denote_var_of_poison ?_
         simp only [Expr.denoteOp, hb0, simp_denote, simp_sllvm]
         rfl
-      · intro w hw
+      · -- pin here, not before the run: the witness is the whole reduction as a term, and a
+        -- `simp` over the run would then walk it
+        det_pin d454
+        intro w hw
         rw [← d454.eq, hb0] at hw
         simp [wordsOf] at hw
     refine name_of ({ t7 with mem := t7.mem.splice out b0 } : GlobalState) fun u₀ hu₀ => ?_
