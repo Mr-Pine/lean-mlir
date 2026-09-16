@@ -10,7 +10,9 @@ deriving Repr, DecidableEq, Lean.ToExpr
 
 namespace EffectKind
 
-def toMonad (e : EffectKind) (m : Type → Type) : Type → Type :=
+-- v4.34 checks applications at `implicit` transparency; without this `pure.toMonad m α`
+-- no longer unfolds to `α` and the pure effect stops typechecking against `m`.
+@[implicit_reducible] def toMonad (e : EffectKind) (m : Type → Type) : Type → Type :=
   match e with
   | pure => Id
   | impure => m

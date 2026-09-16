@@ -663,8 +663,6 @@ section Lemmas
     (Valuation.comap (e.denote V) e.contextHom) = V := by
   funext t v
   simp [Expr.denote_unfold, EffectKind.pureMonad_map_eq]
-  -- v4.34: the append lemma matches only up to defeq here
-  exact Ctxt.Valuation.append_appendInr
 
 @[simp] theorem Regions.denote_nil {eff : EffectKind} (T : Regions d eff []) :
     Regions.denote T = HVector.nil := by
@@ -1049,7 +1047,6 @@ section DenoteInsert
 @[simp] theorem Expr.denote_appendInr (e : Expr d Γ .pure t) (V : Γ.Valuation) (v : Γ.Var u) :
     e.denote V v.appendInr = V v := by
   simp [denote_unfold, EffectKind.pureMonad_map_eq]
-  exact Ctxt.Valuation.append_appendInr
 
 /-- Denoting any of the free variables of a program through `Com.denoteLets` just returns the
 assignment of that variable in the input valuation -/
