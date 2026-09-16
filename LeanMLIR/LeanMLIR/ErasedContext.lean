@@ -41,14 +41,14 @@ instance : Coe (List Ty) (Ctxt Ty) where
 
 end Instances
 
-def empty : Ctxt Ty := .ofList []
+@[implicit_reducible] def empty : Ctxt Ty := .ofList []
 
 instance : EmptyCollection (Ctxt Ty) := ⟨Ctxt.empty⟩
 instance : Inhabited (Ctxt Ty) := ⟨Ctxt.empty⟩
 
 theorem empty_eq : (∅ : Ctxt Ty) = .empty := rfl
 
-@[match_pattern]
+@[match_pattern, implicit_reducible]
 def cons (hd : Ty) : Ctxt Ty → Ctxt Ty
 | ⟨tl⟩ => ⟨hd :: tl⟩
 
@@ -629,12 +629,12 @@ def Valuation.eval {Γ : Ctxt Ty} (VAL : Valuation Γ) ⦃t : Ty⦄ (v : Γ.Var 
     VAL v
 
 /-- Make a valuation for the empty context. -/
-def Valuation.nil : Ctxt.Valuation (∅ : Ctxt Ty) := fun _ v => v.emptyElim
+@[implicit_reducible] def Valuation.nil : Ctxt.Valuation (∅ : Ctxt Ty) := fun _ v => v.emptyElim
 
 instance : Inhabited (Ctxt.Valuation (∅ : Ctxt Ty)) := ⟨Valuation.nil⟩
 
 /-- Make a valuation for `Γ.cons t` from a valuation for `Γ` and an element of `t.toType`. -/
-def Valuation.cons {Γ : Ctxt Ty} {t : Ty} (x : toType t) (V : Γ.Valuation) :
+@[implicit_reducible] def Valuation.cons {Γ : Ctxt Ty} {t : Ty} (x : toType t) (V : Γ.Valuation) :
     (Γ.cons t).Valuation := by
   intro t' v
   revert x V
@@ -825,7 +825,7 @@ end Lemmas
 /-! ## Valuation Construction Helpers -/
 
 /-- Make a a valuation for a singleton value -/
-def Valuation.singleton {t : Ty} (v : toType t) : Ctxt.Valuation ⟨[t]⟩ :=
+@[implicit_reducible] def Valuation.singleton {t : Ty} (v : toType t) : Ctxt.Valuation ⟨[t]⟩ :=
   Ctxt.Valuation.nil.cons v
 
 /-- Build valuation from a vector of values of types `types`. -/
@@ -974,7 +974,10 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     case nil => rfl
     case cons t Γ v vs ih =>
       simp [HVector.ofFn, ofHVector, -ofHVector_apply]
-      exact ⟨rfl, ih⟩
+      first
+      | exact ih
+      | (trace "B"; exact ⟨rfl, ih⟩)
+      | (trace "C"; simp [ih])
 
 end Valuation
 

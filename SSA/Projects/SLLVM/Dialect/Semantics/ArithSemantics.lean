@@ -15,7 +15,7 @@ def LLVM.IntW.canBe (x : LLVM.IntW w) (y : BitVec w) : Bool :=
 namespace LeanMLIR.SLLVM
 
 /-- An LLVM pointer, or `poison` -/
-def Ptr : Type := PoisonOr Pointer
+@[implicit_reducible] def Ptr : Type := PoisonOr Pointer
 
 /-- The block `llvm.mlir.zero` points at. Reserved: it is the one id no
 `alloca` may hand out and no global may be loaded at, so that a null pointer

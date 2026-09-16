@@ -108,7 +108,10 @@ lemma limbReadback (m : MemoryState) (p : Pointer) (a b c d e : BitVec 64)
   have hi : i.toNat < 5 := i.isLt
   simp only [readLimb?, splicedLive m p blk hb _, Option.bind_eq_bind, Option.bind_some,
     Option.pure_def]
-  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
+  -- v4.34: `LiveBlock.lengthInBits` no longer unfolds while `rw` unifies, so `hfits` alone
+  -- no longer pins `bytes`; name the arguments.
+  rw [extractLsb'_spliceBits_of_subrange blk.bytes p.offsetInBits (p.offsetInBits + 64 * i.toNat)
+      (e ++ d ++ c ++ b ++ a) (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left, extractLimb]
 
 /-- A limb read back out of a splice sees only the spliced bits, whatever the
@@ -122,7 +125,8 @@ lemma limbSpliceReadback (m : MemoryState) (p : Pointer) (x : BitVec (5 * 64))
   have hi : i.toNat < 5 := i.isLt
   simp only [readLimb?, splicedLive m p blk hb _, Option.bind_eq_bind, Option.bind_some,
     Option.pure_def]
-  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) hfits,
+  rw [extractLsb'_spliceBits_of_subrange blk.bytes p.offsetInBits (p.offsetInBits + 64 * i.toNat)
+      x (by omega) (by omega) hfits,
     Nat.add_sub_cancel_left]
 
 /-- `limbReadback` for limbs given as a function rather than five variables --

@@ -84,9 +84,7 @@ or the operation is UB. -/
 theorem run_addressof {name : String} {s : GlobalState} {p : Pointer}
     (h : s.globals[name]? = some p) :
     StateT.run (SLLVM.addressof name) s = .value (PoisonOr.value p, s) := by
-  -- v4.34: `simp` no longer finishes off the final `StateT.run (pure _)`.
   simp [SLLVM.addressof, h]
-  rfl
 
 /-! ## The operations, in `denoteOp` form
 

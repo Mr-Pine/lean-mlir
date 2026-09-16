@@ -373,7 +373,8 @@ theorem Com.recAux'_eq :
 
 end Rec
 
-def Expr.op {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} (e : Expr d Γ eff ty) : d.Op :=
+-- v4.34: reducible, so applications stay type-correct at `implicit` transparency.
+@[implicit_reducible] def Expr.op {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} (e : Expr d Γ eff ty) : d.Op :=
   Expr.casesOn e (fun op _ _ _ _ => op)
 
 theorem Expr.eff_le {Γ : Ctxt d.Ty} {ty} (e : Expr d Γ eff ty) :
@@ -594,7 +595,6 @@ theorem Expr.denote_unfold (e : Expr d Γ eff ty) :
     e.denote = fun V => (· ++ V) <$> (e.denoteOp V) := by
   rcases e with ⟨op, rfl, _⟩
   simp [denote, denoteOp]
-  rfl
 
 @[simp] theorem Expr.denoteOp_eq_denoteOp_of {e₁ : Expr d Γ eff ty} {e₂ : Expr d Δ eff ty}
     {Γv : Valuation Γ} {Δv : Valuation Δ}
