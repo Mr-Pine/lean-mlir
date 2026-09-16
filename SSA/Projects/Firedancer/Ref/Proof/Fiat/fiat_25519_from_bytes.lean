@@ -119,6 +119,9 @@ theorem fiat_25519_from_bytes_conforms (o p: Pointer) (s: GlobalState)
       fun k off hk hoff => bufByte hpblk hp hk hoff
 
     peel_buf_bytes p, hp, pblk, hpblk, buf, hpoff, hpbyte
+    -- v4.34: `bv_decide` fails on *any* goal while `hpbyte` is in scope; it is dead
+    -- after the peel, so drop it (and `hpoff` with it).
+    clear hpoff hpbyte
 
     -- `arg1[0]`-`arg1[3]`, the C's `x32` and `x31`-`x29`, arrive as one 32-bit
     -- load off the base pointer
