@@ -355,21 +355,16 @@ macro "peel_load_slides " hs:term ", " hk:term ", " hp:term : tactic =>
       simp only [simp_spine, $hp:term]
       rw [run_liftM (Common.DoubleScalarMulBase.run_load_slides $hs $hk)]; rfl)])
 
-theorem readScalar_of_live?_eq {m m' : MemoryState} {p : Pointer}
-    (hl : m'.live? p.id = m.live? p.id) (h : Common.IsScalarPtr m p)
-    (h' : Common.IsScalarPtr m' p) : Common.readScalar h' = Common.readScalar h := by
-  simp only [Common.readScalar, Common.readScalar?, hl]
-
 /-- `fd_curve25519_scalar_wnaf` returns, writing some `w` at `slides` whose digits are zero or odd,
 within `±B` for `bits = 4, 8`, and sum to `n`'s low 255 bits. -/
 theorem wnaf_run (slides n : Pointer) (bits : BitVec 32) (B : ℤ) (s : GlobalState) (hs : s.WF)
-    (hsl : IsSlidesPtr s.mem slides) (hn : IsScalarPtr s.mem n)
+    (hsl : IsSlidesPtr s.mem slides) (hn : IsByteBufPtr s.mem n)
     (hbits : bits = 4#32 ∧ B = 15 ∨ bits = 8#32 ∧ B = 255) :
     ∃ s' : GlobalState, StateT.run (runFunction (fd_curve25519_scalar_wnaf.denote
         (Ctxt.Valuation.ofHVector [.value bits, .value n, .value slides]ₕ))) s = .value ([]ₕ, s')
       ∧ ∃ w : BitVec (256 * 16), ({ s with mem := s.mem.splice slides w } : GlobalState) ≈ s'
         ∧ DigitVals w B
-        ∧ (slides.id ≠ n.id → digitSum w 256 = ((readScalar hn).toNat % 2 ^ 255 : ℕ)) :=
+        ∧ (slides.id ≠ n.id → digitSum w 256 = ((readBuf hn).toNat % 2 ^ 255 : ℕ)) :=
   (fd_curve25519_scalar_wnaf_conforms slides n bits s hs hsl hn
     (by rcases hbits with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide)).elim
     fun s' h => h.elim fun hrun h => h.elim fun w h =>

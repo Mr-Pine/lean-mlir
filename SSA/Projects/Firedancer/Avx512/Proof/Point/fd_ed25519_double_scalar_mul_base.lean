@@ -1206,7 +1206,7 @@ abbrev slot (s : GlobalState) (k : Nat) : Pointer := s.chainPtr allocW k
 into_precomputed(ai[0])`, then `br ^bb2(1)`. -/
 theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.WF)
     (hr : IsQuadPtr s.mem r) (ha : IsQuadPtr s.mem a)
-    (hn1 : Common.IsScalarPtr s.mem n1) (hn2 : Common.IsScalarPtr s.mem n2)
+    (hn1 : IsByteBufPtr s.mem n1) (hn2 : IsByteBufPtr s.mem n2)
     (hua : U44 (readQuad ha)) {g : Pointer} (hg : GlobalPtr s "fd_ed25519_base_point_wnaf_table" g) :
     ∃ (L : Locals) (Vout : fd_ed25519_double_scalar_mul_base.Γout.Valuation) (u : GlobalState),
       StateT.run (fd_ed25519_double_scalar_mul_base.entry.denote
@@ -1215,8 +1215,8 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.WF)
       ∧ L.tbl = g ∧ EntryEnv Vout r L ∧ ∃ W : Vals, W.A = (readQuad ha).toPoint ∧ Frame s r L W u
         ∧ Table u.mem L.ai W.A 1
         ∧ DigitVals W.w₁ 15 ∧ DigitVals W.w₂ 255
-        ∧ Common.digitSum W.w₁ 256 = ((Common.readScalar hn1).toNat % 2 ^ 255 : ℕ)
-        ∧ Common.digitSum W.w₂ 256 = ((Common.readScalar hn2).toNat % 2 ^ 255 : ℕ) := by
+        ∧ Common.digitSum W.w₁ 256 = ((readBuf hn1).toNat % 2 ^ 255 : ℕ)
+        ∧ Common.digitSum W.w₂ 256 = ((readBuf hn2).toNat % 2 ^ 255 : ℕ) := by
   denote_step_reduce v 11 [LLVM.const?]
   peel_addressof hg
   -- `%13 … %17`: `n1slide`, `n2slide`, `ai`, `a2`, `t`
@@ -1239,7 +1239,7 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.WF)
   -- `wnaf(n1slide, n1, 4)`
   peel_lifetime
   have hn1b := lt_nextFreeBlock_of_fits hs hn1.1
-  have hn1L : Common.IsScalarPtr (s.allocaChain allocW 5).mem n1 :=
+  have hn1L : IsByteBufPtr (s.allocaChain allocW 5).mem n1 :=
     ⟨fits_of_live?_eq (fb n1.id hn1b) hn1.1, hn1.2⟩
   refine (wnaf_run (slot s 0) n1 4#32 15 (s.allocaChain allocW 5) hwL
     ⟨GlobalState.fits_chainPtr (by omega), by simp⟩ hn1L (.inl ⟨rfl, rfl⟩)).elim
@@ -1250,13 +1250,13 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.WF)
   obtain ⟨w₁, he₁, hd₁, hsum₁⟩ := he₁
   have hS₁ := (hsum₁ (hslot_below hn1b)).trans
     (congrArg (fun x : BitVec 256 => ((x.toNat % 2 ^ 255 : ℕ) : ℤ))
-      (Common.DoubleScalarMulBase.readScalar_of_live?_eq (fb n1.id hn1b) hn1 hn1L))
+      (readBuf_of_live?_eq (fb n1.id hn1b) (hp := hn1) (hp' := hn1L)))
   have hl₁ : ∀ b : BlockId, (slot s 0).id ≠ b →
       u₁.mem.live? b = (s.allocaChain allocW 5).mem.live? b := fun b hb =>
     (live?_of_equiv_mem' he₁.symm b).trans (live?_splice_ne (p := slot s 0) hb)
   peel_lifetime
   have hn2b := lt_nextFreeBlock_of_fits hs hn2.1
-  have hn2L : Common.IsScalarPtr u₁.mem n2 :=
+  have hn2L : IsByteBufPtr u₁.mem n2 :=
     ⟨fits_of_live?_eq ((hl₁ _ (hslot_below hn2b)).trans (fb n2.id hn2b)) hn2.1, hn2.2⟩
   refine (wnaf_run (slot s 1) n2 8#32 255 u₁ (GlobalState.WF.of_equiv hwL.splice he₁)
     ⟨fits_of_live?_eq (hl₁ _ (hslot (by omega))) (GlobalState.fits_chainPtr (by omega)), by simp⟩
@@ -1269,7 +1269,7 @@ theorem entry_run (r n1 a n2 : Pointer) (s : GlobalState) (hs : s.WF)
   obtain ⟨w₂, he₂, hd₂, hsum₂⟩ := he₂
   have hS₂ := (hsum₂ (hslot_below hn2b)).trans
     (congrArg (fun x : BitVec 256 => ((x.toNat % 2 ^ 255 : ℕ) : ℤ))
-      (Common.DoubleScalarMulBase.readScalar_of_live?_eq ((hl₁ _ (hslot_below hn2b)).trans (fb n2.id hn2b)) hn2 hn2L))
+      (readBuf_of_live?_eq ((hl₁ _ (hslot_below hn2b)).trans (fb n2.id hn2b)) (hp := hn2) (hp' := hn2L)))
   have hl₂ : ∀ b : BlockId, (slot s 1).id ≠ b → u₂.mem.live? b = u₁.mem.live? b := fun b hb =>
     (live?_of_equiv_mem' he₂.symm b).trans (live?_splice_ne (p := slot s 1) hb)
   have hna : a.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs ha.1

@@ -179,9 +179,9 @@ theorem gep_byte (p : Pointer) (j : Nat) :
 
 /-- Loading byte `j < 32` of `n` returns, in every state the walk reaches. -/
 theorem run_load_byte {s u : GlobalState} {slides n : Pointer} {w : BitVec 4096}
-    (hn : IsScalarPtr s.mem n) (hu : u ≈ Sw s slides w)
+    (hn : IsByteBufPtr s.mem n) (hu : u ≈ Sw s slides w)
     {j : Nat} (hj : j < 32) :
-    ∃ b, (slides.id ≠ n.id → b = (readScalar hn).extractLsb' (8 * j) 8)
+    ∃ b, (slides.id ≠ n.id → b = (readBuf hn).extractLsb' (8 * j) 8)
       ∧ (load (.value (bytePtr n j)) (.bitvec (.concrete 8))).run u.mem = .value (.value b, u.mem) := by
   obtain ⟨blk, hblk, hlen⟩ := fits_of_live?_eq (m := (Sw s slides w).mem) (hu.live n.id)
     (fits_splice hn.1)
@@ -193,7 +193,7 @@ theorem run_load_byte {s u : GlobalState} {slides n : Pointer} {w : BitVec 4096}
   refine ⟨_, fun hne => ?_, rfl⟩
   have hl : u.mem.live? n.id = s.mem.live? n.id := (hu.live n.id).trans (live?_splice_ne hne)
   rw [show u.mem.live? n.id = some blk by simp [MemoryState.live?, hblk]] at hl
-  simp only [LLVM.Ty.width, readScalar, readScalar?, ← hl, Option.get_some,
+  simp only [LLVM.Ty.width, readBuf, readBuf?, ← hl, Option.get_some,
     Option.bind_eq_bind, Option.bind_some, Option.pure_def]
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
@@ -1141,9 +1141,9 @@ theorem step_bb1 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
   rank_lt
 
 theorem step_bb2 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides)
-    (hn : IsScalarPtr s.mem n) {u : GlobalState}
+    (hn : IsByteBufPtr s.mem n) {u : GlobalState}
     {w : BitVec 4096} (k : Nat) (hk : k ≤ 254) (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w k)
-    (hI : H → Bits Nv w k) (hH : H → Hyp bits slides n) (hNv : Nv = (readScalar hn).toNat) :
+    (hI : H → Bits Nv w k) (hH : H → Hyp bits slides n) (hNv : Nv = (readBuf hn).toNat) :
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 1 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v64 k]ₕ : HVector toType [SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨1, rfl, [v64 k]ₕ⟩ u) p u' := by
@@ -1715,7 +1715,7 @@ end Steps
 theorem steps {s : GlobalState} {slides n : Pointer} {bits : BitVec 32} {H : Prop} {Nv : Nat}
     {V : fd_curve25519_scalar_wnaf.Γout.Valuation}
     (hs : s.WF) (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides)
-    (hn : IsScalarPtr s.mem n) (hH : H → Hyp bits slides n) (hNv : Nv = (readScalar hn).toNat) :
+    (hn : IsByteBufPtr s.mem n) (hH : H → Hyp bits slides n) (hNv : Nv = (readBuf hn).toNat) :
     ∀ t u, Reach s slides bits H Nv t u → ∃ p u',
       StateT.run ((fd_curve25519_scalar_wnaf.blocks.get t.idx t.hidx).2.denote
           (Ctxt.Valuation.ofHVector t.args.reverse ++ V)) u = .value (p, u')
@@ -1752,7 +1752,7 @@ end Wnaf
 open Wnaf in
 /-- **`fd_curve25519_scalar_wnaf` returns, writing the scalar's digits at `slides`.** -/
 theorem fd_curve25519_scalar_wnaf_conforms (slides n : Pointer) (bits : BitVec 32) (s : GlobalState)
-    (hs : s.WF) (hsl : IsSlidesPtr s.mem slides) (hn : IsScalarPtr s.mem n)
+    (hs : s.WF) (hsl : IsSlidesPtr s.mem slides) (hn : IsByteBufPtr s.mem n)
     (hbits : bits.toNat < 32) :
     fd_curve25519_scalar_wnaf_spec slides n bits s hn := by
   simp only [fd_curve25519_scalar_wnaf_spec, Cfg.denote]
@@ -1764,8 +1764,8 @@ theorem fd_curve25519_scalar_wnaf_conforms (slides n : Pointer) (bits : BitVec 3
     ⟨rfl, rfl, fun q => (live?_splice_extract 4096 hl q).symm⟩
   obtain ⟨rs, u, hrun, w, hw, hB, hS⟩ := Blocks.run_of_variant
     (bs := fd_curve25519_scalar_wnaf.blocks) (Vamb := Vout)
-    (Reach s slides bits (Hyp bits slides n) (readScalar hn).toNat) μ
-    (fun _ u => Done s slides bits (Hyp bits slides n) (readScalar hn).toNat u)
+    (Reach s slides bits (Hyp bits slides n) (readBuf hn).toNat) μ
+    (fun _ u => Done s slides bits (Hyp bits slides n) (readBuf hn).toNat u)
     (steps hs hV hsl hn id rfl)
     (Reach.bb2 0 (by omega) hu₀ (fun _ h => absurd h (Nat.not_lt_zero _))
       fun _ _ h => absurd h (Nat.not_lt_zero _))
