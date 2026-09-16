@@ -145,7 +145,8 @@ partial def reduceIsRefinedByAux (inst lhs rhs : Expr) : SimpM (Option Expr) := 
   | ``instEffToMonadRefinement => simpEffToMonad instArgs
   | ``Id.instRefinement => simpId instArgs
   | ``inferInstance   => simpInfer instArgs
-  | ``inferInstanceAs => simpInfer instArgs
+  -- v4.34: `inferInstanceAs` is a token now, so the name needs escaping
+  | ``«inferInstanceAs» => simpInfer instArgs
   | _ => return none
 where
   loop (e : Expr) (returnArgOnFail := true) : SimpM (Option Expr) :=

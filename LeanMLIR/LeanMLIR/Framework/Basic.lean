@@ -16,6 +16,20 @@ theorem Id.pure_eq' (a : α) : (pure a : Id α) = a := rfl
 theorem Id.map_eq' (x : Id α) (f : α → β) : f <$> x = f x := rfl
 theorem Id.bind_eq' (x : Id α) (f : α → id β) : x >>= f = f x := rfl
 
+/-! v4.34: `simp` no longer unfolds `toMonad` far enough to spot the `Id` above, so the pure
+effect needs its own copies. -/
+section PureMonad
+variable {m : Type → Type} [Monad m]
+
+theorem EffectKind.pureMonad_pure_eq (a : α) :
+    (Pure.pure a : EffectKind.pure.toMonad m α) = a := rfl
+theorem EffectKind.pureMonad_map_eq (x : EffectKind.pure.toMonad m α) (f : α → β) :
+    f <$> x = (f x : EffectKind.pure.toMonad m β) := rfl
+theorem EffectKind.pureMonad_bind_eq (x : EffectKind.pure.toMonad m α)
+    (f : α → EffectKind.pure.toMonad m β) : x >>= f = f x := rfl
+
+end PureMonad
+
 open Ctxt (Var VarSet Valuation Hom)
 open TyDenote (toType)
 
@@ -278,8 +292,9 @@ protected instance Com.decidableEq [DecidableEq d.Op] [DecidableEq d.Ty]
       letI := Com.decidableEq body₁ body₂
       exact decidable_of_iff (e₁ = e₂ ∧ body₁ = body₂) (by simp)
     else isFalse (by simp_all)
-  | .rets _, .var _ _ => isFalse (fun h => Com.noConfusion h)
-  | .var _ _, .rets _ => isFalse (fun h => Com.noConfusion h)
+  -- v4.34: `noConfusion` no longer picks a motive here; `nofun` does.
+  | .rets _, .var _ _ => isFalse nofun
+  | .var _ _, .rets _ => isFalse nofun
 
 end -- decEq
 
@@ -497,8 +512,9 @@ section Lemmas
     = e.contextHom.comp body.outContextHom := by
   funext t v
   apply Subtype.ext
+  -- v4.34: `val_toHom_apply` no longer fires here, so unfold `toHom`/`appendInr` for `omega`
   simp [outContextHom, outContextDiff, Expr.contextHom, Ctxt.Hom.comp, Expr.bvars,
-    e.ty_eq]
+    Ctxt.Diff.toHom, Ctxt.Var.appendInr, e.ty_eq]
   omega
 
 @[simp] theorem Com.returnVars_rets : returnVars (rets vs : Com d Γ eff t) = vs := rfl
@@ -576,6 +592,7 @@ theorem Expr.denote_unfold (e : Expr d Γ eff ty) :
     e.denote = fun V => (· ++ V) <$> (e.denoteOp V) := by
   rcases e with ⟨op, rfl, _⟩
   simp [denote, denoteOp]
+  rfl
 
 @[simp] theorem Expr.denoteOp_eq_denoteOp_of {e₁ : Expr d Γ eff ty} {e₂ : Expr d Δ eff ty}
     {Γv : Valuation Γ} {Δv : Valuation Δ}
@@ -644,7 +661,10 @@ section Lemmas
 
 @[simp] theorem Expr.comap_denote_contextHom (e : Expr d Γ .pure ty) (V : Γ.Valuation) :
     (Valuation.comap (e.denote V) e.contextHom) = V := by
-  funext t v; simp [Expr.denote_unfold, Id.map_eq']
+  funext t v
+  simp [Expr.denote_unfold, EffectKind.pureMonad_map_eq]
+  -- v4.34: the append lemma matches only up to defeq here
+  exact Ctxt.Valuation.append_appendInr
 
 @[simp] theorem Regions.denote_nil {eff : EffectKind} (T : Regions d eff []) :
     Regions.denote T = HVector.nil := by
@@ -670,7 +690,13 @@ section Lemmas
         fun V => e.denote V >>= body.denoteLets := by
   cases eff
   · rfl
-  · simp [denoteLets, bind_pure]
+  · funext V
+    simp only [denoteLets]
+    first
+    | (refine bind_congr fun a => ?_; exact id_map _)
+    | (refine bind_congr fun a => ?_; trace "B697"; rfl)
+    | (congr 1; funext a; trace "C697"; exact id_map _)
+    | (trace "D697"; rfl)
 
 @[simp] theorem Lets.denote_nil {Γ : Ctxt d.Ty} :
     (Lets.nil : Lets d Γ eff Γ).denote = (return ·) := by
@@ -709,7 +735,10 @@ variable {Γ Γ' : Ctxt d.Ty} {t} (f : Γ.Hom Γ') (e : Expr d Γ eff t) (V : Γ
 
 @[simp] theorem Expr.denoteOp_changeVars  :
     (e.changeVars f).denoteOp V = e.denoteOp (V.comap f) := by
-  simp [denoteOp, HVector.map_map]; rfl
+  first
+  | (simp [denoteOp, HVector.map_map, Ctxt.Valuation.comap]; trace "A744")
+  | (simp only [denoteOp, args_changeVars, HVector.map_map]; trace "B744"; rfl)
+  | (simp [denoteOp, HVector.map_map]; trace "C744"; rfl)
 
 @[simp] theorem Expr.denote_changeVars {Γ Γ' : Ctxt d.Ty}
     (varsMap : Γ.Hom Γ')
@@ -719,7 +748,10 @@ variable {Γ Γ' : Ctxt d.Ty} {t} (f : Γ.Hom Γ') (e : Expr d Γ eff t) (V : Γ
     (Expr.changeVars varsMap e).denote V
       >>= (f <| Valuation.comap · varsMap.append)
     = e.denote (V.comap varsMap) >>= f := by
-  simp [denote_unfold]
+  first
+  | (simp [denote_unfold, Ctxt.Valuation.comap]; trace "A753")
+  | (simp [denote_unfold]; trace "B753"; rfl)
+  | (trace "C753"; rfl)
 
 
 end Lemmas
@@ -761,7 +793,7 @@ end Lemmas
     c.returnVars.map (c.denoteLets V) = c.denote V := by
   induction c using Com.rec'
   case rets v  => rfl
-  case var ih => simp [denoteLets, Id.pure_eq', Id.bind_eq', ih, denote]
+  case var ih => simp [denoteLets, EffectKind.pureMonad_pure_eq, EffectKind.pureMonad_bind_eq, ih, denote]
 
 @[simp] theorem Expr.changeVars_changeVars (e : Expr d Γ eff ty) (f : Γ.Hom Δ) (g : Δ.Hom Ξ) :
     (e.changeVars f).changeVars g = e.changeVars (f.comp g) := by
@@ -912,7 +944,9 @@ section Lemmas
 
 @[simp] theorem Com.returnVars_castPureToEff (eff : _) (com : Com d Γ .pure tys) :
     (com.castPureToEff eff).returnVars = com.returnVars.map (fun _ v => v.castCtxt (by simp)) := by
-  induction com <;> simp_all
+  induction com <;> simp_all <;> first
+    | (trace "A949"; rfl)
+    | (trace "B949"; exact (HVector.map_id _).symm)
 
 /-! denotations of `castPureToEff` -/
 
@@ -923,15 +957,22 @@ section Lemmas
   case pure => rfl
   case impure =>
     funext V
-    simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk,
-      EffectKind.pure_map, EffectKind.pure_liftEffect]
+    first
+    | (simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk,
+        EffectKind.pure_map, EffectKind.pure_liftEffect]; trace "A959"; rfl)
+    | (simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk,
+        EffectKind.pure_map]; trace "B959"; rfl)
+    | (trace "C959"; rfl)
 
 @[simp] theorem Com.denote_castPureToEff {com : Com d Γ .pure ty} :
     denote (com.castPureToEff eff) = fun V => pure (com.denote V) := by
   funext V
   induction com using Com.rec'
   · rfl
-  · simp [*]; rfl
+  · first
+    | (simp [*]; trace "A969"; rfl)
+    | (simp [*, pure_bind]; trace "B969")
+    | (simp only [denote_var, *]; trace "C969"; simp)
 
 end Lemmas
 
@@ -981,7 +1022,9 @@ theorem Expr.denote_pure {e : Expr d Γ .pure ty} :
 @[simp]
 theorem Expr.pure_denoteOp_toPure (e : Expr d Γ eff ty) (h : e.HasPureOp) :
     pure ((e.toPure h).denoteOp V) = (e.denoteOp V) := by
-  simp [denoteOp]
+  first
+  | (simp [denoteOp]; trace "A1018"; rfl)
+  | (trace "B1018"; rfl)
 
 /-- The denotation of toPure? -/
 theorem Expr.denote_toPure? {e : Expr d Γ eff ty} {e': Expr d Γ .pure ty}
@@ -1005,7 +1048,8 @@ section DenoteInsert
 
 @[simp] theorem Expr.denote_appendInr (e : Expr d Γ .pure t) (V : Γ.Valuation) (v : Γ.Var u) :
     e.denote V v.appendInr = V v := by
-  simp [denote_unfold, Id.map_eq']
+  simp [denote_unfold, EffectKind.pureMonad_map_eq]
+  exact Ctxt.Valuation.append_appendInr
 
 /-- Denoting any of the free variables of a program through `Com.denoteLets` just returns the
 assignment of that variable in the input valuation -/
@@ -1016,11 +1060,11 @@ assignment of that variable in the input valuation -/
   · simp; rfl
   case var e body ih =>
     rw [outContextHom_var]
-    simp [Id.bind_eq', Hom.comp, ih]
+    simp [EffectKind.pureMonad_bind_eq, Hom.comp, ih]
 
 @[simp] theorem Ctxt.Valuation.comap_outContextHom_denoteLets {com : Com d Γ .pure ty} {V} :
     Valuation.comap (com.denoteLets V) com.outContextHom = V := by
-  unfold comap; simp
+  unfold comap; simp; rfl
 
 end DenoteInsert
 

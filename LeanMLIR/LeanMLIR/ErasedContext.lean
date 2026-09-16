@@ -897,8 +897,11 @@ def Valuation.reassignVars [DecidableEq Ty] {ts : List Ty} {Γ : Ctxt Ty}
     V.comap (map.with vs ws) = (V.comap map).reassignVars vs (ws.map V) := by
   funext t' v'
   simp only [comap, Hom.with, reassignVars]
-  -- v4.34: the `some` branch now carries a cast the old `aesop` call did not have to face
-  split <;> first | rfl | sorry
+  split
+  · rfl
+  -- v4.34: the `some` branch keeps the `Var.cast`; substituting its type equation
+  -- turns both casts into `rfl` and leaves `HVector.get_map`.
+  · next _ hty _ => subst hty; exact (HVector.get_map ws V).symm
 
 /-! ### Recursion -/
 
@@ -921,6 +924,16 @@ def Valuation.cast {Γ Δ : Ctxt Ty} (h : Γ = Δ) (V : Valuation Γ) : Valuatio
   fun _ v => V <| v.castCtxt h.symm
 
 @[simp] theorem Valuation.cast_rfl {Γ : Ctxt Ty} (h : Γ = Γ) (V : Valuation Γ) : V.cast h = V := rfl
+
+/-- Pointfree `cast_rfl`, for the casts that sit under a `<$>`. -/
+@[simp] theorem Valuation.cast_rfl_eq_id {Γ : Ctxt Ty} (h : Γ = Γ) :
+    Valuation.cast h = (id : Γ.Valuation → Γ.Valuation) := rfl
+
+/-- `append_appendInr` through the `HVector`-on-the-left append. -/
+@[simp] theorem Valuation.appendHVector_appendInr {ts : List Ty} {Γ : Ctxt Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) (v : Var Γ t) :
+    (vals ++ V) v.appendInr = V v :=
+  append_appendInr
 
 @[simp] theorem Valuation.cast_apply {Γ : Ctxt Ty} (h : Γ = Δ) (V : Γ.Valuation) (v : Δ.Var t) :
     V.cast h v = V (v.castCtxt h.symm) := rfl
@@ -946,8 +959,7 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     case nil => rfl
     case cons t Γ v vs ih =>
       simp [HVector.ofFn, ofHVector, -ofHVector_apply]
-      -- v4.34: the tail is `ih` up to the `cons` valuation's index shift
-      exact ⟨rfl, sorry⟩
+      exact ⟨rfl, ih⟩
 
 end Valuation
 
