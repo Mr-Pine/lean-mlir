@@ -96,10 +96,12 @@ export DialectSignature (signature)
 namespace DialectSignature
 variable {d} [s : DialectSignature d]
 
-def sig          := Signature.sig ∘ s.signature
-def regSig       := Signature.regSig ∘ s.signature
-def returnTypes  := Signature.returnTypes ∘ s.signature
-def effectKind   := Signature.effectKind ∘ s.signature
+-- v4.34 checks applications at `implicit` transparency, so these have to unfold to the
+-- `Signature` projections they abbreviate.
+@[implicit_reducible] def sig          := Signature.sig ∘ s.signature
+@[implicit_reducible] def regSig       := Signature.regSig ∘ s.signature
+@[implicit_reducible] def returnTypes  := Signature.returnTypes ∘ s.signature
+@[implicit_reducible] def effectKind   := Signature.effectKind ∘ s.signature
 
 end DialectSignature
 
@@ -956,9 +958,12 @@ section Lemmas
     have hop : DialectSignature.effectKind op = .pure := EffectKind.eq_of_le_pure eff_le
     simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk]
     first
-    | (rw [EffectKind.liftEffect_eq_pure_cast hop]; trace "A966"; simp [EffectKind.pure_map]; done)
-    | (rw [EffectKind.liftEffect_eq_pure_cast hop]; trace "B966"; rfl)
-    | (simp [EffectKind.liftEffect_eq_pure_cast hop, EffectKind.pure_map]; trace "C966"; done)
+    | (rw [EffectKind.liftEffect_eq_pure_cast hop, EffectKind.liftEffect_pure]
+       trace "A961"; simp; done)
+    | (simp [EffectKind.liftEffect_eq_pure_cast hop, EffectKind.liftEffect_pure]
+       trace "B961"; done)
+    | (rw [EffectKind.liftEffect_eq_pure_cast hop]; trace "C961"
+       simp [EffectKind.liftEffect_pure]; done)
 
 @[simp] theorem Com.denote_castPureToEff {com : Com d Γ .pure ty} :
     denote (com.castPureToEff eff) = fun V => pure (com.denote V) := by
@@ -1020,9 +1025,11 @@ theorem Expr.denote_pure {e : Expr d Γ .pure ty} :
 theorem Expr.pure_denoteOp_toPure (e : Expr d Γ eff ty) (h : e.HasPureOp) :
     pure ((e.toPure h).denoteOp V) = (e.denoteOp V) := by
   first
-  | (simp only [denoteOp, Expr.toPure, EffectKind.liftEffect_eq_pure_cast h]; trace "A1029"; rfl)
-  | (rw [EffectKind.liftEffect_eq_pure_cast h]; trace "B1029"; simp [denoteOp, Expr.toPure]; done)
-  | (simp [denoteOp, Expr.toPure, EffectKind.liftEffect_eq_pure_cast h]; trace "C1029"; done)
+  | (cases eff <;> simp [denoteOp, Expr.toPure, EffectKind.liftEffect_pure,
+       EffectKind.liftEffect_eq_pure_cast h]; trace "A1025"; done)
+  | (simp [denoteOp, Expr.toPure, EffectKind.liftEffect_pure,
+       EffectKind.liftEffect_eq_pure_cast h]; trace "B1025"; done)
+  | (simp only [denoteOp, Expr.toPure]; trace "C1025"; rfl)
 
 /-- The denotation of toPure? -/
 theorem Expr.denote_toPure? {e : Expr d Γ eff ty} {e': Expr d Γ .pure ty}
@@ -1217,6 +1224,8 @@ def Expr.changeDialect : Expr d Γ eff ty → Expr d' (Γ.map f.mapTy) eff (f.ma
         Regions.changeDialect regs
     ⟩
 termination_by e => sizeOf e
+-- v4.34: the default tactic no longer unfolds `sizeOf` through the constructor
+decreasing_by simp only [Expr.mk.sizeOf_spec]; omega
 
 /-- Inline of a `map` over `Regions` for the termination checker -/
 def Regions.changeDialect : ∀ {regSig : RegionSignature d.Ty},
@@ -1238,7 +1247,10 @@ section Lemmas
 @[simp] theorem Com.changeDialect_rets (f : DialectMorphism d d') (vs) :
     Com.changeDialect f (Com.rets vs : Com d Γ eff t)
     = Com.rets (vs.map' f.mapTy (fun _ v => v.toMap)) := by
-  cases eff <;> simp [changeDialect]
+  cases eff <;> first
+    | (simp [changeDialect]; trace "A1240"; done)
+    | (trace "B1240"; rfl)
+    | (unfold changeDialect; trace "C1240"; rfl)
 
 @[simp] theorem Com.changeDialect_var (f : DialectMorphism d d')
     (e : Expr d Γ eff t) (body : Com d _ eff u) :
@@ -1246,10 +1258,17 @@ section Lemmas
     = have h := by simp; rfl
       Com.var (e.changeDialect f)
       <| (body.changeDialect f).changeVars (Hom.id.castCodomain h) := by
-  simp only [changeDialect]
+  first
+  | (simp only [changeDialect]; trace "A1248"; rfl)
+  | (trace "B1248"; rfl)
+  | (unfold changeDialect; trace "C1248"; rfl)
 
 @[simp] theorem Regions.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
-    Regions.changeDialect (eff := eff) f .nil = .nil := by simp [Regions.changeDialect]
+    Regions.changeDialect (eff := eff) f .nil = .nil := by
+  first
+  | (trace "A1252"; rfl)
+  | (unfold Regions.changeDialect; trace "B1252"; rfl)
+  | (simp [Regions.changeDialect]; trace "C1252"; done)
 
 end Lemmas
 
@@ -1295,6 +1314,9 @@ section Lemmas
   case var ih =>
     simp only [Com.castPureToEff_var, Com.outContext_var, addComToEnd_var,
       ← Lets.castPureToEff_var, ih]
+    first
+    | (trace "A1294"; rfl)
+    | (trace "B1294"; simp)
 
 @[simp] theorem Com.toLets_castPureToEff {com : Com d Γ .pure ty} :
     (com.castPureToEff eff).toLets = cast (by simp) (com.toLets.castPureToEff eff) := by
@@ -1327,7 +1349,10 @@ theorem Com.denoteLets_eq {com : Com d Γ eff t} : com.denoteLets = com.toLets.d
   funext V
   induction com using Com.rec'
   · simp
-  · simp [*]; rfl
+  · first
+    | (simp [*]; trace "A1329"; rfl)
+    | (simp [*, Ctxt.Valuation.comap]; trace "B1329"; done)
+    | (simp only [*]; trace "C1329"; rfl)
 
 end Lemmas
 
