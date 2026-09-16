@@ -918,48 +918,48 @@ local notation "r32 " x => (PoisonOr.value x : LLVM.IntW 32)
 /-- Where the walk can stand, and what holds there. -/
 inductive Reach (s : GlobalState) (slides : Pointer) (bits : BitVec 32) (H : Prop) (Nv : Nat) :
     SuccArgs fd_curve25519_scalar_wnaf.sigs → GlobalState → Prop
-  | bb1 {u w} (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w 255) (hI : H → Bits Nv w 255) :
+  | bb1 {u w : _} (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w 255) (hI : H → Bits Nv w 255) :
       Reach s slides bits H Nv ⟨0, rfl, .nil⟩ u
-  | bb2 {u w} (k : Nat) (hk : k ≤ 254) (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w k)
+  | bb2 {u w : _} (k : Nat) (hk : k ≤ 254) (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w k)
       (hI : H → Bits Nv w k) :
       Reach s slides bits H Nv ⟨1, rfl, [v64 k]ₕ⟩ u
-  | bb3 {u w} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 255) (hu : u ≈ Sw s slides w)
+  | bb3 {u w : _} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 255) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0) (hy : Y19 bits y19) (hw : BndUpTo bits w 256)
       (hI : H → SumEq Nv w 0 ∧ Ones w 0) :
       Reach s slides bits H Nv ⟨2, rfl, [v64 k, r32 y19]ₕ⟩ u
-  | bb4 {u w} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 255) (hu : u ≈ Sw s slides w)
+  | bb4 {u w : _} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 255) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0) (hy : Y19 bits y19) (hw : BndUpTo bits w 256)
       (hI : H → SumEq Nv w 0 ∧ Ones w 0) :
       Reach s slides bits H Nv ⟨3, rfl, [r32 y19, v64 k]ₕ⟩ u
-  | bb5 {u w} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 254) (hu : u ≈ Sw s slides w)
+  | bb5 {u w : _} (k : Nat) (y19 : BitVec 32) (hk : k ≤ 254) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0) (hy : Y19 bits y19) (hw : BndUpTo bits w 256)
       (hI : H → Outer Nv w k) :
       Reach s slides bits H Nv ⟨4, rfl, [r32 y19, v64 k]ₕ⟩ u
-  | bb6 {u w} (i : Nat) (y19 : BitVec 32) (hi : i ≤ 254) (hu : u ≈ Sw s slides w)
+  | bb6 {u w : _} (i : Nat) (y19 : BitVec 32) (hi : i ≤ 254) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0) (hy : Y19 bits y19) (hw : BndUpTo bits w 256)
       (hI : H → Outer Nv w i) :
       Reach s slides bits H Nv ⟨5, rfl, [r32 y19, v32 i]ₕ⟩ u
-  | bb7 {u w} (i : Nat) (y43 y44 y45 : BitVec 32) (hi : i ≤ 255) (hu : u ≈ Sw s slides w)
+  | bb7 {u w : _} (i : Nat) (y43 y44 y45 : BitVec 32) (hi : i ≤ 255) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0 ∨ i = 255) (hK : K bits y43 y44 y45) (hw : BndUpTo bits w 256)
       (hI : H → Outer Nv w i) :
       Reach s slides bits H Nv ⟨6, rfl, [v32 i, r32 y43, r32 y44, r32 y45]ₕ⟩ u
-  | bb8 {u w} (i : Nat) (y43 y44 y45 : BitVec 32) (hi : i ≤ 254) (hu : u ≈ Sw s slides w)
+  | bb8 {u w : _} (i : Nat) (y43 y44 y45 : BitVec 32) (hi : i ≤ 254) (hu : u ≈ Sw s slides w)
       (ht : slot w 255 = 0) (hK : K bits y43 y44 y45) (hw : BndUpTo bits w 256)
       (hI : H → Outer Nv w i) :
       Reach s slides bits H Nv ⟨7, rfl, [r32 y43, r32 y44, r32 y45, v32 i]ₕ⟩ u
-  | bb9 {u w} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
+  | bb9 {u w : _} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
       (hj : j ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y52) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y52 0) :
       Reach s slides bits H Nv ⟨8, rfl, [v32 (j + 2), v64 j, r16 y52, r32 y43, r32 y44, r32 y45,
         v32 m, v64 m]ₕ⟩ u
-  | bb10 {u w} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
+  | bb10 {u w : _} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
       (hj : j + 1 ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y52) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y52 0 ∧ slot w (j + 1) = 1#16) :
       Reach s slides bits H Nv ⟨9, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2),
         v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1))]ₕ⟩ u
-  | bb11 {u w} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 y61 : BitVec 32) (hmj : m ≤ j)
+  | bb11 {u w : _} (j m : Nat) (y52 : BitVec 16) (y43 y44 y45 y61 : BitVec 32) (hmj : m ≤ j)
       (hj : j + 1 ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y52) (hd : y61 ≤ 16384#32 ∧ y61 &&& 1#32 = 0#32)
       (hw : BndUpTo bits w 256)
@@ -967,13 +967,13 @@ inductive Reach (s : GlobalState) (slides : Pointer) (bits : BitVec 32) (H : Pro
         ∧ y61 = BitVec.ofNat 32 (2 ^ (j + 1 - m)) ∧ j + 1 - m ≤ 13) :
       Reach s slides bits H Nv ⟨10, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2),
         v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r32 y61]ₕ⟩ u
-  | bb12 {u w} (j m : Nat) (y64 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
+  | bb12 {u w : _} (j m : Nat) (y64 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
       (hj : j + 1 ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y64) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y64 (-2 ^ (j + 1)) ∧ slot w (j + 1) = 1#16) :
       Reach s slides bits H Nv ⟨11, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2),
         v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y64]ₕ⟩ u
-  | bb13 {u w} (j m : Nat) (y52 y63 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
+  | bb13 {u w : _} (j m : Nat) (y52 y63 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
       (hj : j + 1 ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y52) (hd : y63 ≤ 16384#16 ∧ y63 &&& 1#16 = 0#16)
       (hw : BndUpTo bits w 256)
@@ -981,57 +981,57 @@ inductive Reach (s : GlobalState) (slides : Pointer) (bits : BitVec 32) (H : Pro
         ∧ y63 = BitVec.ofNat 16 (2 ^ (j + 1 - m)) ∧ j + 1 - m ≤ 13) :
       Reach s slides bits H Nv ⟨12, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j,
         r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y63]ₕ⟩ u
-  | bb14 {u w} (j m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
+  | bb14 {u w : _} (j m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmj : m ≤ j)
       (hj : j + 1 ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y68) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y68 (2 ^ (j + 1)) ∧ slot w (j + 1) = 1#16) :
       Reach s slides bits H Nv ⟨13, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j,
         vp (slotPtr slides (j + 1)), r16 y68]ₕ⟩ u
-  | bb15 {u w} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb15 {u w : _} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y68) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y68 (2 ^ c) ∧ slot w c = 1#16) :
       Reach s slides bits H Nv ⟨14, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 c, r16 y68,
         vp (slotPtr slides c)]ₕ⟩ u
-  | bb16 {u w} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb16 {u w : _} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 255) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y68) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y68 (2 ^ c) ∧ slot w c = 0#16) :
       Reach s slides bits H Nv ⟨15, rfl, [r32 y43, r32 y44, r32 y45, v64 m, r16 y68, v64 c,
         vp (slotPtr slides c)]ₕ⟩ u
-  | bb17 {u w} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb17 {u w : _} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 255) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y68) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y68 (2 ^ c) ∧ slot w c = 0#16) :
       Reach s slides bits H Nv ⟨16, rfl, [v32 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45,
         v64 m, r16 y68]ₕ⟩ u
-  | bb18 {u w} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb18 {u w : _} (c m : Nat) (y68 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y68) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y68 (2 ^ c) ∧ slot w c = 1#16) :
       Reach s slides bits H Nv ⟨17, rfl, [v64 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45,
         v64 m, r16 y68]ₕ⟩ u
-  | bb19 {u w} (c m : Nat) (y87 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb19 {u w : _} (c m : Nat) (y87 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 255) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y87) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y87 0) :
       Reach s slides bits H Nv ⟨18, rfl, [r16 y87, r32 y43, r32 y44, r32 y45, v32 m, v64 m,
         v32 (c + 1), v64 c]ₕ⟩ u
-  | bb20 {u w} (m : Nat) (y91 : BitVec 16) (hm : m ≤ 255) (hu : u ≈ Sw s slides w)
+  | bb20 {u w : _} (m : Nat) (y91 : BitVec 16) (hm : m ≤ 255) (hu : u ≈ Sw s slides w)
       (hti : Ti bits y91) (hw : BndUpTo bits w 256)
       (hI : H → SumEq Nv w ((y91.toInt - 1) * 2 ^ m) ∧ slot w m = 1#16) :
       Reach s slides bits H Nv ⟨19, rfl, [v64 m, r16 y91]ₕ⟩ u
-  | bb21 {u w} (c m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb21 {u w : _} (c m : Nat) (y52 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 254) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0)
       (hK : K bits y43 y44 y45) (hti : Ti bits y52) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y52 0 ∧ slot w c = 1#16) :
       Reach s slides bits H Nv ⟨20, rfl, [r32 y43, r32 y44, r32 y45, v64 m, r16 y52, v64 c]ₕ⟩ u
-  | bb22 {u w} (c m : Nat) (y95 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
+  | bb22 {u w : _} (c m : Nat) (y95 : BitVec 16) (y43 y44 y45 : BitVec 32) (hmc : m < c)
       (hc : c ≤ 255) (hu : u ≈ Sw s slides w) (ht : slot w 255 = 0 ∨ c = 255)
       (hK : K bits y43 y44 y45) (hti : Ti bits y95) (hw : BndUpTo bits w 256)
       (hI : H → Inner Nv w m y95 0 ∧ slot w c = 1#16) :
       Reach s slides bits H Nv ⟨21, rfl, [v32 c, r16 y95, r32 y43, r32 y44, r32 y45, v64 m]ₕ⟩ u
-  | bb23 {u w} (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w 256) (hI : H → SumEq Nv w 0) :
+  | bb23 {u w : _} (hu : u ≈ Sw s slides w) (hw : BndUpTo bits w 256) (hI : H → SumEq Nv w 0) :
       Reach s slides bits H Nv ⟨22, rfl, .nil⟩ u
 
 /-- What the walk ends in. -/

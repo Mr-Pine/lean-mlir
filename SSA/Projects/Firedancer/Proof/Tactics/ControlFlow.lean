@@ -8,6 +8,14 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Firedancer.Avx512 (vecBV flatten_vecBV)
 
+-- v4.34: `BlockCom.call` indexes the callee's entry block by `Ctxt.ofList argTys.reverse`,
+-- so a call node is only type-correct up to `List.reverse` of a literal list. Applications
+-- are now checked at `implicit` transparency, where a core `def` does not unfold, and every
+-- `rw` through a call node fails. `List.reverse` cannot be marked from outside its own file
+-- without this override.
+set_option allowUnsafeReducibility true in
+attribute [implicit_reducible] List.reverse List.reverseAux
+
 open Lean Meta Elab Tactic in
 /-- Is `h`'s valuation written `Ctxt.Valuation.ofHVector`?
 
@@ -97,6 +105,9 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
   -- check it cannot discharge rather than failing over. With a *concrete*
   -- valuation the plain path already works, and taking this one instead
   -- changes which `argVals` gets picked -- hence the gate.
+  -- v4.34: the `bind` around the call carries the lifted `Cfg`'s `Γout`/`sigs`; reduce them
+  -- or the target is not type-correct at `implicit` transparency and no `rw` matches.
+  evalTactic (← `(tactic| reduce_cfg_indices))
   let byRef ← callArgsAreOfHVector h
   unless !byRef || !isBind do
     if ← (do evalTactic (← `(tactic| rw [$bindCfgLem:ident (argTys := $tys)
