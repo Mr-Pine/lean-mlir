@@ -35,6 +35,7 @@ unreduced fd_r43x6_t (i.e. in u47).  Assumes lanes 6 and 7 of x are zero"):
 -/
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -54,26 +55,26 @@ limbs
 this is the `za` half of lane `k`, and `sqCol (k+6)` is the `zb` half. -/
 def sqCol (x : Fin 6 → ℕ) : Fin 12 → ℕ
   | 0 => pl (x 0) (x 0)
-  | 1 => pl (2 * x 0) (x 1)
-      + ph (x 0) (x 0)
-  | 2 => pl (x 1) (x 1) + pl (2 * x 0) (x 2)
-      + ph (2 * x 0) (x 1)
-  | 3 => pl (2 * x 1) (x 2) + pl (2 * x 0) (x 3)
-      + ph (x 1) (x 1) + ph (2 * x 0) (x 2)
-  | 4 => pl (2 * x 1) (x 3) + pl (2 * x 0) (x 4) + pl (x 2) (x 2)
-      + ph (2 * x 1) (x 2) + ph (2 * x 0) (x 3)
-  | 5 => pl (2 * x 1) (x 4) + pl (2 * x 0) (x 5) + pl (2 * x 2) (x 3)
-      + ph (2 * x 1) (x 3) + ph (2 * x 0) (x 4) + ph (x 2) (x 2)
-  | 6 => pl (2 * x 1) (x 5) + pl (x 3) (x 3) + pl (2 * x 2) (x 4)
-      + ph (2 * x 1) (x 4) + ph (2 * x 0) (x 5) + ph (2 * x 2) (x 3)
-  | 7 => pl (2 * x 3) (x 4) + pl (2 * x 2) (x 5)
-      + ph (2 * x 1) (x 5) + ph (x 3) (x 3) + ph (2 * x 2) (x 4)
-  | 8 => pl (2 * x 3) (x 5) + pl (x 4) (x 4)
-      + ph (2 * x 3) (x 4) + ph (2 * x 2) (x 5)
-  | 9 => pl (2 * x 4) (x 5)
-      + ph (2 * x 3) (x 5) + ph (x 4) (x 4)
-  | 10 => pl (x 5) (x 5)
-      + ph (2 * x 4) (x 5)
+  | 1 => pl (2 * x 0) (x 1) + ph (x 0) (x 0)
+  | 2 => pl (x 1) (x 1) + pl (2 * x 0) (x 2) + ph (2 * x 0) (x 1)
+  | 3 => pl (2 * x 1) (x 2) + pl (2 * x 0) (x 3) + ph (x 1) (x 1) + ph (2 * x 0) (x 2)
+  | 4 =>
+    pl (2 * x 1) (x 3) + pl (2 * x 0) (x 4) + pl (x 2) (x 2) + ph (2 * x 1) (x 2) +
+      ph (2 * x 0) (x 3)
+  | 5 =>
+    pl (2 * x 1) (x 4) + pl (2 * x 0) (x 5) + pl (2 * x 2) (x 3) + ph (2 * x 1) (x 3) +
+      ph (2 * x 0) (x 4) +
+      ph (x 2) (x 2)
+  | 6 =>
+    pl (2 * x 1) (x 5) + pl (x 3) (x 3) + pl (2 * x 2) (x 4) + ph (2 * x 1) (x 4) +
+      ph (2 * x 0) (x 5) +
+      ph (2 * x 2) (x 3)
+  | 7 =>
+    pl (2 * x 3) (x 4) + pl (2 * x 2) (x 5) + ph (2 * x 1) (x 5) + ph (x 3) (x 3) +
+      ph (2 * x 2) (x 4)
+  | 8 => pl (2 * x 3) (x 5) + pl (x 4) (x 4) + ph (2 * x 3) (x 4) + ph (2 * x 2) (x 5)
+  | 9 => pl (2 * x 4) (x 5) + ph (2 * x 3) (x 5) + ph (x 4) (x 4)
+  | 10 => pl (x 5) (x 5) + ph (2 * x 4) (x 5)
   | 11 => ph (x 5) (x 5)
 
 /-- The output limbs of `fd_r43x6_sqr_fast`: the low six columns, plus the
@@ -88,10 +89,15 @@ set_option exponentiation.threshold 600 in
 products appears exactly once, at the weight `2^(43(i+j))` of its column. -/
 theorem sqCols_sq (x : Fin 6 → ℕ) :
     (decodeNat x) ^ 2 =
-      sqCol x 0 + 2^43 * sqCol x 1 + 2^86 * sqCol x 2 + 2^129 * sqCol x 3
-      + 2^172 * sqCol x 4 + 2^215 * sqCol x 5 + 2^258 * sqCol x 6
-      + 2^301 * sqCol x 7 + 2^344 * sqCol x 8 + 2^387 * sqCol x 9
-      + 2^430 * sqCol x 10 + 2^473 * sqCol x 11 := by
+      sqCol x 0 + 2 ^ 43 * sqCol x 1 + 2 ^ 86 * sqCol x 2 + 2 ^ 129 * sqCol x 3 +
+        2 ^ 172 * sqCol x 4 +
+        2 ^ 215 * sqCol x 5 +
+        2 ^ 258 * sqCol x 6 +
+        2 ^ 301 * sqCol x 7 +
+        2 ^ 344 * sqCol x 8 +
+        2 ^ 387 * sqCol x 9 +
+        2 ^ 430 * sqCol x 10 +
+        2 ^ 473 * sqCol x 11 := by
   simp only [decodeNat_eq, sqCol]
   -- The twenty-one products formed by the implementation.
   have d0 := pl_add_shift_ph (x 0) (x 0)
@@ -115,35 +121,36 @@ theorem sqCols_sq (x : Fin 6 → ℕ) :
   have h34 := pl_add_shift_ph (2 * x 3) (x 4)
   have h35 := pl_add_shift_ph (2 * x 3) (x 5)
   have h45 := pl_add_shift_ph (2 * x 4) (x 5)
-  calc (x 0 + 2^43 * x 1 + 2^86 * x 2 + 2^129 * x 3 + 2^172 * x 4 + 2^215 * x 5) ^ 2
-      = (x 0 * x 0)
-        + 2^43 * ((2 * x 0) * x 1)
-        + 2^86 * (x 1 * x 1 + (2 * x 0) * x 2)
-        + 2^129 * ((2 * x 1) * x 2 + (2 * x 0) * x 3)
-        + 2^172 * ((2 * x 1) * x 3 + (2 * x 0) * x 4 + x 2 * x 2)
-        + 2^215 * ((2 * x 1) * x 4 + (2 * x 0) * x 5 + (2 * x 2) * x 3)
-        + 2^258 * ((2 * x 1) * x 5 + x 3 * x 3 + (2 * x 2) * x 4)
-        + 2^301 * ((2 * x 3) * x 4 + (2 * x 2) * x 5)
-        + 2^344 * ((2 * x 3) * x 5 + x 4 * x 4)
-        + 2^387 * ((2 * x 4) * x 5)
-        + 2^430 * (x 5 * x 5) := by ring
+  calc
+    (x 0 + 2 ^ 43 * x 1 + 2 ^ 86 * x 2 + 2 ^ 129 * x 3 + 2 ^ 172 * x 4 + 2 ^ 215 * x 5) ^ 2 =
+        (x 0 * x 0) + 2 ^ 43 * ((2 * x 0) * x 1) + 2 ^ 86 * (x 1 * x 1 + (2 * x 0) * x 2) +
+          2 ^ 129 * ((2 * x 1) * x 2 + (2 * x 0) * x 3) +
+          2 ^ 172 * ((2 * x 1) * x 3 + (2 * x 0) * x 4 + x 2 * x 2) +
+          2 ^ 215 * ((2 * x 1) * x 4 + (2 * x 0) * x 5 + (2 * x 2) * x 3) +
+          2 ^ 258 * ((2 * x 1) * x 5 + x 3 * x 3 + (2 * x 2) * x 4) +
+          2 ^ 301 * ((2 * x 3) * x 4 + (2 * x 2) * x 5) +
+          2 ^ 344 * ((2 * x 3) * x 5 + x 4 * x 4) +
+          2 ^ 387 * ((2 * x 4) * x 5) +
+          2 ^ 430 * (x 5 * x 5) :=
+      by ring
     _ = _ := by
-        rw [← d0, ← d1, ← d2, ← d3, ← d4, ← d5,
-            ← h01, ← h02, ← h03, ← h04, ← h05,
-            ← h12, ← h13, ← h14, ← h15,
-            ← h23, ← h24, ← h25,
-            ← h34, ← h35, ← h45]
-        ring
+      rw [← d0, ← d1, ← d2, ← d3, ← d4, ← d5, ← h01, ← h02, ← h03, ← h04, ← h05, ← h12, ← h13, ←
+        h14, ← h15, ← h23, ← h24, ← h25, ← h34, ← h35, ← h45]
+      ring
 
 /-- **Ring correctness**: decoding the output limbs of `fd_r43x6_sqr_fast`
 yields the square of the decoded input modulo `p = 2^255 - 19`. -/
 theorem decodeLimbs_sqLimb_modEq (x : Fin 6 → ℕ) :
     decodeNat (sqLimb x) ≡ (decodeNat x) ^ 2 [MOD p] := by
   -- The high columns contribute a multiple of `p`, since `2^258 - 152 = 8·p`.
-  have hsplit : decodeNat (sqLimb x)
-      + p * (8 * (sqCol x 6 + 2^43 * sqCol x 7 + 2^86 * sqCol x 8
-          + 2^129 * sqCol x 9 + 2^172 * sqCol x 10 + 2^215 * sqCol x 11))
-      = (decodeNat x) ^ 2 := by
+  have hsplit :
+    decodeNat (sqLimb x) +
+        p *
+          (8 *
+            (sqCol x 6 + 2 ^ 43 * sqCol x 7 + 2 ^ 86 * sqCol x 8 + 2 ^ 129 * sqCol x 9 +
+              2 ^ 172 * sqCol x 10 +
+              2 ^ 215 * sqCol x 11)) =
+      (decodeNat x) ^ 2 := by
     rw [sqCols_sq]
     simp only [decodeNat_eq, sqLimb, p, Fin.reduceAddNat, Fin.reduceCastAdd]
     generalize sqCol x 0 = c0; generalize sqCol x 1 = c1
@@ -177,79 +184,79 @@ set_option maxHeartbeats 1000000 in
 /-- Every output limb, in terms of an off-diagonal `ph` bound `Bo` and a
 diagonal one `Bd`. -/
 private theorem sqLimb_lt_of_bounds (x : Fin 6 → ℕ) (Bo Bd L : ℕ)
-    (hph : ∀ i j, ph (2 * x i) (x j) < Bo)
-    (hphd : ∀ i, ph (x i) (x i) < Bd)
-    (hL : 457 * 2^52 + 456 * Bo + 153 * Bd ≤ L)
-    (k : Fin 6) :
-    sqLimb x k < L := by
-  have hpl : ∀ a b : ℕ, pl a b < 2^52 := fun a b => pl_lt a b
+    (hph : ∀ i j, ph (2 * x i) (x j) < Bo) (hphd : ∀ i, ph (x i) (x i) < Bd)
+    (hL : 457 * 2 ^ 52 + 456 * Bo + 153 * Bd ≤ L) (k : Fin 6) : sqLimb x k < L := by
+  have hpl : ∀ a b : ℕ, pl a b < 2 ^ 52 := fun a b => pl_lt a b
   fin_cases k <;>
-  · simp [sqLimb, sqCol]
-    have := hpl (x 0) (x 0); have := hpl (x 1) (x 1); have := hpl (x 2) (x 2)
-    have := hpl (x 3) (x 3); have := hpl (x 4) (x 4); have := hpl (x 5) (x 5)
-    have := hpl (2 * x 0) (x 1); have := hpl (2 * x 0) (x 2)
-    have := hpl (2 * x 0) (x 3); have := hpl (2 * x 0) (x 4)
-    have := hpl (2 * x 0) (x 5); have := hpl (2 * x 1) (x 2)
-    have := hpl (2 * x 1) (x 3); have := hpl (2 * x 1) (x 4)
-    have := hpl (2 * x 1) (x 5); have := hpl (2 * x 2) (x 3)
-    have := hpl (2 * x 2) (x 4); have := hpl (2 * x 2) (x 5)
-    have := hpl (2 * x 3) (x 4); have := hpl (2 * x 3) (x 5)
-    have := hpl (2 * x 4) (x 5)
-    have h0 := hphd 0; have h1 := hphd 1
-    have h2 := hphd 2; have h3 := hphd 3
-    have h4 := hphd 4; have h5 := hphd 5
-    have := hph 0 1; have := hph 0 2
-    have := hph 0 3; have := hph 0 4
-    have := hph 0 5; have := hph 1 2
-    have := hph 1 3; have := hph 1 4
-    have := hph 1 5; have := hph 2 3
-    have := hph 2 4; have := hph 2 5
-    have := hph 3 4; have := hph 3 5
-    have := hph 4 5
-    omega
+    · simp [sqLimb, sqCol]
+      have := hpl (x 0) (x 0); have := hpl (x 1) (x 1); have := hpl (x 2) (x 2)
+      have := hpl (x 3) (x 3); have := hpl (x 4) (x 4); have := hpl (x 5) (x 5)
+      have := hpl (2 * x 0) (x 1); have := hpl (2 * x 0) (x 2)
+      have := hpl (2 * x 0) (x 3); have := hpl (2 * x 0) (x 4)
+      have := hpl (2 * x 0) (x 5); have := hpl (2 * x 1) (x 2)
+      have := hpl (2 * x 1) (x 3); have := hpl (2 * x 1) (x 4)
+      have := hpl (2 * x 1) (x 5); have := hpl (2 * x 2) (x 3)
+      have := hpl (2 * x 2) (x 4); have := hpl (2 * x 2) (x 5)
+      have := hpl (2 * x 3) (x 4); have := hpl (2 * x 3) (x 5)
+      have := hpl (2 * x 4) (x 5)
+      have h0 := hphd 0; have h1 := hphd 1
+      have h2 := hphd 2; have h3 := hphd 3
+      have h4 := hphd 4; have h5 := hphd 5
+      have := hph 0 1; have := hph 0 2
+      have := hph 0 3; have := hph 0 4
+      have := hph 0 5; have := hph 1 2
+      have := hph 1 3; have := hph 1 4
+      have := hph 1 5; have := hph 2 3
+      have := hph 2 4; have := hph 2 5
+      have := hph 3 4; have := hph 3 5
+      have := hph 4 5
+      omega
 
 /-- **`u44` in, `u61` out.** -/
-theorem sqLimb_lt_u44 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2^44) (k : Fin 6) :
-    sqLimb x k < 2^61 :=
-  sqLimb_lt_of_bounds x (2^37 * 2^9) (2^36 * 2^9) (2^61)
-    (fun i j => ph_lt_bound (u := 2^45) (v := 2^44)
-      (by have := hx i; omega) (hx j) (by omega))
-    (fun i => ph_lt_bound (u := 2^44) (v := 2^44) (hx i) (hx i) (by omega))
-    (by omega) k
+theorem sqLimb_lt_u44 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 44) (k : Fin 6) : sqLimb x k < 2 ^ 61 :=
+  sqLimb_lt_of_bounds x (2 ^ 37 * 2 ^ 9) (2 ^ 36 * 2 ^ 9) (2 ^ 61)
+    (fun i j =>
+      ph_lt_bound (u := 2 ^ 45) (v := 2 ^ 44)
+        (by
+          have := hx i; omega)
+        (hx j) (by omega))
+    (fun i => ph_lt_bound (u := 2 ^ 44) (v := 2 ^ 44) (hx i) (hx i) (by omega)) (by omega) k
 
 /-- **`u45` in, `u61` out.** The tightest of the four: the bound comes to
 `15689 · 2^47` against `2^61 = 16384 · 2^47`. -/
-theorem sqLimb_lt_u45 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2^45) (k : Fin 6) :
-    sqLimb x k < 2^61 :=
-  sqLimb_lt_of_bounds x (2^39 * 2^9) (2^38 * 2^9) (2^61)
-    (fun i j => ph_lt_bound (u := 2^46) (v := 2^45)
-      (by have := hx i; omega) (hx j) (by omega))
-    (fun i => ph_lt_bound (u := 2^45) (v := 2^45) (hx i) (hx i) (by omega))
-    (by omega) k
+theorem sqLimb_lt_u45 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 45) (k : Fin 6) : sqLimb x k < 2 ^ 61 :=
+  sqLimb_lt_of_bounds x (2 ^ 39 * 2 ^ 9) (2 ^ 38 * 2 ^ 9) (2 ^ 61)
+    (fun i j =>
+      ph_lt_bound (u := 2 ^ 46) (v := 2 ^ 45)
+        (by
+          have := hx i; omega)
+        (hx j) (by omega))
+    (fun i => ph_lt_bound (u := 2 ^ 45) (v := 2 ^ 45) (hx i) (hx i) (by omega)) (by omega) k
 
 /-- **`u46` in, `u62` out.** -/
-theorem sqLimb_lt_u46 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2^46) (k : Fin 6) :
-    sqLimb x k < 2^62 :=
-  sqLimb_lt_of_bounds x (2^41 * 2^9) (2^40 * 2^9) (2^62)
-    (fun i j => ph_lt_bound (u := 2^47) (v := 2^46)
-      (by have := hx i; omega) (hx j) (by omega))
-    (fun i => ph_lt_bound (u := 2^46) (v := 2^46) (hx i) (hx i) (by omega))
-    (by omega) k
+theorem sqLimb_lt_u46 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 46) (k : Fin 6) : sqLimb x k < 2 ^ 62 :=
+  sqLimb_lt_of_bounds x (2 ^ 41 * 2 ^ 9) (2 ^ 40 * 2 ^ 9) (2 ^ 62)
+    (fun i j =>
+      ph_lt_bound (u := 2 ^ 47) (v := 2 ^ 46)
+        (by
+          have := hx i; omega)
+        (hx j) (by omega))
+    (fun i => ph_lt_bound (u := 2 ^ 46) (v := 2 ^ 46) (hx i) (hx i) (by omega)) (by omega) k
 
 /-- **`u47` in, `u62` out.** -/
-theorem sqLimb_lt_u47 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2^47) (k : Fin 6) :
-    sqLimb x k < 2^62 :=
-  sqLimb_lt_of_bounds x (2^43 * 2^9) (2^42 * 2^9) (2^62)
-    (fun i j => ph_lt_bound (u := 2^48) (v := 2^47)
-      (by have := hx i; omega) (hx j) (by omega))
-    (fun i => ph_lt_bound (u := 2^47) (v := 2^47) (hx i) (hx i) (by omega))
-    (by omega) k
+theorem sqLimb_lt_u47 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 47) (k : Fin 6) : sqLimb x k < 2 ^ 62 :=
+  sqLimb_lt_of_bounds x (2 ^ 43 * 2 ^ 9) (2 ^ 42 * 2 ^ 9) (2 ^ 62)
+    (fun i j =>
+      ph_lt_bound (u := 2 ^ 48) (v := 2 ^ 47)
+        (by
+          have := hx i; omega)
+        (hx j) (by omega))
+    (fun i => ph_lt_bound (u := 2 ^ 47) (v := 2 ^ 47) (hx i) (hx i) (by omega)) (by omega) k
 
 /-- The bound the `BitVec.toInt` transfer needs: below `2^63`, a lane is not
 read back as negative. -/
-theorem sqLimb_lt_two_pow_63 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2^47)
-    (k : Fin 6) :
-    sqLimb x k < 2^63 := by
+theorem sqLimb_lt_two_pow_63 (x : Fin 6 → ℕ) (hx : ∀ i, x i < 2 ^ 47) (k : Fin 6) :
+    sqLimb x k < 2 ^ 63 := by
   have := sqLimb_lt_u47 x hx k
   omega
 

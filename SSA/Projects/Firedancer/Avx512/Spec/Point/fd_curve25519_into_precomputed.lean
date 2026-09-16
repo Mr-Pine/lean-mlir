@@ -7,6 +7,7 @@ import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
 import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -17,17 +18,17 @@ keeps `Y + X` below `2^63`, which `FD_R43X6_QUAD_FOLD_SIGNED` needs. The final f
 within `2p`'s limbs, so the point can be subtracted. -/
 abbrev fd_curve25519_into_precomputed_spec (r : Pointer) (s : GlobalState)
     (hr : IsQuadPtr s.mem r) : Prop :=
-  let invocation := runFunction
-    (fd_curve25519_into_precomputed.denote (Ctxt.Valuation.singleton (.value r)))
+  let invocation :=
+    runFunction (fd_curve25519_into_precomputed.denote (Ctxt.Valuation.singleton (.value r)))
   let result := StateT.run invocation s
   let q := readQuad hr
-
-  R43x6.U62 q.v03 → R43x6.U62 q.v14 → R43x6.U62 q.v25 →
-  ∃ q' : Quad,
-    let output_state : GlobalState := { s with mem := s.mem.writeQuad r q' }
-
-    (∃ s' : GlobalState, result = .value ([]ₕ, s') ∧ output_state ≈ s')
-    ∧ PrecomputedPoint.ofSlots q'.toPoint = q.toPoint.toPrecomputed
-    ∧ R43x6.U44 q'.v03 ∧ R43x6.U44 q'.v14 ∧ R43x6.U44 q'.v25 ∧ q'.NegBounds 3
+  R43x6.U62 q.v03 →
+    R43x6.U62 q.v14 →
+      R43x6.U62 q.v25 →
+        ∃ q' : Quad,
+          let output_state : GlobalState := { s with mem := s.mem.writeQuad r q' }
+          (∃ s' : GlobalState, result = .value ([]ₕ, s') ∧ output_state ≈ s') ∧
+            PrecomputedPoint.ofSlots q'.toPoint = q.toPoint.toPrecomputed ∧
+            R43x6.U44 q'.v03 ∧ R43x6.U44 q'.v14 ∧ R43x6.U44 q'.v25 ∧ q'.NegBounds 3
 
 end Firedancer.Avx512

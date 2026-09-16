@@ -75,15 +75,19 @@ namespace Firedancer.Avx512
 
 /-- The two macros chained, at the bias `fd_r43x6_is_nonzero` and
 `fd_r43x6_diagnose` use. -/
-def reduce (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ := mnr (bcp (2^20) x)
+def reduce (x : Fin R43x6.limbCount → ℤ) : Fin R43x6.limbCount → ℤ :=
+  mnr (bcp (2 ^ 20) x)
 
 /-- The answer read off the end: `!!(l0|l1|l2|l3|l4|l5)`, as the `i32` the C
 returns. The program ORs the limbs bitwise and compares against zero; on the
 reduced representation, whose limbs are all non-negative, that is the same as
 asking whether every limb is zero. -/
 def isNonzero (x : Fin R43x6.limbCount → ℤ) : BitVec 32 :=
-  if reduce x 0 = 0 ∧ reduce x 1 = 0 ∧ reduce x 2 = 0
-     ∧ reduce x 3 = 0 ∧ reduce x 4 = 0 ∧ reduce x 5 = 0 then 0 else 1
+  if
+      reduce x 0 = 0 ∧
+        reduce x 1 = 0 ∧ reduce x 2 = 0 ∧ reduce x 3 = 0 ∧ reduce x 4 = 0 ∧ reduce x 5 = 0 then
+    0
+  else 1
 
 /-! ## `nsw`/`nuw`: what the denotation needs
 
@@ -96,8 +100,9 @@ are determined by the model, not by the lifting. -/
 /-- **No `nsw` operand overflows.** What `BcpPre` exists to discharge: until
 it holds, the region denotes to poison. -/
 def ChainFitsLong (x : Fin R43x6.limbCount → ℤ) : Prop :=
-  BcpPre (2^20) x → (∀ v ∈ bcpChain (2^20) x, R43x6.FitsLong v)
-                  ∧ (∀ v ∈ mnrChain (bcp (2^20) x), R43x6.FitsLong v)
+  BcpPre (2 ^ 20) x →
+    (∀ v ∈ bcpChain (2 ^ 20) x, R43x6.FitsLong v) ∧
+      (∀ v ∈ mnrChain (bcp (2 ^ 20) x), R43x6.FitsLong v)
 
 /-- **No `nuw` operand wraps, and no `lshr` is on a negative value.** The
 `x + 19` chain of `fd_r43x6_mod_nearly_reduced_limbs` -- `mnrA`, `%39`-`%56`
@@ -106,15 +111,14 @@ with `lshr` rather than `ashr`; both require it. The borrow chain that follows,
 `%61`-`%71`, is `nsw` alone and shifts with `ashr`: `%61` is where the borrow
 is taken, and `mnrE _ 1`-`mnrE _ 4` propagate it as `-1`. -/
 def MnrChainNonneg (x : Fin R43x6.limbCount → ℤ) : Prop :=
-  BcpPre (2^20) x → ∀ i, 0 ≤ mnrA (bcp (2^20) x) i
+  BcpPre (2 ^ 20) x → ∀ i, 0 ≤ mnrA (bcp (2 ^ 20) x) i
 
 /-! ## The obligations on the arithmetic -/
 
 /-- **The chain preserves the element.** -/
 def ReducePreservesValue (x : Fin R43x6.limbCount → ℤ) : Prop :=
-  BcpPre (2^20) x →
-    ((R43x6.decodeLimbs (reduce x) : ℤ) : ZMod p)
-      = ((R43x6.decodeLimbs x : ℤ) : ZMod p)
+  BcpPre (2 ^ 20) x →
+    ((R43x6.decodeLimbs (reduce x) : ℤ) : ZMod p) = ((R43x6.decodeLimbs x : ℤ) : ZMod p)
 
 /-- **The chain lands in the `reduced` class of the `fd_r43x6.h` table**:
 limbs 0-4 below `2^43`, limb 5 below `2^40`, all non-negative, and the packed
@@ -127,17 +131,17 @@ canonical representative -- `decodeLimbs (reduce x)` is `decodeLimbs x % p` on
 the nose -- rather than merely bounding it. The limb widths are what the final
 `or`-against-zero needs; the packed bound is what canonicity needs. -/
 def ReduceIsCanonical (x : Fin R43x6.limbCount → ℤ) : Prop :=
-  BcpPre (2^20) x →
-      (∀ i : Fin R43x6.limbCount, (i : ℕ) < 5 → 0 ≤ reduce x i ∧ reduce x i < 2 ^ 43)
-    ∧ (0 ≤ reduce x 5 ∧ reduce x 5 < 2 ^ 40)
-    ∧ (0 ≤ R43x6.decodeLimbs (reduce x) ∧ R43x6.decodeLimbs (reduce x) < (p : ℤ))
+  BcpPre (2 ^ 20) x →
+    (∀ i : Fin R43x6.limbCount, (i : ℕ) < 5 → 0 ≤ reduce x i ∧ reduce x i < 2 ^ 43) ∧
+      (0 ≤ reduce x 5 ∧ reduce x 5 < 2 ^ 40) ∧
+      (0 ≤ R43x6.decodeLimbs (reduce x) ∧ R43x6.decodeLimbs (reduce x) < (p : ℤ))
 
 /-- **The decision is the right one.** The corollary the callers want; it
 needs `ReduceIsCanonical` as well as `ReducePreservesValue`, since a limb-wise
 compare against zero decides the *element* only once the representation is
 known to be unique. -/
 def IsNonzeroDecides (x : Fin R43x6.limbCount → ℤ) : Prop :=
-  BcpPre (2^20) x → (isNonzero x = 0 ↔ ((R43x6.decodeLimbs x : ℤ) : ZMod p) = 0)
+  BcpPre (2 ^ 20) x → (isNonzero x = 0 ↔ ((R43x6.decodeLimbs x : ℤ) : ZMod p) = 0)
 
 /-- **The decision, on the vector the C takes.** `IsNonzeroDecides` phrased
 over the argument of `fd_r43x6_is_nonzero` rather than over its extracted
@@ -159,25 +163,36 @@ example : R43x6.decodeLimbs (reduce (R43x6.limbs6 0 0 0 0 0 0)) = 0 := by decide
 /-- `fd_r43x6_p()`, the non-trivial nearly reduced representation of `p` itself,
 reduces to zero -- the case a random vector never lands on. -/
 example :
-    R43x6.decodeLimbs (reduce (R43x6.limbs6 (2^43 - 19) (2^43 - 1) (2^43 - 1)
-      (2^43 - 1) (2^43 - 1) (2^40 - 1))) = 0 := by decide
+    R43x6.decodeLimbs
+        (reduce
+          (R43x6.limbs6 (2 ^ 43 - 19) (2 ^ 43 - 1) (2 ^ 43 - 1) (2 ^ 43 - 1) (2 ^ 43 - 1)
+            (2 ^ 40 - 1))) =
+      0 := by
+  decide
 
 /-- A negative limb borrows: `-1` reduces to `p - 1 = 2^255 - 20`. -/
-example : R43x6.decodeLimbs (reduce (R43x6.limbs6 (-1) 0 0 0 0 0)) = 2^255 - 20 := by
-  decide
+example : R43x6.decodeLimbs (reduce (R43x6.limbs6 (-1) 0 0 0 0 0)) = 2 ^ 255 - 20 := by decide
 
 /-- A limb well above `2^43` is carried rather than truncated. -/
 example :
-    R43x6.decodeLimbs (reduce (R43x6.limbs6 (2^61) (2^61) (2^61) (2^61) (2^61) (2^61)))
-      = R43x6.decodeLimbs (R43x6.limbs6 (2^61) (2^61) (2^61) (2^61) (2^61) (2^61))
-          % (p : ℤ) := by decide
+    R43x6.decodeLimbs
+        (reduce (R43x6.limbs6 (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61))) =
+      R43x6.decodeLimbs (R43x6.limbs6 (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61) (2 ^ 61)) %
+        (p : ℤ) := by
+  decide
 
 /-- And the decision agrees. -/
 example : isNonzero (R43x6.limbs6 0 0 0 0 0 0) = 0 := by decide
+
 example :
-    isNonzero (R43x6.limbs6 (2^43 - 19) (2^43 - 1) (2^43 - 1) (2^43 - 1) (2^43 - 1)
-      (2^40 - 1)) = 0 := by decide
+    isNonzero
+        (R43x6.limbs6 (2 ^ 43 - 19) (2 ^ 43 - 1) (2 ^ 43 - 1) (2 ^ 43 - 1) (2 ^ 43 - 1)
+          (2 ^ 40 - 1)) =
+      0 := by
+  decide
+
 example : isNonzero (R43x6.limbs6 (-1) 0 0 0 0 0) = 1 := by decide
+
 example : isNonzero (R43x6.limbs6 1 0 0 0 0 0) = 1 := by decide
 
 end Firedancer.Avx512

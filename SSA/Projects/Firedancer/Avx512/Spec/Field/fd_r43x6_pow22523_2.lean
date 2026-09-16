@@ -14,27 +14,30 @@ loop.
 -/
 
 namespace Firedancer.Avx512
+
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-abbrev fd_r43x6_pow22523_2_spec (za zb : Pointer) (xa xb : Vector (BitVec 64) 8)
-    (s : GlobalState) (hza : IsVecPtr s.mem za) (hzb : IsVecPtr s.mem zb) : Prop :=
-  let invocation := runFunction (fd_r43x6_pow22523_2.denote (Ctxt.Valuation.ofHVector
-    [xb.map PoisonOr.value, .value zb, xa.map PoisonOr.value, .value za]ₕ))
+abbrev fd_r43x6_pow22523_2_spec (za zb : Pointer) (xa xb : Vector (BitVec 64) 8) (s : GlobalState)
+    (hza : IsVecPtr s.mem za) (hzb : IsVecPtr s.mem zb) : Prop :=
+  let invocation :=
+    runFunction
+      (fd_r43x6_pow22523_2.denote
+        (Ctxt.Valuation.ofHVector
+          [xb.map PoisonOr.value, .value zb, xa.map PoisonOr.value, .value za]ₕ))
   let result := StateT.run invocation s
-
   ∃ s' : GlobalState,
     result = .value ([]ₕ, s') ∧
-    ∃ oa ob : Vector (BitVec 64) 8,
-    let outMem := (s.mem.splice za (vecBV oa)).splice zb (vecBV ob)
-    s' ≈ ({ s with mem := outMem } : GlobalState)
-    ∧ vecValue oa = vecValue xa ^ (2 ^ 252 - 3)
-    ∧ vecValue ob = vecValue xb ^ (2 ^ 252 - 3)
-    -- the header's `u44` out
-    ∧ R43x6.U44 (oa.take R43x6.limbCount)
-    ∧ R43x6.U44 (ob.take R43x6.limbCount)
-    -- ... and the two ignored lanes, which the next kernel's `y` operand needs
-    ∧ oa[6] = 0 ∧ oa[7] = 0
-    ∧ ob[6] = 0 ∧ ob[7] = 0
+      ∃ oa ob : Vector (BitVec 64) 8,
+        let outMem := (s.mem.splice za (vecBV oa)).splice zb (vecBV ob)
+        s' ≈ ({ s with mem := outMem } : GlobalState) ∧
+          vecValue oa = vecValue xa ^ (2 ^ 252 - 3) ∧
+          vecValue ob = vecValue xb ^ (2 ^ 252 - 3)
+          -- the header's `u44` out
+          ∧
+          R43x6.U44 (oa.take R43x6.limbCount) ∧
+          R43x6.U44 (ob.take R43x6.limbCount)
+          -- ... and the two ignored lanes, which the next kernel's `y` operand needs
+          ∧ oa[6] = 0 ∧ oa[7] = 0 ∧ ob[6] = 0 ∧ ob[7] = 0
 
 end Firedancer.Avx512
