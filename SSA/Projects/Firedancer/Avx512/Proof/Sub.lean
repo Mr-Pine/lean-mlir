@@ -66,7 +66,7 @@ def subOneLimb : Fin R43x6.limbCount → ℤ :=
 /-- What the constant is: `p - 1` once the bias is added back. -/
 theorem decodeNat_subOneLimb :
     decodeNat (fun k => subOneLimb k + biasLimb k) = (p : ℤ) - 1 := by
-  simp only [decodeNat_eq, subOneLimb, biasLimb, R43x6.limbs6, p]
+  simp only [decodeNat_eq, subOneLimb, biasLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, p]
   norm_num
 
 theorem extractLimbs_addSubOne (x : Vector (BitVec 64) 8)
@@ -81,8 +81,8 @@ theorem extractLimbs_addSubOne (x : Vector (BitVec 64) 8)
     simp only [Vector.getElem_ofFn, subOneConst, Vector.getElem_mk, List.getElem_toArray,
       List.getElem_cons_zero, List.getElem_cons_succ, Fin.val_castLE] <;>
     (conv_lhs => rw [← ofInt_toInt x[_], ofNat_eq_ofInt, ← BitVec.ofInt_add]) <;>
-    rw [toInt_ofInt (by simpa [subOneLimb, R43x6.limbs6] using h)] <;>
-    simp [subOneLimb, R43x6.limbs6]
+    rw [toInt_ofInt (by simpa [subOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] using h)] <;>
+    simp [subOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
 
 theorem extractLimbs_limbVecInt (l : Fin R43x6.limbCount → ℤ)
     (hb : ∀ k, R43x6.FitsLong (l k)) (k : Fin R43x6.limbCount) :
@@ -167,7 +167,7 @@ private theorem subOneAdd_limbs {x : Vector (BitVec 64) 8}
         (Vector.ofFn fun i : Fin 8 => x[i.val] + BitVec.ofNat 64 subOneConst[i.val]) k
         < 2 ^ 45) := by
   have hcb : ∀ k : Fin R43x6.limbCount, 0 ≤ subOneLimb k ∧ subOneLimb k < 2 ^ 43 := by
-    intro k; fin_cases k <;> simp [subOneLimb, R43x6.limbs6] <;> norm_num
+    intro k; fin_cases k <;> simp [subOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] <;> norm_num
   have hfit : ∀ k, R43x6.FitsLong (R43x6.extractLimbs x k + subOneLimb k) := by
     intro k
     have h1 := hx k
@@ -301,15 +301,15 @@ theorem extractLimbs_addOneVec (x : Vector (BitVec 64) 8)
     simp only [addOneVec, Vector.getElem_ofFn, addOneConst, Vector.getElem_mk,
       List.getElem_toArray, List.getElem_cons_zero, List.getElem_cons_succ, Fin.val_castLE] <;>
     (conv_lhs => rw [← ofInt_toInt x[_], ofNat_eq_ofInt, ← BitVec.ofInt_add]) <;>
-    rw [toInt_ofInt (by simpa [addOneLimb, R43x6.limbs6] using h)] <;>
-    simp [addOneLimb, R43x6.limbs6]
+    rw [toInt_ofInt (by simpa [addOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] using h)] <;>
+    simp [addOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
 
 /-- **`fd_r43x6_add_fast( x, one )` adds one.** -/
 theorem decode'_addOneVec {x : Vector (BitVec 64) 8}
     (hx : ∀ k, 0 ≤ R43x6.extractLimbs x k ∧ R43x6.extractLimbs x k < 2 ^ 44) :
     R43x6.decode' (addOneVec x) = R43x6.decode' x + 1 := by
   have hcb : ∀ j : Fin R43x6.limbCount, 0 ≤ addOneLimb j ∧ addOneLimb j ≤ 1 := by
-    intro j; fin_cases j <;> simp [addOneLimb, R43x6.limbs6]
+    intro j; fin_cases j <;> simp [addOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hb : ∀ k, R43x6.FitsLong (R43x6.extractLimbs x k + addOneLimb k) := by
     intro k
     have h1 := hx k
@@ -321,7 +321,7 @@ theorem decode'_addOneVec {x : Vector (BitVec 64) 8}
     show R43x6.decodeLimbs (R43x6.extractLimbs (addOneVec x))
         = R43x6.decodeLimbs (fun k => R43x6.extractLimbs x k + addOneLimb k) from by
       congr 1; funext k; exact hl k]
-  simp only [R43x6.decodeLimbs_eq, addOneLimb, R43x6.limbs6]
+  simp only [R43x6.decodeLimbs_eq, addOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   ring
 
 /-- ... and its limbs stay inside the next kernel's reach. -/
@@ -331,7 +331,7 @@ theorem extractLimbs_addOneVec_bounds {x : Vector (BitVec 64) 8}
     0 ≤ R43x6.extractLimbs (addOneVec x) k
       ∧ R43x6.extractLimbs (addOneVec x) k < 2 ^ 45 := by
   have hcb : ∀ j : Fin R43x6.limbCount, 0 ≤ addOneLimb j ∧ addOneLimb j ≤ 1 := by
-    intro j; fin_cases j <;> simp [addOneLimb, R43x6.limbs6]
+    intro j; fin_cases j <;> simp [addOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hb : ∀ j, R43x6.FitsLong (R43x6.extractLimbs x j + addOneLimb j) := by
     intro j
     have h1 := hx j
@@ -372,7 +372,7 @@ def negLimb : Fin R43x6.limbCount → ℤ :=
 
 /-- What the constant is: `p` once the bias is added back. -/
 theorem decodeNat_negLimb : decodeNat (fun k => negLimb k + biasLimb k) = (p : ℤ) := by
-  simp only [decodeNat_eq, negLimb, biasLimb, R43x6.limbs6, p]
+  simp only [decodeNat_eq, negLimb, biasLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, p]
   norm_num
 
 /-- The vector `fd_r43x6_neg( x )` returns. -/
@@ -391,8 +391,8 @@ theorem extractLimbs_subNegConst (x : Vector (BitVec 64) 8)
     simp only [Vector.getElem_ofFn, negConst, Vector.getElem_mk, List.getElem_toArray,
       List.getElem_cons_zero, List.getElem_cons_succ, Fin.val_castLE] <;>
     (conv_lhs => rw [← ofInt_toInt x[_], ofNat_eq_ofInt, ofInt_sub64]) <;>
-    rw [toInt_ofInt (by simpa [negLimb, R43x6.limbs6] using h)] <;>
-    simp [negLimb, R43x6.limbs6]
+    rw [toInt_ofInt (by simpa [negLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] using h)] <;>
+    simp [negLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
 
 /-- The limbs the fold sees, and their range. Unlike `sub`'s these can be
 *negative* -- the constant's lanes are around `2 ^ 43` and `x`'s reach
@@ -408,7 +408,7 @@ private theorem negSub_limbs {x : Vector (BitVec 64) 8}
         (Vector.ofFn fun i : Fin 8 => BitVec.ofNat 64 negConst[i.val] - x[i.val]) k
         < 2 ^ 45) := by
   have hcb : ∀ k : Fin R43x6.limbCount, 0 ≤ negLimb k ∧ negLimb k < 2 ^ 44 := by
-    intro k; fin_cases k <;> simp [negLimb, R43x6.limbs6] <;> norm_num
+    intro k; fin_cases k <;> simp [negLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] <;> norm_num
   have hfit : ∀ k, R43x6.FitsLong (negLimb k - R43x6.extractLimbs x k) := by
     intro k
     have h1 := hx k
@@ -527,7 +527,7 @@ def subFastLimb : Fin R43x6.limbCount → ℤ :=
 /-- What the constant is: `p`, once the bias is added back. -/
 theorem decodeNat_subFastLimb :
     decodeNat (fun k => subFastLimb k + biasLimb k) = (p : ℤ) := by
-  simp only [decodeNat_eq, subFastLimb, biasLimb, R43x6.limbs6, p]
+  simp only [decodeNat_eq, subFastLimb, biasLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, p]
   norm_num
 
 /-- Subtracting lane-wise, on limbs. -/
@@ -666,7 +666,7 @@ theorem decode'_subFastVec {x y : Vector (BitVec 64) 8}
     show R43x6.decodeLimbs (R43x6.extractLimbs (subFastVec x y))
         = R43x6.decodeLimbs (fun k => R43x6.extractLimbs x k - R43x6.extractLimbs y k
           + subFastLimb k) from by congr 1; funext k; exact hl k]
-  simp only [R43x6.decodeLimbs_eq, decodeNat, subFastLimb, R43x6.limbs6]
+  simp only [R43x6.decodeLimbs_eq, decodeNat, subFastLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   ring
 
 /-- **`fd_r43x6_add_fast( x, y ) = x + y`**. -/
@@ -694,7 +694,7 @@ theorem extractLimbs_addSubOne_bounds {x : Vector (BitVec 64) 8}
         (Vector.ofFn fun i : Fin 8 => x[i.val] + BitVec.ofNat 64 subOneConst[i.val]) k
         < 2 ^ 45 := by
   have hcb : ∀ j : Fin R43x6.limbCount, 0 ≤ subOneLimb j ∧ subOneLimb j < 2 ^ 43 := by
-    intro j; fin_cases j <;> simp [subOneLimb, R43x6.limbs6] <;> norm_num
+    intro j; fin_cases j <;> simp [subOneLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] <;> norm_num
   have hfit : ∀ j, R43x6.FitsLong (R43x6.extractLimbs x j + subOneLimb j) := by
     intro j
     have h1 := hx j
@@ -723,7 +723,7 @@ theorem acpVec_bounds {z : Vector (BitVec 64) 8}
 /-- The `sub_fast` constant's limbs, for the caller's `omega`. -/
 theorem subFastLimb_bounds (k : Fin R43x6.limbCount) :
     0 ≤ subFastLimb k ∧ subFastLimb k < 2 ^ 43 := by
-  fin_cases k <;> simp [subFastLimb, R43x6.limbs6] <;> norm_num
+  fin_cases k <;> simp [subFastLimb, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five] <;> norm_num
 
 theorem subOneAcp_bounds {x : Vector (BitVec 64) 8}
     (hx : ∀ k, 0 ≤ R43x6.extractLimbs x k ∧ R43x6.extractLimbs x k < 2 ^ 44)

@@ -68,7 +68,7 @@ theorem decodeLimbs_bcp (b : ℤ) (x : Fin R43x6.limbCount → ℤ) :
     R43x6.decodeLimbs (bcp b x)
       = R43x6.decodeLimbs x - ((x 5 - b) >>> 40) * (p : ℤ) := by
   simp only [bcp, bcpA, R43x6.decodeLimbs_eq,
-    R43x6.limbs6, R43x6.shiftRight_eq, p_int]
+    R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq, p_int]
   omega
 
 /-- **The element is preserved.** -/
@@ -86,7 +86,7 @@ theorem bcp_limbs {b : ℤ} {x : Fin R43x6.limbCount → ℤ} (hb : 0 ≤ b) (hb
     (∀ k : Fin R43x6.limbCount, (k : ℕ) < 5 → 0 ≤ bcp b x k ∧ bcp b x k < 2 ^ 43)
   ∧ (-2 ^ 20 + b ≤ bcp b x 5 ∧ bcp b x 5 < 2 ^ 40 + 2 ^ 20 - 1 + b) := by
   obtain ⟨h0, h1, h2, h3, h4, h5⟩ := h.limbs
-  simp only [bcp, bcpA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [bcp, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   refine ⟨fun k hk => ?_, ?_⟩
   · fin_cases k <;> simp_all <;> omega
   · simp; omega
@@ -96,7 +96,7 @@ theorem bcpA_fitsLong {b : ℤ} {x : Fin R43x6.limbCount → ℤ} (hb : 0 ≤ b)
     (hb' : b ≤ 2 ^ 20) (h : BcpPre b x) (i : Fin R43x6.limbCount) :
     R43x6.FitsLong (bcpA b x i) := by
   obtain ⟨h0, h1, h2, h3, h4, h5⟩ := h.limbs
-  simp only [R43x6.FitsLong, bcpA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [R43x6.FitsLong, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   fin_cases i <;> simp_all <;> omega
 
 /-- The three values of the chain that are not one of the `bcpA i`: limb 5's
@@ -107,7 +107,7 @@ theorem bcp_aux_fitsLong {b : ℤ} {x : Fin R43x6.limbCount → ℤ} (hb : 0 ≤
   ∧ R43x6.FitsLong (bcpA b x 5 % 2^40 + b)
   ∧ R43x6.FitsLong (bcpA b x 5 % 2^40 + b + (bcpA b x 4 >>> 43)) := by
   obtain ⟨h0, h1, h2, h3, h4, h5⟩ := h.limbs
-  simp only [R43x6.FitsLong, bcpA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [R43x6.FitsLong, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   refine ⟨⟨by omega, by omega⟩, ⟨by omega, by omega⟩, ⟨by omega, by omega⟩⟩
 
 /-- **No intermediate overflows a `long`.** The obligation behind the `nsw` on
@@ -116,7 +116,7 @@ theorem bcp_chain_fitsLong {b : ℤ} {x : Fin R43x6.limbCount → ℤ} (hb : 0 �
     (h : BcpPre b x) : ∀ v ∈ bcpChain b x, R43x6.FitsLong v := by
   obtain ⟨h0, h1, h2, h3, h4, h5⟩ := h.limbs
   intro v hv
-  simp only [bcpChain, bcpA, R43x6.limbs6, R43x6.shiftRight_eq, List.mem_cons,
+  simp only [bcpChain, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq, List.mem_cons,
     List.not_mem_nil, or_false] at hv
   simp only [R43x6.FitsLong]
   rcases hv with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
@@ -152,10 +152,10 @@ theorem bcp_nearlyReduced_of_unsigned {x : Fin R43x6.limbCount → ℤ}
   have h04 : ∀ k : Fin R43x6.limbCount, (k : ℕ) < 5 →
       0 ≤ bcp 0 x k ∧ bcp 0 x k < 2 ^ 43 := by
     intro k hk
-    simp only [bcp, bcpA, R43x6.limbs6, R43x6.shiftRight_eq]
+    simp only [bcp, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
     fin_cases k <;> simp_all <;> omega
   have h5 : 0 ≤ bcp 0 x 5 ∧ bcp 0 x 5 < 2 ^ 40 + 2 ^ 21 - 1 := by
-    simp only [bcp, bcpA, R43x6.limbs6, R43x6.shiftRight_eq]
+    simp only [bcp, bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
     simp; omega
   exact ⟨h04, h5.1, R43x6.decodeLimbs_lt_two_p h04 h5.1 h5.2⟩
 

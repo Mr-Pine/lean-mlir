@@ -471,11 +471,11 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
   have hxd : xDiff = subFastVecOfLimbs (quadMulLimb XShuff YShuff 1) (quadMulLimb XShuff YShuff 0) := by
     apply Vector.ext
     intro i hi
-    interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+    interval_cases i <;> simp [xDiff, xn1, xn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, BitVec.ofInt_ofNat]
   have hyd : yDiff = subFastVecOfLimbs (quadMulLimb XShuff YShuff 3) (quadMulLimb XShuff YShuff 2) := by
     apply Vector.ext
     intro i hi
-    interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6, BitVec.ofInt_ofNat]
+    interval_cases i <;> simp [yDiff, yn1, yn2, pVec, resultQuad, subFastVecOfLimbs, Quad.vector, quadElemVec, quadMulResult, quadVec, ← sub_add_lane, subFast, pLimbs, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, BitVec.ofInt_ofNat]
   have hxs62 : R43x6.S62 (xDiff.take R43x6.limbCount) := hxd ▸ s62_subFastVecOfLimbs (hM 1) (hM 0)
   have hys62 : R43x6.S62 (yDiff.take R43x6.limbCount) := hyd ▸ s62_subFastVecOfLimbs (hM 3) (hM 2)
 

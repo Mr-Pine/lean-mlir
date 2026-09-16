@@ -63,7 +63,7 @@ theorem mnrQ_spec {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
   ∧ (mnrQ y = 1 ↔ (p : ℤ) ≤ R43x6.decodeLimbs y) := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
   simp only [R43x6.decodeLimbs_eq, p_int]
-  simp only [mnrQ, mnrA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [mnrQ, mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   omega
 
 /-! ## The value -/
@@ -74,7 +74,7 @@ theorem decodeLimbs_mnr {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
       = R43x6.decodeLimbs y - (if R43x6.decodeLimbs y < (p : ℤ) then 0 else (p : ℤ)) := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
   simp only [mnr, mnrE, mnrA, mnrQ, R43x6.decodeLimbs_eq,
-    R43x6.limbs6, R43x6.shiftRight_eq, p_int]
+    R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq, p_int]
   split <;> split <;> omega
 
 /-- **The element is preserved.** -/
@@ -94,9 +94,9 @@ theorem mnr_reduced {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
   have hv := decodeLimbs_mnr h
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
   refine ⟨fun k hk => ?_, ?_, ?_, ?_⟩
-  · simp only [mnr, mnrE, mnrA, mnrQ, R43x6.limbs6, R43x6.shiftRight_eq]
+  · simp only [mnr, mnrE, mnrA, mnrQ, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
     fin_cases k <;> simp_all <;> omega
-  · simp only [mnr, mnrE, mnrA, mnrQ, R43x6.limbs6, R43x6.shiftRight_eq]
+  · simp only [mnr, mnrE, mnrA, mnrQ, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
     simp; split <;> omega
   · rw [hv]; simp only [R43x6.decodeLimbs_eq, p_int] at hs ⊢; split <;> omega
   · rw [hv]; simp only [R43x6.decodeLimbs_eq, p_int] at hs ⊢; split <;> omega
@@ -116,7 +116,7 @@ theorem decodeLimbs_mnr_eq_emod {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y)
 theorem mnrA_fitsLong {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y)
     (i : Fin R43x6.limbCount) : R43x6.FitsLong (mnrA y i) := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
-  simp only [R43x6.FitsLong, mnrA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [R43x6.FitsLong, mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   fin_cases i <;> simp_all <;> omega
 
 /-- Every value of the borrow chain fits a `long`. Limb 5 is not one of them:
@@ -125,14 +125,14 @@ replaces it. -/
 theorem mnrE_fitsLong {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y)
     (i : Fin R43x6.limbCount) : R43x6.FitsLong (mnrE y i) := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
-  simp only [R43x6.FitsLong, mnrE, mnrA, mnrQ, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [R43x6.FitsLong, mnrE, mnrA, mnrQ, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   fin_cases i <;> simp_all <;> (try split) <;> omega
 
 /-- The output's limb 5 fits a `long`. -/
 theorem mnr_limb5_fitsLong {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
     R43x6.FitsLong (mnrA y 5 % 2^40 + (mnrE y 4 >>> 43)) := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
-  simp only [R43x6.FitsLong, mnrE, mnrA, mnrQ, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [R43x6.FitsLong, mnrE, mnrA, mnrQ, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   split <;> omega
 
 /-- **No intermediate overflows a `long`.** Nothing here is anywhere near the
@@ -143,7 +143,7 @@ theorem mnr_chain_fitsLong {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
     ∀ v ∈ mnrChain y, R43x6.FitsLong v := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
   intro v hv
-  simp only [mnrChain, mnrE, mnrA, mnrQ, R43x6.limbs6, R43x6.shiftRight_eq,
+  simp only [mnrChain, mnrE, mnrA, mnrQ, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq,
     List.mem_cons, List.not_mem_nil, or_false] at hv
   simp only [R43x6.FitsLong]
   rcases hv with rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl|rfl <;>
@@ -160,7 +160,7 @@ theorem mnrA_nonneg {y : Fin R43x6.limbCount → ℤ} (h : MnrPre y) :
     ∀ i, 0 ≤ mnrA y i := by
   obtain ⟨h0, h1, h2, h3, h4, h5, hs⟩ := h.bounds
   intro i
-  simp only [mnrA, R43x6.limbs6, R43x6.shiftRight_eq]
+  simp only [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, R43x6.shiftRight_eq]
   fin_cases i <;> simp_all <;> omega
 
 end Firedancer.Avx512

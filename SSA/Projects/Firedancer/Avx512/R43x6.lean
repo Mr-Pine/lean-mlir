@@ -43,10 +43,33 @@ results in this form. -/
 def limbs6 {R : Type*} (a b c d e f : R) : Fin limbCount → R := fun i =>
   match (i : ℕ) with | 0 => a | 1 => b | 2 => c | 3 => d | 4 => e | _ => f
 
+/-- `limbs6` at each index. Unfolding `limbs6` instead leaves a `match` on `(i : ℕ)` that no
+longer reduces at a literal `Fin`, and `omega` then sees the whole chain as opaque. -/
+@[simp] theorem limbs6_zero {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 0 = a := rfl
+@[simp] theorem limbs6_one {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 1 = b := rfl
+@[simp] theorem limbs6_two {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 2 = c := rfl
+@[simp] theorem limbs6_three {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 3 = d := rfl
+@[simp] theorem limbs6_four {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 4 = e := rfl
+@[simp] theorem limbs6_five {R : Type*} (a b c d e f : R) : limbs6 a b c d e f 5 = f := rfl
+
+/-- ... and at the `Fin.mk` indices `fin_cases` produces. -/
+@[simp] theorem limbs6_mk_zero {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨0, h⟩ = a := rfl
+@[simp] theorem limbs6_mk_one {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨1, h⟩ = b := rfl
+@[simp] theorem limbs6_mk_two {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨2, h⟩ = c := rfl
+@[simp] theorem limbs6_mk_three {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨3, h⟩ = d := rfl
+@[simp] theorem limbs6_mk_four {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨4, h⟩ = e := rfl
+@[simp] theorem limbs6_mk_five {R : Type*} (a b c d e f : R) (h) :
+    limbs6 a b c d e f ⟨5, h⟩ = f := rfl
+
 @[simp] theorem decodeLimbs_limbs6 {R : Type*} [CommSemiring R] (a b c d e f : R) :
     decodeLimbs (limbs6 a b c d e f)
       = a + 2^43 * b + 2^86 * c + 2^129 * d + 2^172 * e + 2^215 * f := by
-  simp [limbs6]
+  simp [limbs6_zero, limbs6_one, limbs6_two, limbs6_three, limbs6_four, limbs6_five]
 
 /-- The range of a C `long`, `[-2^63, 2^63)`. Every intermediate of the serial
 carry macros has to stay inside it: the emitted code marks the arithmetic

@@ -115,36 +115,36 @@ theorem reduceFacts {l : Fin R43x6.limbCount → ℤ} (hpre : BcpPre (2 ^ 20) l)
   have hmnr := bcp_nearlyReduced hpre
   have f71 := mnr_limb5_fitsLong hmnr
   have h71 : (mnrE (bcp (2 ^ 20) l) 4 >>> 43) + mnrA (bcp (2 ^ 20) l) 5 % (2 : ℤ) ^ 40
-      = mnr (bcp (2 ^ 20) l) 5 := by simp [mnr, R43x6.limbs6]; ring
+      = mnr (bcp (2 ^ 20) l) 5 := by simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
   have hm0 : mnr (bcp (2 ^ 20) l) 0 = mnrE (bcp (2 ^ 20) l) 0 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hm1 : mnr (bcp (2 ^ 20) l) 1 = mnrE (bcp (2 ^ 20) l) 1 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hm2 : mnr (bcp (2 ^ 20) l) 2 = mnrE (bcp (2 ^ 20) l) 2 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hm3 : mnr (bcp (2 ^ 20) l) 3 = mnrE (bcp (2 ^ 20) l) 3 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   have hm4 : mnr (bcp (2 ^ 20) l) 4 = mnrE (bcp (2 ^ 20) l) 4 % (2 : ℤ) ^ 43 := by
-    simp [mnr, R43x6.limbs6]
+    simp [mnr, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
   exact
     { fa := fa
       fmul := fmul
       fmul' := by rw [mul_comm] at fmul; exact fmul
       f54 := f54
       f55 := f55
-      ha5 := by simp [bcpA, R43x6.limbs6]; ring
-      ha0 := by simp [bcpA, R43x6.limbs6]; ring
-      ha1 := by simp [bcpA, R43x6.limbs6]; ring
-      ha2 := by simp [bcpA, R43x6.limbs6]; ring
-      ha3 := by simp [bcpA, R43x6.limbs6]; ring
-      ha4 := by simp [bcpA, R43x6.limbs6]; ring
+      ha5 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha0 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha1 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha2 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha3 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      ha4 := by simp [bcpA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
       hmul19 := mul_comm _ _
-      hy0 := by simp [bcp, R43x6.limbs6]
-      hy1 := by simp [bcp, R43x6.limbs6]
-      hy2 := by simp [bcp, R43x6.limbs6]
-      hy3 := by simp [bcp, R43x6.limbs6]
-      hy4 := by simp [bcp, R43x6.limbs6]
-      hy5 := by simp [bcp, R43x6.limbs6]; ring
+      hy0 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hy1 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hy2 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hy3 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hy4 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hy5 := by simp [bcp, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
       hb0 := hb0
       hb1 := hb1
       hb2 := hb2
@@ -160,19 +160,19 @@ theorem reduceFacts {l : Fin R43x6.limbCount → ℤ} (hpre : BcpPre (2 ^ 20) l)
       fA := mnrA_fitsLong hmnr
       fE := mnrE_fitsLong hmnr
       fA0 := mnrA_nonneg hmnr
-      hA0 := by simp [mnrA, R43x6.limbs6]
-      hA1 := by simp [mnrA, R43x6.limbs6]
-      hA2 := by simp [mnrA, R43x6.limbs6]
-      hA3 := by simp [mnrA, R43x6.limbs6]
-      hA4 := by simp [mnrA, R43x6.limbs6]
-      hA5 := by simp [mnrA, R43x6.limbs6]
+      hA0 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA1 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA2 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA3 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA4 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hA5 := by simp [mnrA, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
       hqlt := mnrQ_eq_zero_iff (mnrA_nonneg hmnr 5)
       fif := by split <;> simp [R43x6.FitsLong]
-      hE0 := by simp [mnrE, R43x6.limbs6]
-      hE1 := by simp [mnrE, R43x6.limbs6]; ring
-      hE2 := by simp [mnrE, R43x6.limbs6]; ring
-      hE3 := by simp [mnrE, R43x6.limbs6]; ring
-      hE4 := by simp [mnrE, R43x6.limbs6]; ring
+      hE0 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
+      hE1 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      hE2 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      hE3 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
+      hE4 := by simp [mnrE, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]; ring
       h71 := h71
       f72 := by rw [h71]; exact f71
       hm0 := hm0

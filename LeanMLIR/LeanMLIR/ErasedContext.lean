@@ -245,7 +245,7 @@ def casesOn
           simp_all only [zero_eq_last]
           ) <| @last Γ t
     | ⟨i+1, h⟩ =>
-        toCons ⟨i, by simpa [cons] using h⟩
+        toCons ⟨i, by simpa [cons, getElem?_eq_toList_getElem?] using h⟩
 
 /-- `Ctxt.Var.casesOn` behaves in the expected way when applied to the last variable -/
 @[simp]
@@ -408,13 +408,19 @@ instance [DecidableEq Ty] {Γ : Ctxt Ty} {t : Ty} : Fintype (Γ.Var t) where
                       none
       nodup := by
         apply List.Nodup.filterMap ?_ List.nodup_range
-        simp only [Option.mem_def, Option.dite_none_right_eq_some, Option.some.injEq,
-          forall_exists_index, forall_apply_eq_imp_iff]
-        intro i j hi hj h_eq
-        cases h_eq
-        rfl
+        intro i j v hi hj
+        simp only [Option.mem_def, Option.dite_none_right_eq_some] at hi hj
+        obtain ⟨hi', hi⟩ := hi
+        obtain ⟨hj', hj⟩ := hj
+        injection hi with hi
+        injection hj with hj
+        exact congrArg Subtype.val (hi.trans hj.symm)
     }
-  complete v := by simpa using ⟨v.val, v.val_lt, v.prop, rfl⟩
+  complete v := by
+    refine Finset.mem_mk.mpr (Multiset.mem_coe.mpr (List.mem_filterMap.mpr ⟨v.val, ?_, ?_⟩))
+    · exact List.mem_range.mpr v.val_lt
+    · rcases v with ⟨i, hi⟩
+      rw [dif_pos hi]
 
 /-! ### Var Fin Helpers -/
 
@@ -463,7 +469,7 @@ instance {Γ} : GetElem (HVector A as) (Var Γ a) (A a) (fun _ _ => as = Γ.toLi
     subst h
     congr 1
     rcases i with ⟨i, h⟩
-    simpa [Ctxt.Var.toFin, List.getElem_eq_iff] using h
+    simpa [Ctxt.Var.toFin, List.getElem_eq_iff, getElem?_eq_toList_getElem?] using h
 
 namespace HVector
 variable {A : α → _} {as : List α} (xs : HVector A as) {Γ : Ctxt α}
@@ -473,21 +479,20 @@ variable {A : α → _} {as : List α} (xs : HVector A as) {Γ : Ctxt α}
 @[simp] theorem getElem_map (xs : HVector A as) (v : Var ⟨as⟩ a) :
     (xs.map f)[v] = f _ xs[v] := by
   cases v using Var.ofFinCases
-  rw [getElem_ofFin_eq_get, getElem_ofFin_eq_get]
-  simp only [length_ofList, get_map, List.get_eq_getElem]
-  rfl
+  exact get_map ..
 
 @[simp] theorem cons_getElem_toCons (x : A a) (v : Var Γ u)
     (h : as = Γ.toList := by rfl) (h' : a :: as = (Γ.cons a).toList := by rfl) :
     (HVector.cons x xs)[v.toCons (t' := a)]'h' = xs[v]'h := by
-  simp only [GetElem.getElem]
-  simp
+  subst h
+  simp only [GetElem.getElem, Ctxt.Var.toFin, Ctxt.Var.toCons]
+  rfl
 
 @[simp] theorem cons_getElem_last (x : A a)
     (h' : a :: as = (Γ.cons a).toList := by rfl) :
     (HVector.cons x xs)[Var.last Γ a]'h' = x := by
-  simp only [GetElem.getElem]
-  simp
+  simp only [GetElem.getElem, Ctxt.Var.toFin, Ctxt.Var.last]
+  rfl
 
 end HVector
 namespace Ctxt
@@ -779,8 +784,10 @@ variable {ts : List Ty}
   case nil => exact v.emptyElim
   case cons x xs ih =>
     cases v using Var.casesOn
-    · simpa [ih] using (HVector.cons_getElem_toCons _ _ _).symm
-    · simpa [ih] using (HVector.cons_getElem_last _ _ _).symm
+    · rw [Valuation.ofHVector_cons, Valuation.cons_toCons, ih]
+      exact (HVector.cons_getElem_toCons ..).symm
+    · rw [Valuation.ofHVector_cons, Valuation.cons_last]
+      exact (HVector.cons_getElem_last ..).symm
 
 @[simp] theorem Valuation.ofHVector_inj (xs ys : HVector toType ts) :
     ofHVector xs = ofHVector ys ↔ xs = ys := by
@@ -878,11 +885,11 @@ def Valuation.reassignVars [DecidableEq Ty] {ts : List Ty} {Γ : Ctxt Ty}
       subst this
       have := h_eq.to_eq
       subst this
-      simp
+      simp [HVector.map_cons]
     · unfold Var.eq at h_eq
       simp only [HVector.idxOf?, h_eq, ↓reduceDIte, List.get_eq_getElem, List.length_cons,
         HVector.map_cons]
-      split at ih <;> simp_all
+      split at ih <;> simp_all [HVector.map_cons]
 
 @[simp] theorem Valuation.comap_with [DecidableEq Ty] {Γ Δ : Ctxt Ty}
     {V : Valuation Γ} {map : Δ.Hom Γ} {vs : HVector Δ.Var ty} {ws : HVector Γ.Var ty} :

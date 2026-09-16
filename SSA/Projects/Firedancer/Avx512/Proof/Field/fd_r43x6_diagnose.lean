@@ -25,7 +25,7 @@ def decodeVals (a0 a1 a2 a3 a4 a5 : LLVM.IntW 64) : PoisonOr ℤ := do
 theorem decodeVals_lanes (x : Vector (BitVec 64) 8) :
     decodeVals (.value x[0]) (.value x[1]) (.value x[2]) (.value x[3]) (.value x[4])
         (.value x[5]) = .value (R43x6.decode' x) := by
-  simp [decodeVals, R43x6.decode'_eq, R43x6.limbs6]
+  simp [decodeVals, R43x6.decode'_eq, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five]
 
 /-- Changing the last lane by `d` moves the decoded value by that lane's
 weight, `2^(43*5)`. -/
@@ -36,7 +36,7 @@ theorem decodeVals_last {a0 a1 a2 a3 a4 : LLVM.IntW 64} {b c : BitVec 64} {d : �
   cases a0 using PoisonOr.casesOn' <;> cases a1 using PoisonOr.casesOn' <;>
     cases a2 using PoisonOr.casesOn' <;> cases a3 using PoisonOr.casesOn' <;>
     cases a4 using PoisonOr.casesOn' <;>
-    simp [decodeVals, R43x6.limbs6, h]; ring
+    simp [decodeVals, R43x6.limbs6_zero, R43x6.limbs6_one, R43x6.limbs6_two, R43x6.limbs6_three, R43x6.limbs6_four, R43x6.limbs6_five, h]; ring
 
 /-- `llvm.icmp eq` against a `val`, on an accumulated left operand. -/
 theorem icmp_eq_val (bv : BitVec 64) (b : ℤ) :

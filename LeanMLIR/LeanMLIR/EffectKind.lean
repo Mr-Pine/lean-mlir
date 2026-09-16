@@ -72,7 +72,9 @@ variable [Monad m]
 variable [LawfulMonad m] in
 theorem pure_map (f : α → β) (x : pure.toMonad m α) (eff : EffectKind) :
     (Pure.pure (f <$> x : pure.toMonad m _) : eff.toMonad m _) = f <$> (Pure.pure x) := by
-  simp; rfl
+  cases eff
+  · rfl
+  · exact (map_pure f x).symm
 
 end Lemmas
 
@@ -198,7 +200,9 @@ instance must have `n` fully concrete. In the following instances, we have
 meta-variables in the type of `n`, so we have to implement `MonadLiftT` instead.
 -/
 
-instance instMonadLiftOfLe {e1 e2 : EffectKind} (h : e1 ≤ e2) :
+/-- A `def`, not an `instance`: `h` appears in no instance-implicit argument, so it could never
+be synthesised. The three instances below are what callers actually use. -/
+def instMonadLiftOfLe {e1 e2 : EffectKind} (h : e1 ≤ e2) :
     MonadLiftT (e1.toMonad m) (e2.toMonad m) where
   monadLift := liftEffect h
 

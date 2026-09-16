@@ -523,13 +523,6 @@ theorem extractLsb'_ofInt_eq_ofInt_ofNat {x : Nat} {w w' : Nat} {h : w ≤ w'} :
   apply extractLsb'_ofInt_eq_ofInt
   exact h
 
-theorem extractLsb_setWidth_of_lt (x : BitVec w) (hi lo v : Nat) (hilo : lo < hi) (hhi : hi < v):
-    BitVec.extractLsb hi lo (BitVec.setWidth v x) = BitVec.extractLsb hi lo x := by
-  simp only [BitVec.extractLsb]
-  ext k
-  simp
-  omega
-
 theorem setWidth_signExtend_eq_self {w w' : Nat} {x : BitVec w} (h : w ≤ w') : (x.signExtend w').setWidth w = x := by
   ext i hi
   simp  [hi, BitVec.getLsbD_signExtend]
