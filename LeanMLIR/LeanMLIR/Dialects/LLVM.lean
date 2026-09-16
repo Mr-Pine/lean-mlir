@@ -1,3 +1,5 @@
-import LeanMLIR.Dialects.LLVM.Semantics
-import LeanMLIR.Dialects.LLVM.Basic
-import LeanMLIR.Dialects.LLVM.Syntax
+module
+
+public import LeanMLIR.Dialects.LLVM.Semantics
+public import LeanMLIR.Dialects.LLVM.Basic
+public import LeanMLIR.Dialects.LLVM.Syntax

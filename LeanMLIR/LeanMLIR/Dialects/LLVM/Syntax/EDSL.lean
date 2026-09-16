@@ -1,10 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax
-import LeanMLIR.Dialects.LLVM.Basic
+module
 
-import Qq
+public import LeanMLIR.MLIRSyntax
+public import LeanMLIR.Dialects.LLVM.Basic
+
+public import Qq
+-- module: the `[llvm(..)| ..]` elaborator is `meta`
+public meta import LeanMLIR.Dialects.LLVM.Basic
+public meta import LeanMLIR.MLIRSyntax
+
+@[expose] public section
 
 open Qq Lean Meta Elab.Term Elab Command
 open InstCombine (LLVM MetaLLVM MOp Width)
@@ -14,7 +21,7 @@ namespace InstcombineTransformDialect
 
 open AST (Op TransformError)
 
-private abbrev ReaderM (φ) :=
+abbrev ReaderM (φ) :=
   AST.ReaderM (MetaLLVM φ)
 
 def mkTy : MLIR.AST.MLIRType φ → MLIR.AST.ExceptM (MetaLLVM φ) ((MetaLLVM φ).Ty)
@@ -303,7 +310,7 @@ open InstCombine LLVM Qq in
 /-- Instantiate the width metavariables of a `MetaLLVM φ` type, producing the
 `Expr` of the corresponding concrete `LLVM` type. Split out of `instantiate`
 below because vectors make it recursive. -/
-private def MetaLLVM.instantiateTy (vals : Vector Expr φ) : MTy φ → Expr
+def MetaLLVM.instantiateTy (vals : Vector Expr φ) : MTy φ → Expr
   | .bitvec w => mkApp (mkConst ``Ty.bitvec) <| w.metaInstantiate vals
   | .vector l e => mkApp2 (mkConst ``Ty.vector) (toExpr l) (instantiateTy vals e)
 
@@ -368,6 +375,8 @@ def MetaLLVM.instantiate (vals : Vector Expr φ) : DialectMetaMorphism (MetaLLVM
 
 end InstcombineTransformDialect
 
+-- module: the elaborator needs this module's own dialect instances, which stay non-`meta`
+set_option compiler.relaxedMetaCheck true in
 open SSA InstcombineTransformDialect InstCombine in
 elab "[llvm(" mvars:term,* ")| " reg:mlir_region "]" : term => do
   withTraceNode `LeanMLIR.Elab (pure m!"{exceptEmoji ·} elaborate LLVM program") <| do

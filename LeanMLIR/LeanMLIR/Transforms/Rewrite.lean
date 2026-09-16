@@ -1,2 +1,4 @@
-import LeanMLIR.Transforms.Rewrite.Match
-import LeanMLIR.Transforms.Rewrite.Rewrite
+module
+
+public import LeanMLIR.Transforms.Rewrite.Match
+public import LeanMLIR.Transforms.Rewrite.Rewrite

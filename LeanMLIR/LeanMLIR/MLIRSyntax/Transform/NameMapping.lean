@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Batteries.Data.List.Basic
+module
+
+public import Batteries.Data.List.Basic
+
+@[expose] public section
 
 namespace MLIR.AST
 

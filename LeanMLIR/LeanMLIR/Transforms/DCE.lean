@@ -1,10 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework
+module
 
-import Mathlib.Tactic.Linarith
-import Mathlib.Tactic.DepRewrite
+public import LeanMLIR.Framework
+
+public import Mathlib.Tactic.Linarith
+public import Mathlib.Tactic.DepRewrite
+
+@[expose] public section
 
 open Ctxt (Var Valuation Hom)
 

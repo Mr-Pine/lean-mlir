@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Util.ConcreteOrMVar
+module
+
+public import LeanMLIR.Util.ConcreteOrMVar
+
+@[expose] public section
 
 open Lean PrettyPrinter
 

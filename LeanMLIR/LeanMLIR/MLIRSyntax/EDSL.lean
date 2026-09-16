@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax.GenericParser
-import LeanMLIR.MLIRSyntax.Transform
-import LeanMLIR.Framework.Trace
+module
+
+public import LeanMLIR.MLIRSyntax.GenericParser
+public import LeanMLIR.MLIRSyntax.Transform
+public import LeanMLIR.Framework.Trace
 
 /-!
 # MLIR Dialect Domain Specific Language
@@ -11,6 +13,8 @@ This file sets up generic glue meta-code to tie together the generic MLIR parser
 `Transform` mechanism, to obtain an easy way to specify a DSL that elaborates into `Com`/`Expr`
 instances for a specific dialect.
 -/
+
+@[expose] public section
 
 namespace SSA
 

@@ -1,15 +1,19 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Lean
-import Lean.Elab
-import Lean.Meta
-import Lean.Parser
-import Lean.PrettyPrinter
-import Lean.PrettyPrinter.Formatter
-import Lean.Parser
-import Lean.Parser.Extra
-import LeanMLIR.MLIRSyntax.AST
+module
+
+public import Lean
+public import Lean.Elab
+public import Lean.Meta
+public import Lean.Parser
+public import Lean.PrettyPrinter
+public import Lean.PrettyPrinter.Formatter
+public import Lean.Parser
+public import Lean.Parser.Extra
+public import LeanMLIR.MLIRSyntax.AST
+-- module: parsers/macro helpers below are `meta`, so their deps need meta imports
+public meta import LeanMLIR.MLIRSyntax.AST
 
 /-!
 # MLIR Syntax Parsing
@@ -19,6 +23,8 @@ in `MLIRSyntax.AST`.
 Key definitions are the `[mlir_op| ...]` and `[mlir_region| ...]` term elaborators
 
 -/
+
+@[expose] public section
 
 open Lean
 open Lean.Parser
@@ -31,6 +37,9 @@ open Lean.PrettyPrinter.Formatter
 open MLIR.AST
 
 namespace MLIR.EDSL
+
+-- module: the bracket parser and everything it uses is elaboration-time only
+meta section
 
 -- | Custom parsers for balanced brackets
 inductive Bracket
@@ -122,6 +131,8 @@ def MLIR.EDSL.balancedBrackets.formatter : Formatter :=
 def MLIR.EDSL.balancedBracketsParenthesizer : Parenthesizer :=
   pure ()
 
+end
+
 macro "[balanced_brackets|" xs:balancedBrackets "]" : term => do
   match xs.raw[0] with
   | .atom _ val =>
@@ -152,7 +163,7 @@ def IntToString (i : Int) : String :=
 instance : Quote Int :=
   ⟨fun n => Syntax.mkNumLit <| n.repr⟩
 
-def quoteMList (k : List (TSyntax `term)) (ty : TSyntax `term) : MacroM (TSyntax `term) :=
+meta def quoteMList (k : List (TSyntax `term)) (ty : TSyntax `term) : MacroM (TSyntax `term) :=
   match k with
   | [] => `(@List.nil $ty)
   | (k :: ks) => do
@@ -289,7 +300,7 @@ If the suffix id is an identifier (the right choice), we convert that identifier
 
 `getSuffixId` is used in parsing the syntax of MLIR to a Lean AST
 -/
-def getSuffixId : TSyntax ``mlir_suffix_id → String
+meta def getSuffixId : TSyntax ``mlir_suffix_id → String
   | `(mlir_suffix_id| $x:ident) => x.getId.toString
   | `(mlir_suffix_id| $x:num) => toString (x.getNat)
   | _ => "" -- Should never happen, since `mlir_suffix_id` is a closed syntax definition
@@ -301,7 +312,7 @@ syntax "^" mlir_suffix_id : mlir_op_successor_arg -- bb argument with no operand
 -- syntax "^" ident ":" "(" mlir_op_operand","* ")" : mlir_op_successor_arg
 
 /-- The block name a successor refers to, e.g. `"bb9"` for `^bb9`. -/
-def getSuccessorName : TSyntax `mlir_op_successor_arg → String
+meta def getSuccessorName : TSyntax `mlir_op_successor_arg → String
   | `(mlir_op_successor_arg| ^ $x:mlir_suffix_id) => getSuffixId x
   | _ => "" -- Should never happen: `mlir_op_successor_arg` has one production
 
@@ -448,6 +459,9 @@ macro_rules
 -- `balancedBrackets` parser and decode the resulting string during macro
 -- expansion.
 
+-- module: the shaped-type macro helpers are elaboration-time only
+meta section
+
 /-- A single vector dimension: `n` when `scalable = false`, `[n]` when `true`. -/
 private structure VectorDim where
   size : Nat
@@ -484,6 +498,8 @@ private def shapedElemType (kind s : String) (ref : Syntax) :
     `([mlir_type| ! $(Lean.quote (s.drop 1).toString):str])
   else
     `([mlir_type| $(mkIdent (.mkSimple s)):ident])
+
+end
 
 syntax "vector" balancedBrackets : mlir_type
 
@@ -731,6 +747,9 @@ comments (`^bb1:  // pred: ^bb0`). Lean's whitespace function does not consume
 `//`, so a raw `ParserFn` eats the comment through end-of-line; the content is
 discarded by the macros. -/
 
+-- module: the comment parser and its node kind are elaboration-time only
+meta section
+
 /-- Node kind for a `//`-to-end-of-line MLIR comment. -/
 abbrev mlirCommentKind : SyntaxNodeKind :=
   `MLIR.EDSL.mlirComment
@@ -771,6 +790,8 @@ def mlirCommentNoAntiquot.formatter :=
 def mlirCommentNoAntiquot.parenthesizer :=
   Lean.PrettyPrinter.Parenthesizer.visitToken
 
+end
+
 -- A basic block: `^name(args...):`, an optional trailing comment, then ops.
 syntax "^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")? ":" (mlirComment)? mlir_ops :
   mlir_bb
@@ -784,7 +805,7 @@ syntax "{" mlir_ops "}" : mlir_region
 syntax "[mlir_region|" mlir_region "]" : term
 
 /-- Elaborate one `mlir_bb` to `(block name, args term, ops term)`. -/
-def elabMlirBb (blk : TSyntax `mlir_bb) :
+meta def elabMlirBb (blk : TSyntax `mlir_bb) :
     MacroM (String × TSyntax `term × TSyntax `term) := do
   match blk with
   | `(mlir_bb| ^ $name:mlir_suffix_id ( $operands,* ) : $[$_cmt]? $ops:mlir_ops) => do
@@ -923,7 +944,7 @@ macro_rules
   | `([mlir_attr_val|$$($x)]) => `($x)
 
 /-- Convert a possibly negated numeral into a term representing the same value -/
-def negNumToTerm : TSyntax ``neg_num → MacroM Term
+meta def negNumToTerm : TSyntax ``neg_num → MacroM Term
   | `(neg_num| $x:num) => `($x:num)
   | `(neg_num| -$x:num) => `(-$x:num)
   | _ => Macro.throwUnsupported
@@ -1163,7 +1184,7 @@ def attr0Str : AttrEntry 0 :=
   [mlir_attr_entry|sym_name = "add"]
 
 /--
-info: def MLIR.EDSL.attr0Str : AttrEntry 0 :=
+info: @[expose] def MLIR.EDSL.attr0Str : AttrEntry 0 :=
 AttrEntry.mk "sym_name" (AttrValue.str "add")
 -/
 #guard_msgs in
@@ -1173,7 +1194,7 @@ def attr3Unit : AttrEntry 0 :=
   [mlir_attr_entry|sym_name]
 
 /--
-info: def MLIR.EDSL.attr3Unit : AttrEntry 0 :=
+info: @[expose] def MLIR.EDSL.attr3Unit : AttrEntry 0 :=
 AttrEntry.mk "sym_name" AttrValue.unit
 -/
 #guard_msgs in
@@ -1204,7 +1225,7 @@ def nestedAttrDict0 : AttrDict 0 :=
   [mlir_attr_dict|{foo = {bar = "baz"}}]
 
 /--
-info: def MLIR.EDSL.nestedAttrDict0 : AttrDict 0 :=
+info: @[expose] def MLIR.EDSL.nestedAttrDict0 : AttrDict 0 :=
 AttrDict.mk [AttrEntry.mk "foo" (AttrValue.dict (AttrDict.mk [AttrEntry.mk "bar" (AttrValue.str "baz")]))]
 -/
 #guard_msgs in
@@ -1228,7 +1249,7 @@ macro_rules
   | `([mlir_op|$$($x)]) => return x
 
 /-- Quote a successor list (e.g. `[^bb1, ^bb2]`) to a `List String` term. -/
-def quoteSuccessors (succs : Option (Lean.Syntax.TSepArray `mlir_op_successor_arg ",")) :
+meta def quoteSuccessors (succs : Option (Lean.Syntax.TSepArray `mlir_op_successor_arg ",")) :
     MacroM (TSyntax `term) := do
   match succs with
   | none =>

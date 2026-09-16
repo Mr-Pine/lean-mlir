@@ -1,9 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Basic
-import LeanMLIR.Framework.Trace
-import LeanMLIR.Tactic.SimpSet
+module
+
+public import LeanMLIR.Framework.Basic
+public import LeanMLIR.Framework.Trace
+public import LeanMLIR.Tactic.SimpSet
+public import LeanMLIR.HVector
+-- module: the elaborators below are `meta`, so their dependencies need meta imports too
+public meta import LeanMLIR.Framework.Basic
+public meta import LeanMLIR.Framework.Trace
+public meta import LeanMLIR.HVector
 
 /-! ## `def_signature` elaborator
 This file defines `def_signature` elaborator that makes it easier to define the
@@ -25,11 +32,16 @@ other arrow to showcase the syntax.
 
 -/
 
+@[expose] public section
+
 open Lean
 
 namespace LeanMLIR.Parser
 
 open Lean.Parser
+
+-- module: parsers and elaborators are elaboration-time only
+meta section
 
 /-!
 ## Syntax parsers
@@ -94,6 +106,7 @@ protected def matchAltsExpr : Parser :=
 instance : Coe (TSyntax ``Parser.matchAltsExpr) (TSyntax ``Lean.Parser.Term.matchAlts) where
   coe x := ⟨x.raw⟩
 
+end
 end Parser
 
 /-!
@@ -101,6 +114,9 @@ end Parser
 -/
 
 namespace Elab
+
+-- module: elaboration-time only
+meta section
 
 open Qq
 open LeanMLIR.Parser
@@ -149,7 +165,7 @@ def ctxtExprToArray (e : Expr) : MetaM (Option <| Array Expr) := do
 
 /-- Given `stx` a match-expression, return its alternatives. -/
 -- Based on `Lean.Elab.Match.getMatchAlts` and `expandMatchAlt`
-private def getMatchAlts (alts : TSyntax ``matchAltsSig) :
+def getMatchAlts (alts : TSyntax ``matchAltsSig) :
     Array (MatchAltView ``Parser.signature) :=
   let alts := alts.raw[0].getArgs
   alts.flatMap fun
@@ -157,7 +173,7 @@ private def getMatchAlts (alts : TSyntax ``matchAltsSig) :
       patss.map fun patterns => { ref := ref, patterns := patterns.getElems, rhs := rhs }
     | stx => #[⟨.missing, #[], ⟨.missing⟩⟩]
 
-private def getMatchAltsExpr (alts : TSyntax ``LeanMLIR.Parser.matchAltsExpr) :
+def getMatchAltsExpr (alts : TSyntax ``LeanMLIR.Parser.matchAltsExpr) :
     Array (MatchAltView `term) :=
   let alts := alts.raw[0].getArgs
   alts.flatMap fun
@@ -303,7 +319,6 @@ uncurried type from a term of the constructed curried type.
 structure CurriedArrow where
   (args : Array CurriedArgs)
   (returnType : Expr)
-  deriving Inhabited
 
 /-- `CurriedArgs` represents a single *uncurried* argument in a `CurriedArrow`.
 In particular, it generally represents an `HVector` or `Ctxt.Valuation`, but may
@@ -334,6 +349,9 @@ inductive CurriedArgs
   | other (name : Name) (expr : Expr)
 
 end
+
+-- module: `deriving Inhabited` does not produce `meta` auxiliaries, so spell it out
+instance : Inhabited CurriedArrow := ⟨{ args := #[], returnType := default }⟩
 
 mutual
 /-- Parse an expression of type `Type` into a `CurriedArrow` -/

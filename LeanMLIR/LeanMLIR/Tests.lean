@@ -1,2 +1,4 @@
-import LeanMLIR.Tests.Dialects.LLVM
-import LeanMLIR.Tests.Tactic.ElimValuation
+module
+
+public import LeanMLIR.Tests.Dialects.LLVM
+public import LeanMLIR.Tests.Tactic.ElimValuation

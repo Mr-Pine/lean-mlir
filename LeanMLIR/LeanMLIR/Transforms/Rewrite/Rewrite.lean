@@ -1,6 +1,8 @@
-import LeanMLIR.Framework
-import LeanMLIR.Framework.Zipper
-import LeanMLIR.Transforms.Rewrite.Match
+module
+
+public import LeanMLIR.Framework
+public import LeanMLIR.Framework.Zipper
+public import LeanMLIR.Transforms.Rewrite.Match
 
 /-!
 # Peephole Rewriter
@@ -9,6 +11,8 @@ This file defines the rewrite procedure which apply a peephole rewrite at a loca
 previously matched by `matchVar` and co.
 
 -/
+
+@[expose] public section
 
 set_option deprecated.oldSectionVars true
 open Ctxt (Var VarSet Valuation)

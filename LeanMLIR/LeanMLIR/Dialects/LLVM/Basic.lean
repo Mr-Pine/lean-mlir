@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework
-import LeanMLIR.Util
-import LeanMLIR.Tactic.SimpSet
+module
 
-import LeanMLIR.Dialects.LLVM.Semantics
+public import LeanMLIR.Framework
+public import LeanMLIR.Util
+public import LeanMLIR.Tactic.SimpSet
+
+public import LeanMLIR.Dialects.LLVM.Semantics
 
 /-!
   # InstCombine Dialect
@@ -22,6 +24,8 @@ import LeanMLIR.Dialects.LLVM.Semantics
 
   see https://releases.llvm.org/14.0.0/docs/LangRef.html#bitwise-binary-operations
 -/
+
+@[expose] public section
 
 namespace InstCombine
 

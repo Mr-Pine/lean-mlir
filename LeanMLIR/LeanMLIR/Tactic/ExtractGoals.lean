@@ -8,15 +8,17 @@ Extracts multiple goals from a theorem.
 Adapted from Mathlib's `ExtractGoals` module.
 Adaptor: Siddharth Bhat
 -/
-import Mathlib.Init
-import Lean.Elab.Tactic.ElabTerm
-import Lean.Meta.Tactic.Cleanup
-import Lean.PrettyPrinter
-import Lean.Elab.Print
-import Batteries.Lean.Meta.Inaccessible
-import Lean.Meta.Eqns
-import Lean.Util.CollectAxioms
-import Lean.Elab.Command
+module
+
+public import Mathlib.Init
+public import Lean.Elab.Tactic.ElabTerm
+public import Lean.Meta.Tactic.Cleanup
+public import Lean.PrettyPrinter
+public import Lean.Elab.Print
+public import Batteries.Lean.Meta.Inaccessible
+public import Lean.Meta.Eqns
+public import Lean.Util.CollectAxioms
+public import Lean.Elab.Command
 
 
 /-!
@@ -30,6 +32,8 @@ functions from `Lean.Elab.Print` to print theorems.
 Our goals states are complex enough, due to the presence of `HRefinement`,
 that we need to use `pp.analyze` to print them correctly.
 -/
+
+@[expose] public section
 
 namespace PrintPrivate
 open Lean Meta Elab Command

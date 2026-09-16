@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework
-import LeanMLIR.Tactic
+module
+
+public import LeanMLIR.Framework
+public import LeanMLIR.Tactic
+
+@[expose] public section
 
 /-
 # Examples

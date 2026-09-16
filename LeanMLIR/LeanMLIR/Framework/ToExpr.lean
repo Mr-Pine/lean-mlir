@@ -1,14 +1,18 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Basic
-import Qq
+module
+
+public import LeanMLIR.Framework.Basic
+public import Qq
 
 /-!
 ## ToExpr instances
 Define a `ToExpr` instance for core datastructures
 
 -/
+
+@[expose] public section
 
 open Lean (ToExpr toExpr MetaM mkAppN mkConst mkApp mkApp2 mkApp3 mkApp4 mkApp6)
 open Qq

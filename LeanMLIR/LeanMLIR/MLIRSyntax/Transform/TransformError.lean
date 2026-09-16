@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax.AST
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+
+@[expose] public section
 
 namespace MLIR.AST
 

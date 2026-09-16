@@ -1,2 +1,4 @@
-import LeanMLIR.Dialects.LLVM.Syntax.EDSL
-import LeanMLIR.Dialects.LLVM.Syntax.PrettyEDSL
+module
+
+public import LeanMLIR.Dialects.LLVM.Syntax.EDSL
+public import LeanMLIR.Dialects.LLVM.Syntax.PrettyEDSL

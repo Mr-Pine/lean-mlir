@@ -1,14 +1,18 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Dialect
-import LeanMLIR.EffectKind
-import LeanMLIR.ErasedContext
-import LeanMLIR.Tactic.SimpSet
+module
+
+public import LeanMLIR.Framework.Dialect
+public import LeanMLIR.EffectKind
+public import LeanMLIR.ErasedContext
+public import LeanMLIR.Tactic.SimpSet
 
 /-!
 ## Generic Refinement Relation
 -/
+
+@[expose] public section
 
 /-! ### Syntax -/
 
@@ -148,7 +152,7 @@ open Lean Meta
 open Simp (SimpM)
 
 /-- Implementation of `reduceIsRefinedBy` simproc -/
-partial def reduceIsRefinedByAux (inst lhs rhs : Expr) : SimpM (Option Expr) := do
+meta partial def reduceIsRefinedByAux (inst lhs rhs : Expr) : SimpM (Option Expr) := do
   let ⟨instFn, instArgs⟩ := inst.withApp Prod.mk
   trace[LeanMLIR.Elab] "Refinement instance is an application of: {instFn}"
   match instFn.constName with
