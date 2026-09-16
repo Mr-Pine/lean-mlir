@@ -957,13 +957,16 @@ section Lemmas
     funext V
     have hop : DialectSignature.effectKind op = .pure := EffectKind.eq_of_le_pure eff_le
     simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk]
+    simp only [EffectKind.pure_map]
     first
-    | (rw [EffectKind.liftEffect_eq_pure_cast hop, EffectKind.liftEffect_pure]
-       trace "A961"; simp; done)
-    | (simp [EffectKind.liftEffect_eq_pure_cast hop, EffectKind.liftEffect_pure]
-       trace "B961"; done)
-    | (rw [EffectKind.liftEffect_eq_pure_cast hop]; trace "C961"
-       simp [EffectKind.liftEffect_pure]; done)
+    | (exact congrArg _
+        (congrFun (EffectKind.liftEffect_compose eff_le (EffectKind.pure_le _)) _).symm)
+    | (trace "B965"
+       rw [← EffectKind.liftEffect_pure_impure (EffectKind.pure_le _),
+         ← Function.comp_apply (f := EffectKind.liftEffect (EffectKind.pure_le EffectKind.impure)),
+         EffectKind.liftEffect_compose]
+       done)
+    | (trace "C965"; rfl)
 
 @[simp] theorem Com.denote_castPureToEff {com : Com d Γ .pure ty} :
     denote (com.castPureToEff eff) = fun V => pure (com.denote V) := by
@@ -1024,12 +1027,11 @@ theorem Expr.denote_pure {e : Expr d Γ .pure ty} :
 @[simp]
 theorem Expr.pure_denoteOp_toPure (e : Expr d Γ eff ty) (h : e.HasPureOp) :
     pure ((e.toPure h).denoteOp V) = (e.denoteOp V) := by
-  first
-  | (cases eff <;> simp [denoteOp, Expr.toPure, EffectKind.liftEffect_pure,
-       EffectKind.liftEffect_eq_pure_cast h]; trace "A1025"; done)
-  | (simp [denoteOp, Expr.toPure, EffectKind.liftEffect_pure,
-       EffectKind.liftEffect_eq_pure_cast h]; trace "B1025"; done)
-  | (simp only [denoteOp, Expr.toPure]; trace "C1025"; rfl)
+  cases eff
+  · rfl
+  · simp only [denoteOp, Expr.toPure, op_mk, args_mk, regArgs_mk]
+    exact congrFun (EffectKind.liftEffect_compose (m := d.m) (EffectKind.le_of_eq h)
+      (EffectKind.pure_le EffectKind.impure) e.eff_le) _
 
 /-- The denotation of toPure? -/
 theorem Expr.denote_toPure? {e : Expr d Γ eff ty} {e': Expr d Γ .pure ty}
@@ -1122,7 +1124,11 @@ def Lets.getPureExpr {Γ₁ Γ₂ : Ctxt d.Ty} (lets : Lets d Γ₁ eff Γ₂) {
   funext _ v'
   apply Subtype.ext
   have := v.val_lt
-  simp; grind
+  -- v4.34: neither `castCtxt` nor `appendInr` reduces on its own any more
+  simp only [Ctxt.length_ofList] at this
+  simp [Hom.castCodomain, Hom.appendCodomain, Ctxt.Var.castCtxt, Ctxt.Var.appendInr,
+    Ctxt.length_dropUntil, Ctxt.length_ofList]
+  omega
 
 
 @[simp] theorem Lets.getPureExprAux_var_appendInr (lets : Lets d Γ_in eff Γ_out)
@@ -1259,9 +1265,9 @@ section Lemmas
       Com.var (e.changeDialect f)
       <| (body.changeDialect f).changeVars (Hom.id.castCodomain h) := by
   first
-  | (simp only [changeDialect]; trace "A1248"; rfl)
-  | (trace "B1248"; rfl)
-  | (unfold changeDialect; trace "C1248"; rfl)
+  | (simp only [changeDialect]; trace "A1264"; done)
+  | (simp [changeDialect]; trace "B1264"; done)
+  | (simp only [changeDialect]; trace "C1264"; rfl)
 
 @[simp] theorem Regions.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
     Regions.changeDialect (eff := eff) f .nil = .nil := by
@@ -1310,13 +1316,18 @@ section Lemmas
     (lets.castPureToEff eff).addComToEnd (com.castPureToEff eff)
     = cast (by simp) ((lets.addComToEnd com).castPureToEff eff) := by
   induction com using Com.rec'
-  case rets => simp
+  case rets =>
+    first
+    | (simp; done)
+    | (trace "B1316"; exact (cast_eq _ _).symm)
+    | (trace "C1316"; rfl)
   case var ih =>
     simp only [Com.castPureToEff_var, Com.outContext_var, addComToEnd_var,
       ← Lets.castPureToEff_var, ih]
     first
-    | (trace "A1294"; rfl)
-    | (trace "B1294"; simp)
+    | (trace "A1313"; done)
+    | (trace "B1313"; rfl)
+    | (trace "C1313"; simp)
 
 @[simp] theorem Com.toLets_castPureToEff {com : Com d Γ .pure ty} :
     (com.castPureToEff eff).toLets = cast (by simp) (com.toLets.castPureToEff eff) := by
@@ -1348,11 +1359,15 @@ theorem Com.denoteLets_eq {com : Com d Γ eff t} : com.denoteLets = com.toLets.d
     = fun V => pure (com.denoteLets V |>.comap fun _ v => v.castCtxt (by simp)) := by
   funext V
   induction com using Com.rec'
-  · simp
   · first
-    | (simp [*]; trace "A1329"; rfl)
-    | (simp [*, Ctxt.Valuation.comap]; trace "B1329"; done)
-    | (simp only [*]; trace "C1329"; rfl)
+    | (simp; done)
+    | (trace "B1361"; simp; rfl)
+    | (trace "C1361"; rfl)
+  · first
+    | (simp [*]; done)
+    | (simp [*]; trace "B1363"; rfl)
+    | (simp only [*]; trace "C1363"; rfl)
+    | (trace "D1363"; simp [*, Ctxt.Valuation.comap])
 
 end Lemmas
 

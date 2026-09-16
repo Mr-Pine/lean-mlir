@@ -169,7 +169,7 @@ end Rec
 
 /-! ## Variables -/
 
-def Var (Γ : Ctxt Ty) (t : Ty) : Type :=
+@[implicit_reducible] def Var (Γ : Ctxt Ty) (t : Ty) : Type :=
   { i : Nat // Γ[i]? = some t }
 
 namespace Var
@@ -1197,6 +1197,9 @@ def dropUntil : Ctxt Ty :=
   ⟨Γ.toList.drop (v.val + 1)⟩
 
 variable {Γ} {v}
+
+@[simp] theorem length_dropUntil : (Γ.dropUntil v).length = Γ.length - (v.val + 1) :=
+  List.length_drop ..
 
 @[simp] theorem dropUntil_last   : dropUntil (cons ty Γ) (Var.last Γ ty) = Γ := rfl
 @[simp] theorem dropUntil_toCons : dropUntil (cons ty Γ) (Var.toCons v) = dropUntil Γ v := rfl
