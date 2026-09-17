@@ -8,7 +8,6 @@ import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 import SSA.Projects.Firedancer.Ref.Proof.Point
 import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_curve25519_scalar_reduce
-import SSA.Projects.Firedancer.Common.Proof.SHA.fd_sha512_init
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_double_scalar_mul_base
 import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_affine_is_small_order
@@ -21,8 +20,7 @@ open InstCombine (LLVM)
 open Ed25519 Common
 
 attribute [local irreducible] Common.fd_curve25519_scalar_validate
-  fd_ed25519_point_frombytes_2x fd_ed25519_affine_is_small_order Common.fd_sha512_init
-  Common.fd_sha512_append Common.fd_sha512_fini Common.fd_curve25519_scalar_reduce
+  fd_ed25519_point_frombytes_2x fd_ed25519_affine_is_small_order Common.fd_curve25519_scalar_reduce
   fd_ed25519_point_neg fd_ed25519_double_scalar_mul_base fd_ed25519_point_eq_z1
 
 /-- `run_runFunction'` with the return value existential too, bound before the
@@ -46,24 +44,11 @@ theorem wf_pointOutMem {t : GlobalState} {m : MemoryState} {r : Pointer}
 
 end Firedancer.Ref
 
-/-! ### `fd_sha512_init`'s memory, and the round constants across a call -/
+/-! ### The round constants across a call -/
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
-
-theorem live?_sha512InitMem_self {m : MemoryState} {sha : Pointer} :
-    (sha512InitMem m sha).live? sha.id = sha512InitBlock sha.offset (m.live? sha.id) := by
-  simp only [sha512InitMem, Ref.Dbln.live?_splice_of_id (p := sha.withOffset 200) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 184) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 176) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 168) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 160) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 152) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 144) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 136) (b := sha.id) rfl,
-    Ref.Dbln.live?_splice_of_id (p := sha.withOffset 128) (b := sha.id) rfl, Option.map_map]
-  rfl
 
 /-- The round constants survive states that keep the symbol table and every caller block but
 `sha`'s. -/
@@ -80,26 +65,6 @@ theorem Sha512KHolds.of_live?_eq {s t : GlobalState} {sha : Pointer} (hs : s.WF)
 theorem readWord_eq_of_live?_eq {m m' : MemoryState} {p : Pointer} {w : Nat} {h' : Fits m' p w}
     (hl : m'.live? p.id = m.live? p.id) (h : Fits m p w) : readWord h' = readWord h :=
   readWord_eq_of ((readWord?_of_live?_eq hl).trans (readWord?_eq_some h rfl))
-
-theorem live?_sha512InitMem_ne {m : MemoryState} {sha : Pointer} {b : BlockId} (h : sha.id ≠ b) :
-    (sha512InitMem m sha).live? b = m.live? b := by
-  simp only [sha512InitMem, live?_splice_ne (p := sha.withOffset 128) h,
-    live?_splice_ne (p := sha.withOffset 136) h, live?_splice_ne (p := sha.withOffset 144) h,
-    live?_splice_ne (p := sha.withOffset 152) h, live?_splice_ne (p := sha.withOffset 160) h,
-    live?_splice_ne (p := sha.withOffset 168) h, live?_splice_ne (p := sha.withOffset 176) h,
-    live?_splice_ne (p := sha.withOffset 184) h, live?_splice_ne (p := sha.withOffset 200) h]
-
-theorem live?_sha512InitMem_eq_none {m : MemoryState} {sha : Pointer} {q : BlockId}
-    (h : m.live? q = none) : (sha512InitMem m sha).live? q = none := by
-  unfold sha512InitMem
-  iterate 9 refine live?_splice_eq_none ?_
-  exact h
-
-/-- Stated across `fd_sha512_init`'s `≈`: against `{ s with mem := sha512InitMem … }`
-directly, the kernel unfolds the nine splices. -/
-theorem wf_of_equiv_sha512InitMem {s t : GlobalState} {sha : Pointer} (hs : s.WF)
-    (he : t ≈ ({ s with mem := sha512InitMem s.mem sha } : GlobalState)) : t.WF := fun q hq =>
-  (Ref.live?_of_equiv_mem he q).trans (live?_sha512InitMem_eq_none (hs q (by rw [he.alloc] at hq; exact hq)))
 
 end Firedancer.Common
 
@@ -147,7 +112,7 @@ theorem live?_scalarOutMem_ne {m : MemoryState} {r : Pointer} {w : Fin 4 → Bit
     live?_splice_ne (p := r.withOffset 16) h, live?_splice_ne (p := r.withOffset 8) h,
     live?_splice_ne h]
 
-/-- Across `scalar_reduce`'s `≈`, first-order for the reason `wf_of_equiv_sha512InitMem` is. -/
+/-- Across `scalar_reduce`'s `≈`: first-order, so the kernel never unfolds the stores. -/
 theorem wf_of_equiv_scalarOutMem {s t : GlobalState} {r : Pointer} {w : Fin 4 → BitVec 64}
     (hs : s.WF) (he : t ≈ ({ s with mem := scalarOutMem s.mem r w } : GlobalState)) : t.WF :=
   fun q hq => (live?_of_equiv_mem he q).trans (by
@@ -246,15 +211,16 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
     (hsignull : sig.id ≠ SLLVM.nullBlock)
     (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
+    (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
     (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
     (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
-    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f fApp fFini := by
+    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f fInit fApp fFini := by
   simp only [fd_ed25519_verify_spec, Cfg.denote]
-  intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hf hApp hFini Bt hTbl hB
+  intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hf hInit hApp hFini Bt hTbl hB
     dig hdig w hw
-  -- the digest's chain: three appends and the fini, each of which returned
+  -- the digest's chain: the init, three appends and the fini, each of which returned
   simp only [ed25519Digest, Option.bind_eq_some_iff] at hdig
-  obtain ⟨b₁, hb₁, b₂, hb₂, b₃, hb₃, hfin⟩ := hdig
+  obtain ⟨b₀, hb₀, b₁, hb₁, b₂, hb₂, b₃, hb₃, hfin⟩ := hdig
   refine run_runFunction_ret
     (fun ret : BitVec 32 => ([.value ret]ₕ : HVector toType [SLLVM.Ty.bitvec 32])) _ ?_
 
@@ -543,15 +509,12 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
 
   -- `%22`: `fd_sha512_init( sha )`
   have hsha₈ : IsSha512Ptr s₈.mem sha := fits_of_live?_eq (fb₈ _ (hlt hsha)) hsha
-  obtain ⟨s₉, hrun₂₂, heq₂₂⟩ := fd_sha512_init_conforms sha s₈ hwf₈ hsha₈
+  obtain ⟨hret₂₂, -⟩ := hInit sha s₈ hwf₈ hsha₈
+  rw [fb₈ _ (hlt hsha)] at hret₂₂
+  obtain ⟨s₉, hrun₂₂, hwf₉, -, hg₉₈, fr₉, hblk₉⟩ := hret₂₂ b₀ hb₀
   peel_call hrun₂₂
-  have hwf₉ : s₉.WF := wf_of_equiv_sha512InitMem hwf₈ heq₂₂
-  have hblk₉ : s₉.mem.live? sha.id = sha512InitBlock sha.offset (s.mem.live? sha.id) := by
-    rw [live?_of_equiv_mem heq₂₂ sha.id, live?_sha512InitMem_self, fb₈ _ (hlt hsha)]
-  have fr₉ : ∀ b : BlockId, b ≠ sha.id → s₉.mem.live? b = s₈.mem.live? b :=
-    fun b hb => (live?_of_equiv_mem heq₂₂ b).trans (live?_sha512InitMem_ne (Ne.symm hb))
   have hg₉ : s₉.globals = s.globals :=
-    heq₂₂.globals.trans (heq₂₀.globals.symm.trans (heq₁₈.globals.symm.trans
+    hg₉₈.trans (heq₂₀.globals.symm.trans (heq₁₈.globals.symm.trans
       (hs₆.globals.trans (by rw [← heq₁₂.globals, hs₄def, hs₃def, hs₂def, hs₁def]; rfl))))
   have hK₉ : Sha512KHolds s₉ sha :=
     hK.of_live?_eq hm.wf hg₉ fun b hb hb' => (fr₉ b hb).trans (fb₈ b hb')

@@ -5,9 +5,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.SLLVM.Cfg
 import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_reduce
-import SSA.Projects.Firedancer.Common.Mlir.SHA.fd_sha512_init
-import SSA.Projects.Firedancer.Common.Mlir.SHA.fd_sha512_append
-import SSA.Projects.Firedancer.Common.Mlir.SHA.fd_sha512_fini
+import SSA.Projects.Firedancer.Common.Spec.SHA
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_frombytes_2x
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_affine_is_small_order
 import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_neg

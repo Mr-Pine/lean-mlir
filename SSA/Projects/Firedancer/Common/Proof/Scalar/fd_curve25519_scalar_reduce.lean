@@ -6,7 +6,6 @@ import SSA.Projects.Firedancer.Common.Proof.fd_ulong_load_8
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Common.Proof.SHA.Walk
 
 /-!
 # `fd_curve25519_scalar_reduce` writes nowhere but `out`
@@ -31,6 +30,19 @@ sends the entire run to poison.
 namespace Firedancer.Common
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
+
+/-- A `store`'s operation, by its operands: `rw`-able where `simp` would walk a deep valuation. -/
+theorem denoteOp_store {Γ : Ctxt SLLVM.Ty} (t : LLVM.Ty) (p : Ctxt.Var Γ .ptr)
+    (v : Ctxt.Var Γ (.arith t)) (V : Ctxt.Valuation Γ) :
+    Expr.denoteOp
+        (Expr.mk (d := SLLVM) (Γ := Γ) (eff := .impure) (SLLVMOp.store t) rfl (EffectKind.le_refl _)
+          (p::ₕv::ₕ.nil) Regions.nil)
+        V =
+      ((fun _ => HVector.nil) <$> (liftM (SLLVM.store (V p) t (V v))) :
+        EffectM (HVector TyDenote.toType [])) := by
+  simp [Expr.denoteOp, EffectKind.liftEffect, DialectSignature.effectKind,
+    DialectSignature.signature, DialectDenote.denote]
+  rfl
 
 -- reached only through its conformance theorem
 attribute [local irreducible] fd_ulong_load_8

@@ -66,6 +66,20 @@ inductive CalleeBinding
   | region (r : MLIR.AST.Region 0)
   | ref (r : CalleeRef) (v : ParsedCfg)
 
+/-- A variable of `Γ` at type `t`, if there is one. -/
+def findVarOfTy (Γ : Ctxt SLLVM.Ty) (t : SLLVM.Ty) : Option (Γ.Var t) :=
+  (List.range Γ.length).findSome? fun i => if h : Γ[i]? = some t then some ⟨i, h⟩ else none
+
+/-- A `Cfg Γin rets` that returns its own arguments: the value a body-less callee (an `axiom`)
+is built with. Only its type matters -- the emitted call names the constant, never this body. -/
+def ParsedCfg.placeholder (Γin : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) : ParsedCfg :=
+  let rec vars : (ts : List SLLVM.Ty) → Option (HVector Γin.Var ts)
+    | [] => some .nil
+    | t :: ts => do return .cons (← findVarOfTy Γin t) (← vars ts)
+  match vars rets with
+  | some vs => ⟨Γin, rets, ⟨(BlockCom.term (.ret vs) : BlockCom Γin Γin rets []), .nil⟩⟩
+  | none => default
+
 def elabCalleeBinding (t : Term) : TermElabM CalleeBinding := do
   let e ← Term.elabTerm t none
   synthesizeSyntheticMVarsNoPostponing
@@ -84,7 +98,17 @@ def elabCalleeBinding (t : Term) : TermElabM CalleeBinding := do
     let args := ty.getAppArgs
     unless args.size == 2 do
       throwError "malformed `Cfg` type: {ty}"
-    let v ← evalParsedCfg <| mkAppN (mkConst ``ParsedCfg.ofCfg) #[args[0]!, args[1]!, e]
+    -- an `axiom` has no body to evaluate; the call only needs a value of its type
+    let env ← getEnv
+    let bodyless : Bool := match e with
+      | .const n _ => match env.find? n with
+        | some (.axiomInfo _) => true
+        | _ => false
+      | _ => false
+    let v ← evalParsedCfg <| if bodyless then
+        mkAppN (mkConst ``ParsedCfg.placeholder) #[args[0]!, args[1]!]
+      else
+        mkAppN (mkConst ``ParsedCfg.ofCfg) #[args[0]!, args[1]!, e]
     return .ref (.cfg e) v
   else
     throwError "a callee binding must be an `MLIR.AST.Region 0` (inlined) or a \
@@ -157,9 +181,13 @@ elab mods:declModifiers "sllvm_cfg_def " id:ident " : " ty:term " := " val:term 
       let env ← getEnv
       let hints := if st == .reducible then ReducibilityHints.abbrev
         else .regular (getMaxHeight env e + 1)
+      let decl := Declaration.defnDecl (← mkDefinitionValInferringUnsafe n [] t e hints)
       -- exported with its body: the proofs about the program unfold it
       withExporting do
-        addAndCompile <| .defnDecl (← mkDefinitionValInferringUnsafe n [] t e hints)
+        addDecl decl
+        -- a call to a body-less (`axiom`) callee has no code; such a piece stays noncomputable
+        try compileDecl decl (logErrors := false)
+        catch _ => modifyEnv (addNoncomputable · n)
       setReducibilityStatus n st
       addDeclarationRangesFromSyntax n (← getRef)
       return mkConst n
