@@ -6,6 +6,7 @@ import SSA.Projects.Firedancer.Common.Proof.fd_ulong_load_8
 import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Proof.Tactics
 import SSA.Projects.Firedancer.Proof.Memory
+import SSA.Projects.Firedancer.Common.Proof.SHA.Walk
 
 /-!
 # `fd_curve25519_scalar_reduce` writes nowhere but `out`
@@ -112,6 +113,62 @@ private theorem poison_cases {α : Type} {v : PoisonOr α} {P : Prop}
   | poison => exact hp rfl
   | value a => exact hv a rfl
 
+open Lean Meta Elab Tactic in
+/-- Replaces each `(x₀ ::ᵥ x₁ ::ᵥ …) ⟨i, h⟩` in the goal by `xᵢ`, walking the spine in a loop.
+`SSA.simpValuationApply` recurses once per entry and exhausts `maxRecDepth` past ~480;
+the kernel checks the replacement. -/
+elab "resolve_deep_lookups" : tactic => liftMetaTactic1 fun g => g.withContext do
+  let tgt ← instantiateMVars (← g.getType)
+  let tgt' ← Meta.transform tgt (pre := fun e => do
+    unless e.isAppOfArity ``Ctxt.Valuation.cons 8 do return .continue
+    let some n ← match_expr e.appArg! with
+      | Subtype.mk _ _ i _ => pure (i.rawNatLit? <|> i.nat?)
+      | Ctxt.Var.last _ _ _ => pure (some 0)
+      | _ => pure none
+      | return .continue
+    let mut S := e.appFn!.appFn!
+    let mut m := n
+    repeat
+      match_expr S with
+      | Ctxt.Valuation.cons _ _ _ _ x W =>
+        if m == 0 then return .done x
+        S := W; m := m - 1
+      | Ctxt.Valuation.ofHVector _ _ _ xs =>
+        -- the region's arguments, at the bottom of the spine
+        let mut xs ← whnfR xs
+        repeat
+          let_expr HVector.cons _ _ _ _ x tl := xs | return .continue
+          if m == 0 then return .done x
+          xs ← whnfR tl; m := m - 1
+        return .continue
+      | _ => return .continue
+    return .continue)
+  if tgt' == tgt then return g
+  g.change tgt' (checkDefEq := false)
+
+open Lean Meta Elab Tactic in
+/-- Generalizes the valuation a `BlockCom.denote` is applied to, everywhere in the goal. -/
+elab "generalize_block_valuation " w:ident : tactic => liftMetaTactic fun g => g.withContext do
+  let tgt ← instantiateMVars (← g.getType)
+  let some e := tgt.find? (·.isAppOf ``Ctxt.Valuation.cons) | throwError "no valuation"
+  let (_, g) ← g.generalize #[{ expr := e, xName? := w.getId }]
+  return [g]
+
+/-- `peel_store` for a 64-bit value, reading its operands with `denoteOp_store` and
+`resolve_deep_lookups`: the default one's `simp` walks a valuation and context 455 entries deep
+here, and exhausts `maxRecDepth`. -/
+macro "peel_store64 " x:term ", " p:term ", " hp:term ", " st:term " as " st':term " := "
+    hst':term : tactic =>
+  `(tactic|
+    (reduce_cfg_indices
+     rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
+       (by rw [denoteOp_store]
+           resolve_deep_lookups
+           simp only [EffectM.run_map]
+           rw [run_liftM (run_store (t := .bitvec (.concrete 64)) (x := PoisonOr.value $x) rfl
+             (show Fits (($st).mem) $p 64 from Fits.mono $hp (by omega)))]
+           rw [$hst':term]; rfl)]))
+
 /-- The poison branch of a store: the value handed to it is poison, so the store
 is UB, the run is poison, and the specification's implication is vacuous. Four
 stores, one tactic. -/
@@ -119,7 +176,9 @@ macro "store_poison " h:term : tactic =>
   `(tactic|
     (refine ⟨.poison, ?_, by intro s' h'; exact absurd h'.symm (PoisonOr.value_ne_poison _)⟩
      refine BlockCom.run_bind_denote_var_of_poison ?_
-     simp only [Expr.denoteOp, $h:term, simp_denote, simp_sllvm]
+     rw [denoteOp_store]
+     resolve_deep_lookups
+     simp only [$h:term, EffectM.run_map]
      rfl))
 
 /-- `run_runFunction'` for the named-result shape: cross the call boundary once,
@@ -143,7 +202,7 @@ private theorem runFunction_res {α : Type} {body : EffectM α} {s : GlobalState
       rw [PoisonOr.value_inj, Prod.mk.injEq] at h'
       exact h'.2 ▸ hQ t (by rw [h'.1])
 
-set_option maxRecDepth 100000 in
+
 set_option maxHeartbeats 2000000 in
 theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
     (hs : s.WF) (hin : Fits s.mem inp (64 * 8)) (hout : IsByteBufPtr s.mem out) :
@@ -226,7 +285,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   · store_poison hb0
   refine name_of ({ t₇ with mem := t₇.mem.splice out b0 } : GlobalState) fun u₀ hu₀ => ?_
   rw [hb0]
-  peel_store b0, out, hout₇, t₇ as u₀ := hu₀
+  peel_store64 b0, out, hout₇, t₇ as u₀ := hu₀
   have hout₀ : Fits u₀.mem out (32 * 8) := by rw [hu₀]; exact fits_splice hout₇
 
   -- `%455`-`%464`, then `%465 = out + 8` and the second store
@@ -239,7 +298,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   · store_poison hb1
   refine name_of ({ u₀ with mem := u₀.mem.splice out8 b1 } : GlobalState) fun u₁ hu₁ => ?_
   rw [hb1]
-  peel_store b1, out8, hout8N, u₀ as u₁ := hu₁
+  peel_store64 b1, out8, hout8N, u₀ as u₁ := hu₁
   have hout₁ : Fits u₁.mem out (32 * 8) := by rw [hu₁]; exact fits_splice hout₀
 
   -- `%466`-`%475`, then `%476 = out + 16` and the third store
@@ -252,7 +311,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   · store_poison hb2
   refine name_of ({ u₁ with mem := u₁.mem.splice out16 b2 } : GlobalState) fun u₂ hu₂ => ?_
   rw [hb2]
-  peel_store b2, out16, hout16N, u₁ as u₂ := hu₂
+  peel_store64 b2, out16, hout16N, u₁ as u₂ := hu₂
   have hout₂ : Fits u₂.mem out (32 * 8) := by rw [hu₂]; exact fits_splice hout₁
 
   -- `%477`-`%483`, then `%484 = out + 24` and the fourth store
@@ -265,7 +324,7 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
   · store_poison hb3
   refine name_of ({ u₂ with mem := u₂.mem.splice out24 b3 } : GlobalState) fun u₃ hu₃ => ?_
   rw [hb3]
-  peel_store b3, out24, hout24N, u₂ as u₃ := hu₃
+  peel_store64 b3, out24, hout24N, u₂ as u₃ := hu₃
 
   -- `llvm.return %arg0`: the region hands back `out`, and the memory it leaves
   -- is `t₇`'s with the four stores. `t₇` is `s` up to equivalence, and all four
@@ -279,7 +338,10 @@ theorem fd_curve25519_scalar_reduce_frame (out inp : Pointer) (s : GlobalState)
 
   -- `llvm.return %arg0`: the region hands back `out`.
   refine ⟨.value ([.value out]ₕ, u₃), ?_, ?_⟩
-  · simp_return
+  · rw [BlockCom.denote_term, Terminator.denote_ret, HVector.map_cons, HVector.map_nil]
+    resolve_deep_lookups
+    generalize_block_valuation W
+    simp
   · intro s' h'
     rw [PoisonOr.value_inj, Prod.mk.injEq] at h'
     refine ⟨![b0, b1, b2, b3], ?_⟩
@@ -423,7 +485,17 @@ elab "det_range " kt:ident ppSpace lo:num ppSpace hi:num : tactic => do
         | n => panic! s!"det_range: {n} operands"
       let core ← mkAppM lemmaName (#[kfv, F] ++ ds)
       mkAppM ``det_of_eq #[hvDecl.toExpr, core]
-    let goal ← goal.assert (Name.mkSimple ("d" ++ toString i)) (← inferType prf) prf
+    -- `inferType` beta-reduces each `gⱼ x`, inlining every earlier witness: instantiate
+    -- without beta, so the witness only refers to them
+    let noBeta (e : Expr) : MetaM Expr := do
+      instantiateForall (← inferType e.getAppFn) e.getAppArgs
+    let ty ← goal.withContext do
+      let args := prf.getAppArgs
+      let coreTy ← noBeta args[args.size - 1]!
+      let_expr Det _ _ _ _ g := coreTy | noBeta prf
+      let dTy ← noBeta prf
+      pure (mkApp dTy.appFn! g)
+    let goal ← goal.assert (Name.mkSimple ("d" ++ toString i)) ty prf
     let (_, goal) ← goal.intro1P
     replaceMainGoal [goal]
 
@@ -432,6 +504,33 @@ def wordsOf (a b c d : PoisonOr (BitVec 64)) : Option (Fin 4 → BitVec 64) :=
   match a, b, c, d with
   | .value a, .value b, .value c, .value d => some ![a, b, c, d]
   | _, _, _, _ => none
+
+/-- A poison operand makes the four words `none`. One per slot: the store that is handed
+poison is the only one whose value is known there. -/
+private theorem wordsOf_poison₀ {a b c d : PoisonOr (BitVec 64)} (h : a = .poison) :
+    wordsOf a b c d = none := by subst h; cases b <;> cases c <;> cases d <;> rfl
+
+private theorem wordsOf_poison₁ {a b c d : PoisonOr (BitVec 64)} (h : b = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases c <;> cases d <;> rfl
+
+private theorem wordsOf_poison₂ {a b c d : PoisonOr (BitVec 64)} (h : c = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases b <;> cases d <;> rfl
+
+private theorem wordsOf_poison₃ {a b c d : PoisonOr (BitVec 64)} (h : d = .poison) :
+    wordsOf a b c d = none := by subst h; cases a <;> cases b <;> cases c <;> rfl
+
+/-- Four values, four words. -/
+private theorem wordsOf_value {a b c d : PoisonOr (BitVec 64)} {x y z t : BitVec 64}
+    (ha : a = .value x) (hb : b = .value y) (hc : c = .value z) (hd : d = .value t) :
+    wordsOf a b c d = some ![x, y, z, t] := by subst ha; subst hb; subst hc; subst hd; rfl
+
+/-- The two readings of one `wordsOf` a store branch ends with, played off each other.
+
+Stated over an abstract `o`: the witness reaches the goal only as `o`'s unifier, so no tactic
+here ever traverses it. -/
+private theorem wordsOf_absurd {P : Prop} {w : Fin 4 → BitVec 64}
+    {o : Option (Fin 4 → BitVec 64)} (hs : o = some w) (hn : o = none) : P :=
+  absurd (hs.symm.trans hn) (by simp)
 
 /-- A load inside the 512 bits at `inp` returns its slice of them. -/
 theorem readWord_load_slice {m : MemoryState} {inp q : Pointer} (hin : Fits m inp (64 * 8))
@@ -638,17 +737,152 @@ theorem scalarReduce_determined : ScalarReduceDetermined := by
     rw [readWord_load_slice (q := in56) hin6 rfl (i := 7) (by omega)
       (by rw [offsetInBits_withOffset inp 56 (by simp; omega)]; rfl), hk6] at hcall7
     peel_call hcall7
+    -- the eight loads are done and no store has run, so the state is still `s`
+    have heq : s ≈ t7 :=
+      he0.trans (he1.trans (he2.trans (he3.trans (he4.trans (he5.trans (he6.trans he7))))))
 
     -- `%61`-`%454`: the reduction, threaded
     denote_step_all v 454
     det_range k 61 454
 
-    -- The four stores are what remains. The draft is in this branch's history (`3cad8b107`):
-    -- `poison_cases` per store, `det_pin` inside the `wordsOf` subgoals so the run's `simp`
-    -- never meets the witness. It still exhausts `maxRecDepth` at the first store's
-    -- `simp only [Expr.denoteOp, …]`, which is the next thing to solve.
-    sorry
-  -- the four witnesses, assigned once the stores above are real
-  all_goals exact sorry
+    -- `out` is still a 32-byte buffer at every state the loads left
+    have hout₇ : Fits t7.mem out (32 * 8) := fits_of_live?_eq (heq.live out.id).symm hout.left
+
+    -- The four stores. Each is a case split on whether its operand is poison, and every
+    -- poison branch is *deferred* (`rotate_left`): proving one pins a witness, and a witness
+    -- is the whole reduction as a term. Pinned early it would ride in the goal through the
+    -- rest of the walk, where `simp` and `rw` would have to walk it; pinned last it is only
+    -- ever a unifier. The witnesses are never named here -- `wordsOf_value`/`wordsOf_poisonᵢ`
+    -- against the `Det` facts is what assigns them.
+    refine poison_cases (v := v454) (fun hb0 => ?_) (fun b0 hb0 => ?_)
+    rotate_left
+    refine name_of ({ t7 with mem := t7.mem.splice out b0 } : GlobalState) fun u₀ hu₀ => ?_
+    rw [hb0]
+    peel_store64 b0, out, hout₇, t7 as u₀ := hu₀
+    have hout₀ : Fits u₀.mem out (32 * 8) := by rw [hu₀]; exact fits_splice hout₇
+
+    -- `%455`-`%464`, then `%465 = out + 8` and the second store
+    denote_step_all v 464
+    det_range k 455 464
+    peel_gep 8 with out, hout₀, u₀ as out8
+    have hout8N : Fits u₀.mem out8 64 := Fits.mono hout8 (by decide)
+    refine poison_cases (v := v464) (fun hb1 => ?_) (fun b1 hb1 => ?_)
+    rotate_left
+    refine name_of ({ u₀ with mem := u₀.mem.splice out8 b1 } : GlobalState) fun u₁ hu₁ => ?_
+    rw [hb1]
+    peel_store64 b1, out8, hout8N, u₀ as u₁ := hu₁
+    have hout₁ : Fits u₁.mem out (32 * 8) := by rw [hu₁]; exact fits_splice hout₀
+
+    -- `%466`-`%475`, then `%476 = out + 16` and the third store
+    denote_step_all v 475
+    det_range k 466 475
+    peel_gep 16 with out, hout₁, u₁ as out16
+    have hout16N : Fits u₁.mem out16 64 := Fits.mono hout16 (by decide)
+    refine poison_cases (v := v475) (fun hb2 => ?_) (fun b2 hb2 => ?_)
+    rotate_left
+    refine name_of ({ u₁ with mem := u₁.mem.splice out16 b2 } : GlobalState) fun u₂ hu₂ => ?_
+    rw [hb2]
+    peel_store64 b2, out16, hout16N, u₁ as u₂ := hu₂
+    have hout₂ : Fits u₂.mem out (32 * 8) := by rw [hu₂]; exact fits_splice hout₁
+
+    -- `%477`-`%483`, then `%484 = out + 24` and the fourth store
+    denote_step_all v 483
+    det_range k 477 483
+    peel_gep 24 with out, hout₂, u₂ as out24
+    have hout24N : Fits u₂.mem out24 64 := Fits.mono hout24 (by decide)
+    refine poison_cases (v := v483) (fun hb3 => ?_) (fun b3 hb3 => ?_)
+    rotate_left
+    refine name_of ({ u₂ with mem := u₂.mem.splice out24 b3 } : GlobalState) fun u₃ hu₃ => ?_
+    rw [hb3]
+    -- `peel_store64` spelled out: the macro's own nesting tips this store over `maxRecDepth`
+    reduce_cfg_indices
+    rw [BlockCom.run_bind_denote_var_of_nil (s' := u₃) (by
+      rw [denoteOp_store]
+      resolve_deep_lookups
+      simp only [EffectM.run_map]
+      rw [run_liftM (run_store (t := .bitvec (.concrete 64)) (x := PoisonOr.value b3) rfl
+        (show Fits u₂.mem out24 64 from Fits.mono hout24N (by omega)))]
+      rw [hu₃]; rfl)]
+
+    -- the four states differ from `t7` only in `mem`; project one level at a time
+    have m₃ : u₃.mem = u₂.mem.splice out24 b3 := by rw [hu₃]
+    have m₂ : u₂.mem = u₁.mem.splice out16 b2 := by rw [hu₂]
+    have m₁ : u₁.mem = u₀.mem.splice out8 b1 := by rw [hu₁]
+    have m₀ : u₀.mem = t7.mem.splice out b0 := by rw [hu₀]
+
+    -- `llvm.return %arg0`: the region hands back `out`.
+    refine ⟨.value ([.value out]ₕ, u₃), ?_, ?_, ?_⟩
+    · rw [BlockCom.denote_term, Terminator.denote_ret, HVector.map_cons]
+      resolve_deep_lookups
+      generalize_block_valuation W
+      simp
+    · intro w hw
+      -- the four `Det` facts pin the four witnesses, here and nowhere earlier; `hw` is then
+      -- dropped, so the `subst` rewrites nothing that holds them
+      have hwv : w = ![b0, b1, b2, b3] :=
+        Option.some.inj (hw.symm.trans (wordsOf_value (d454.eq.symm.trans hb0)
+          (d464.eq.symm.trans hb1) (d475.eq.symm.trans hb2) (d483.eq.symm.trans hb3)))
+      clear hw
+      subst hwv
+      refine ⟨u₃, rfl, ?_⟩
+      -- The body's state is popped on return, so this is `popFrame_equiv_block`:
+      -- `out`'s block is the only one written, and nothing was allocated.
+      have hoblk : out.id.id < s.alloc.nextFreeBlock := lt_nextFreeBlock_of_fits hs hout.left
+      refine popFrame_equiv_block hs hoblk ?_ ?_ ?_
+      · -- every other block reads as it did on entry
+        intro b _ hb
+        have e0 : out.id ≠ b := fun e => hb e.symm
+        have e1 : out8.id ≠ b := fun e => hb e.symm
+        have e2 : out16.id ≠ b := fun e => hb e.symm
+        have e3 : out24.id ≠ b := fun e => hb e.symm
+        rw [m₃, m₂, m₁, m₀, live?_splice_ne e3, live?_splice_ne e2, live?_splice_ne e1,
+          live?_splice_ne e0]
+        exact (heq.live b).symm
+      · -- ... and the four stores miss it on the specification's side too
+        intro b hb
+        have e0 : out.id ≠ b := fun e => hb e.symm
+        have e1 : (out.withOffset 8).id ≠ b := fun e => hb e.symm
+        have e2 : (out.withOffset 16).id ≠ b := fun e => hb e.symm
+        have e3 : (out.withOffset 24).id ≠ b := fun e => hb e.symm
+        simp only [scalarOutMem, live?_splice_ne e3, live?_splice_ne e2, live?_splice_ne e1,
+          live?_splice_ne e0]
+      · -- on `out`'s own block the two agree, store for store
+        rw [m₃, m₂, m₁, m₀]
+        simp only [out8, out16, out24, scalarOutMem, Matrix.cons_val_zero, Matrix.cons_val_one,
+          Matrix.head_cons, Matrix.cons_val_two, Matrix.cons_val_three, Matrix.tail_cons]
+        exact live?_four (fun z => (heq.live z).symm) out.id
+    · exact fun hn => wordsOf_absurd (wordsOf_value (d454.eq.symm.trans hb0)
+        (d464.eq.symm.trans hb1) (d475.eq.symm.trans hb2) (d483.eq.symm.trans hb3)) hn
+
+    -- The four deferred poison branches, innermost store last. A poison operand is UB, so the
+    -- run is poison and the `some w` conjunct is vacuous.
+    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
+      · refine BlockCom.run_bind_denote_var_of_poison ?_
+        rw [denoteOp_store]
+        resolve_deep_lookups
+        simp only [hb0, EffectM.run_map]
+        rfl
+      · exact fun w hw => wordsOf_absurd hw (wordsOf_poison₀ (d454.eq.symm.trans hb0))
+    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
+      · refine BlockCom.run_bind_denote_var_of_poison ?_
+        rw [denoteOp_store]
+        resolve_deep_lookups
+        simp only [hb1, EffectM.run_map]
+        rfl
+      · exact fun w hw => wordsOf_absurd hw (wordsOf_poison₁ (d464.eq.symm.trans hb1))
+    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
+      · refine BlockCom.run_bind_denote_var_of_poison ?_
+        rw [denoteOp_store]
+        resolve_deep_lookups
+        simp only [hb2, EffectM.run_map]
+        rfl
+      · exact fun w hw => wordsOf_absurd hw (wordsOf_poison₂ (d475.eq.symm.trans hb2))
+    · refine ⟨.poison, ?_, ?_, fun _ => rfl⟩
+      · refine BlockCom.run_bind_denote_var_of_poison ?_
+        rw [denoteOp_store]
+        resolve_deep_lookups
+        simp only [hb3, EffectM.run_map]
+        rfl
+      · exact fun w hw => wordsOf_absurd hw (wordsOf_poison₃ (d483.eq.symm.trans hb3))
 
 end Firedancer.Common

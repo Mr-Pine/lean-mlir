@@ -12,9 +12,9 @@ import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 The C computes `out = in mod ℓ`. That value is not specified here.
 `ScalarReduceDetermined` says only that the call is decided by the 512 bits at `in`: one
 function of those bits gives both whether the run returns and the four `i64`s it then stores.
-That is what a comparison of two callers needs. Nothing proves it yet.
+That is what a comparison of two callers needs; `scalarReduce_determined` proves it.
 
-What is proved is `fd_curve25519_scalar_reduce_frame_spec`, the footprint: a run that returns
+So is `fd_curve25519_scalar_reduce_frame_spec`, the footprint: a run that returns
 leaves the entry state plus the four stores. It allows poison, since with the digit bounds
 unproved an `nsw` operation may be poison, and `SLLVM.store` takes `getOrUB` of its value.
 -/
