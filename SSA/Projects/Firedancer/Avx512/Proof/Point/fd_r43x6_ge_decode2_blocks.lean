@@ -281,6 +281,7 @@ macro "peel_store_amb " x:term ", " p:term ", " hp:term ", " st:term
     " with " l:term,+ : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil
       (s' := ({ $st with mem := ($st).mem.splice $p (vecBV $x) } : GlobalState))
       (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
@@ -297,6 +298,7 @@ macro "peel_store_amb " x:term ", " p:term ", " hp:term ", " st:term
     " as " st':term " := " hst':term " with " l:term,+ : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
       (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
           try simp only [$[$l:term],*]
@@ -342,6 +344,7 @@ theorem bb5_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   peel_store_amb v, b25, hb25, s with simp_spine, env.vb25
   iterate 2 peel_lifetime
   simp_return
+  rfl
 
 /-! ### `^bb3` and `^bb4`, the two failure paths
 
@@ -405,7 +408,7 @@ theorem bb3_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       (hm₂ ▸ fits_splice (hm₁ ▸ fits_splice hb25))))
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm,
     simp_spine, env.czero, env.cm1]
-  rw [bb5_run env zeroVec (.value (-1#32)) hb25₅]
+  refine (bb5_run env zeroVec (.value (-1#32)) hb25₅).trans ?_
   simp only [hm₅, hm₄, hm₃, hm₂, hm₁, zeroOutMem]
 
 set_option maxHeartbeats 1000000 in
@@ -453,7 +456,7 @@ theorem bb4_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
       (hm₂ ▸ fits_splice (hm₁ ▸ fits_splice hb25))))
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm,
     simp_spine, env.czero, env.cm2]
-  rw [bb5_run env zeroVec (.value (-2#32)) hb25₅]
+  refine (bb5_run env zeroVec (.value (-2#32)) hb25₅).trans ?_
   simp only [hm₅, hm₄, hm₃, hm₂, hm₁, zeroOutMem]
 
 /-! ### `^bb1`, the second encoding's remaining square-root test -/
@@ -519,7 +522,9 @@ theorem bb1_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
     · rw [beq_eq_false_iff_ne.mpr hc]; rfl
   subst hv198
   simp only [BlockCom.denote_term, Terminator.denote_condBr, Ctxt.Valuation.cons_zero]
-  split <;> rfl
+  -- v4.34: the goal only typechecks past `implicit` transparency, so `simp` needs it too
+  by_cases hc : nonzeroBit (addVec x184 x90) &&& t1nzb = 0 <;>
+    (set_option backward.isDefEq.respectTransparency false in simp only [hc, ↓reduceIte]) <;> rfl
 
 /-! ### Splice chains, as `≈` sees them
 
@@ -948,6 +953,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
   -- `%207`-`%211`: `FD_R43X6_MUL_INL( xa, xa, t3a )` -- the call, then the
   -- four fold instructions that follow it in this block
   refine name_of (s.popFrame s.mem) fun u₁ hu₁ => ?_
+  reduce_cfg_indices
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, inp.x159, hv202])
     (mul_step_of_take hxaU47 hxa6 hxa7 ht3aU ht3a6 ht3a7 s u₁ hu₁)]

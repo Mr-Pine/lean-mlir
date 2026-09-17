@@ -109,7 +109,7 @@ theorem acpBias_fitsLong {l : Fin R43x6.limbCount → ℤ}
     R43x6.FitsLong (acpLimb l k + biasLimb k) := by
   have h0 := hl 0; have h1 := hl 1; have h2 := hl 2
   have h3 := hl 3; have h4 := hl 4; have h5 := hl 5
-  fin_cases k <;> simp only [acpLimb, biasLimb, R43x6.FitsLong] <;> omega
+  fin_cases k <;> simp only [Fin.zero_eta, acpLimb, biasLimb, R43x6.FitsLong] <;> omega
 
 /-- **What the fold leaves, limb by limb.** -/
 theorem extractLimbs_acpBiasVec {z : Vector (BitVec 64) 8}
@@ -131,7 +131,7 @@ theorem extractLimbs_acpBiasVec_bounds {z : Vector (BitVec 64) 8}
   have h0 := hz 0; have h1 := hz 1; have h2 := hz 2
   have h3 := hz 3; have h4 := hz 4; have h5 := hz 5
   rw [hw]
-  fin_cases k <;> simp only [acpLimb, biasLimb] <;> omega
+  fin_cases k <;> simp only [Fin.zero_eta, acpLimb, biasLimb] <;> omega
 
 /-- **... and the element it holds**: the fold moves a multiple of `p`, so the
 value is the limbs it saw plus the bias. -/

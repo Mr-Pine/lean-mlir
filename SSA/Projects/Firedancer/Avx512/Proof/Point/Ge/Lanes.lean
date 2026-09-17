@@ -83,7 +83,7 @@ macro_rules
 /-- Lanewise: `Vector.ext`, one goal per lane, `ge_lane_simp`, and `rfl` for what is left. -/
 macro "ge_lanes" " [" ls:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
   `(tactic| (apply Vector.ext; intro i hi
-             simp only [List.length_cons, List.length_nil] at hi
+             try simp only [List.length_cons, List.length_nil] at hi
              interval_cases i <;> ge_lane_simp [$ls,*] <;> try rfl))
 
 /-- `p`'s limbs on lanes 0 and 4, poison elsewhere. -/

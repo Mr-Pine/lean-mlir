@@ -86,6 +86,7 @@ theorem bb2_run {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {r
     {n : BitVec 32} (env : EntryEnv V s r n) (u : GlobalState) :
     StateT.run (fd_ed25519_point_dbln.blocks.run V hdr2) u = .value ([.value r]ₕ, u) := by
   denote_enter_block
+  reduce_cfg_indices
   simp only [BlockCom.denote_term, Terminator.denote_ret, simp_spine]
   rw [env.vr]; rfl
 
@@ -224,17 +225,16 @@ theorem bb3_step {V : fd_ed25519_point_dbln.Γout.Valuation} {s : GlobalState} {
   replace hv289 : v289 = .value (BitVec.ofBool (BitVec.ult (BitVec.setWidth 32 (c + 1#8)) n)) := by
     rw [hv289, env.vn]; rfl
   subst hv289
+  reduce_cfg_indices
   simp only [BlockCom.denote_term, Terminator.denote_condBr, simp_spine]
   by_cases hb : (BitVec.setWidth 32 (c + 1#8) <ᵤ n) = true
   · refine ⟨?V1, u2, ?e1, hF2⟩
     case e1 =>
-      rw [if_pos hb]
-      simp only [hb, BitVec.ofBool_true, ite_true, pure_bind, bind_pure]
+      simp only [hb, BitVec.ofBool_true, ↓reduceIte, pure_bind, bind_pure]
       rfl
   · refine ⟨?V2, u2, ?e2, hF2⟩
     case e2 =>
-      rw [if_neg hb]
-      simp only [hb, BitVec.ofBool_false, pure_bind, bind_pure]
+      simp only [hb, BitVec.ofBool_false, ↓reduceIte, pure_bind, bind_pure]
       rfl
 
 /-! ### The loop -/

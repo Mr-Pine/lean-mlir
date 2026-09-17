@@ -126,7 +126,8 @@ theorem bb3_run_ex {V : fd_ed25519_point_add_with_opts.Γout.Valuation} {s : Glo
   ge_store_amb (foldQuad q).v25, (r.withOffset 128), g128', u2 as u3 := hu3 with simp_spine
   refine ⟨u3, ?_, by rw [hu3, hu2, hu1]; exact hF3⟩
   simp_return
-  simp [env.vr]
+  -- v4.34: `hdr3 q`'s `sigs` only unfold past `implicit` transparency
+  set_option backward.isDefEq.respectTransparency false in simp [env.vr]
 
 /-- `bb3_run_ex`, in continuation form. -/
 theorem bb3_run {V : fd_ed25519_point_add_with_opts.Γout.Valuation} {s : GlobalState}

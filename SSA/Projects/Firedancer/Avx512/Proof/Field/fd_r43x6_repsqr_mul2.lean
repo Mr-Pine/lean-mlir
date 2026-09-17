@@ -194,7 +194,7 @@ private lemma bb1_step {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
   by_cases h : m = 1
   case pos =>
     simp only [h]
-    simp
+    set_option backward.isDefEq.respectTransparency false in simp
     simp only [Ctxt.Var.last, Ctxt.Valuation.cons_zero, hv7, hv12]
     refine ⟨foldVec (sqrVec a), foldVec (sqrVec b), ?_⟩
     simp
@@ -208,8 +208,9 @@ private lemma bb1_step {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
   simp [this]
   simp only [Ctxt.Var.last, Ctxt.Valuation.cons_zero, hv7, hv12, hv13]
   refine ⟨foldVec (sqrVec a), foldVec (sqrVec b), ?_, hend⟩
-  rw [if_neg (show ¬ (m = 1#64) from fun hc => h (by bv_omega)),
+  simp only [show ¬ (m = 1#64) from fun hc => h (by bv_omega), ↓reduceIte,
     show m + 18446744073709551615#64 = m - 1#64 from by bv_omega]
+  rfl
 
 /-- **The loop.** From the `^bb1` header with the chains at `xa`/`xb` and the
 counter at `n ≠ 0`, control reaches `^bb2` with each chain squared `n.toNat`
@@ -348,6 +349,7 @@ private lemma bb2_run {za zb : Pointer} {ya yb : Vector (BitVec 64) 8}
         ∧ oa[6] = 0 ∧ oa[7] = 0 ∧ ob[6] = 0 ∧ ob[7] = 0 := by
   denote_enter_block
   -- `%24 = call @fd_r43x6_mul_fast(%23, %arg2)`: the `a` chain by `ya`
+  reduce_cfg_indices
   rw [BlockCom.run_bind_denote_call_cfg_of_value (argTys := [V8, V8])
     (by simp only [simp_spine, env.vya])
     (mul_step_of_take ha ha6 ha7 hya hya6 hya7 s _ rfl)]

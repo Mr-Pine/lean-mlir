@@ -123,6 +123,7 @@ goal, which costs about as much again. -/
 macro "peel_load_vec " v:term ", " p:term ", " hp:term ", " hval:term ", " st:term : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_value (x := ($v).map PoisonOr.value) (s' := $st)
       (by simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
           rw [run_liftM (run_load (t := .vector 8 (.bitvec (.concrete 64)))

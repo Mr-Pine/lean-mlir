@@ -1214,7 +1214,9 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       hsqA.mp (hcondA.imp (fun h => by rw [← ht2a]; exact h) (fun h => by rw [← ht1a]; exact h))
     rw [if_pos hcondA, if_pos rfl]
     simp only [pure_bind, Target.denote_mk, HVector.map]
-    rw [bb1_run (env := ?envA) (h184 := hv184) (h90 := hv90) (h191 := rfl)
+    -- v4.34: the walk's valuation is only a `Γout.Valuation` past `implicit` transparency
+    set_option backward.isDefEq.respectTransparency false in
+    rw [bb1_run (env := ?envA) (h184 := hv184) (h90 := hv90) (h191 := by rfl)
       (hs62 := ht2bS62) (s := u₃₂)]
     case envA => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,
       hv16, hv15, hv14, hv13, hv12, hv11, hv10, hv9, hv44, hv1, hv0,
@@ -1364,6 +1366,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       ⟨fits_of_live?_eq (hcaller b14.id (hidLt b14 hb14)) hb14.1, hb14.2⟩
     have rb25 : IsVecPtr u₃₂.mem b25 :=
       ⟨fits_of_live?_eq (hcaller b25.id (hidLt b25 hb25)) hb25.1, hb25.2⟩
+    set_option backward.isDefEq.respectTransparency false in
     rw [bb3_run (env := ?env3) (ha03 := ra03.1) (ha14 := ra14.1) (ha25 := ra25.1)
       (hb03 := rb03.1) (hb14 := rb14.1) (hb25 := rb25.1)]
     case env3 => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,

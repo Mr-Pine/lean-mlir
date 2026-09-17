@@ -330,6 +330,7 @@ macro "ge_store_amb " x:term ", " p:term ", " hp:term ", " st:term
     " as " st':term " := " hst':term " with " l:term,+ : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil (s' := $st')
       (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
           try simp only [$[$l:term],*]
@@ -343,6 +344,7 @@ macro "ge_load_amb " v:term ", " p:term ", " hp:term ", " hval:term ", " st:term
     " with " l:term,+ : tactic =>
   `(tactic|
    (try simp only [bind_assoc]
+    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_value (x := ($v).map PoisonOr.value) (s' := $st)
       (by try simp only [Expr.denoteOp, Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
           try simp only [$[$l:term],*]

@@ -204,7 +204,7 @@ theorem extractLsb'_vecBV (v : Vector (BitVec 64) 8) (j : Nat) (h : j < 8) :
     (vecBV v).extractLsb' (j * 64) 64 = v[j] := by
   have := LLVM.Ty.extractLsb'_flattenBV_vector (l := 8) (e := .bitvec (.concrete 64))
     (v.map PoisonOr.value) j h
-  simpa [vecBV] using this
+  simpa [vecBV, LLVM.Ty.width, LLVM.Ty.flattenBV, LLVM.Ty.ofBitvec] using this
 
 /-! The three vectors sit at the offsets `readQuad?` reads them back at:
 `i * (64 * 8)` bits from the pointer, `v03` first. Together with
@@ -661,7 +661,6 @@ theorem denote_quadFold_v03 {q : Quad} {a286 a287 a288 a289 a290 : Vector (LLVM.
   subst h286 h287 h288 h289 h290
   apply Vector.ext
   intro i hi
-  simp only [List.length_cons, List.length_nil] at hi
   interval_cases i <;>
     simp [LLVM.Ty.shufflevector, InstCombine.binaryDenote, toBitVecValue, quadShift48,
       quadMask43, quadMul19, foldQuad_v03_eq, LLVM.and, LLVM.and?,

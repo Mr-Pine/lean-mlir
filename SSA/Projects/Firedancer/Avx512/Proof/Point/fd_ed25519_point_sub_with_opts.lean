@@ -89,7 +89,7 @@ theorem fd_ed25519_point_sub_with_opts_conforms (r a b : Pointer) (bPre : BitVec
   have eb : readQuad hbA = readQuad hb := readQuad_of_live?_eq (hlA _ hnb) hb hbA
   refine negPre_step hwA (htn _ hnb) htA hbA (eb ▸ hb03) (eb ▸ hb14) (eb ▸ hb25) (eb ▸ hbn)
     fun s₁ qn hrun₁ he₁ hpt₁ hn03 hn14 hn25 => ?_
-  peel_call hrun₁
+  set_option backward.isDefEq.respectTransparency false in peel_call hrun₁
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
 
   -- `^bb3`: `r = a + t`
