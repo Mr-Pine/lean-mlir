@@ -535,11 +535,28 @@ attribute [simp_spine] HVector.map HVector.reverse_nil HVector.reverse_cons HVec
 attribute [simp_spine↓] SSA.simpValuationApply
 
 open Lean Meta in
-/-- The known elements of a `cons` chain, head first, and what the chain ends in. -/
-private partial def spineElems (e : Expr) (elems : Array Expr := #[]) : Array Expr × Expr :=
+/-- The elements of a statically known valuation, head first: a `cons` chain ending in `nil`,
+or `ofHVector` of a vector that reduces to a literal one (`HVector.nil.reverse` included). -/
+private partial def spineElems (e : Expr) (elems : Array Expr := #[]) :
+    MetaM (Option (Array Expr)) := do
   match_expr e with
   | Ctxt.Valuation.cons _Ty _inst _Γ _t x V => spineElems V (elems.push x)
-  | _ => (elems, e)
+  | Ctxt.Valuation.nil _Ty _inst => return some elems
+  | Ctxt.Valuation.ofHVector _Ty _inst _ts xs =>
+    -- bounded: a long operand vector is not a literal spine, and unfolding it is deep
+    let rec vec (fuel : Nat) (xs : Expr) (elems : Array Expr) : MetaM (Option (Array Expr)) := do
+      let fuel + 1 := fuel | return none
+      let xs ← whnfR xs
+      match_expr xs with
+      | HVector.cons _α _A _as _a x xs => vec fuel xs (elems.push x)
+      | HVector.nil _α _A => return some elems
+      | HVector.reverse _α _A _as ys =>
+        match_expr ← whnfR ys with
+        | HVector.nil _α _A => return some elems
+        | _ => return none
+      | _ => return none
+    vec 8 xs elems
+  | _ => return none
 
 open Lean Meta in
 /-- `(A ++ W) ⟨i, h⟩` for `A` a `cons` chain ending in `nil`: an element of `A` for a literal
@@ -553,8 +570,7 @@ dsimproc ↓ [simp_spine, simp_denote] simpValuationAppendApply
     let args := e.getAppArgs
     unless e.getAppFn.isConstOf ``HAppend.hAppend && args.size == 8 do return .continue
     let A := args[4]!; let W := args[5]!; let t := args[6]!; let v := args[7]!
-    let (elems, rest) := spineElems A
-    unless rest.isAppOf ``Ctxt.Valuation.nil do return .continue
+    let some elems ← spineElems A | return .continue
     let_expr Subtype.mk _α _p i h := v | return .continue
     let (k?, m) ← match i.numeral? with
       | some n => pure (none, n)
@@ -574,9 +590,8 @@ dsimproc ↓ [simp_spine, simp_denote] simpValuationAppendApply
     let varTy ← whnfD (body.instantiate1 t).bindingDomain!
     let_expr Subtype α p := varTy | return .continue
     let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p idx h
-    let res := mkApp2 W t v'
-    unless ← withDefault (isDefEq e res) do return .continue
-    return .visit res
+    -- defeq by `appendCases`' `idx < Γ.length` branch; the kernel checks it
+    return .visit (mkApp2 W t v')
 
 /-! ### Entering a block
 

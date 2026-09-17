@@ -317,7 +317,8 @@ elab "peel_gep_limb " i:num ", " p:term ", " hp:term ", " st:term ", " nm:ident 
         simpa [$ptr:ident] using remainingFits ($st).mem $p $hp ($offBytes) (by simp)))
   evalTactic (← `(tactic| have vValue : $v = .value $ptr := by
         simp [$hv:ident, gep, gepConst, ptradd, $ptr:ident, Pointer.withOffset, Ctxt.Valuation.singleton,
-          LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm]))
+          LLVM.add, LLVM.mul, LLVM.const?, LLVM.add?, LLVM.mul?, simp_sllvm,
+          ↓simpValuationAppendApply, SSA.simpValuationApply]))
   evalTactic (← `(tactic| subst vValue))
   evalTactic (← `(tactic| clear $hv))
 
