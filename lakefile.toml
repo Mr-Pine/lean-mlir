@@ -25,7 +25,7 @@ rev = "main"
 
 [[require]]
 name = "leanwuzla"
-git = "https://github.com/hargoniX/Leanwuzla.git"
+git = "https://github.com/Mr-Pine/Leanwuzla.git"
 rev = "main"
 
 [[lean_lib]]
@@ -79,5 +79,5 @@ rev = "main"
 
 [[require]]
 name = "mathlib"
-git = "https://github.com/leanprover-community/mathlib4"
-rev = "v4.34.0"
+git = "https://github.com/leanprover-community/mathlib4-nightly-testing"
+rev = "nightly-testing-2026-09-16"

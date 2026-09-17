@@ -136,8 +136,6 @@ theorem add_eq_xor_add_mul_and_zext (x y : BitVec w) :
 /--
 info: 'MultiWidthTests.add_eq_xor_add_mul_and_zext' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
  Quot.sound]
 -/
 #guard_msgs in #print axioms add_eq_xor_add_mul_and_zext

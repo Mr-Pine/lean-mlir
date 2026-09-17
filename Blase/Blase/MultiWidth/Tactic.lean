@@ -997,27 +997,15 @@ and closes this goal with 'native_decide' of a 'rfl' proof.
 Assigns to the MVarId a proof.
 -/
 def mkEqReflBoolNativeDecideProof (name : Name) (lhsExpr : Expr) (rhs : Bool) (debugSorry? : Bool := false) : SolverM Expr := do
-    -- hoist a₁ into a top-level definition of 'Lean.ofReduceBool' to succeed.
-  let name := name ++ `lhs
-  let auxDeclName ← Term.mkAuxName name
-  let decl := Declaration.defnDecl {
-    name := auxDeclName
-    levelParams := []
-    type := mkConst ``Bool
-    value := lhsExpr
-    hints := .abbrev
-    safety := .safe
-  }
-  addAndCompile decl
-  -- debugLog m!"declared {lhsExpr} as {auxDeclName}"
-  debugLog m!"declared {auxDeclName} equality native decide proof."
-  let lhsDef : Expr := mkConst auxDeclName
-  let rflProof ← mkEqRefl (toExpr rhs)
-  -- let rflProof := mkApp2 (mkConst ``Eq.refl [Level.ofNat 1]) (mkConst ``Bool []) (toExpr rhs)
   let rflTy := mkApp3 (mkConst ``Eq [Level.ofNat 1]) (mkConst ``Bool []) lhsExpr (toExpr rhs)
-  let sorryProof ← mkSorry (type := rflTy) (synthetic := true)
-  let proof := mkApp3 (mkConst ``Lean.ofReduceBool []) lhsDef (toExpr rhs) rflProof
-  return if debugSorry? then sorryProof else proof
+  if debugSorry? then return ← mkSorry (type := rflTy) (synthetic := true)
+  -- `nativeEqTrue` only proves `_ = true`; `lhs = false` is `!lhs = true`
+  let goal := if rhs then lhsExpr else mkApp (mkConst ``not) lhsExpr
+  match ← nativeEqTrue name goal with
+  | .success prf =>
+    debugLog m!"declared {name} equality native decide proof."
+    if rhs then pure prf else mkAppM ``Lean.Grind.Bool.eq_false_of_not_eq_true #[prf]
+  | .notTrue => throwError m!"native evaluation of {indentExpr lhsExpr} is not {rhs}"
 
 /--
 Make an equality proof for an equality of the form `a = b` of type `sortExpr`,

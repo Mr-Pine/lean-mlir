@@ -51,8 +51,6 @@ theorem check_axioms_cadical (w : Nat) (a b : BitVec w) : a + b = b + a := by
 /--
 info: 'TestsSingleWidth.check_axioms_cadical' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
  Quot.sound,
  BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
  BitStream.subCarries?_correct._native.bv_decide.ax_1_15]
@@ -66,8 +64,6 @@ theorem check_axioms_presburger (w : Nat) (a b : BitVec w) : a + b = b + a := by
 info: 'TestsSingleWidth.check_axioms_presburger' depends on axioms: [hashMap_missing,
  propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
  Quot.sound,
  BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
  BitStream.subCarries?_correct._native.bv_decide.ax_1_15,

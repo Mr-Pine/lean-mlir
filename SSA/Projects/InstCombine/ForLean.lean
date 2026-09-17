@@ -516,7 +516,7 @@ end BitVec
 namespace Bool
 
 theorem xor_decide (p q : Prop) [dp : Decidable p] [Decidable q] :
-    (decide p).xor (decide q) = decide (p ≠ q) := by rcases dp with pt | pt <;> simp [pt]
+    (decide p).xor (decide q) = decide (p ≠ q) := by by_cases p <;> by_cases q <;> simp [*]
 
 @[simp]
 theorem xor_not_xor {a b : Bool} : ((!(a ^^ b)) ^^ b) = !a := by cases a <;> cases b <;> simp
