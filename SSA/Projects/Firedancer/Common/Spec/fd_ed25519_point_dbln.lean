@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # The doubling `fd_ed25519_point_dbln` repeats
@@ -11,6 +13,8 @@ Both backends double with the dedicated formulas of `dbl-2008-hwcd`
 comment. Neither reads `T`. That `dbl P` represents `2·P` is not proved: the
 group law is not formalised (`Curve.lean`).
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

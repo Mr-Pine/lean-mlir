@@ -2,8 +2,14 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_frombytes_2x.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_r43x6_ge_decode2
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_r43x6_ge_decode2
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_r43x6_ge_decode2
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

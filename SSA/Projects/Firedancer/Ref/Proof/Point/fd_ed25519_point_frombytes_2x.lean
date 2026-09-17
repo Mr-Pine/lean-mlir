@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes
 
 /-!
 # `fd_ed25519_point_frombytes_2x` conforms to its spec
@@ -15,6 +17,8 @@ call writes nothing.
 The three `run_*` lemmas are the region's three paths. They are separate
 declarations because each walks the whole CFG, and the walks share no work.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

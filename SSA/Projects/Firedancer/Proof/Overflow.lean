@@ -1,5 +1,7 @@
-import Mathlib.Tactic.NormNum
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import Mathlib.Tactic.NormNum
+public import SSA.Projects.SLLVM.Dialect
 
 /-!
 # Registers that do not wrap
@@ -8,6 +10,8 @@ import SSA.Projects.SLLVM.Dialect
 One bound on the operands discharges it and makes the register's `toNat` the
 exact `ℕ` result.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 

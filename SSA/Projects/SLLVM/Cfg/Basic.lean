@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import SSA.Projects.SLLVM.Dialect
 
 /-!
 # A CFG for SLLVM
@@ -40,6 +42,8 @@ regions (see `Dialect/Basic.lean`).
 
 Branching on a poison condition or switch scrutinee is UB, as in LLVM.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 
@@ -133,7 +137,7 @@ def Blocks.get {Γamb : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} {all : List (List 
           {ts : List SLLVM.Ty} →
           remaining[i]? = some ts → Σ Γout, BlockCom (Ctxt.ofList ts.reverse ++ Γamb) Γout rets all
   | _, .nil, _, _, h => absurd h (by simp)
-  | _, .cons (Γout := Γout) b _, 0, _, h => ⟨Γout, (by simpa using h : _ = _) ▸ b⟩
+  | _, .cons (argTys := a) (Γout := Γout) b _, 0, ts, h => ⟨Γout, (by simpa using h : a = ts) ▸ b⟩
   | _, .cons _ bs, i + 1, _, h => bs.get i (by simpa using h)
 
 /-! ### Denotation -/

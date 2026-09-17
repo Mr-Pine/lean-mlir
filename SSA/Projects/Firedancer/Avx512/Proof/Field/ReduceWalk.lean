@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Long
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_mod_nearly_reduced_limbs
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Long
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_mod_nearly_reduced_limbs
 
 /-!
 # The facts a walk over `reduce` needs
@@ -19,6 +21,8 @@ is `mnrA y 0 = y 0 + 19`) and the `R43x6.FitsLong` bound that keeps its `nsw`
 from denoting poison. `ReduceFacts` is all of them, and `reduceFacts` derives
 them from the one hypothesis the caller has, `BcpPre (2^20) l`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

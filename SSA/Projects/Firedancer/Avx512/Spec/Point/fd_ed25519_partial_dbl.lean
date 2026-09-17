@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

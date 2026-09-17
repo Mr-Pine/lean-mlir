@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sqr4
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sqr4
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr
 
 /-!
 # `fd_f25519_sqr4` conformance (ref)
@@ -13,6 +15,8 @@ Four `fd_f25519_sqr` calls. A later call's operands sit in blocks no earlier
 call wrote (`live?_of_step_ne`); an earlier output survives the later stores
 because the destinations are `FieldApart`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

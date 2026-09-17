@@ -1,7 +1,11 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_is_zero
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+@[expose] public section
 
 
 namespace Firedancer.Ref

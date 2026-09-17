@@ -2,10 +2,17 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_diagnose.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
-import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
+public import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

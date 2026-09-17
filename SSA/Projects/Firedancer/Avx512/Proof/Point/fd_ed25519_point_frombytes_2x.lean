@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_r43x6_ge_decode2
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_r43x6_ge_decode2
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 
 /-!
 # `fd_ed25519_point_frombytes_2x` conforms to its spec
@@ -44,6 +46,8 @@ half of it: `heqw.live q` states its right-hand side as
 `({ sAlloc with mem := m }).mem`, a projection no `rw` can see `m`'s splices
 through, so it is restated at `m` once and used everywhere.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_repsqr_mul2
-import SSA.Projects.Firedancer.Avx512.Spec.Vec
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_repsqr_mul2
+public import SSA.Projects.Firedancer.Avx512.Spec.Vec
 
 /-!
 # What `fd_r43x6_repsqr_mul2` is specified to compute
@@ -15,6 +17,8 @@ The out-parameters are two separate `wwl_t *`, and they must be distinct
 blocks: the region writes both, and a spec that let them alias could not say
 what either holds afterwards.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

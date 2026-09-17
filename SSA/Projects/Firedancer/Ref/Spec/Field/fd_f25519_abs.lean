@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_abs
-import SSA.Projects.Firedancer.Ref.Spec.Bias
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_abs
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

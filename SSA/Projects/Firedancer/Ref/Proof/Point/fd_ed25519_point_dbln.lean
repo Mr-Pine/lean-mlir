@@ -1,14 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul_projective
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_final_mul_projective
 
 /-!
 # `fd_ed25519_point_dbln` conformance (ref)
@@ -22,6 +24,8 @@ partial_dbl(t, r); i + 1 <u n`; `^bb1` is `add_final_mul(r, t)` and the return.
 entry, and `r`'s block is `s`'s up to what a final four-coordinate store at `r`
 overwrites (`Covered`) -- the loop's stores to `r` are all inside that range.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 
@@ -303,11 +307,11 @@ abbrev entryVal (r a t : Pointer) (n : BitVec 32) : fd_ed25519_point_dbln.Γout.
 
 /-- `^bb2` with the counter at `i`. -/
 abbrev hdr (i : BitVec 8) : SuccArgs fd_ed25519_point_dbln.sigs :=
-  ⟨1, by rfl, [PoisonOr.value i]ₕ⟩
+  ⟨1, rfl, [PoisonOr.value i]ₕ⟩
 
 /-- `^bb1`. -/
 abbrev exit : SuccArgs fd_ed25519_point_dbln.sigs :=
-  ⟨0, by rfl, HVector.nil⟩
+  ⟨0, rfl, HVector.nil⟩
 
 /-- Where the walk stands after `k` of `K` bodies. -/
 def tgt (K k : ℕ) : SuccArgs fd_ed25519_point_dbln.sigs :=

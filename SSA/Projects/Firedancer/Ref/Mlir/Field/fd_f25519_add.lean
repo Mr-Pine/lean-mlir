@@ -2,9 +2,16 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_add.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_add
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_add
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_add
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

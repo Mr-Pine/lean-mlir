@@ -1,11 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Spec.Point.Add
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_sub_with_opts
+module
+
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Point.Add
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_sub_with_opts
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

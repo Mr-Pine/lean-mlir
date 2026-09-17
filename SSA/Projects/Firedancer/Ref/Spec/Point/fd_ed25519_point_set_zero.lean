@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Spec.Point
+module
+
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

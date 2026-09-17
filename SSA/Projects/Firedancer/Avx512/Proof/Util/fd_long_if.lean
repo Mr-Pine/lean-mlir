@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Tactic
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
-import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
+module
+
+public import LeanMLIR.Tactic
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
+public import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
 
 /-!
 # `fd_long_if` denotes to `fdLongIf`
@@ -15,6 +17,8 @@ the argument is poison. It is stated separately from
 calls, so the standing workaround is to inline the callee, and a lemma about
 the callee is what makes the inlining a rewrite rather than a re-derivation.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

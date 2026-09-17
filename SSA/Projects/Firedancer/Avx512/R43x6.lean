@@ -1,7 +1,9 @@
-import SSA.Projects.Firedancer.Limbs
-import SSA.Projects.Firedancer.Ed25519
-import Mathlib.Tactic.Ring
-import Mathlib.Tactic.IntervalCases
+module
+
+public import SSA.Projects.Firedancer.Limbs
+public import SSA.Projects.Firedancer.Ed25519
+public import Mathlib.Tactic.Ring
+public import Mathlib.Tactic.IntervalCases
 
 /-!
 # The `fd_r43x6_t` representation
@@ -17,6 +19,8 @@ serial carry macros begin with `fd_r43x6_extract_limbs` and are scalar `long`
 code from there, with intermediates far outside the range of a limb, so they
 are stated over limb functions.
 -/
+
+@[expose] public section
 
 namespace R43x6
 

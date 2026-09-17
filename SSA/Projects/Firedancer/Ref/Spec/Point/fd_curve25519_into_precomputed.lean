@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
+module
+
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
 
 /-!
 # `fd_curve25519_into_precomputed` (ref)
@@ -18,6 +20,8 @@ The input bounds are the callees': `Y` tight and `X` bias-bounded for `add_nr` a
 `sub_nr`, `T` loose for `mul`. `RefWF [r]` holds `@fd_f25519_k` apart from `r`, which `mul`
 writes through.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Avx512.R43x6
-import Mathlib.Data.ZMod.Basic
-import Mathlib.Tactic.Ring
-import Mathlib.Tactic.IntervalCases
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Avx512.R43x6
+public import Mathlib.Data.ZMod.Basic
+public import Mathlib.Tactic.Ring
+public import Mathlib.Tactic.IntervalCases
 
 /-!
 # Shared ℕ-level machinery for the `fd_r43x6` specifications
@@ -25,6 +27,8 @@ lemmas that read a lane expression built from
 The per-operation column sums (`sqCol`/`col`) and their ring/bounds theorems
 live in the respective `Avx512/Spec/fd_r43x6_*.lean` files.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

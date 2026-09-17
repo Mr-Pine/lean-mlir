@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ed25519
-import Mathlib.NumberTheory.LucasPrimality
-import Mathlib.Tactic.NormNum.Prime
+module
+
+public import SSA.Projects.Firedancer.Ed25519
+public import Mathlib.NumberTheory.LucasPrimality
+public import Mathlib.Tactic.NormNum.Prime
 
 /-!
 # `2^255 - 19` is prime
@@ -26,6 +28,8 @@ The certificate is a chain of seven Lucas nodes: `p`, `l`, `n`, `m`, `k`, `q`
 and `r`.  It is from https://math.stackexchange.com/a/4999951 ; every node's
 factorisation and both Lucas conditions were re-verified numerically before use.
 -/
+
+@[expose] public section
 
 namespace Pratt
 

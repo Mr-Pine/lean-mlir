@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import SSA.Projects.SLLVM.Dialect
 
 /-!
 # 32-byte buffers
@@ -9,6 +11,8 @@ import SSA.Projects.SLLVM.Dialect
 A 32-byte little-endian buffer read as one 256-bit word: field-element and point encodings,
 and scalars.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 

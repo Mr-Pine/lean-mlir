@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_is_nonzero
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_is_nonzero
 
 /-!
 # One `fd_r43x6_is_nonzero` call, peeled
@@ -16,6 +18,8 @@ when the element is zero -- and never the reduction chain behind it.
 `fd_r43x6_is_nonzero_cfg`, not `fd_r43x6_is_nonzero`, is what a caller's call
 node holds, so the run equation is stated over that constant.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

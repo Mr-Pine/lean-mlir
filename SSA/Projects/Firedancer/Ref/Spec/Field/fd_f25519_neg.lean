@@ -1,6 +1,10 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Spec.Bias
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

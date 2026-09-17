@@ -1,11 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
-import LeanMLIR.Util.Poison
-import SSA.Projects.SLLVM.Tactic.SimpSet
-import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
-import SSA.Projects.SLLVM.Dialect.Semantics.Memory
+public import LeanMLIR.Util.Poison
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+public import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
+public import SSA.Projects.SLLVM.Dialect.Semantics.Memory
+
+@[expose] public section
 
 namespace LeanMLIR
 

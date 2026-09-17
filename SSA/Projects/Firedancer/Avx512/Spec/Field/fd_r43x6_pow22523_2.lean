@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_pow22523_2
-import SSA.Projects.Firedancer.Avx512.Spec.Vec
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_pow22523_2
+public import SSA.Projects.Firedancer.Avx512.Spec.Vec
 
 /-!
 # What `fd_r43x6_pow22523_2` is specified to compute
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Avx512.Spec.Vec
 eleven `fd_r43x6_repsqr_mul2` calls, so the two chains share every squaring
 loop.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

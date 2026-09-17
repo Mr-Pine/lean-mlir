@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
 
 /-!
 # What `fd_r43x6_quad_mul_fast` is specified to compute
@@ -36,6 +38,8 @@ against all eight lanes of `y` and the slides move lane-6/7 products into the
 result. In a QUAD lanes 6 and 7 hold limbs 2 and 5 of elements 2 and 3, every
 product stays inside one lane, and nothing is ignored.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

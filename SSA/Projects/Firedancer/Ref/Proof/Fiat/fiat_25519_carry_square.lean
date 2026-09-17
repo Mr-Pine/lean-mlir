@@ -1,10 +1,14 @@
-import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_carry_square
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry_square
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Limb
-import SSA.Projects.Firedancer.Ref.Proof.CarryChain
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_carry_square
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry_square
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Limb
+public import SSA.Projects.Firedancer.Ref.Proof.CarryChain
+
+@[expose] public section
 
 
 namespace Firedancer.Ref

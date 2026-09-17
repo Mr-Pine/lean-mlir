@@ -1,7 +1,11 @@
-import Mathlib.Data.Int.Basic
-import Mathlib.Algebra.NeZero
-import Mathlib.Tactic.NormNum
-import Mathlib.Data.ZMod.Basic
+module
+
+public import Mathlib.Data.Int.Basic
+public import Mathlib.Algebra.NeZero
+public import Mathlib.Tactic.NormNum
+public import Mathlib.Data.ZMod.Basic
+
+@[expose] public section
 
 /-- The ed25519 field characteristic, `2^255 - 19`. -/
 def p :=

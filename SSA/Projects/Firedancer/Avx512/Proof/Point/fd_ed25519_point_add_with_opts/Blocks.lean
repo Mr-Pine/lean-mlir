@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Lanes
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Lanes
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 
 /-!
 # `fd_ed25519_point_add_with_opts`'s tail blocks
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 (block 2) folds it and stores into `r`. Each reads `^bb0`'s definitions through
 `EntryEnv`; `%k` is `Γout` variable `103 - k`, `%argN` is `107 - N`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
@@ -24,11 +28,11 @@ open Ge
 
 /-- `^bb1`, the precomputed path. -/
 abbrev hdr1 : SuccArgs fd_ed25519_point_add_with_opts.sigs :=
-  ⟨0, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨0, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb3(%348, %349, %350)`: the last product, before its fold. -/
 abbrev hdr3 (q : Quad) : SuccArgs fd_ed25519_point_add_with_opts.sigs :=
-  ⟨2, by rfl, ([q.v03.map PoisonOr.value, q.v14.map PoisonOr.value, q.v25.map PoisonOr.value]ₕ :
+  ⟨2, rfl, ([q.v03.map PoisonOr.value, q.v14.map PoisonOr.value, q.v25.map PoisonOr.value]ₕ :
     HVector TyDenote.toType [V8, V8, V8])⟩
 
 /-! ### The ambient environment -/

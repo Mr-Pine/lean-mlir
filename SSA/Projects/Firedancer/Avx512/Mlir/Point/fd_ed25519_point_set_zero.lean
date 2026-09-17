@@ -1,5 +1,9 @@
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_set_zero.mlir
-import SSA.Projects.SLLVM.Cfg
+module
+
+public import SSA.Projects.SLLVM.Cfg
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

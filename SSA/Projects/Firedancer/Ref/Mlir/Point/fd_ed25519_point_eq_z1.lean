@@ -2,9 +2,16 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_point_eq_z1.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

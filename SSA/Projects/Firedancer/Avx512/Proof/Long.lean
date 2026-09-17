@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Avx512.R43x6
-import Mathlib.Tactic.Linarith
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Avx512.R43x6
+public import Mathlib.Tactic.Linarith
 
 /-!
 # The scalar `long` instructions, at the level of `ℤ`
@@ -17,6 +19,8 @@ The `FitsLong` side conditions are not bookkeeping: `nsw` makes an overflowing
 `add` denote to poison, so without them the region has no value at all. They
 are exactly what `ChainFitsLong` supplies.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

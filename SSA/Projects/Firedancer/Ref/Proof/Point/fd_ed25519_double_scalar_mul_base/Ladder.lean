@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Ref.Spec.Point.Add
-import SSA.Projects.Firedancer.Common.Proof.fd_ed25519_double_scalar_mul_base
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Ref.Spec.Point.Add
+public import SSA.Projects.Firedancer.Common.Proof.fd_ed25519_double_scalar_mul_base
 
 /-!
 # The values ref's `fd_ed25519_double_scalar_mul_base` computes
@@ -12,6 +14,8 @@ The table `ai[k]` (`aiVal`) and the ladder's two half-iterations (`addDigit_repr
 `addDigitB_value`), each `Common.DoubleScalarMulBase.addSigned_value` once the partial
 multiplications and `Z := 1` flags are multiplied out.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref.DoubleScalarMulBase
 open LeanMLIR SLLVM

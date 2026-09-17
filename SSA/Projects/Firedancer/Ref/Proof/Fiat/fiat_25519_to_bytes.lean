@@ -1,15 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_to_bytes
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_subborrowx_u51
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_addcarryx_u51
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_cmovznz_u64
-import Mathlib.Tactic.Zify
-import Mathlib.Tactic.LinearCombination
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_to_bytes
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_subborrowx_u51
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_addcarryx_u51
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_cmovznz_u64
+public import Mathlib.Tactic.Zify
+public import Mathlib.Tactic.LinearCombination
 
 /-!
 # `fiat_25519_to_bytes` conforms to its spec
@@ -25,6 +27,8 @@ indices — with 21 cells the alternative is 210 disequalities.
 `Wrote₁`/`Wrote₂` package one peeled kernel call: the cells it wrote, and the
 one clause (`other`) from which every surviving fact is transported.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -973,7 +977,7 @@ def storedByte (x12 x38 x51 x66 x79 : BitVec 64) (k : Nat) : BitVec 8 :=
 /-- Byte `k` of the buffer is the value of `%(byteSrc k)`: the region emits
 bytes 0-5 out of `x12`, 6-11 out of `x38`, 12-18 out of `x51`, 19-24 out of
 `x66` and 25-31 out of `x79`, two instructions per byte. -/
-def byteSrc (k : Nat) : Nat :=
+meta def byteSrc (k : Nat) : Nat :=
   if k < 6 then 74 + 2 * k
   else if k < 12 then 88 + 2 * (k - 6)
   else if k < 19 then 102 + 2 * (k - 12)

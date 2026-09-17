@@ -3,9 +3,11 @@ Released under Apache 2.0 license as described in the file LICENSE.
 NOTE: the bulk of this file was machine-generated; the structure mirrors
 the data flow of `fd_r43x6_quad_sqr_fast`.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_quad_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Mem
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_quad_sqr_fast
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_quad_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Mem
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_quad_sqr_fast
 
 /-!
 # `fd_r43x6_quad_sqr_fast` squares four field elements at once
@@ -31,6 +33,8 @@ and column 6 out of `q66`.
 QUAD has no ignored lanes. The one zero the kernel multiplies against is its
 own constant `x4z`, not a contract on the input.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

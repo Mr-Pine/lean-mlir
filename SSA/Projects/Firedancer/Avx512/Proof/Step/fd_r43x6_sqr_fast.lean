@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Proof.Memory
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Proof.Memory
 
 /-!
 # One `fd_r43x6_sqr_fast` call, peeled
@@ -27,6 +29,8 @@ holds -- a callee bound by `@fd_r43x6_sqr_fast := fd_r43x6_sqr_fast_cfg` in
 constant, so the run equation has to be stated over it too; over the `Com` it
 matches nothing and fails.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

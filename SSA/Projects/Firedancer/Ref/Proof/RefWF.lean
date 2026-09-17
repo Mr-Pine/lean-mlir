@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
-import SSA.Projects.Firedancer.Ref.Proof.Globals
-import SSA.Projects.Firedancer.Curve
-import SSA.Projects.Firedancer.Ed25519
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_affine_is_small_order
+module
+
+public import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Ref.Proof.Globals
+public import SSA.Projects.Firedancer.Curve
+public import SSA.Projects.Firedancer.Ed25519
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_affine_is_small_order
 
 /-!
 # A state the `ref` module can run in
@@ -16,6 +18,8 @@ that a region -- or a
 callee doing its own `llvm.mlir.addressof` -- finds them where it expects. The
 carry lemmas take it past a step, which is where the `apart` list is spent.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

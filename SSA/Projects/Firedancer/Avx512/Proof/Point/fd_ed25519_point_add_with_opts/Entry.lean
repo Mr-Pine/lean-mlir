@@ -1,13 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Blocks
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Blocks
 
 /-!
 # `fd_ed25519_point_add_with_opts`'s entry block
 
 `^bb0`: the constants, the fifteen slots, and the branch on `b_is_precomputed`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

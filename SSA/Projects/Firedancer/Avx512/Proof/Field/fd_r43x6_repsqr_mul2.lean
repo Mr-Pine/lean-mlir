@@ -1,14 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_repsqr_mul2
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_repsqr_mul2
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
 
 /-!
 # `fd_r43x6_repsqr_mul2` conforms to its spec
@@ -36,6 +38,8 @@ allocate nothing, but `runFunction` still pops a frame, so what comes back is
 `s.popFrame s.mem` rather than `s`.
 -/
 
+@[expose] public section
+
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
@@ -51,15 +55,15 @@ namespace RepsqrMul2
 both edges into it pass the `b` chain first. -/
 
 /-- The loop header `^bb1` with the chains at `a`/`b` and the counter at `m`. -/
-private abbrev hdr1 (a b : Vector (BitVec 64) 8) (m : BitVec 64) :
+abbrev hdr1 (a b : Vector (BitVec 64) 8) (m : BitVec 64) :
     SuccArgs fd_r43x6_repsqr_mul2.sigs :=
-  ⟨0, by rfl, ([a.map PoisonOr.value, b.map PoisonOr.value, PoisonOr.value m]ₕ :
+  ⟨0, rfl, ([a.map PoisonOr.value, b.map PoisonOr.value, PoisonOr.value m]ₕ :
     HVector TyDenote.toType [V8, V8, SLLVM.Ty.bitvec 64])⟩
 
 /-- The loop's exit block `^bb2`, `b` chain first. -/
-private abbrev hdr2 (b a : Vector (BitVec 64) 8) :
+abbrev hdr2 (b a : Vector (BitVec 64) 8) :
     SuccArgs fd_r43x6_repsqr_mul2.sigs :=
-  ⟨1, by rfl, ([b.map PoisonOr.value, a.map PoisonOr.value]ₕ :
+  ⟨1, rfl, ([b.map PoisonOr.value, a.map PoisonOr.value]ₕ :
     HVector TyDenote.toType [V8, V8])⟩
 
 /-- The ambient environment the tail blocks read: the entry block's six
@@ -107,7 +111,7 @@ structure EntryEnv (V : fd_r43x6_repsqr_mul2.Γout.Valuation)
 reached, `x` squared `k` times. `u44` is the tighter bound the fold leaves,
 so it holds only once an iteration has run -- and it is what `^bb2` hands to
 `fd_r43x6_mul_fast`. -/
-private structure Chain (x : Vector (BitVec 64) 8) (k : Nat)
+structure Chain (x : Vector (BitVec 64) 8) (k : Nat)
     (v : Vector (BitVec 64) 8) : Prop where
   /-- `fd_r43x6_sqr_fast`'s input bound. -/
   u47 : R43x6.U47 (v.take R43x6.limbCount)

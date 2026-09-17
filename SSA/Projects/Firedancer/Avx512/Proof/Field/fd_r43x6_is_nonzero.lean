@@ -1,14 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Proof.Long
-import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_long_if
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
-import SSA.Projects.Firedancer.Avx512.Proof.Field.ReduceWalk
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import Mathlib.Tactic.Linarith
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Proof.Long
+public import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_long_if
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.ReduceWalk
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import Mathlib.Tactic.Linarith
 
 /-!
 # `fd_r43x6_is_nonzero` decides whether its input is zero in `GF(2^255-19)`
@@ -29,6 +31,8 @@ comparison against zero decides the element only because the representation
 reaching it is the unique reduced one, so it uses `reduceIsCanonical` (through
 `R43x6.decodeLimbs_eq_zero_iff`) as well as `reducePreservesValue`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

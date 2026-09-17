@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

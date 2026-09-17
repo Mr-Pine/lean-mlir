@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.F25519
-import SSA.Projects.Firedancer.Proof.Memory
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
+public import SSA.Projects.Firedancer.Proof.Memory
 
 /-!
 # A ref region's frame
@@ -13,6 +15,8 @@ ids consecutive from the entry counter, each at offset 0. A walk indexes them
 by `Fin n` for its own `n` and uses the three lemmas below to keep them apart
 from each other and from the caller's blocks.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

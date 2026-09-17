@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
 
 /-!
 # The negation `fd_ed25519_point_sub_with_opts` adds
@@ -9,6 +11,8 @@ import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
 `a - b` is `a + (-b)`, and `-(X, Y, Z, T) = (-X, Y, Z, -T)`: in precomputed form
 `Y - X` and `Y + X` swap and `2d·T` changes sign.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

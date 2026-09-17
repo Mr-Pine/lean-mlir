@@ -2,9 +2,16 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_ge_is_eq.mlir
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_quad_mul_fast
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_quad_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_quad_mul_fast
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

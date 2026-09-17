@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_frombytes_2x
+module
+
+public import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_frombytes_2x
 
 /-!
 # `fd_ed25519_point_dbln`: ref ≡ avx512
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Conformance.Proof.fd_ed25519_point_frombytes_2x
 Each side's conformance gives `dbln n` of its own input; `Point.dbln_congr`
 equates the two, since the inputs agree on `X`, `Y`, `Z`.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 open LeanMLIR SLLVM

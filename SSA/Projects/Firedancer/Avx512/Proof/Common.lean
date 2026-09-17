@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Spec.Common
-import Mathlib.Tactic.IntervalCases
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Spec.Common
+public import Mathlib.Tactic.IntervalCases
 
 /-!
 # Shared lane semantics for the `fd_r43x6` proofs
@@ -38,6 +40,8 @@ The tactics work lanewise on 8-lane `vector<8xi64>` values; they are used on
 goals of the shape `v<i> = <explicit vector>` produced by `denote_step_all`
 (see `MLIR/DenoteStep.lean`).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 
@@ -157,7 +161,7 @@ theorem vec8_mul_rep (a0 a1 a2 a3 a4 a5 a6 a7 k : ℕ) :
 
 open Lean Meta in
 /-- The 8 lanes of a literal `toBitVecValue 64 #v[…]`, through `let`s. -/
-private def vec8Lanes? (e : Lean.Expr) : MetaM (Option (Array Lean.Expr)) := do
+meta def vec8Lanes? (e : Lean.Expr) : MetaM (Option (Array Lean.Expr)) := do
   let e ←
     if e.isFVar then
       pure ((← e.fvarId!.getDecl).value?.getD e)
@@ -173,7 +177,7 @@ private def vec8Lanes? (e : Lean.Expr) : MetaM (Option (Array Lean.Expr)) := do
 
 open Lean Meta in
 /-- `k` of a `toBitVecValue 64 (Vector.replicate 8 k)`, through `let`s. -/
-private def vec8Rep? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
+meta def vec8Rep? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
   let e ←
     if e.isFVar then
       pure ((← e.fvarId!.getDecl).value?.getD e)

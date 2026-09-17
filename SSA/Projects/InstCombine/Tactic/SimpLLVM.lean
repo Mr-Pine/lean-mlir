@@ -1,10 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Trace
-import SSA.Projects.InstCombine.ForLean
-import LeanMLIR.Dialects.LLVM.Syntax
-import SSA.Projects.InstCombine.Tactic.ReduceModTwoPow
+module
+
+public import LeanMLIR.Framework.Trace
+public import SSA.Projects.InstCombine.ForLean
+public import LeanMLIR.Dialects.LLVM.Syntax
+public import SSA.Projects.InstCombine.Tactic.ReduceModTwoPow
+
+@[expose] public section
 
 open Lean
 open Lean.Elab.Tactic
@@ -78,7 +82,7 @@ macro_rules
                                 --   `∀ (x₁ : BitVec _) ... (xₙ : BitVec _), ...`
     )
 
-def revertIntW (g : MVarId) : MetaM (Array FVarId × MVarId) := do
+meta def revertIntW (g : MVarId) : MetaM (Array FVarId × MVarId) := do
   let type ← g.getType
   let (_, fvars) ← type.forEachWhere Expr.isFVar collector |>.run {}
   g.revert fvars.toArray
@@ -155,7 +159,7 @@ theorem hide_eq {a : α} : hide a = a := by
 theorem eq_hide {a : α} : a = hide a := by
   symm; exact hide_eq
 
-def simpHide (e : Expr) : Meta.SimpM Meta.Simp.Step := do
+meta def simpHide (e : Expr) : Meta.SimpM Meta.Simp.Step := do
   let ctx ← Simp.getContext
   if let some parent := ctx.parent? then
     if parent.isAppOf ``hide then
@@ -169,7 +173,7 @@ def simpHide (e : Expr) : Meta.SimpM Meta.Simp.Step := do
     proof? := some proof
   }
 
-protected partial def isConstant (e : Expr) : Bool :=
+protected meta partial def isConstant (e : Expr) : Bool :=
   match_expr e with
   | Neg.neg _α _self x => HideConstants.isConstant x
   | OfNat.ofNat _α x _self => HideConstants.isConstant x

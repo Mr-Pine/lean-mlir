@@ -1,7 +1,11 @@
-import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_frombytes_2x
+module
+
+public import SSA.Projects.Firedancer.Conformance.Spec.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_frombytes_2x
+
+@[expose] public section
 
 namespace Firedancer
 open LeanMLIR SLLVM

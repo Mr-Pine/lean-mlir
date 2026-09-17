@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
 
 /-!
 # What `fd_r43x6_quad_sqr_fast` is specified to compute
@@ -45,6 +47,8 @@ against which `two_x14` is multiplied, so that the mirror-symmetric schedule
 has a term to pair `2*p41l` with. It contributes `pl a 0 = ph a 0 = 0` and
 drops out.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

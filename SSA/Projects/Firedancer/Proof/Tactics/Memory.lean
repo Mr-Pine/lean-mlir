@@ -1,7 +1,11 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+
+@[expose] public section
 
 namespace Firedancer
 

@@ -1,10 +1,14 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_add
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_carry
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_add
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_carry
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

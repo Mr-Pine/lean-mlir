@@ -1,6 +1,8 @@
-import SSA.Projects.Firedancer.Avx512.Spec.Common
-import SSA.Projects.Firedancer.Ed25519
-import Mathlib.Tactic.IntervalCases
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Common
+public import SSA.Projects.Firedancer.Ed25519
+public import Mathlib.Tactic.IntervalCases
 
 /-!
 # What `fd_r43x6_mul_fast` is specified to compute
@@ -28,6 +30,8 @@ and 7 of y are zero"):
 Lanes 6 and 7 of `x` need no hypothesis beyond `hx`: the `wwl_permute` masks
 select only lanes 0-5 of `x`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

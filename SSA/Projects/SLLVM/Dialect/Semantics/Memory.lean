@@ -1,6 +1,10 @@
-import LeanMLIR.Framework
+module
 
-import SSA.Projects.SLLVM.Tactic.SimpSet
+public import LeanMLIR.Framework
+
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+
+@[expose] public section
 
 namespace LeanMLIR
 

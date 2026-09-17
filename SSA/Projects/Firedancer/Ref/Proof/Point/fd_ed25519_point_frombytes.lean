@@ -1,20 +1,22 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.Locals
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_from
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sgn
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_frombytes
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqrt_ratio
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.Locals
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_from
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sgn
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_frombytes
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqrt_ratio
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
 
 /-!
 # `fd_ed25519_point_frombytes` conforms to its spec
@@ -28,6 +30,8 @@ the ratio is not a square it returns `NULL` and writes nothing.
 the two sign branches share, and is where the `x = 0` case -- RFC 8032 admits
 `(0, y)` with the sign bit set, Dalek rejects it -- is discharged.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

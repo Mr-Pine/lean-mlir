@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
 
 /-!
 # Lane operations and the fold runs
@@ -11,6 +13,8 @@ instructions and names the vector they leave by its model definition.
 Hypotheses are stated through `vbin`/`vshuf`: written out as `Vector.ofFn`, a
 chain of a dozen of them elaborates in exponential time.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,6 +1,13 @@
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set_zero
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

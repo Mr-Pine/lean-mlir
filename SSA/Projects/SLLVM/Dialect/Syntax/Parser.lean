@@ -1,10 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Qq
+module
 
-import LeanMLIR.MLIRSyntax
-import SSA.Projects.SLLVM.Dialect.Basic
+public import Qq
+
+public import LeanMLIR.MLIRSyntax
+public import SSA.Projects.SLLVM.Dialect.Basic
+-- the `[sllvm| ..]` elaborators are `meta`
+public meta import LeanMLIR.MLIRSyntax
+public meta import SSA.Projects.SLLVM.Dialect.Basic
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 
@@ -13,8 +20,6 @@ open InstCombine (LLVM)
 open MLIR
 open MLIR.AST
 
-private abbrev ReaderM :=
-  MLIR.AST.ReaderM SLLVM
 
 /-! ### LLVM aggregate types and their layout
 
@@ -33,11 +38,11 @@ inductive AggTy where
   | vector (n : Nat) (elem : AggTy)
   deriving Repr
 
-private def takeAggNat (cs : List Char) : Option (Nat × List Char) :=
+def takeAggNat (cs : List Char) : Option (Nat × List Char) :=
   let ds := cs.takeWhile Char.isDigit
   if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
 
-private def dropWs (cs : List Char) : List Char :=
+def dropWs (cs : List Char) : List Char :=
   cs.dropWhile (· == ' ')
 
 mutual
@@ -88,7 +93,7 @@ partial def parseAggFields (cs : List Char) (acc : List AggTy) : Option (List Ag
 end
 
 /-- Round `off` up to a multiple of `a`. -/
-private def alignTo (off a : Nat) : Nat :=
+def alignTo (off a : Nat) : Nat :=
   ((off + a - 1) / a) * a
 
 /-- `(size, alignment)` in bytes, per LLVM's default data layout. An array
@@ -228,7 +233,7 @@ def getArgArithTy (opStx : MLIR.AST.Op 0) (i : Nat) : ExceptM SLLVM LLVM.Ty := d
 /-- The arithmetic type of an already-parsed operand. Unlike `getArgArithTy`
 this reads the type off the context variable rather than off the syntax, which
 is what `llvm.store` needs: its stored value may be of any arithmetic type. -/
-def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → ReaderM LLVM.Ty
+def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → MLIR.AST.ReaderM SLLVM LLVM.Ty
   | ⟨Ty.arith t, _⟩ => return t
   | ⟨t, _⟩ => throw <| .generic s!"{opName}: expected an arithmetic operand, but found: {t}"
 
@@ -236,7 +241,7 @@ def argArithTy {Γ : Ctxt SLLVM.Ty} (opName : String) : (Σ t, Γ.Var t) → Rea
 `not_atomic`, and atomics are not modelled. `alignment`, `tbaa` and
 `nontemporal` are accepted and ignored -- this memory model has no alignment
 constraints and no alias-metadata semantics. -/
-def checkNotAtomic (opStx : MLIR.AST.Op 0) : ReaderM Unit :=
+def checkNotAtomic (opStx : MLIR.AST.Op 0) : MLIR.AST.ReaderM SLLVM Unit :=
   match opStx.getAttr? "ordering" with
   | none => return ()
   | some (.int 0 _) => return ()
@@ -314,11 +319,11 @@ def getVectorLaneCount (opStx : MLIR.AST.Op 0) (op : String) :
 This relies on the fact that `bitvec _` is the only type currently modelled.
 In future, this might start throwing errors, if the type is not a bitvec.
 -/
-def getIntWidth {Γ : Ctxt SLLVM.Ty} : (Σ t, Γ.Var t) → ReaderM Nat
+def getIntWidth {Γ : Ctxt SLLVM.Ty} : (Σ t, Γ.Var t) → MLIR.AST.ReaderM SLLVM Nat
   | ⟨Ty.bitvec w, _⟩ => return w
   | ⟨t, _⟩ => throw <| .generic s!"Expected type `bitvec _`, but found: {t}"
 
-def parseOverflowFlags (op : AST.Op 0) : ReaderM LLVM.NoWrapFlags :=
+def parseOverflowFlags (op : AST.Op 0) : MLIR.AST.ReaderM SLLVM LLVM.NoWrapFlags :=
   match op.getAttr? "overflowFlags" with
   | .none => return {}
   | .some y => match y with
@@ -360,7 +365,7 @@ instance : DialectParse SLLVM 0 where
      operands are. Note that this is only used for the *pure* binary operations;
      divisions and remainders keep their scalar, impure SLLVM treatment. -/
   let mkBinary (bop : InstCombine.MOp.BinaryOp) :
-      ReaderM (Σ eff returnTy, Expr SLLVM Γ eff returnTy) := do
+      MLIR.AST.ReaderM SLLVM (Σ eff returnTy, Expr SLLVM Γ eff returnTy) := do
     let args ← args.assumeArity 2
     match args[0].1 with
     | Ty.bitvec w => mkExprOf <| Op.arith (.binary w bop)
@@ -741,7 +746,7 @@ partial def AggTy.print : AggTy → String
   | .vector n t => s!"vector<{n}x{t.print}>"
   | .struct fields => "struct<(" ++ String.intercalate ", " (fields.map print) ++ ")>"
 
-private def _root_.MLIR.AST.AttrDict.set (d : AttrDict 0) (key : String) (v : AttrValue 0) :
+def _root_.MLIR.AST.AttrDict.set (d : AttrDict 0) (key : String) (v : AttrValue 0) :
     AttrDict 0 :=
   match d with
   | .mk entries => .mk <| entries.map fun
@@ -801,7 +806,7 @@ must be visibly the constant 1. Checked on the region AST because the count is
 an SSA operand -- `mkExpr` sees one operation at a time and cannot follow it
 to its defining constant. Each region is its own scope: a bound callee's `%0`
 is not its caller's. -/
-private partial def allocaCountsAreOne (reg : Region 0) : Except String Unit := do
+partial def allocaCountsAreOne (reg : Region 0) : Except String Unit := do
   let _ ← reg.ops.foldlM (init := ([] : List SSAVal)) fun ones op => do
     op.regions.forM allocaCountsAreOne
     if op.name == "llvm.mlir.constant" then
@@ -823,13 +828,13 @@ syntax sllvmCallee := "@" ident " := " term
 
 open Lean Elab Term Qq in
 /-- Evaluate a bound term to the AST region it denotes. -/
-private def elabRegionTerm (t : Term) : TermElabM (MLIR.AST.Region 0) := do
+meta def elabRegionTerm (t : Term) : TermElabM (MLIR.AST.Region 0) := do
   let e ← elabTermEnsuringTypeQ t q(MLIR.AST.Region 0)
   synthesizeSyntheticMVarsNoPostponing
   SSA.evalExprOfTypeRegion 0 (← instantiateMVars e)
 
 open Lean Elab Term in
-private def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
+meta def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
     TermElabM (List (String × MLIR.AST.Region 0)) :=
   bs.toList.mapM fun b => do
     match b with
@@ -837,9 +842,13 @@ private def elabCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
         return (name.getId.toString, ← elabRegionTerm t)
     | _ => throwUnsupportedSyntax
 
+-- module: the elaborator needs this module's own dialect instances, which stay non-`meta`
+set_option compiler.relaxedMetaCheck true in
 elab "[sllvm| " reg:mlir_region "]" : term =>
   SSA.elabIntoCom' reg SLLVM (pre := foldGepZeroIndex) (check := allocaCountsAreOne)
 
+-- module: the elaborator needs this module's own dialect instances, which stay non-`meta`
+set_option compiler.relaxedMetaCheck true in
 /-- `[sllvm| ‹region› with @f := fRegion]` binds the bodies of the symbols the
 region's `llvm.call`s name, where `fRegion : MLIR.AST.Region 0` -- as
 `[mlir_region| … ]` produces. MLIR's `llvm.call` carries no inline region, so
@@ -849,12 +858,16 @@ elab "[sllvm| " reg:mlir_region " with " bs:sllvmCallee,+ "]" : term => do
   SSA.elabIntoCom' reg SLLVM (pre := foldGepZeroIndex ∘ bindCallees table)
     (check := allocaCountsAreOne)
 
+-- module: the elaborator needs this module's own dialect instances, which stay non-`meta`
+set_option compiler.relaxedMetaCheck true in
 /-- `[sllvm| … ]` from an already-built `MLIR.AST.Region 0`, so a region can be
 written once and used both as a `Com` and as a callee binding. -/
 elab "[sllvm_of| " t:term "]" : term => do
   SSA.elabIntoCom'OfRegion (foldGepZeroIndex (← elabRegionTerm t)) SLLVM
     (check := allocaCountsAreOne)
 
+-- module: the elaborator needs this module's own dialect instances, which stay non-`meta`
+set_option compiler.relaxedMetaCheck true in
 /-- `[sllvm_of| r with @f := fRegion]`: `[sllvm_of| r]` with callee bindings,
 for a lifted region that both *is* a callee and *has* callees of its own. -/
 elab "[sllvm_of| " t:term " with " bs:sllvmCallee,+ "]" : term => do

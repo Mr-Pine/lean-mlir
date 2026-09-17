@@ -1,12 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_wnaf
-import SSA.Projects.Firedancer.Proof.Globals
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_wnaf
+public import SSA.Projects.Firedancer.Proof.Globals
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

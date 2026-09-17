@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_pow22523_2
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_pow22523_2
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 
 /-!
 # One `fd_r43x6_pow22523_2` call, peeled
@@ -15,6 +17,8 @@ The kernel writes two `wwl_t` out-parameters, so what it leaves is `Wrote2` --
 which is also what lets the two `load`s after the call read the exponentials
 back out of the slots.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

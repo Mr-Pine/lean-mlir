@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

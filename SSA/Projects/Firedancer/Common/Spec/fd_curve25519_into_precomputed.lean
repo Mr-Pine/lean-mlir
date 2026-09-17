@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # The precomputed form `fd_curve25519_into_precomputed` writes
@@ -10,6 +12,8 @@ Point addition (RFC 8032 §5.1.4) multiplies `Y - X`, `Y + X` and `2d·T` of eac
 operand. A table point, added many times, stores those three and `Z` instead of
 `X, Y, Z, T`, saving a sub, an add and the multiplication by `2d` per addition.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

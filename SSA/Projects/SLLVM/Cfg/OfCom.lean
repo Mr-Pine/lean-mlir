@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.Basic
+module
+
+public import SSA.Projects.SLLVM.Cfg.Basic
 
 /-!
 # A straight-line `Com` as a one-block `Cfg`
@@ -17,6 +19,8 @@ recursion is stated on `Cfg` rather than on `BlockCom`: an `ofCom` indexed by
 `Com.outContext` does not reduce under `Com.rec'`, whose `var` case spells the
 body's context `Expr.outContext e` where the constructor spells it `tys ++ Γ`.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 

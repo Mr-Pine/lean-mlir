@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Proof.Memory
+module
+
+public import SSA.Projects.Firedancer.Proof.Memory
 
 /-!
 # A callee's write chain, as the caller meets it
@@ -21,6 +23,8 @@ first-order.
 They are proved by `intro` and `rw` with no `show`: spelling the chain out first
 re-elaborates it, which costs seconds on its own.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 

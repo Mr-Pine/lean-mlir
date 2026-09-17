@@ -2,8 +2,14 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/{ref,avx512}/region/fd_curve25519_scalar_wnaf.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_int_min
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_int_min
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_int_min
+
+@[expose] public section
 
 namespace Firedancer.Common
 open LeanMLIR SLLVM

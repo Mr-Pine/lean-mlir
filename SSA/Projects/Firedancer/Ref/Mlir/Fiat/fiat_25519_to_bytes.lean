@@ -2,10 +2,18 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fiat_25519_to_bytes.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_addcarryx_u51
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_subborrowx_u51
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_cmovznz_u64
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_addcarryx_u51
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_subborrowx_u51
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_cmovznz_u64
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_addcarryx_u51
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_subborrowx_u51
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_cmovznz_u64
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

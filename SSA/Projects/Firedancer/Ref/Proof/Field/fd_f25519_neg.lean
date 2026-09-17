@@ -1,8 +1,12 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_opp
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_opp
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

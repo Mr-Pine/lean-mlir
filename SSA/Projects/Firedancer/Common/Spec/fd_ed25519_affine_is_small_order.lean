@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # The eight low-order points, and the test `fd_ed25519_affine_is_small_order` runs
@@ -43,6 +45,8 @@ holds, on the curve with `Z = 1`, exactly for the eight coordinate pairs
 listed. The order labels come from the C comment and RFC 8032 and are
 documentation.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

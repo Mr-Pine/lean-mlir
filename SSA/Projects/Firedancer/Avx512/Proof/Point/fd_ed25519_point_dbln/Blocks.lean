@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Lanes
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Lanes
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
 
 /-!
 # `fd_ed25519_point_dbln`'s tail blocks
@@ -15,6 +17,8 @@ import SSA.Projects.Firedancer.Proof.Tactics
 and the `i8` counter. Each reads `^bb0`'s definitions through `EntryEnv`;
 `%k` is `Γout` variable `194 - k`, `%argN` is `197 - N`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
@@ -27,16 +31,16 @@ open Ge
 
 /-- `^bb1(%282, %284, %286)`, threaded by the lifter: the last doubling. -/
 abbrev hdr1 (q : Quad) : SuccArgs fd_ed25519_point_dbln.sigs :=
-  ⟨0, by rfl, ([q.v03.map PoisonOr.value, q.v14.map PoisonOr.value, q.v25.map PoisonOr.value]ₕ :
+  ⟨0, rfl, ([q.v03.map PoisonOr.value, q.v14.map PoisonOr.value, q.v25.map PoisonOr.value]ₕ :
     HVector TyDenote.toType [V8, V8, V8])⟩
 
 /-- `^bb2`, the return. -/
 abbrev hdr2 : SuccArgs fd_ed25519_point_dbln.sigs :=
-  ⟨1, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨1, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb3(%195, %196, %197, %198)`: the loop header, `25` vector first, and the counter. -/
 abbrev hdr3 (q : Quad) (c : BitVec 8) : SuccArgs fd_ed25519_point_dbln.sigs :=
-  ⟨2, by rfl, ([q.v25.map PoisonOr.value, q.v14.map PoisonOr.value, q.v03.map PoisonOr.value,
+  ⟨2, rfl, ([q.v25.map PoisonOr.value, q.v14.map PoisonOr.value, q.v03.map PoisonOr.value,
     PoisonOr.value c]ₕ : HVector TyDenote.toType [V8, V8, V8, SLLVM.Ty.bitvec 8])⟩
 
 /-! ### The ambient environment -/

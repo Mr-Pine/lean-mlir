@@ -2,7 +2,11 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_quad_sqr_fast.mlir
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import SSA.Projects.SLLVM.Dialect
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

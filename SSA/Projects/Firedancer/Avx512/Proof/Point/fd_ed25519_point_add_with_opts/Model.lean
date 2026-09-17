@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
 
 /-!
 # `FD_R43X6_GE_ADD_TABLE_ALT`, as a function on QUADs
@@ -15,6 +17,8 @@ permutes, the multiply and the unsigned fold.
 * `u44_geAddTable`: `u44` in, `u44` out.
 * `toPoint_geAddTable`: the point is `Point.addPrecomputed`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

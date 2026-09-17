@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
 
 /-!
 # `fd_ed25519_point_set_zero` conformance (ref)
@@ -11,6 +13,8 @@ import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
 Four `fd_f25519_set`s from the two globals into `r`'s block. `Apart` carries the
 globals past each write; the readback follows `AddWithOpts.tail_run`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

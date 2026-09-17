@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mod_nearly_reduced_limbs
-import Mathlib.Data.ZMod.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mod_nearly_reduced_limbs
+public import Mathlib.Data.ZMod.Basic
 
 /-!
 # `fd_r43x6_mod_nearly_reduced_limbs` returns the canonical representative
@@ -34,6 +36,8 @@ The arithmetic is all `omega` once `R43x6.shiftRight_eq` has turned the shifts
 into division; the borrow bound `mnrE y i ∈ [-1, 2^43)` is derived on the way
 rather than stated.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

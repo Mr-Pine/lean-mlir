@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Entry
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Entry
 
 /-!
 # `fd_ed25519_point_add_with_opts` conforms (AVX-512)
@@ -11,6 +13,8 @@ computes `FD_R43X6_GE_ADD_TABLE_ALT` up to the last product; `^bb3` (`bb3_run`) 
 it and stores into `r`. The arithmetic is `PointAdd.geAddTable`
 (`fd_ed25519_point_add_with_opts/Model.lean`).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

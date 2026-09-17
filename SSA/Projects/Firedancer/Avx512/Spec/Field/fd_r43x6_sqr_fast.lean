@@ -1,7 +1,9 @@
-import SSA.Projects.Firedancer.Avx512.Spec.Common
-import SSA.Projects.Firedancer.MLIR.Poison
-import SSA.Projects.Firedancer.Ed25519
-import Mathlib.Tactic.IntervalCases
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Common
+public import SSA.Projects.Firedancer.MLIR.Poison
+public import SSA.Projects.Firedancer.Ed25519
+public import Mathlib.Tactic.IntervalCases
 
 /-!
 # What `fd_r43x6_sqr_fast` is specified to compute
@@ -33,6 +35,8 @@ unreduced fd_r43x6_t (i.e. in u47).  Assumes lanes 6 and 7 of x are zero"):
 
 `h6` belongs to that contract but is unused: `x[6]` occurs in no output lane.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

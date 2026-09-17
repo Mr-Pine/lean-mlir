@@ -1,11 +1,21 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_is_zero
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+module
+
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_is_zero
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_carry
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

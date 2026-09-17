@@ -1,6 +1,8 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Overflow
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Overflow
 
 /-!
 # Evaluating one stepped instruction
@@ -10,6 +12,8 @@ opaque `v<k>` of its operands. `eval_llvm` reduces that to
 `v<i> = PoisonOr.value e`, the form an operand must be in for the next
 instruction's `PoisonOr` bind to reduce.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 

@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_diagnose
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_diagnose
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
 
 /-!
 # One `fd_r43x6_diagnose` call, peeled
@@ -18,6 +20,8 @@ and the spec reads it off -- while `peel_call` wants the whole `HVector`;
 reach the sign test: `fd_r43x6_diagnose`'s input contract is signed, and every
 caller arrives holding the `u44` a fold left.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

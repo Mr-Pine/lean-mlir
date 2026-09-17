@@ -1,5 +1,9 @@
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_is_zero.mlir
-import SSA.Projects.SLLVM.Cfg
+module
+
+public import SSA.Projects.SLLVM.Cfg
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

@@ -1,9 +1,11 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_set
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Limb
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_set
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Limb
 
 /-!
 # `fd_f25519_set` conformance
@@ -19,6 +21,8 @@ defining equation) rather than `set`: leaving them as transparent lets makes
 the elaborator's final re-check zeta-expand the nested structure updates and
 blows the check up from seconds to minutes.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

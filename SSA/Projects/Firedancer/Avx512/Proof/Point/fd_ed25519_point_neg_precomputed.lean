@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg_precomputed
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg_precomputed
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 
 /-!
 # `fd_ed25519_point_neg_precomputed` conformance (AVX-512)
@@ -13,6 +15,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 vectors; then `negPre`, `negT` with the `X` and `Y` lanes swapped, stored over
 all three. `live?_splice2_writeQuad` drops the first two stores.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

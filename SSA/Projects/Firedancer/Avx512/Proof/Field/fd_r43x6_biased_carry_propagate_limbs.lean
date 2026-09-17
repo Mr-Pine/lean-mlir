@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_biased_carry_propagate_limbs
-import Mathlib.Data.ZMod.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_biased_carry_propagate_limbs
+public import Mathlib.Data.ZMod.Basic
 
 /-!
 # `fd_r43x6_biased_carry_propagate_limbs` is a nearly reducing carry propagate
@@ -27,6 +29,8 @@ is linear arithmetic over `ℤ` with division and remainder by literals, and the
 carry bounds -- `x5 >> 40` in `[-2^23,2^23)`, each `>> 43` in `[-2^20,2^20)`
 -- come out on the way.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

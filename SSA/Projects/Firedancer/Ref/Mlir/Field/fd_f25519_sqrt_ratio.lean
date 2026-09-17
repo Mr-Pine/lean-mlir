@@ -1,12 +1,24 @@
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_sqrt_ratio.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_abs
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_pow22523
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_abs
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_pow22523
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_abs
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_pow22523
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

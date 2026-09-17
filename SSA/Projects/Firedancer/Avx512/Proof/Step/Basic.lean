@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Tactics
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics
 
 /-!
 # Reading and writing a `wwl_t` slot
@@ -17,6 +19,8 @@ every `fd_r43x6` callee that writes `wwl_t` out-parameters uses it.
 `readWord?_splice_ne`/`_self` in `Proof/Memory.lean`, and belong beside them
 once a second caller wants them.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

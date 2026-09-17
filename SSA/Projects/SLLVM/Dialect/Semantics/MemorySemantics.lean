@@ -1,12 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
-import LeanMLIR.Dialects.LLVM.Basic
-import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
-import SSA.Projects.SLLVM.Dialect.Semantics.EffectM
-import SSA.Projects.SLLVM.Dialect.Semantics.ArithSemantics
-import SSA.Projects.SLLVM.Tactic.SimpSet
+public import LeanMLIR.Dialects.LLVM.Basic
+public import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
+public import SSA.Projects.SLLVM.Dialect.Semantics.EffectM
+public import SSA.Projects.SLLVM.Dialect.Semantics.ArithSemantics
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+
+@[expose] public section
 
 namespace LeanMLIR
 

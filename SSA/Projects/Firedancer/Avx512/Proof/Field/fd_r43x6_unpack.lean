@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
 
 /-!
 # `fd_r43x6_unpack` conforms to its spec
@@ -21,6 +23,8 @@ together), in `SLLVM/Dialect/Semantics/MemoryLemmas.lean`. The first is where
 which the permute never reads.
 -/
 
+@[expose] public section
+
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine
@@ -37,11 +41,11 @@ the spec's `wvNat`, bridged by `toNat_wvBV`. It stays here rather than beside
 `wvNat`: `bv_decide` collects `u[i]` written in two different files as two
 distinct atoms, so the word and the bytes cut from it have to be elaborated
 together. -/
-private def wvBV (u : Vector (BitVec 64) 4) : BitVec 256 :=
+def wvBV (u : Vector (BitVec 64) 4) : BitVec 256 :=
   u[3] ++ u[2] ++ u[1] ++ u[0]
 
 /-- Byte `k` of the `wv_t`, zero past the 32 bytes it holds. -/
-private def ub (u : Vector (BitVec 64) 4) (k : Nat) : BitVec 8 :=
+def ub (u : Vector (BitVec 64) 4) (k : Nat) : BitVec 8 :=
   match k / 8 with
   | 0 => u[0].extractLsb' (8 * (k % 8)) 8
   | 1 => u[1].extractLsb' (8 * (k % 8)) 8
@@ -51,7 +55,7 @@ private def ub (u : Vector (BitVec 64) 4) (k : Nat) : BitVec 8 :=
 
 /-- The eight lanes the byte permute leaves, before the shift and mask:
 lane `j` is the seven-or-eight byte window the shuffle mask selects. -/
-private def v10lanes (u : Vector (BitVec 64) 4) : Vector (BitVec 64) 8 :=
+def v10lanes (u : Vector (BitVec 64) 4) : Vector (BitVec 64) 8 :=
   #v[0#0 ++ ub u 63 ++ ub u 63 ++ ub u 5 ++ ub u 4 ++ ub u 3 ++ ub u 2 ++ ub u 1 ++ ub u 0,
      0#0 ++ ub u 63 ++ ub u 63 ++ ub u 10 ++ ub u 9 ++ ub u 8 ++ ub u 7 ++ ub u 6 ++ ub u 5,
      0#0 ++ ub u 63 ++ ub u 16 ++ ub u 15 ++ ub u 14 ++ ub u 13 ++ ub u 12 ++ ub u 11 ++ ub u 10,
@@ -63,7 +67,7 @@ private def v10lanes (u : Vector (BitVec 64) 4) : Vector (BitVec 64) 8 :=
 
 /-- The six limbs the region is specified to cut, as `BitVec`s: bits
 `[43j, 43j+43)` of the word, zero in lanes 6 and 7. -/
-private def unpackVec (u : Vector (BitVec 64) 4) : Vector (BitVec 64) 8 :=
+def unpackVec (u : Vector (BitVec 64) 4) : Vector (BitVec 64) 8 :=
   #v[((wvBV u).extractLsb' 0 43).setWidth 64,
      ((wvBV u).extractLsb' 43 43).setWidth 64,
      ((wvBV u).extractLsb' 86 43).setWidth 64,

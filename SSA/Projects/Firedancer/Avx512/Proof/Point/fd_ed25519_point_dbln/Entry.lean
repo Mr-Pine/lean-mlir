@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Blocks
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Blocks
 
 /-!
 # `fd_ed25519_point_dbln`'s entry block
@@ -9,6 +11,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Blocks
 `^bb0`: the constants, the twelve slots, `a`'s three vectors, `FD_R43X6_GE_DBL`
 through slots 0-5, the three stores into `r`, and the branch on `n > 1`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

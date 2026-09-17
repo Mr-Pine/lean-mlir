@@ -2,10 +2,18 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_point_dbln.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

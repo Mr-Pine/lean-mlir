@@ -1,21 +1,25 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sqrt_ratio
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.Ref.Proof.Globals
-import SSA.Projects.Firedancer.Ref.Proof.Locals
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_abs
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_if
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_eq
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_pow22523
+module
 
-import SSA.Projects.Firedancer.Prime
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_sqrt_ratio
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.Ref.Proof.Globals
+public import SSA.Projects.Firedancer.Ref.Proof.Locals
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_abs
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_if
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_pow22523
 
-import Mathlib.FieldTheory.Finite.Basic
-import Mathlib.NumberTheory.LegendreSymbol.Basic
-import Mathlib.Algebra.Group.Even
+public import SSA.Projects.Firedancer.Prime
+
+public import Mathlib.FieldTheory.Finite.Basic
+public import Mathlib.NumberTheory.LegendreSymbol.Basic
+public import Mathlib.Algebra.Group.Even
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

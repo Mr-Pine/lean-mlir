@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Proof.Overflow
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Proof.Overflow
 
 /-!
 # The constant-operand macros a caller's block expands inline
@@ -30,6 +32,8 @@ Each macro's caller wants the same three things of the vector it leaves: the
 denotation, the element, and the `u44` bound the next kernel takes as its
 input contract.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open InstCombine (LLVM)

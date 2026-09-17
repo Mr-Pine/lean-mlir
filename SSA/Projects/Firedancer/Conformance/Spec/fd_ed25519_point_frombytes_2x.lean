@@ -1,8 +1,12 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Ref.Proof.RefWF -- Should move out of Proof
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF -- Should move out of Proof
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Curve
+
+@[expose] public section
 
 namespace Firedancer
 open LeanMLIR SLLVM

@@ -1,11 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Proof.Globals
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Proof.Globals
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

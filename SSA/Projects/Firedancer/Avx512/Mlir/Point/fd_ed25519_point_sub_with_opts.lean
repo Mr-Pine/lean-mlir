@@ -2,10 +2,18 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_sub_with_opts.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg_precomputed
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_add_with_opts
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg_precomputed
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_add_with_opts
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg_precomputed
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_add_with_opts
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqrt_ratio
+module
+
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqrt_ratio
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

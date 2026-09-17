@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.Basic
+module
+
+public import SSA.Projects.SLLVM.Cfg.Basic
 
 /-!
 # The fueled interpreter agrees with the denotation
@@ -17,6 +19,8 @@ interpreter `#guard` tests run. This file connects them:
   block's `denote` -- the equation loop proofs walk with;
 - `Cfg.eval_sound`: a completed `Cfg.eval` result is the denotation.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 

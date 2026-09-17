@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Model
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts.Model
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
 
 /-!
 # `FD_R43X6_GE_ADD_TABLE_ALT`'s instruction runs, reduced to the model
@@ -11,6 +13,8 @@ The runs every `GE` macro shares are `Ge`'s; these are the rest. The second sign
 fold adds its bias in a different order on the `03` and `14` vectors, so it gets
 its own two lemmas.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

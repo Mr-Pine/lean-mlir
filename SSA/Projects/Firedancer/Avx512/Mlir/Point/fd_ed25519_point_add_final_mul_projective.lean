@@ -2,8 +2,14 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_add_final_mul_projective.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_set
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,10 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
-import LeanMLIR.Dialects.LLVM.Semantics
-import SSA.Projects.SLLVM.Dialect.Semantics.EffectM
-import SSA.Projects.SLLVM.Tactic.SimpSet
+public import LeanMLIR.Dialects.LLVM.Semantics
+public import SSA.Projects.SLLVM.Dialect.Semantics.EffectM
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+
+@[expose] public section
 
 /-- `x.canBe y` returns true when `x` can be refined into a bitvector value `y`.
 That is, when `x` is poison or `x` is equal to `value y`. -/

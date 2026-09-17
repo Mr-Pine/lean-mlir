@@ -1,8 +1,12 @@
-import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_cmovznz_u64
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_cmovznz_u64
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_cmovznz_u64
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_cmovznz_u64
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

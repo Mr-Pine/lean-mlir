@@ -1,5 +1,9 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+
+@[expose] public section
 
 namespace Firedancer
 

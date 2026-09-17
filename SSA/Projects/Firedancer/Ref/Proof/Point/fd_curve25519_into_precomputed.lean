@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
 
 /-!
 # `fd_curve25519_into_precomputed` conformance (ref)
@@ -13,6 +15,8 @@ Locals `add` and `sub` are copied into `r->Y` and `r->X`, then `r->T` is multipl
 by `k` in place; `Wrote.holds` carries `r->T` and `k` past the two stores to
 `r`'s block.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

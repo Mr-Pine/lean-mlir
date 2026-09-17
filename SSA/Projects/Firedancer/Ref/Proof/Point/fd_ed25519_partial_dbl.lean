@@ -1,16 +1,18 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Proof.WriteChain
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add_nr
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub_nr
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Proof.WriteChain
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add_nr
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub_nr
 
 /-!
 # `fd_ed25519_partial_dbl` conformance (ref)
@@ -21,6 +23,8 @@ the walk itself is only `peel_call`s. `r`'s block after the four stores is
 chained through the callees' `≈` by `live?_splice_congr`; every other caller
 block is untouched, and the locals die at `popFrame` (`popFrame_equiv_block`).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

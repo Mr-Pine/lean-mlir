@@ -2,12 +2,22 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_r43x6_ge_decode2.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Avx512.Mlir.Util.wv_ld
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_diagnose
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_pow22523_2
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Avx512.Mlir.Util.wv_ld
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_diagnose
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_pow22523_2
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Util.wv_ld
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_unpack
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_diagnose
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_is_nonzero
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_pow22523_2
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

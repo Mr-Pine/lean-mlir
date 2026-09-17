@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_wnaf
-import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_int_min
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Proof.Memory
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_wnaf
+public import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_int_min
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Proof.Memory
 
 /-!
 # `fd_curve25519_scalar_wnaf` returns, writing the scalar's digits at `slides`
@@ -30,6 +32,8 @@ a value) and makes the outer loop advance.
 preserve against `%43 = max` and `%45 = -max` (`K`). Under `Hyp` (`bits ≤ 13`, `slides` and `n`
 apart) each constructor's `hI` adds the digit sum; see "The digits".
 -/
+
+@[expose] public section
 
 namespace Firedancer.Common
 

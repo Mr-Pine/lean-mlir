@@ -2,8 +2,14 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_point_set_zero.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_set
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

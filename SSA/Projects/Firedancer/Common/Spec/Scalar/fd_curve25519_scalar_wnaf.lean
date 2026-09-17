@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_wnaf
-import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_wnaf
+public import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 
 /-!
 # `fd_curve25519_scalar_wnaf` (common)
@@ -23,6 +25,8 @@ The sum needs `bits ≤ 13`: at 14, `delta = 2 ^ min(j - i, 14)` passes the `del
 check while `j - i > 14`, and the digit absorbs a bit at the wrong weight. The C documents
 `bits` in `[1, 12]`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Common
 

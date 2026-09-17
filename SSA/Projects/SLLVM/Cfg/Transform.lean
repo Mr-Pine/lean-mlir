@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.Basic
-import SSA.Projects.SLLVM.Dialect.Syntax.Parser
+module
+
+public import SSA.Projects.SLLVM.Cfg.Basic
+public import SSA.Projects.SLLVM.Dialect.Syntax.Parser
 
 /-!
 # AST → `Cfg`
@@ -27,6 +29,8 @@ Terminators are decoded from each block's last operation. Successor operands
 live in the op's main operand list, split by `operandSegmentSizes` (and, for
 `llvm.switch`, `case_operand_segments` / `case_values`).
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 
@@ -62,7 +66,7 @@ def mkTarget (Γ : Ctxt SLLVM.Ty) (argVals : List (TypedSSAVal 0)) (succs : List
   | none =>
     throw <| .generic "internal: successor index out of range"
 
-private def segAttr (opStx : Op 0) (attr : String) : ReaderM SLLVM (List Nat) := do
+def segAttr (opStx : Op 0) (attr : String) : ReaderM SLLVM (List Nat) := do
   return (← arrayInts opStx attr).map (·.toNat)
 
 /-- Decode a block's final operation into a `Terminator`. `all` names every
@@ -150,7 +154,7 @@ abbrev MkCallee : Type :=
 
 /-- The three AVX-512 IFMA intrinsics keep their keyhole treatment as
 ordinary (region-free) operations; see the straight-line parser. -/
-private def isIntrinsicCall (opStx : Op 0) : Bool :=
+def isIntrinsicCall (opStx : Op 0) : Bool :=
   match opStx.getAttr? "callee" with
   | some (.symbol c) =>
     c == "x86_avx512_vpmadd52l_uq_512" || c == "x86_avx512_vpmadd52h_uq_512" ||
@@ -233,7 +237,7 @@ def mkBlockCom (mkCallee : MkCallee) (valTable : List (String × ParsedCfg)) (re
   | _, [] => throw <| .generic "empty block: every block must end in a terminator"
 
 /-- Record a block's argument names (types are fixed by the caller). -/
-private def declareBlockArgNames (args : List (TypedSSAVal 0)) : BuilderM SLLVM Unit := do
+def declareBlockArgNames (args : List (TypedSSAVal 0)) : BuilderM SLLVM Unit := do
   for (name, _) in args do
     let some nm := (← get).add (SSAValToString name)
       | throw <| .nameAlreadyDeclared (SSAValToString name)
@@ -268,7 +272,7 @@ def mkBlocks (mkCallee : MkCallee) (valTable : List (String × ParsedCfg)) (all 
 
 /-- The region's return types: read off its first `llvm.return`. Every other
 return is checked against them when its terminator is built. -/
-private def findRets (reg : Region 0) : ExceptM SLLVM (List SLLVM.Ty) := do
+def findRets (reg : Region 0) : ExceptM SLLVM (List SLLVM.Ty) := do
   let allOps := reg.ops ++ reg.blocks.flatMap (·.ops)
   let some retStx := allOps.find? (·.name == "llvm.return")
     | throw <| .generic "region has no llvm.return"
@@ -286,12 +290,12 @@ and a region already in depth-1 form has nothing live and comes back as it was.
 -/
 
 /-- The name an SSA value binds or reads. -/
-private def valName (v : TypedSSAVal 0) : String :=
+def valName (v : TypedSSAVal 0) : String :=
   SSAValToString v.1
 
 /-- Replace the integers of array attribute `key` by `ns`, keeping each entry's
 integer type. -/
-private def setSegments (attrs : AttrDict 0) (key : String) (ns : List Nat) : AttrDict 0 :=
+def setSegments (attrs : AttrDict 0) (key : String) (ns : List Nat) : AttrDict 0 :=
   let .mk entries := attrs
   .mk <|
     entries.map fun e =>
@@ -309,7 +313,7 @@ private def setSegments (attrs : AttrDict 0) (key : String) (ns : List Nat) : At
 /-- `op` with `extra s` appended to the operands it passes to each successor
 `s`. A terminator whose segment attributes do not parse is left alone, for
 `mkTerminator` to reject. -/
-private def threadTerminator (extra : String → List (TypedSSAVal 0)) (op : Op 0) : Op 0 :=
+def threadTerminator (extra : String → List (TypedSSAVal 0)) (op : Op 0) : Op 0 :=
   match op.name, op.successors with
   | "llvm.br", [s] => { op with args := op.args ++ extra s }
   | "llvm.cond_br", [sT, sF] =>

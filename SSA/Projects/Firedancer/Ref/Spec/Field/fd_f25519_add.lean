@@ -1,6 +1,10 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

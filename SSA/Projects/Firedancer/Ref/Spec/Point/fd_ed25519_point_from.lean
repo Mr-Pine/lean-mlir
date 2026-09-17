@@ -1,7 +1,11 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Proof.Point
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

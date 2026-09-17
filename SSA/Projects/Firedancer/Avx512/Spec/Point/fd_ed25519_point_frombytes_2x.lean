@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
 
 /-!
 # What `fd_ed25519_point_frombytes_2x` is specified to compute
@@ -20,6 +22,8 @@ Both encodings are read at the entry state: the callee copies them into its
 own staging buffers before anything is written, so a `buf` overlapping an `r`
 is still read unwritten.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

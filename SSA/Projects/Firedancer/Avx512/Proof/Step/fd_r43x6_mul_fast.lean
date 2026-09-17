@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
 
 /-!
 # One `fd_r43x6_mul_fast` call, peeled
@@ -17,6 +19,8 @@ The kernel's contract is asymmetric -- `x` needs only `u47`, while `y` also
 needs its two ignored lanes zero, because the accumulators multiply against
 them -- so `mul_inl` takes the two operands' hypotheses separately.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

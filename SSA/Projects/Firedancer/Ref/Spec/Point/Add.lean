@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_add_with_opts
 
 /-!
 # The two halves of a ref addition
@@ -11,6 +13,8 @@ With `skip_last_mul`, `fd_ed25519_point_add_with_opts` leaves `E, F, G, H` of
 `Point.addPrecomputed` in the coordinates `X, Y, Z, T`;
 `fd_ed25519_point_add_final_mul` multiplies them out.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

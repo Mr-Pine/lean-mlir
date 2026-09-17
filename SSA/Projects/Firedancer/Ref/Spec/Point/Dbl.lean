@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
 
 /-!
 # The two halves of a ref doubling
@@ -9,6 +11,8 @@ import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
 `fd_ed25519_partial_dbl` leaves `E, F, G, H` of `Point.dbl` in the coordinates
 `X, Y, Z, T`; `fd_ed25519_point_add_final_mul` multiplies them out.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

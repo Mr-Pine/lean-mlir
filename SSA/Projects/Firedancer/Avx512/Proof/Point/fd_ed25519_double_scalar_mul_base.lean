@@ -1,21 +1,23 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Common.Proof.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_set
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_final_mul
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_final_mul_projective
-import SSA.Projects.Firedancer.Proof.WriteChain
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Common.Proof.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_set
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_final_mul
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_final_mul_projective
+public import SSA.Projects.Firedancer.Proof.WriteChain
 
 /-!
 # `fd_ed25519_double_scalar_mul_base` conformance (AVX-512)
@@ -26,6 +28,8 @@ slides, `ai[0] = a` precomputed and `a2 = 2a`; `^bb2(k)` fills `ai[1..7]`; `^bb1
 `^bb19` returns. Here every point is a `u44` QUAD, `partial_dbl` doubles fully and
 `add_final_mul`/`_projective` copy, so `r` is always a whole point.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

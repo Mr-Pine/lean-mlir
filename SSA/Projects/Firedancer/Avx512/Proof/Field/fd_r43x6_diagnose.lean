@@ -1,14 +1,18 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Tactic
-import SSA.Projects.Firedancer.Avx512.Proof.Long
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
-import SSA.Projects.Firedancer.Avx512.Proof.Field.ReduceWalk
-import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_long_if
-import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_int_if
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_diagnose
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import LeanMLIR.Tactic
+public import SSA.Projects.Firedancer.Avx512.Proof.Long
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_biased_carry_propagate_limbs
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.ReduceWalk
+public import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_long_if
+public import SSA.Projects.Firedancer.Avx512.Proof.Util.fd_int_if
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_diagnose
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

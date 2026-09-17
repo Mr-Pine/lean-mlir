@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
 
 /-!
 # The bias limbs
@@ -19,6 +21,8 @@ nothing underflows. The *uniform* bound `LimbBounds h 0xffffffffffffe` is too
 weak to see it: it allows limb 0 to be 36 above `sub`'s `0xfffffffffffda`, and
 then the limb really would wrap. Hence a per-limb bound.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

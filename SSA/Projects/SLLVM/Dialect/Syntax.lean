@@ -1,1 +1,3 @@
-import SSA.Projects.SLLVM.Dialect.Syntax.Parser
+module
+
+public import SSA.Projects.SLLVM.Dialect.Syntax.Parser

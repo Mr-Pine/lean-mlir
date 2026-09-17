@@ -1,9 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_biased_carry_propagate_limbs
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mod_nearly_reduced_limbs
-import Mathlib.Data.ZMod.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_biased_carry_propagate_limbs
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mod_nearly_reduced_limbs
+public import Mathlib.Data.ZMod.Basic
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_biased_carry_propagate_limbs
+public meta import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mod_nearly_reduced_limbs
 
 /-!
 # What `fd_r43x6_is_nonzero` is specified to compute
@@ -70,6 +75,8 @@ computes *the* canonical representative, not merely that it detects zero.
 limb-wise compare against zero decides the element only once the
 representation is known to be the unique one.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

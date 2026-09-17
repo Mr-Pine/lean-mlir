@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_diagnose
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_diagnose
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
 
 /-!
 # What `fd_r43x6_diagnose` is specified to compute
@@ -19,6 +21,8 @@ comparing the six limbs against zero.
 implementation and Dalek differ there, and this is where the difference is
 visible.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

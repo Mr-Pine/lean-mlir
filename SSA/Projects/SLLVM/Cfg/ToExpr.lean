@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.OfCom
+module
+
+public import SSA.Projects.SLLVM.Cfg.OfCom
 
 /-!
 # Reflecting a `Cfg` back into a Lean term
@@ -16,6 +18,8 @@ spelled out. Every context is emitted as `Ctxt.ofList ‹literal›`; the kernel
 reconciles that with the `↑tys ++ Γ` spellings in the constructor types by
 unfolding.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 
@@ -35,24 +39,24 @@ inductive CalleeRef
 namespace CfgToExpr
 
 /-- The identity morphism: SLLVM data to expressions of SLLVM data. -/
-private def f :=
+def f :=
   DialectMetaMorphism.id SLLVM
 
-private def tyListE (ts : List SLLVM.Ty) : Lean.Expr :=
+def tyListE (ts : List SLLVM.Ty) : Lean.Expr :=
   f.mapList ts
 
-private def ctxtE (Γ : Ctxt SLLVM.Ty) : Lean.Expr :=
+def ctxtE (Γ : Ctxt SLLVM.Ty) : Lean.Expr :=
   f.mapCtxt Γ
 
-private def sigsE (sigs : List (List SLLVM.Ty)) : Lean.Expr :=
+def sigsE (sigs : List (List SLLVM.Ty)) : Lean.Expr :=
   _root_.List.foldToExpr (α := q(List SLLVM.Ty)) (sigs.map fun ts => tyListE ts)
 
-private def targetTyE (Γ : Ctxt SLLVM.Ty) (succs : List (List SLLVM.Ty)) : Lean.Expr :=
+def targetTyE (Γ : Ctxt SLLVM.Ty) (succs : List (List SLLVM.Ty)) : Lean.Expr :=
   mkApp2 (mkConst ``Target) (ctxtE Γ) (sigsE succs)
 
 /-- The lookup proof `all[idx]? = some ts` is emitted as `Eq.refl`: both the
 list and the index are literals, so the two sides are definitionally equal. -/
-private def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)} (t : Target Γ succs) :
+def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)} (t : Target Γ succs) :
     Lean.Expr :=
   let someTsE := mkApp2 (mkConst ``Option.some [levelZero]) q(List SLLVM.Ty) (tyListE t.ts)
   let hE :=
@@ -61,7 +65,7 @@ private def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)} (t : Tar
   mkAppN (mkConst ``Target.mk)
     #[ctxtE Γ, sigsE succs, tyListE t.ts, toExpr t.idx, hE, f.mapVarVec t.args]
 
-private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
+def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
     Terminator Γ rets succs → Lean.Expr
   | .ret vs =>
     mkAppN (mkConst ``Terminator.ret) #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVarVec vs]
@@ -80,7 +84,7 @@ private def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : Lis
 
 mutual
 
-private partial def blockComE (refs : List (String × CalleeRef))
+partial def blockComE (refs : List (String × CalleeRef))
     (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
     {Γ Γout : Ctxt SLLVM.Ty} → BlockCom Γ Γout rets succs → MetaM Lean.Expr :=
   fun {Γ} {Γout} b => match b with
@@ -116,7 +120,7 @@ private partial def blockComE (refs : List (String × CalleeRef))
             #[ctxtE Γ, ctxtE Γout, tyListE rets, sigsE succs, tyListE argTys, tyListE retTys,
               sigsE csigs, ctxtE cΓout, toExpr callee, centryE, cblocksE, f.mapVarVec args, bodyE]
 
-private partial def blocksE (refs : List (String × CalleeRef))
+partial def blocksE (refs : List (String × CalleeRef))
     (rets : List SLLVM.Ty) (Γamb : Ctxt SLLVM.Ty) (all : List (List SLLVM.Ty)) :
     {remaining : List (List SLLVM.Ty)} → Blocks Γamb rets remaining all → MetaM Lean.Expr :=
   fun {remaining} bs => match remaining, bs with

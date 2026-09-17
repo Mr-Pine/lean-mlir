@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Lanes
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Lanes
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 
 /-!
 # `fd_ed25519_partial_dbl` conforms (AVX-512)
@@ -11,6 +13,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
 One block: `FD_R43X6_GE_DBL` through six slots, then three stores into `r`. The
 lane lemmas and the model, `PointDbln.geDbl`, are `fd_ed25519_point_dbln`'s.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

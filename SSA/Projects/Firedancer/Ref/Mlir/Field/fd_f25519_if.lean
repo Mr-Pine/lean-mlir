@@ -1,6 +1,12 @@
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_if.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_selectznz
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_selectznz
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_selectznz
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

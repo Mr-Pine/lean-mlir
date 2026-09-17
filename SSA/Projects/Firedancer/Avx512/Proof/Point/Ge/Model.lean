@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
 
 /-!
 # The `FD_R43X6_GE` macros' shared model
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Quad
 limbs of a QUAD (`quadInt`) and what the fold does to them, and the bridges from
 limbs to field elements the point proofs read their results through.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,13 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_pow22523_2
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_repsqr_mul2
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_pow22523_2
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_repsqr_mul2
 
 /-!
 # `fd_r43x6_pow22523_2` conforms to its spec
@@ -19,6 +21,8 @@ folds, the eleven `fd_r43x6_repsqr_mul2` calls -- each to be peeled against
 `fd_r43x6_repsqr_mul2_conforms` -- and the exponent bookkeeping that adds
 their `2^n` up to `2^252 - 3`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

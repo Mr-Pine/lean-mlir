@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Avx512.Spec.Vec
-import SSA.Projects.Firedancer.Proof.Overflow
-import SSA.Projects.Firedancer.Avx512.Proof.Fold
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+public import SSA.Projects.Firedancer.Avx512.Spec.Vec
+public import SSA.Projects.Firedancer.Proof.Overflow
+public import SSA.Projects.Firedancer.Avx512.Proof.Fold
 
 /-!
 # Shared scaffolding for the `fd_r43x6_quad_*` proofs
@@ -15,6 +17,8 @@ three `!llvm.ptr` out-parameters, and write their three results through those
 pointers. This file fixes the QUAD layout and the readback of a result vector;
 the valuations that feed the kernels live in `Proof/Mem.lean`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

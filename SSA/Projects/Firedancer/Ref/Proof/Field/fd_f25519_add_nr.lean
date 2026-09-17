@@ -1,10 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_add_nr
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_add
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_add_nr
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_add
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

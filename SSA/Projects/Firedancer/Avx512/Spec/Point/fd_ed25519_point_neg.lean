@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # `fd_ed25519_point_neg` (AVX-512)
@@ -18,6 +20,8 @@ whatever it was given, so the result can be negated again.
 `r.id ≠ a.id` because the region reloads `a`'s `14` and `25` vectors after
 storing to `r`. The in-place `fd_ed25519_point_neg( A, A )` is not covered.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

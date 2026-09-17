@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import SSA.Projects.SLLVM.Dialect
 
 /-!
 # What `fd_long_if` is specified to compute
@@ -21,6 +23,8 @@ Poison propagates: `llvm.icmp` on a poison operand is poison, and
 That matters here -- the condition reaching this region is a `zext` of an
 `icmp` over the carry chain, so it is poison exactly when the chain is.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

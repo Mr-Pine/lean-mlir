@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Tactic
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_int_if
+module
+
+public import LeanMLIR.Tactic
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_int_if
 
 /-!
 # `fd_int_if` conforms to its spec
@@ -17,6 +19,8 @@ pops is the one it entered with.
 it: `Com` has no calls, so `fd_r43x6_diagnose` inlines the callee, and a
 lemma about the callee makes the inlining a rewrite.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

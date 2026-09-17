@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Model
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Model
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
 
 /-!
 # `FD_R43X6_GE_DBL`'s instruction runs, reduced to the model
@@ -11,6 +13,8 @@ Each lemma takes the `denote_eval` hypotheses of one run of instructions and
 names the vector they leave by its `PointDbln` definition; the walks of `^bb0`
 and `^bb3` both apply them.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

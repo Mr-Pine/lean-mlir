@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg_precomputed
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Proof.WriteChain
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg_precomputed
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Proof.WriteChain
 
 /-!
 # `fd_ed25519_point_sub_with_opts` conformance (AVX-512)
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Proof.WriteChain
 `b_is_precomputed = 1`: `fd_ed25519_point_neg_precomputed` into the local `t`,
 then `fd_ed25519_point_add_with_opts( r, a, t )`, then `t`'s frame is popped.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

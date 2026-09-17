@@ -1,5 +1,9 @@
-import Lean
-import Std.Tactic.BVDecide
+module
+
+public import Lean
+public import Std.Tactic.BVDecide
+
+@[expose] public section
 
 open Lean Meta
 
@@ -10,7 +14,7 @@ theorem lt_two_pow_succ_of_lt (x y : Nat) :
     (x / 2) < 2 ^ y → x < 2 ^ (y + 1) := by
   omega
 
-def mkLtTwoPowProof (x y : Nat) : Option Expr :=
+meta def mkLtTwoPowProof (x y : Nat) : Option Expr :=
   match y with
   | 0   => none
   | y'+1 => do
@@ -33,5 +37,3 @@ simproc ↓ reduceModTwoPow ((_ : Nat) % 2 ^ (_ : Nat)) := fun e => do
     expr := x
     proof? := mkApp3 (mkConst ``Nat.mod_eq_of_lt) x rhs ltProof
   }
-
-attribute [bv_normalize] reduceModTwoPow

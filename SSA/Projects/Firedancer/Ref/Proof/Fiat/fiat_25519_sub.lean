@@ -1,10 +1,14 @@
-import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_sub
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Limb
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Fiat.fiat_25519_sub
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Limb
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

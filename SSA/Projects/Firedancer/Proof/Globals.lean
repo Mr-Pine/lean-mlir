@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Proof.Memory
+module
+
+public import SSA.Projects.Firedancer.Proof.Memory
 
 /-!
 # Globals
@@ -26,6 +28,8 @@ global and a caller's buffer, so a spec that needs either says so. What the
 loader below does give, for a module loaded from scratch, is the artifacts'
 case: one block per symbol, pairwise distinct by `chainPtr_id`.
 -/
+
+@[expose] public section
 
 namespace Firedancer
 

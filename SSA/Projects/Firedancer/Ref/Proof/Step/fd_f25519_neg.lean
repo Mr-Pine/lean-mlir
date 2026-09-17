@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_neg
+module
+
+public import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_neg
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

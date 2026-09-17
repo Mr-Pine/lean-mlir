@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_set
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_set
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
 
 /-!
 # `fd_ed25519_point_set` conformance
@@ -15,6 +17,8 @@ Destinations share `r`'s block, so a later splice misses an earlier copy by
 offset (as in `point_from`); sources lie in `a`'s block, which no splice
 touches (as in `point_to`).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

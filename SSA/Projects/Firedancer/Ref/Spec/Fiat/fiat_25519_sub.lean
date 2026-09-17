@@ -1,6 +1,10 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
-import SSA.Projects.Firedancer.Ref.Spec.Bias
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Fiat.fiat_25519_sub
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Model
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
 
 /-!
 # `FD_R43X6_GE_DBL`, as a function on QUADs
@@ -15,6 +17,8 @@ each instruction run to one of these definitions.
 * `u44_geDbl`: `u44` in, `u44` out.
 * `toPoint_geDbl`: the point is `Point.dbl` of the input's.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

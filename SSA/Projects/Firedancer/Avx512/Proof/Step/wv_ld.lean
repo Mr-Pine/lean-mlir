@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Util.wv_ld
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Util.wv_ld
 
 /-!
 # One `wv_ld` call, peeled
@@ -13,6 +15,8 @@ term the residual program then carries.
 The kernel is pure and reads a single slot, so there is no `Wrote2` here: what
 it leaves behind is the state equivalence the spec already states.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

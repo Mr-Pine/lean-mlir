@@ -1,13 +1,17 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_int_min
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_int_min
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
 
 /-!
 # `fd_int_min` conforms
 -/
+
+@[expose] public section
 
 namespace Firedancer.Common
 

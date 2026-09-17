@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.R43x6
+module
+
+public import SSA.Projects.Firedancer.Avx512.R43x6
 
 /-!
 # What `fd_r43x6_biased_carry_propagate_limbs` computes
@@ -33,6 +35,8 @@ The bias `b` is subtracted from limb 5 before the chain and added back after.
 It changes neither the element nor limbs 0-4; what it buys is limb 5's range,
 since the last carry into limb 5 is as low as `-2^20` and `b` absorbs it.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

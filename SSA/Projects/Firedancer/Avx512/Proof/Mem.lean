@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.SLLVM.Dialect.Semantics.MemoryLemmas
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.SLLVM.Dialect.Semantics.MemoryLemmas
 
 /-!
 # Kernels that write their results through pointers
@@ -26,6 +28,8 @@ parameters carry `nocapture noundef writeonly` and, notably, **not**
 `&_R03, &_R14, &_R25`, three distinct locals -- and so it appears here as a
 hypothesis rather than as something read off the program.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

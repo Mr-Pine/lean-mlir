@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_curve25519_scalar_wnaf
-import Mathlib.Algebra.BigOperators.Intervals
-import Mathlib.Tactic.Abel
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.Common.Proof.Scalar.fd_curve25519_scalar_wnaf
+public import Mathlib.Algebra.BigOperators.Intervals
+public import Mathlib.Tactic.Abel
 
 /-!
 # `fd_ed25519_double_scalar_mul_base`, both backends
@@ -13,6 +15,8 @@ What the two regions share: the ladder's closed form (`ladder_digitSum`), a digi
 add (`addSigned_value`), the digits `wnaf` leaves (`wnaf_run`) and how they load, and the
 loop-index arithmetic.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Common.DoubleScalarMulBase
 open LeanMLIR SLLVM

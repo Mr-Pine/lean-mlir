@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect.Basic
-import SSA.Projects.SLLVM.Dialect.Semantics.MemoryLemmas
+module
+
+public import SSA.Projects.SLLVM.Dialect.Basic
+public import SSA.Projects.SLLVM.Dialect.Semantics.MemoryLemmas
 
 /-!
 # Stepping an impure `Com` in run form
@@ -21,6 +23,8 @@ change -- `alloca`, `load`, `lifetime` -- in the same shape `denoteOp_call`
 gives it for calls; `run_alloca` and the `getThe`/`modifyThe` lemmas then
 evaluate the effects on a concrete state.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 

@@ -2,10 +2,18 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_f25519_abs.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_if
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

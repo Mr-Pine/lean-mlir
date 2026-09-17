@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_r43x6_ge_decode2
-import SSA.Projects.Firedancer.Avx512.Spec.Vec
-import SSA.Projects.Firedancer.Avx512.Spec.Util.wv_ld
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_r43x6_ge_decode2
+public import SSA.Projects.Firedancer.Avx512.Spec.Vec
+public import SSA.Projects.Firedancer.Avx512.Spec.Util.wv_ld
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # What `fd_r43x6_ge_decode2` is specified to compute
@@ -23,6 +25,8 @@ The sign clause is guarded by `X ≠ 0`, as in the `ref` layer: `fd_r43x6_diagno
 returns `-1` at zero, so `x_0 != x_mod_2` accepts either sign bit there. The C
 says so in as many words, citing Dalek.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,13 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_abs
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sgn
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_if
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_abs
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sgn
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_if
 
 /-!
 # `fd_f25519_abs` conforms to its spec
@@ -17,6 +19,8 @@ reads `a`'s parity without touching memory, and `if` copies the winner
 through the out-parameter. Nothing else writes a block the caller can see,
 so the ending is `popFrame_equiv_splice` against that single write.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

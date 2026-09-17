@@ -1,8 +1,12 @@
-import Mathlib.Data.Fin.VecNotation
-import SSA.Projects.Firedancer.Curve
-import SSA.Projects.Firedancer.Ed25519
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+module
+
+public import Mathlib.Data.Fin.VecNotation
+public import SSA.Projects.Firedancer.Curve
+public import SSA.Projects.Firedancer.Ed25519
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

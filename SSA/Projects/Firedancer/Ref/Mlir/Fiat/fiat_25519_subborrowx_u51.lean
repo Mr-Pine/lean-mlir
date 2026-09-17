@@ -2,7 +2,11 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fiat_25519_subborrowx_u51.mlir
-import SSA.Projects.SLLVM.Cfg
+module
+
+public import SSA.Projects.SLLVM.Cfg
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

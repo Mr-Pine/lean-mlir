@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_int_if
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

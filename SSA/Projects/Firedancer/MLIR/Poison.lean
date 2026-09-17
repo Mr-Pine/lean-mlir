@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
+module
+
+public import SSA.Projects.SLLVM.Dialect
 
 /-!
 # Reading a poison-carrying denotation back as plain values
@@ -21,6 +23,8 @@ prevent.
 This is why there is no `[Inhabited α]` here: there is nothing to fall back
 to, on purpose.
 -/
+
+@[expose] public section
 
 -- NOTE: `Vector` lives in the root namespace, so this helper does too, which
 -- is what makes `result.getValues` work; cf. `Expr.denoteOpPure` in

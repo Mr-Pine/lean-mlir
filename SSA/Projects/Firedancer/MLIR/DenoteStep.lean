@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.SLLVM.Tactic
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.SLLVM.Tactic
 
 /-!
 # Sharing-preserving symbolic execution of pure `Com`s and CFG blocks
@@ -29,6 +31,8 @@ show up in the tactic rather than in the caller: a `BlockCom` is fixed
 block sits under a `bind` (`entry.denote V >>= fun (Vout, r) => …`), so the
 step equation is transported through that as well as through `StateT.run`.
 -/
+
+@[expose] public section
 
 -- Index bounds before core's `Vector` rule, which runs `rw … at *` and
 -- `dsimp +zetaDelta … at *` over a walk's whole context.
@@ -561,7 +565,7 @@ open Lean Meta in
 /-- The `Subtype` behind `Ctxt.Var Γ t` for `S : Γ.Valuation`, with `Γ` kept as written: a full
 `whnfD` would unfold a lifted program's `Γout` too, and the rebuilt variable would then no longer
 match hypotheses stated over it. -/
-def varSubtype (S t : Expr) : MetaM (Option (Expr × Expr × List Level)) := do
+meta def varSubtype (S t : Expr) : MetaM (Option (Expr × Expr × List Level)) := do
   let SVal ← whnfR (← instantiateMVars (← inferType S))
   let_expr Ctxt.Valuation Ty _inst Γ := SVal | return none
   let varTy := mkApp3 (.const ``Ctxt.Var SVal.getAppFn.constLevels!) Ty Γ t
@@ -573,7 +577,7 @@ def varSubtype (S t : Expr) : MetaM (Option (Expr × Expr × List Level)) := do
 open Lean Meta in
 /-- The elements of a vector that reduces to a literal one (`HVector.nil.reverse` included).
 Bounded: a long operand vector is not a literal spine, and unfolding it is deep. -/
-private partial def vecElems (fuel : Nat) (xs : Expr) (elems : Array Expr) :
+meta partial def vecElems (fuel : Nat) (xs : Expr) (elems : Array Expr) :
     MetaM (Option (Array Expr)) := do
   let fuel + 1 := fuel | return none
   let xs ← whnfR xs
@@ -588,7 +592,7 @@ private partial def vecElems (fuel : Nat) (xs : Expr) (elems : Array Expr) :
 open Lean Meta in
 /-- The elements of a statically known valuation, head first: a `cons` chain ending in `nil`,
 or `ofHVector` of a literal vector, or such a vector itself (the `HVector ++ Valuation` form). -/
-private partial def spineElems (e : Expr) (elems : Array Expr := #[]) :
+meta partial def spineElems (e : Expr) (elems : Array Expr := #[]) :
     MetaM (Option (Array Expr)) := do
   match_expr e with
   | Ctxt.Valuation.cons _Ty _inst _Γ _t x V => spineElems V (elems.push x)
@@ -603,7 +607,7 @@ open Lean Meta in
 /-- `S ⟨i, h⟩` for `S` a spine of `cons` and `A ++ _` nodes, `A` statically known: an element
 of the spine for a literal `i`, else the valuation under it at `i` less the elements passed,
 `i` symbolic (`γ`, `γ + k`) included; that rebuild only past an `++` or at a symbolic `i`. -/
-private def spineLookup (e : Expr) : MetaM (Option Expr) := do
+meta def spineLookup (e : Expr) : MetaM (Option Expr) := do
   let args := e.getAppArgs
   unless args.size ≥ 2 do return none
   let t := args[args.size - 2]!; let v := args[args.size - 1]!
@@ -861,7 +865,7 @@ end LeanMLIR.SLLVM
 open Lean Meta in
 /-- `x ::ᵥ V` typed by `e`'s context. Inferred from `V` it is a `Ctxt.cons` chain
 as deep as the walk, which every defeq against the program's context unfolds. -/
-private def consAt (e x V : Lean.Expr) : MetaM Lean.Expr := do
+meta def consAt (e x V : Lean.Expr) : MetaM Lean.Expr := do
   let args := (← whnfR (← inferType e)).getAppArgs
   unless args.size ≥ 5 do
     return ← mkAppM ``Ctxt.Valuation.cons #[x, V]
@@ -870,7 +874,7 @@ private def consAt (e x V : Lean.Expr) : MetaM Lean.Expr := do
 open Lean Meta in
 /-- The value `V` gives `var`: a spine element, or the valuation under the spine
 at the shifted index (as `SSA.simpValuationApply`). -/
-private def operandValue (V var t : Lean.Expr) : MetaM (Option Lean.Expr) := do
+meta def operandValue (V var t : Lean.Expr) : MetaM (Option Lean.Expr) := do
   let_expr Subtype.mk _α _p i h := var | return none
   let some n := (← instantiateMVars i).nat? <|> i.rawNatLit? | return none
   let mut W := V
@@ -896,7 +900,7 @@ open Lean Meta in
 /-- `tVal` (`e.denoteOp1 V`, possibly via `toPure`) restated over a context of just
 `e`'s operands, valued as `V` values them: definitionally equal, but its size does
 not grow with the walk. `none` unless `e` is a literal `Expr.mk`. -/
-private def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V : Lean.Expr) :
+meta def compactDenote (tVal e : Lean.Expr) (hProof? : Option Lean.Expr) (V : Lean.Expr) :
     MetaM (Option Lean.Expr) := do
   try
     let eArgs := e.getAppArgs
@@ -979,7 +983,7 @@ being stepped. In both the payload is the second-to-last argument of the head,
 so one descent covers them.
 
 `whnfR` does not unfold `bind`, so a `do` block keeps its shape here. -/
-private partial def peelWrappers (e : Lean.Expr) :
+meta partial def peelWrappers (e : Lean.Expr) :
     MetaM (Lean.Expr × (Lean.Expr → Lean.Expr) × Bool) := do
   let e ← whnfR e
   if e.isAppOf ``StateT.run || e.isAppOf ``Bind.bind then
@@ -993,7 +997,7 @@ private partial def peelWrappers (e : Lean.Expr) :
 
 open Lean Meta in
 /-- Is this the denotation a stepper works on? -/
-private def isDenoteTerm (e : Lean.Expr) : MetaM Bool := do
+meta def isDenoteTerm (e : Lean.Expr) : MetaM Bool := do
   let (core, _, _) ← peelWrappers e
   return core.isAppOf ``Com.denote || core.isAppOf ``LeanMLIR.SLLVM.BlockCom.denote ||
       core.isAppOf ``LeanMLIR.SLLVM.Cfg.denote
@@ -1012,7 +1016,7 @@ inside the region it mentions.
 The bound state never occurs in the denotation, which is what the
 `hasLooseBVars` guard checks; without a right-hand side the caller rewrites the
 goal in place rather than by transitivity. -/
-private partial def findDenoteTerm? (tgt : Lean.Expr) :
+meta partial def findDenoteTerm? (tgt : Lean.Expr) :
     MetaM (Option (Lean.Expr × Option Lean.Expr)) := do
   let tgt ← whnfR tgt
   -- an equation goal is what the steppers have always worked on: its left-hand
@@ -1037,7 +1041,7 @@ open Lean Meta in
 the kernel. Evaluating the decision here is what makes the stepper stop at an
 impure instruction (a load, a store) instead of stepping it and producing a
 proof the kernel rejects at the end of the declaration. -/
-private def mkPurityProof? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
+meta def mkPurityProof? (e : Lean.Expr) : MetaM (Option Lean.Expr) := do
   try
     -- decided on `op` alone: checking an instance for `e.HasPureOp` walks `e`'s context
     let e' ← whnfR e
@@ -1062,7 +1066,7 @@ quoted region's entry block reaches the goal as `cfg.entry`, whose projection
 hides behind the auxiliary definitions the elaborator generates -- reducible
 transparency does not see through those, so fall back to `whnf`, which stops
 at the constructor. -/
-private def whnfProgram (e : Lean.Expr) : MetaM Lean.Expr := do
+meta def whnfProgram (e : Lean.Expr) : MetaM Lean.Expr := do
   let e' ← whnfR e
   if e'.isAppOf ``Com.var || e'.isAppOf ``LeanMLIR.SLLVM.BlockCom.var then
     return e'
@@ -1079,7 +1083,7 @@ with `hv<i> : v<i> = e.denoteOp1 V` -- restated by `compactDenote` over just
 `e`'s operands where that applies, so the hypothesis does not grow with the
 walk -- and return the goal `body.denote (v<i> ::ᵥ V) = rhs`. Returns `none`
 if the goal is not of that shape (i.e. the program is exhausted). -/
-private def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) (inline : Bool := false) :
+meta def denoteStep1 (goal : MVarId) (baseName : Name) (i : Nat) (inline : Bool := false) :
     MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
@@ -1227,7 +1231,7 @@ open Lean Meta in
 /-- The number of `HVector.cons`es in an `HVector`, after reduction -- a
 block's argument list reaches the goal as `args.reverse`, which is not a
 syntactic spine. -/
-private partial def hvectorLength (X : Lean.Expr) : MetaM Nat := do
+meta partial def hvectorLength (X : Lean.Expr) : MetaM Nat := do
   let X ← whnf X
   if X.isAppOf ``HVector.cons then
     let args := X.getAppArgs
@@ -1246,7 +1250,7 @@ arguments over the ambient context. Both halves count -- the block arguments
 because MLIR numbers them (`^bb10(%33: i32)`), and `Vamb` because it is the
 entry block's spine, which is what makes a tail block's `v<i>` continue the
 entry block's numbering rather than restarting at `v0`. -/
-private partial def valuationDepth (V : Lean.Expr) : MetaM Nat := do
+meta partial def valuationDepth (V : Lean.Expr) : MetaM Nat := do
   if V.isAppOf ``Ctxt.Valuation.cons then
     let args := V.getAppArgs
     if args.size ≥ 1 then
@@ -1269,7 +1273,7 @@ private partial def valuationDepth (V : Lean.Expr) : MetaM Nat := do
 
 open Lean Meta in
 /-- The `DenoteNumbering base depth` marker in the local context, if any. -/
-private def denoteNumberingMarker : MetaM (Option (Nat × Nat)) := do
+meta def denoteNumberingMarker : MetaM (Option (Nat × Nat)) := do
   for decl in ← getLCtx do
     let ty ← instantiateMVars decl.type
     if ty.isAppOf ``DenoteNumbering then
@@ -1289,7 +1293,7 @@ valuation in one more `Ctxt.Valuation.cons`, and that spine is part of the
 denotation being rewritten, so it survives anything done to the context —
 renaming, `clear`ing the `hv<i>`, or `subst`ing a `v<i>` away. The index
 therefore always agrees with the `%i` of the MLIR program. -/
-def nextStepIndex (goal : MVarId) : MetaM Nat :=
+meta def nextStepIndex (goal : MVarId) : MetaM Nat :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (lhs, _) ← findDenoteTerm? tgt | return 0
@@ -1354,7 +1358,7 @@ open Lean Meta in
 left-hand side must unify with it (up to default transparency, so an
 auxiliary definition standing in for a quoted region is seen through).
 Returns the new goal, or `none` if the equation does not apply. -/
-private def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
+meta def rewriteCore (goal : MVarId) (lem : Name) : MetaM (Option MVarId) :=
   goal.withContext do
     let tgt ← whnfR (← instantiateMVars (← goal.getType))
     let some (lhs, rhs?) ← findDenoteTerm? tgt | return none
@@ -1523,7 +1527,7 @@ open Lean Meta Elab Tactic in
 goal's context, ascending. Indices with no hypothesis are skipped rather than
 being an error, so a range may freely span `v<i>`s that have been `subst`ed
 away or whose `hv<i>` has been `clear`ed. -/
-private def denoteHyps (base : Name) (lo hi : Nat) : TacticM (Array Ident) := do
+meta def denoteHyps (base : Name) (lo hi : Nat) : TacticM (Array Ident) := do
   (← getMainGoal).withContext do
       let lctx ← getLCtx
       let mut hyps : Array Ident := #[]
@@ -1657,7 +1661,7 @@ syntax reduceArgs := " [" term,* "]"
 
 open Lean Elab Tactic in
 /-- `simp` over `hyps` with `args`, `only` deciding which of the two it is. -/
-private def simpHyps (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
+meta def simpHyps (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
   match only, args.isEmpty with
   | true,  true  => evalTactic (← `(tactic| simp only [] at $hyps*))
   | true,  false => evalTactic (← `(tactic| simp only [$[$args:term],*] at $hyps*))
@@ -1666,7 +1670,7 @@ private def simpHyps (only : Bool) (args : Array Term) (hyps : Array Ident) : Ta
 
 open Lean Elab Tactic in
 /-- `simpHyps`, but no progress is not an error. -/
-private def simpHyps? (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
+meta def simpHyps? (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
   match only, args.isEmpty with
   | true,  true  => evalTactic (← `(tactic| simp -failIfUnchanged only [] at $hyps*))
   | true,  false => evalTactic (← `(tactic| simp -failIfUnchanged only [$[$args:term],*] at $hyps*))
@@ -1677,7 +1681,7 @@ open Lean Elab Tactic in
 /-- `denote_eval base lo hi`, a `simp` over the same hypotheses, and -- with
 `fold` -- one more ascending pass that rewrites each of them into the ones
 after it: the shared body of `reduce_hv` and `denote_step_reduce`. -/
-private def reduceHypsAt (base : Ident) (lo hi : Nat) (only : Bool) (args : Array Term)
+meta def reduceHypsAt (base : Ident) (lo hi : Nat) (only : Bool) (args : Array Term)
     (fold : Bool) : TacticM Unit := do
   let loStx := Syntax.mkNumLit (toString lo)
   let hiStx := Syntax.mkNumLit (toString hi)
@@ -1697,7 +1701,7 @@ private def reduceHypsAt (base : Ident) (lo hi : Nat) (only : Bool) (args : Arra
 
 open Lean Elab in
 /-- The lemma list of `reduce_hv`, read off the syntax. -/
-private def reduceArgTerms (extra : Option (TSyntax ``reduceArgs)) : Array Term :=
+meta def reduceArgTerms (extra : Option (TSyntax ``reduceArgs)) : Array Term :=
   match extra with
   | some e => e.raw[1].getSepArgs.map fun s => ⟨s⟩
   | none => #[]

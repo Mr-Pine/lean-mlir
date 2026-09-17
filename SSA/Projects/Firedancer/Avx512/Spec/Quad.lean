@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Common
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Common
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # The `FD_R43X6_QUAD` layout
@@ -31,6 +33,8 @@ round trip is the identity, which is what lets the quad specifications reuse
 the scalar `Spec/fd_r43x6_mul_fast.lean` and `Spec/fd_r43x6_sqr_fast.lean`
 column sums unchanged: a quad kernel is exactly four scalar kernels.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

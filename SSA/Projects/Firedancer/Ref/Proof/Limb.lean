@@ -1,6 +1,8 @@
-import Mathlib.Tactic.FinCases
-import Mathlib.Data.Fin.VecNotation
-import SSA.Projects.Firedancer.Proof.Overflow
+module
+
+public import Mathlib.Tactic.FinCases
+public import Mathlib.Data.Fin.VecNotation
+public import SSA.Projects.Firedancer.Proof.Overflow
 
 /-!
 # fiat's limbs in 64-bit registers
@@ -10,6 +12,8 @@ register, and reduce with `19`. These are the `toNat` facts for the operations
 that shape entails: a shift by 51, a mask with `2^51 - 1`, a `mul 19`, and the
 128-bit products two limbs form.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

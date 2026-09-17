@@ -1,8 +1,12 @@
-import Mathlib.Data.Nat.Size -- TODO: remove and get rid of shiftLeft_eq_mul_pow use
-import LeanMLIR.Util.ForStd
-import LeanMLIR.Dialects.LLVM.SimpSet
-import Mathlib.Tactic.Ring
-import Mathlib.Data.BitVec
+module
+
+public import Mathlib.Data.Nat.Size -- TODO: remove and get rid of shiftLeft_eq_mul_pow use
+public import LeanMLIR.Util.ForStd
+public import LeanMLIR.Dialects.LLVM.SimpSet
+public import Mathlib.Tactic.Ring
+public import Mathlib.Data.BitVec
+
+@[expose] public section
 
 namespace Nat
 

@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect.Basic
+module
+
+public import SSA.Projects.SLLVM.Dialect.Basic
 
 /-!
 # Reasoning about `llvm.call`
@@ -15,6 +17,8 @@ derivation would step through the callee's instructions again at every call
 site; with it, the call is a single rewrite to whatever the callee was already
 shown to compute.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 

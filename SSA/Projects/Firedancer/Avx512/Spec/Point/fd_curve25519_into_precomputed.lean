@@ -1,10 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_frombytes_2x
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

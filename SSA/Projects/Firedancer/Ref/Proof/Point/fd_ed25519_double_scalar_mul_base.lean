@@ -1,18 +1,20 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_double_scalar_mul_base
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Ref.Proof.RefWF
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_set
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Proof.WriteChain
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_double_scalar_mul_base.Ladder
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_double_scalar_mul_base
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Ref.Proof.RefWF
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_set
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Proof.WriteChain
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_double_scalar_mul_base.Ladder
 
 /-!
 # `fd_ed25519_double_scalar_mul_base` conformance (ref)
@@ -24,6 +26,8 @@ zero digits; `^bb6`/`^bb7` enter the ladder `^bb8(j)`–`^bb18`; `^bb19` returns
 Each `step_bbK` is block `K` with its successors as continuations (`StepThen`); the `walk_*`
 lemmas chain them into `Runs`, looping by induction, from `^bb2(1)` to the return.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

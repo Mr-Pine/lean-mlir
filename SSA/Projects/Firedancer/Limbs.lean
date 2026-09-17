@@ -1,4 +1,6 @@
-import Mathlib.Algebra.BigOperators.Fin
+module
+
+public import Mathlib.Algebra.BigOperators.Fin
 
 /-!
 # Limb representations
@@ -13,6 +15,8 @@ chain are unbounded integers rather than machine limbs.
 it as a limb function and `decode` is `decodeFn` of that, so the vector level
 restates nothing.
 -/
+
+@[expose] public section
 
 namespace LimbRepresentations
 

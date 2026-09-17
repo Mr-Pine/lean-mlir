@@ -1,9 +1,13 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_frombytes
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_frombytes
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_from_bytes
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_frombytes
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_frombytes
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_from_bytes
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

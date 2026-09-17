@@ -1,11 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_mul4
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_mul4
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

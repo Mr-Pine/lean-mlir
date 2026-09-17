@@ -1,13 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_neg
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 
 /-!
 # `fd_ed25519_point_neg` conformance (AVX-512)
@@ -23,6 +25,8 @@ The lane lemmas unfold `negQuad` through the `rfl` projections `negQuad_v03`
 and friends, never by `rfl` on `vectorFunc`: the kernel would unfold
 `2p - x` into `Nat.add` on the 44-bit literal and recurse on it.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

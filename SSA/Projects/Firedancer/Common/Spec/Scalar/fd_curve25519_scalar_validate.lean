@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.ByteBuf
-import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_validate
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.ByteBuf
+public import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_validate
 
 /-!
 # `fd_curve25519_scalar_validate` (common)
@@ -12,6 +14,8 @@ The region reads the 32-byte scalar at `s` and returns `s` if it is below `ℓ`,
 and `NULL` otherwise; it allocates nothing and stores nothing, so the state it leaves is
 indistinguishable from the one it was entered in.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Common
 

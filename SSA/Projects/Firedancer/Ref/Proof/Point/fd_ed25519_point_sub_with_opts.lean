@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
 
 /-!
 # `fd_ed25519_point_sub_with_opts` conformance (ref)
@@ -10,6 +12,8 @@ import SSA.Projects.Firedancer.Ref.Proof.Point.fd_ed25519_point_add_with_opts
 The add walk with `b`'s `X` and `Y` exchanged at `^bb2` and `add_nr`/`sub_nr`
 exchanged for `Y` and `Z` at `^bb8`; the step lemmas are add's.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 
@@ -52,7 +56,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
     (hD : Holds w.mem (addLocal s 7) D 0x8000000000000)
     (Pt : Point) (hPt : Pt = ⟨B - A, D + C, D - C, B + A⟩) :
     ∃ s' : GlobalState,
-      StateT.run (fd_ed25519_point_sub_with_opts.blocks.run V ⟨4, by rfl, HVector.nil⟩) w
+      StateT.run (fd_ed25519_point_sub_with_opts.blocks.run V ⟨4, rfl, HVector.nil⟩) w
         = .value ([.value r]ₕ, s')
       ∧ ∃ oX oY oZ oT : BitVec (5 * 64),
         let outMem := (((s.mem.splice r oX).splice (r.withOffset 40) oY).splice

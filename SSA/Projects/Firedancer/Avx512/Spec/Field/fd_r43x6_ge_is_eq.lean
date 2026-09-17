@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_quad_mul_fast
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_quad_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # What `fd_r43x6_ge_is_eq` is specified to compute
@@ -64,6 +66,8 @@ model returns `1` exactly on QUADs representing the same point. Its discharge
 (in `Proof/`) composes `samePoint_iff_cross_sub_eq_zero` with
 `IsNonzeroDecides` through the decode lemmas below.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 
@@ -239,7 +243,7 @@ The model is executable, so the criterion can be watched deciding actual
 representations. Test QUADs are built limb by limb: element `j` of `(a,b,c)`
 has limbs `(a[j], b[j], c[j], a[j+4], b[j+4], c[j+4])`. -/
 
-private def v0 : Vector (BitVec 64) 8 :=
+def v0 : Vector (BitVec 64) 8 :=
   #v[0, 0, 0, 0, 0, 0, 0, 0]
 
 /-- The scale factor the criterion has to see through: `(0,2,2,0)` is the

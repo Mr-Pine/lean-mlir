@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_pow22523
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
-import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_pow22523
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_sqr
+public import SSA.Projects.Firedancer.Ref.Proof.Step.fd_f25519_mul
 
 /-!
 # `fd_f25519_pow22523` conforms to its spec
@@ -20,6 +22,8 @@ out-parameter `o`) untouched.
 the new facts at `dst`, and survival of everything else; `State.update₀/₁/₂`
 rebuild the invariant.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM
@@ -238,7 +242,7 @@ lemma bb0_run (o a : Pointer) (s : GlobalState) (hs : s.WF)
       ∧ StateT.run (fd_f25519_pow22523.denote
           (Ctxt.Valuation.ofHVector [.value a, .value o]ₕ)) s
         = StateT.run (fd_f25519_pow22523.blocks.run V
-            ⟨1, by rfl, [PoisonOr.value (BitVec.ofInt 32 1)]ₕ⟩) u := by
+            ⟨1, rfl, [PoisonOr.value (BitVec.ofInt 32 1)]ₕ⟩) u := by
   -- the three locals
   obtain ⟨t₀, s₀, hs₀def, ht₀def, hs₀WF, hfit₀, hid₀, hoff₀, hctr₀, hfr₀⟩ :=
     GlobalState.exists_afterAlloca_facts s hs (5 * 64)
@@ -408,19 +412,19 @@ private lemma exit_cond {k n : ℕ} (hk : k < n - 1) (h2 : 2 ≤ n) (h100 : n �
   omega
 
 /-- Branch target: loop header `i`, counter at `1`. -/
-private abbrev hdr (i : Nat)
+abbrev hdr (i : Nat)
     (h : fd_f25519_pow22523.sigs[i]? = some [Ty.bitvec 32] := by rfl) :
     SuccArgs fd_f25519_pow22523.sigs :=
   ⟨i, h, [PoisonOr.value (BitVec.ofInt 32 1)]ₕ⟩
 
 /-- Branch target: straight-line block `i`, no arguments. -/
-private abbrev seg (i : Nat)
+abbrev seg (i : Nat)
     (h : fd_f25519_pow22523.sigs[i]? = some [] := by rfl) :
     SuccArgs fd_f25519_pow22523.sigs :=
   ⟨i, h, HVector.nil⟩
 
 /-- The walk from `src` reaches `dst`, in a state satisfying `Q`. -/
-private abbrev Hop (V : fd_f25519_pow22523.Γout.Valuation) (u : GlobalState)
+abbrev Hop (V : fd_f25519_pow22523.Γout.Valuation) (u : GlobalState)
     (src dst : SuccArgs fd_f25519_pow22523.sigs) (Q : GlobalState → Prop) : Prop :=
   ∃ u',
     StateT.run (fd_f25519_pow22523.blocks.run V src) u
@@ -430,7 +434,7 @@ private abbrev Hop (V : fd_f25519_pow22523.Γout.Valuation) (u : GlobalState)
 /-- The shared loop-header shape. `γt` names the squared local and `γb` the
 bound constant, both as `Γout` indices; the argument indices are spelled
 `γ + 1 + …` so `Valuation.cons_succ` peels them without knowing `γ`. -/
-private def loopBody (γt γb γc exit self : Nat)
+def loopBody (γt γb γc exit self : Nat)
     (hγt : fd_f25519_pow22523.Γout[γt]? = some Ty.ptr)
     (hγb : fd_f25519_pow22523.Γout[γb]? = some (Ty.bitvec 32))
     (hγc : fd_f25519_pow22523.Γout[γc]? = some (Ty.bitvec 32))
@@ -540,7 +544,7 @@ the counter reset to `%0 = 1`:
       %y = llvm.call @fd_f25519_sqr(%sd, %ss)
       llvm.br ^bb(next) (%0)
 -/
-private def interBody (γmd γm₀ γm₁ γsd γss γc next : Nat)
+def interBody (γmd γm₀ γm₁ γsd γss γc next : Nat)
     (hγmd : fd_f25519_pow22523.Γout[γmd]? = some Ty.ptr)
     (hγm₀ : fd_f25519_pow22523.Γout[γm₀]? = some Ty.ptr)
     (hγm₁ : fd_f25519_pow22523.Γout[γm₁]? = some Ty.ptr)
@@ -628,7 +632,7 @@ variable {t₀ t₁ t₂ a o : Pointer} {n₀ : Nat} {s₀ : GlobalState}
   (V : fd_f25519_pow22523.Γout.Valuation)
 
 /-- The `loop_run` step obligation for a loop over `t₁`. -/
-private def step₁ (ids : Ids t₀ t₁ t₂ a o n₀) :
+def step₁ (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ w v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₁]ₕ))) s
@@ -638,7 +642,7 @@ private def step₁ (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, State.update₁ ids pw st fun h => pw.zh₁ (hz h)⟩
 
 /-- The `loop_run` step obligation for a loop over `t₂`. -/
-private def step₂ (ids : Ids t₀ t₁ t₂ a o n₀) :
+def step₂ (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ w s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ w z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₂, .value t₂]ₕ))) s
@@ -648,7 +652,7 @@ private def step₂ (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, State.update₂ ids pw st fun h => pw.zh₂ (hz h)⟩
 
 /-- `t₀ ← t₁ · t₀` (the mul of `^bb1`/`^bb7`). -/
-private def mulStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
+def mulStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁, .value t₀]ₕ))) s
@@ -659,7 +663,7 @@ private def mulStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, State.update₀ ids pw st fun h => (hz h).imp pw.zh₁ pw.zh₀⟩
 
 /-- `t₁ ← t₀ ^ 2` (the sqr of `^bb1`/`^bb7`). -/
-private def sqrStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
+def sqrStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁]ₕ))) s
@@ -669,7 +673,7 @@ private def sqrStepA (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, (State.update₁ ids pw st fun h => pw.zh₀ (hz h)).cast rfl (by ring) rfl⟩
 
 /-- `t₁ ← t₁ · t₀` (the mul of `^bb3`/`^bb9`). -/
-private def mulStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
+def mulStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₀, .value t₁, .value t₁]ₕ))) s
@@ -680,7 +684,7 @@ private def mulStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, State.update₁ ids pw st fun h => (hz h).imp pw.zh₁ pw.zh₀⟩
 
 /-- `t₂ ← t₁ ^ 2` (the sqr of `^bb3`/`^bb9`). -/
-private def sqrStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
+def sqrStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₂]ₕ))) s
@@ -690,7 +694,7 @@ private def sqrStepB (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, (State.update₂ ids pw st fun h => pw.zh₁ (hz h)).cast rfl rfl (by ring)⟩
 
 /-- `t₁ ← t₂ · t₁` (the mul of `^bb5`/`^bb11`). -/
-private def mulStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
+def mulStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_mul.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₂, .value t₁]ₕ))) s
@@ -701,7 +705,7 @@ private def mulStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
   exact ⟨s', hrun, State.update₁ ids pw st fun h => (hz h).imp pw.zh₂ pw.zh₁⟩
 
 /-- `t₁ ← t₁ ^ 2` (the sqr of `^bb5`/`^bb11`). -/
-private def sqrStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
+def sqrStepC (ids : Ids t₀ t₁ t₂ a o n₀) :
     ∀ s, State t₀ t₁ t₂ n₀ s₀ v₀ v₁ v₂ z₀ z₁ z₂ s → ∃ s',
       StateT.run (runFunction (fd_f25519_sqr.denote
           (Ctxt.Valuation.ofHVector [.value t₁, .value t₁]ₕ))) s

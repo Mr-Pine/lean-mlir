@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Proof.Globals
-import SSA.Projects.Firedancer.Ref.Spec.F25519
+module
+
+public import SSA.Projects.Firedancer.Proof.Globals
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
 
 /-!
 # The `ref` module's globals
@@ -17,6 +19,8 @@ These are that step: each says the limbs `ref.mlir` initialises a global with
 decode to the constant named in `Ed25519.lean`, so the chain artifact → limbs →
 field element is checked rather than asserted.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

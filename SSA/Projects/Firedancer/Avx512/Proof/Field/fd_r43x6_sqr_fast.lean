@@ -5,11 +5,13 @@ the 120 instructions of `fd_r43x6_sqr_fast`; unlike its `mul` counterpart it
 has no generator, having been migrated from the earlier two-file
 (`Denote/` + `Spec/`) layout at commit d4d7da2.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.MLIR.Poison
-import SSA.Projects.Firedancer.Ed25519
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.MLIR.Poison
+public import SSA.Projects.Firedancer.Ed25519
 
 /-!
 # `fd_r43x6_sqr_fast` squares its input in `ZMod p`
@@ -37,6 +39,8 @@ multiply.
 truncation the identity, and `x[7] = 0` is consumed at the shuffles, so no
 product of the ignored lane is ever formed.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 
@@ -508,16 +512,16 @@ abbrev sqrValue (x : Vector (BitVec 64) 8) :=
 abbrev sqrIsSqr (x : Vector (BitVec 64) 8) :=
   (fun l => (R43x6.decode' l : ZMod p)) <$> sqrValue x = .value ((R43x6.decode' x : ZMod p) ^ 2)
 
-private def output_bounds_u44_u61 (x : Vector (BitVec 64) 8) :=
+def sqr_output_bounds_u44_u61 (x : Vector (BitVec 64) 8) :=
   R43x6.U44 x → R43x6.U61 (sqrValue x).getValue
 
-private def output_bounds_u45_u61 (x : Vector (BitVec 64) 8) :=
+def sqr_output_bounds_u45_u61 (x : Vector (BitVec 64) 8) :=
   R43x6.U45 x → R43x6.U61 (sqrValue x).getValue
 
-private def output_bounds_u46_u62 (x : Vector (BitVec 64) 8) :=
+def sqr_output_bounds_u46_u62 (x : Vector (BitVec 64) 8) :=
   R43x6.U46 x → R43x6.U62 (sqrValue x).getValue
 
-private def output_bounds_u47_u62 (x : Vector (BitVec 64) 8) :=
+def sqr_output_bounds_u47_u62 (x : Vector (BitVec 64) 8) :=
   R43x6.U47 x → R43x6.U62 (sqrValue x).getValue
 
 set_option maxHeartbeats 1000000 in
@@ -570,7 +574,7 @@ private theorem sqrValue_eq (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) 
   simp only [HVector.head, Vector.getValues_map_value]
 
 /-- Two-sided lane bounds from a ceiling `N` on the ℕ-level limbs. -/
-private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2 ^ 62)
+private theorem sqr_output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N ≤ 2 ^ 62)
     (hx : R43x6.Unreduced x) (h7 : x[7] = 0) (hb : ∀ k, sqLimb (limbNat x) k < N) :
     R43x6.BoundedUpper ((N : Int) - 1) (sqrValue x).getValue ∧
       R43x6.BoundedLower 0 (sqrValue x).getValue := by
@@ -580,32 +584,32 @@ private theorem output_bounds_of (x : Vector (BitVec 64) 8) (N : ℕ) (hN : N �
   exact limbVec_bounds _ N (by omega) hb
 
 private theorem output_u44 (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    output_bounds_u44_u61 x := by
+    sqr_output_bounds_u44_u61 x := by
   intro hin
   have hb : ∀ k, sqLimb (limbNat x) k < 2 ^ 61 := fun k =>
     sqLimb_lt_u44 _ (limbNat_lt x 44 (by omega) hin) k
-  exact_mod_cast output_bounds_of x (2 ^ 61) (by omega) hx h7 hb
+  exact_mod_cast sqr_output_bounds_of x (2 ^ 61) (by omega) hx h7 hb
 
 private theorem output_u45 (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    output_bounds_u45_u61 x := by
+    sqr_output_bounds_u45_u61 x := by
   intro hin
   have hb : ∀ k, sqLimb (limbNat x) k < 2 ^ 61 := fun k =>
     sqLimb_lt_u45 _ (limbNat_lt x 45 (by omega) hin) k
-  exact_mod_cast output_bounds_of x (2 ^ 61) (by omega) hx h7 hb
+  exact_mod_cast sqr_output_bounds_of x (2 ^ 61) (by omega) hx h7 hb
 
 private theorem output_u46 (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    output_bounds_u46_u62 x := by
+    sqr_output_bounds_u46_u62 x := by
   intro hin
   have hb : ∀ k, sqLimb (limbNat x) k < 2 ^ 62 := fun k =>
     sqLimb_lt_u46 _ (limbNat_lt x 46 (by omega) hin) k
-  exact_mod_cast output_bounds_of x (2 ^ 62) (by omega) hx h7 hb
+  exact_mod_cast sqr_output_bounds_of x (2 ^ 62) (by omega) hx h7 hb
 
 private theorem output_u47 (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (h7 : x[7] = 0) :
-    output_bounds_u47_u62 x := by
+    sqr_output_bounds_u47_u62 x := by
   intro hin
   have hb : ∀ k, sqLimb (limbNat x) k < 2 ^ 62 := fun k =>
     sqLimb_lt_u47 _ (limbNat_lt x 47 (by omega) hin) k
-  exact_mod_cast output_bounds_of x (2 ^ 62) (by omega) hx h7 hb
+  exact_mod_cast sqr_output_bounds_of x (2 ^ 62) (by omega) hx h7 hb
 
 /-- **Specification of `fd_r43x6_sqr_fast`**: on an unreduced input whose two
 high lanes are zero, the six output limbs decode to the square of the decoded
@@ -618,8 +622,8 @@ derivation turns out not to need it -- lane 6 of `x` reaches no product. -/
 theorem spec_fd_r43x6_sqr_fast (x : Vector (BitVec 64) 8) (hx : R43x6.Unreduced x) (_h6 : x[6] = 0)
     (h7 : x[7] = 0) :
     sqrIsSqr x ∧
-      output_bounds_u44_u61 x ∧
-      output_bounds_u45_u61 x ∧ output_bounds_u46_u62 x ∧ output_bounds_u47_u62 x :=
+      sqr_output_bounds_u44_u61 x ∧
+      sqr_output_bounds_u45_u61 x ∧ sqr_output_bounds_u46_u62 x ∧ sqr_output_bounds_u47_u62 x :=
   ⟨sqrIsSqrThm x hx h7, output_u44 x hx h7, output_u45 x hx h7, output_u46 x hx h7,
     output_u47 x hx h7⟩
 

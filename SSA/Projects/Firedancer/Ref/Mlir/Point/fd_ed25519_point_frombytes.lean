@@ -2,16 +2,30 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_point_frombytes.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_frombytes
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqrt_ratio
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_frombytes
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqrt_ratio
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_frombytes
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_neg
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sgn
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqrt_ratio
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

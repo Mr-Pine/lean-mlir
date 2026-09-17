@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+public import SSA.Projects.Firedancer.Curve
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

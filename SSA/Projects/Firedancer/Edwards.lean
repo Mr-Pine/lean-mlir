@@ -1,12 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Tactic.LinearCombination
-import Mathlib.Tactic.Ring
-import Mathlib.Tactic.NormNum
-import Mathlib.Tactic.FieldSimp
-import Mathlib.Algebra.Group.Even
-import Mathlib.Algebra.Field.Basic
+module
+
+public import Mathlib.Tactic.LinearCombination
+public import Mathlib.Tactic.Ring
+public import Mathlib.Tactic.NormNum
+public import Mathlib.Tactic.FieldSimp
+public import Mathlib.Algebra.Group.Even
+public import Mathlib.Algebra.Field.Basic
 
 /-!
 # The twisted Edwards group law
@@ -16,6 +18,8 @@ square and `d` is not: its affine points with the addition of Bernstein–Lange 
 `AddCommGroup`. Completeness is `Curve.mul_ne`; closure and associativity are polynomial
 identities modulo the curve equations, with certificates computed by Singular's `lift`.
 -/
+
+@[expose] public section
 
 namespace Edwards
 

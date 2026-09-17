@@ -1,13 +1,17 @@
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_eq_z1
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_eq_z1
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Spec.Bias
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_eq_z1
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_eq_z1
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

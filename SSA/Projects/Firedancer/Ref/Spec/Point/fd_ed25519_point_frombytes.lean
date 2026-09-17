@@ -1,15 +1,19 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_frombytes
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
-import SSA.Projects.Firedancer.Curve
+module
 
-import SSA.Projects.Firedancer.Prime
-import Mathlib.Algebra.Group.Even
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_frombytes
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.Curve
+
+public import SSA.Projects.Firedancer.Prime
+public import Mathlib.Algebra.Group.Even
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

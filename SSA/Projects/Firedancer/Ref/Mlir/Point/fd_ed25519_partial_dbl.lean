@@ -2,12 +2,22 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_partial_dbl.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add_nr
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr4
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub_nr
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add_nr
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr4
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub_nr
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add_nr
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sqr4
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_add
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_sub_nr
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

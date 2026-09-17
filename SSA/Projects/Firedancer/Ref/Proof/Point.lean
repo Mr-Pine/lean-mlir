@@ -1,5 +1,7 @@
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
 /-!
 # Reading a point
@@ -8,6 +10,8 @@ Lemmas about `readPoint` and the coordinate pointers a region geps. None of
 these is needed to state a spec; they are what the conformance proofs use to
 line a `readPoint` up with the four field-element reads underneath it.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

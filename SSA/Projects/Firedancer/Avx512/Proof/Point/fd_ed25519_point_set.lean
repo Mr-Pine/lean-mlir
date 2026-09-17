@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_set
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_set
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 
 /-!
 # `fd_ed25519_point_set` conformance
@@ -11,6 +13,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 Three whole-vector load/store pairs at 0, 64 and 128 bytes. Each load reads
 `a`'s block, which the preceding stores into `r`'s block leave alone.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

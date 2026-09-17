@@ -1,7 +1,13 @@
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_eq_z1.mlir
-import SSA.Projects.SLLVM.Cfg
+module
 
-import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
+public import SSA.Projects.SLLVM.Cfg
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_point_eq
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

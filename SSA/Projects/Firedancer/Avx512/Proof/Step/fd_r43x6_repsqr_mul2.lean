@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_repsqr_mul2
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_repsqr_mul2
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
 
 /-!
 # One `fd_r43x6_repsqr_mul2` call, peeled
@@ -17,6 +19,8 @@ that it left everything else alone.
 `Wrote2`, the `readVec` transport lemmas it is stated over, and `peel_load_vec`
 are all in `Step/Basic.lean`: none of them name a kernel.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

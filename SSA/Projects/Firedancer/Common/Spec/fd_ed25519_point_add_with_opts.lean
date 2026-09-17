@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
+module
+
+public import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
 
 /-!
 # The addition `fd_ed25519_point_add_with_opts` performs on a precomputed point
@@ -11,6 +13,8 @@ Both backends add with the formulas of RFC 8032 §5.1.4, reading `Y - X`,
 `addPrecomputed` represents the sum is not proved: the group law is not
 formalised (`Curve.lean`).
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

@@ -1,7 +1,11 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_is_zero
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_is_zero
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Curve
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

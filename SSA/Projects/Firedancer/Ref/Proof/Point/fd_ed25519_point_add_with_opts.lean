@@ -1,20 +1,22 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Proof.WriteChain
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
-import SSA.Projects.Firedancer.Ref.Proof.Locals
-import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add_nr
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub_nr
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul3
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul4
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Proof.WriteChain
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+public import SSA.Projects.Firedancer.Ref.Proof.Locals
+public import SSA.Projects.Firedancer.Ref.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_add_nr
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub_nr
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul3
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_mul4
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sqr4
 
 /-!
 # `fd_ed25519_point_add_with_opts` conformance (ref)
@@ -24,6 +26,8 @@ locals is written before `^bb8`, which stores `r`. `Frame` carries the locals
 and the caller's blocks through `^bb0 … ^bb4`; the two `b_Z_is_one` paths meet
 in `tail_run`, stated over the opaque entry valuation.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 
@@ -276,7 +280,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
     (hD : Holds w.mem (addLocal s 7) D 0x8000000000000)
     (Pt : Point) (hPt : Pt = ⟨B - A, D - C, D + C, B + A⟩) :
     ∃ s' : GlobalState,
-      StateT.run (fd_ed25519_point_add_with_opts.blocks.run V ⟨4, by rfl, HVector.nil⟩) w
+      StateT.run (fd_ed25519_point_add_with_opts.blocks.run V ⟨4, rfl, HVector.nil⟩) w
         = .value ([.value r]ₕ, s')
       ∧ ∃ oX oY oZ oT : BitVec (5 * 64),
         let outMem := (((s.mem.splice r oX).splice (r.withOffset 40) oY).splice

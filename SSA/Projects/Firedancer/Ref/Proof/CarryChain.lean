@@ -1,5 +1,7 @@
-import SSA.Projects.Firedancer.Ref.Spec.F25519
-import SSA.Projects.Firedancer.Ref.Proof.Limb
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.F25519
+public import SSA.Projects.Firedancer.Ref.Proof.Limb
 
 /-!
 # The shared carry chain
@@ -13,6 +15,8 @@ The column bounds happen to coincide too -- at fiat's loose input bound both
 reach `693 * 2 ^ 102` in column 0 down to `45 * 2 ^ 102` in column 4 -- so
 `carry_chain_le` and `carry_chain_value` apply to both verbatim.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

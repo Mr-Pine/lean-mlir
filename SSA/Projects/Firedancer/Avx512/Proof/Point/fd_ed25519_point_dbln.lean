@@ -1,12 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Entry
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Entry
 
 /-!
 # `fd_ed25519_point_dbln` conforms (AVX-512)
@@ -16,6 +18,8 @@ import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_dbln.Entry
 over the first. The arithmetic is `PointDbln.geDbl`
 (`fd_ed25519_point_dbln/Model.lean`), `u44` to `u44`, `Point.dbl` on the point.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

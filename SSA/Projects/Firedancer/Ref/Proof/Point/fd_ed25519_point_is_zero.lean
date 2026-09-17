@@ -1,11 +1,15 @@
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_is_zero
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_is_zero
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_is_zero
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_is_zero
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_eq
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

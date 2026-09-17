@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Util.wv_ld
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Util.wv_ld
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
 
 /-!
 # `wv_ld` conforms to its spec
@@ -15,6 +17,8 @@ four lanes `readWv` reads. The region allocates nothing and writes nothing, so
 the state the load runs in is the state it returns and the frame pop is
 invisible.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

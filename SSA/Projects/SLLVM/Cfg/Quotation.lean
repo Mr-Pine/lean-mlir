@@ -1,8 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Cfg.Transform
-import SSA.Projects.SLLVM.Cfg.ToExpr
+module
+
+public import SSA.Projects.SLLVM.Cfg.Transform
+public import SSA.Projects.SLLVM.Cfg.ToExpr
+-- the quotations and `sllvm_cfg_def` run at elaboration time
+public meta import SSA.Projects.SLLVM.Cfg.Transform
+public meta import SSA.Projects.SLLVM.Cfg.ToExpr
 
 /-!
 # `[sllvm_cfg| …]` and `[sllvm_cfg_of| …]`
@@ -19,25 +24,27 @@ projections of the constant -- so the callee's conformance theorem applies
 syntactically, and its own callees never have to be restated.
 -/
 
+public meta section
+
 namespace LeanMLIR.SLLVM
 
 open Lean Elab Term Qq
 open MLIR.AST
 
-private instance : Inhabited ParsedCfg :=
+instance : Inhabited ParsedCfg :=
   ⟨⟨(∅ : Ctxt SLLVM.Ty), [], ⟨.term (.ret .nil), .nil⟩⟩⟩
 
 /-- The callee's `Cfg` value, packaged for `evalParsedCfg`. -/
-private def ParsedCfg.ofCfg {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (c : Cfg Γin rets) :
+def ParsedCfg.ofCfg {Γin : Ctxt SLLVM.Ty} {rets : List SLLVM.Ty} (c : Cfg Γin rets) :
     ParsedCfg :=
   ⟨Γin, rets, c⟩
 
 @[inherit_doc ParsedCfg.ofCfg]
-private def ParsedCfg.ofComRef {Γ : Ctxt SLLVM.Ty} {ts : List SLLVM.Ty}
+def ParsedCfg.ofComRef {Γ : Ctxt SLLVM.Ty} {ts : List SLLVM.Ty}
     (c : Com SLLVM Γ .impure ts) : ParsedCfg :=
   ⟨Γ, ts, Cfg.ofCom c⟩
 
-private unsafe def evalParsedCfgAux : Q(ParsedCfg) → MetaM ParsedCfg :=
+unsafe def evalParsedCfgAux : Q(ParsedCfg) → MetaM ParsedCfg :=
   Lean.Meta.evalExpr ParsedCfg q(ParsedCfg)
 
 /-
@@ -45,27 +52,21 @@ SAFETY: as `evalExprOfTypeRegion` -- the `implemented_by` is safe assuming
 `ParsedCfg` and `q(ParsedCfg)` agree.
 -/
 @[implemented_by evalParsedCfgAux]
-private partial def evalParsedCfg : Q(ParsedCfg) → MetaM ParsedCfg :=
+partial def evalParsedCfg : Q(ParsedCfg) → MetaM ParsedCfg :=
   default
 
-private def elabCfgOfRegion (ast : MLIR.AST.Region 0) : TermElabM Lean.Expr := do
+def elabCfgOfRegion (ast : MLIR.AST.Region 0) : TermElabM Lean.Expr := do
   match mkCfg (foldGepZeroIndex ast) with
   | .error (e : TransformError) => throwError (repr e)
   | .ok ⟨_, _, cfg⟩ => cfg.toExprM
 
-/-- Evaluate a term to the AST region it denotes. -/
-private def elabRegionTerm (t : Term) : TermElabM (MLIR.AST.Region 0) := do
-  let e ← elabTermEnsuringTypeQ t q(MLIR.AST.Region 0)
-  synthesizeSyntheticMVarsNoPostponing
-  SSA.evalExprOfTypeRegion 0 (← instantiateMVars e)
-
 /-- A `with` binding, classified by its term's type: a `Region` is spliced
 and inlined; a lifted `Com` or `Cfg` is embedded by reference. -/
-private inductive CalleeBinding
+inductive CalleeBinding
   | region (r : MLIR.AST.Region 0)
   | ref (r : CalleeRef) (v : ParsedCfg)
 
-private def elabCalleeBinding (t : Term) : TermElabM CalleeBinding := do
+def elabCalleeBinding (t : Term) : TermElabM CalleeBinding := do
   let e ← Term.elabTerm t none
   synthesizeSyntheticMVarsNoPostponing
   let e ← instantiateMVars e
@@ -89,7 +90,7 @@ private def elabCalleeBinding (t : Term) : TermElabM CalleeBinding := do
     throwError "a callee binding must be an `MLIR.AST.Region 0` (inlined) or a \
       lifted `Com`/`Cfg` (embedded by reference); it has type{Lean.indentExpr ty}"
 
-private def elabCfgCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
+def elabCfgCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
     TermElabM (List (String × CalleeBinding)) :=
   bs.toList.mapM fun b => do
     match b with
@@ -98,7 +99,7 @@ private def elabCfgCalleeTable (bs : Array (TSyntax ``sllvmCallee)) :
     | _ =>
       throwUnsupportedSyntax
 
-private def elabCfgWithBindings (ast : MLIR.AST.Region 0)
+def elabCfgWithBindings (ast : MLIR.AST.Region 0)
     (table : List (String × CalleeBinding)) : TermElabM Lean.Expr := do
   let regions := table.filterMap fun (n, b) =>
     match b with | .region r => some (n, r) | _ => none
@@ -156,7 +157,9 @@ elab mods:declModifiers "sllvm_cfg_def " id:ident " : " ty:term " := " val:term 
       let env ← getEnv
       let hints := if st == .reducible then ReducibilityHints.abbrev
         else .regular (getMaxHeight env e + 1)
-      addAndCompile <| .defnDecl (← mkDefinitionValInferringUnsafe n [] t e hints)
+      -- exported with its body: the proofs about the program unfold it
+      withExporting do
+        addAndCompile <| .defnDecl (← mkDefinitionValInferringUnsafe n [] t e hints)
       setReducibilityStatus n st
       addDeclarationRangesFromSyntax n (← getRef)
       return mkConst n

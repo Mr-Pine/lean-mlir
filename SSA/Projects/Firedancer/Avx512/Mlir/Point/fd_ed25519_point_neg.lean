@@ -2,7 +2,11 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/avx512/region/fd_ed25519_point_neg.mlir
-import SSA.Projects.SLLVM.Cfg
+module
+
+public import SSA.Projects.SLLVM.Cfg
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

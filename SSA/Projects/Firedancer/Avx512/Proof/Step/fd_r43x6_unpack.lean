@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_unpack
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_unpack
 
 /-!
 # One `fd_r43x6_unpack` call, peeled
@@ -18,6 +20,8 @@ plus the six facts the spec gives is exactly what a walk wants, and it keeps
 `fd_r43x6_unpack_cfg`, not `fd_r43x6_unpack`, is what a caller's call node
 holds, so the run equation is stated over that constant.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

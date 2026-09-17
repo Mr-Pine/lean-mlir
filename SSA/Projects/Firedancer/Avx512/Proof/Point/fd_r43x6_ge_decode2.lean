@@ -1,19 +1,21 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
-import SSA.Projects.Firedancer.Avx512.Proof.Step.wv_ld
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_pow22523_2
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_r43x6_ge_decode2_blocks
-import SSA.Projects.Firedancer.Avx512.Proof.Sub
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.wv_ld
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_pow22523_2
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_r43x6_ge_decode2_blocks
+public import SSA.Projects.Firedancer.Avx512.Proof.Sub
 
 /-!
 # `fd_r43x6_ge_decode2` conforms to its spec
@@ -26,6 +28,8 @@ What is left is the region's five blocks: the two `memcpy`s and unpacks, the
 shared `u`/`v` chain, `fd_r43x6_pow22523_2`, the two square-root branches, and
 the sign fixup through `fd_r43x6_diagnose`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,9 +1,13 @@
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+
+@[expose] public section
 
 
 namespace Firedancer.Avx512

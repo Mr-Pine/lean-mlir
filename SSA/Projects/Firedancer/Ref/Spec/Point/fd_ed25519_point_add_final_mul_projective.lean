@@ -1,10 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
-import SSA.Projects.Firedancer.Ref.Spec.Point
-import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+public import SSA.Projects.Firedancer.Ref.Spec.Point
+public import SSA.Projects.Firedancer.Ref.Spec.Point.Dbl
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

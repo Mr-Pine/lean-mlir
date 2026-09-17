@@ -1,3 +1,5 @@
-import SSA.Projects.Firedancer.Proof.Tactics.Memory
-import SSA.Projects.Firedancer.Proof.Tactics.ControlFlow
-import SSA.Projects.Firedancer.Proof.Tactics.Eval
+module
+
+public import SSA.Projects.Firedancer.Proof.Tactics.Memory
+public import SSA.Projects.Firedancer.Proof.Tactics.ControlFlow
+public import SSA.Projects.Firedancer.Proof.Tactics.Eval

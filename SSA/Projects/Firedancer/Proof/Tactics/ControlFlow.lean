@@ -1,7 +1,11 @@
-import SSA.Projects.SLLVM.Dialect
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
+module
+
+public import SSA.Projects.SLLVM.Dialect
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
+
+@[expose] public section
 
 namespace Firedancer
 
@@ -33,7 +37,7 @@ own operand expression and which therefore needs no matching at all. Getting it
 backwards is not a failure but a whole-program defeq: the tactic spends the
 heartbeat budget rather than falling over. Hence the dispatch, rather than a
 `first` over both. -/
-def callArgsAreOfHVector (h : Term) : TacticM Bool :=
+meta def callArgsAreOfHVector (h : Term) : TacticM Bool :=
   withMainContext do
     withoutModifyingState do
         let ty ← instantiateMVars (← inferType (← Term.elabTerm h none))
@@ -55,7 +59,7 @@ for whenever one does.
 has type `HVector toType argTys.reverse`, so leaving it open asks Lean to
 invert `List.reverse` on an unknown list -- which does not fail, it grinds
 until the heartbeat limit. -/
-def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
+meta def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
     (extra : Array Term) : TacticM Unit := do
   -- `call {Γ Γout rets succs argTys retTys csigs cΓout} callee centry cblocks args body`
   -- a call inside a lifted block constant only shows once the block is unfolded
@@ -165,7 +169,7 @@ as `peel_store` does with its stored value.
 
 This is what lets one `peel_call` cover both families: the choice was never a
 judgement call, it is written in the lemma the caller already has. -/
-def callReturnsValue (h : Term) : TacticM Bool :=
+meta def callReturnsValue (h : Term) : TacticM Bool :=
   withMainContext do
     let ty ←
       withoutModifyingState do
@@ -181,7 +185,7 @@ def callReturnsValue (h : Term) : TacticM Bool :=
 
 open Lean Elab Tactic in
 /-- The three step-lemma names for the value- or the nil-returning family. -/
-def peelCallNames (value : Bool) : Name × Name × Name :=
+meta def peelCallNames (value : Bool) : Name × Name × Name :=
   if value then
     (``LeanMLIR.SLLVM.BlockCom.run_denote_call_cfg_of_value,
       ``LeanMLIR.SLLVM.BlockCom.run_bind_denote_call_cfg_of_value,

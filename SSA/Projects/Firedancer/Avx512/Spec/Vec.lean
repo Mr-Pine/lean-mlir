@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Quad
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Quad
 
 /-!
 # A single `fd_r43x6_t` in memory
@@ -13,6 +15,8 @@ through *separate* `wwl_t *` out-parameters, one vector each, which is what
 `IsVecPtr`/`readVec` are for. `vecBV` (in `Spec/Quad.lean`) is the bit pattern
 a whole-vector store writes.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

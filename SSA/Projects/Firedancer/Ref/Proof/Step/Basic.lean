@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Ref.Spec.Bias
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
+
+public import SSA.Projects.Firedancer.Ref.Spec.Bias
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
 
 /-!
 # What a peeled call leaves behind
@@ -13,6 +15,8 @@ value and the tight bound at `dst`. The `Step/fd_*` files package one
 conformance lemma each into these shapes, so that a walk only ever handles
 `StepFacts` and the frame lemmas below.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

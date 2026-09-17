@@ -1,10 +1,14 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_eq
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_eq
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_sub
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_is_zero
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

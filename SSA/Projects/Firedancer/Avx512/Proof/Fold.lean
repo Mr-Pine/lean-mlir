@@ -1,13 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Vec
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Proof.Overflow
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Avx512.Proof.Long
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Vec
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_sqr_fast
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Proof.Overflow
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Avx512.Proof.Long
 
 /-!
 # `fd_r43x6_fold_unsigned`
@@ -35,6 +37,8 @@ these two theorems are what that reduction is then combined with:
 `vecValue_foldVec` (the element is unchanged) and `foldVec_u44` (the limbs the
 `fd_r43x6.h` table promises).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open InstCombine (LLVM)
@@ -775,7 +779,7 @@ a right-hand side a `simp` has reshaped -- or one still naming an operand --
 matches nothing syntactically, and unification then falls back to `whnf` on two
 very large terms rather than failing. The heartbeat bound turns that into an
 error that says what is wrong. -/
-private def foldUnsignedAt (hv : Ident) (z hz : Term) : TacticM Unit := do
+meta def foldUnsignedAt (hv : Ident) (z hz : Term) : TacticM Unit := do
   let n := hv.getId.eraseMacroScopes.toString
   unless n.startsWith "h" do
     throwError "fold_unsigned: expected a hypothesis named `h<value>`, got `{n}`"
@@ -795,7 +799,7 @@ open Lean Elab Tactic Meta in
 local context: hypotheses `v<i> = toBitVecValue 64 #v[…]` whose value is one of
 the three. Found by value rather than named, so a region that declared them
 forty instructions before the fold does not have to pass them along. -/
-private def foldConstantHyps : TacticM (Array Ident) := withMainContext do
+meta def foldConstantHyps : TacticM (Array Ident) := withMainContext do
   let terms : Array Term := #[
     ← `(toBitVecValue 64 #v[8796093022207, 8796093022207, 8796093022207, 8796093022207,
         8796093022207, 1099511627775, 0, 0]),

@@ -1,10 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_curve25519_into_precomputed.Model
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
-import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_curve25519_into_precomputed.Model
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Frame
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.fd_ed25519_point_neg
 
 /-!
 # `fd_curve25519_into_precomputed` conforms (AVX-512)
@@ -13,6 +15,8 @@ One block: `r`'s three vectors, the lane sub/add and signed fold, the multiply b
 `(1, 1, 1, 2d)` through slots 0-2, the unsigned fold, the three stores into `r`.
 The arithmetic is `IntoPre.intoPre` (`fd_curve25519_into_precomputed/Model.lean`).
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

@@ -1,8 +1,10 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
-import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
+module
+
+public import SSA.Projects.Firedancer.Avx512.Proof.Point.Ge.Lanes
+public import SSA.Projects.Firedancer.Common.Spec.fd_curve25519_into_precomputed
 
 /-!
 # `fd_curve25519_into_precomputed`, as a function on QUADs
@@ -13,6 +15,8 @@ by `(1, 1, 1, 2d)`, the unsigned fold.
 * `u44_intoPre`: `u62` in, `u44` out.
 * `ofSlots_intoPre`: the slots hold `Point.toPrecomputed`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM

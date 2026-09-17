@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Edwards
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_sub_with_opts
+module
+
+public import SSA.Projects.Firedancer.Edwards
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_sub_with_opts
 
 /-!
 # edwards25519's group, and what the `ge` formulas compute in it
@@ -12,6 +14,8 @@ import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_point_sub_with_opts
 representation stands for one (`Point.toAffine`); `Point.dbl` computes its double and
 `Point.addPrecomputed` its sum with a precomputed point, `Point.neg` its negation.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

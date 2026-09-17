@@ -1,8 +1,12 @@
-import SSA.Projects.SLLVM.Dialect.Basic
+module
+
+public import SSA.Projects.SLLVM.Dialect.Basic
 
 /-!
 # Refinement relation for SLLVM dialect
 -/
+
+@[expose] public section
 
 namespace LeanMLIR.SLLVM
 

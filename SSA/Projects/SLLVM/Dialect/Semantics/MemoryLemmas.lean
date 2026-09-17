@@ -1,8 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
-import SSA.Projects.SLLVM.Dialect.Semantics.MemorySemantics
+public import SSA.Projects.SLLVM.Dialect.Semantics.MemorySemantics
 
 /-!
 # Reasoning about SLLVM memory
@@ -16,6 +17,8 @@ The lemmas here close that gap for straight-line code. They are all in
 run equals this state" -- rather than case-splitting on UB, because that is the
 shape a proof about a kernel with known-good pointers actually needs.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR
 

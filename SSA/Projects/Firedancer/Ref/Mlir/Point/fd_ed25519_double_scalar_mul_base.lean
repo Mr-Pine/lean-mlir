@@ -2,17 +2,32 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- build/native/gcc/mlir_canonicalized/ref/region/fd_ed25519_double_scalar_mul_base.mlir
-import SSA.Projects.SLLVM.Cfg
-import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_wnaf
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_dbln
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_curve25519_into_precomputed
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_with_opts
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set_zero
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_sub_with_opts
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+module
+
+public import SSA.Projects.SLLVM.Cfg
+public import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_wnaf
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_dbln
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_curve25519_into_precomputed
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_with_opts
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set_zero
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_sub_with_opts
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+-- callee bindings are evaluated while elaborating
+public meta import SSA.Projects.Firedancer.Common.Mlir.Scalar.fd_curve25519_scalar_wnaf
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_dbln
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_curve25519_into_precomputed
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_with_opts
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_set_zero
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_partial_dbl
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_sub_with_opts
+public meta import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_add_final_mul_projective
+
+@[expose] public section
 
 namespace Firedancer.Ref
 open LeanMLIR SLLVM

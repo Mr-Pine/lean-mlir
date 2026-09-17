@@ -1,9 +1,11 @@
-import SSA.Projects.Firedancer.Ed25519
-import SSA.Projects.Firedancer.Prime
-import Mathlib.Tactic.LinearCombination
-import Mathlib.FieldTheory.Finite.Basic
-import Mathlib.NumberTheory.LegendreSymbol.Basic
-import Mathlib.Algebra.Group.Even
+module
+
+public import SSA.Projects.Firedancer.Ed25519
+public import SSA.Projects.Firedancer.Prime
+public import Mathlib.Tactic.LinearCombination
+public import Mathlib.FieldTheory.Finite.Basic
+public import Mathlib.NumberTheory.LegendreSymbol.Basic
+public import Mathlib.Algebra.Group.Even
 
 /-!
 # Ed25519 group elements / curve points
@@ -37,6 +39,8 @@ unconditionally is an `Inv` with `ZMod.mul_inv_of_unit`. So denominators are
 hypothesised `IsUnit` -- for the true, prime `p` exactly `≠ 0`, and the form
 the proofs consume; nothing below would gain from the field structure.
 -/
+
+@[expose] public section
 
 namespace Ed25519
 

@@ -1,19 +1,21 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_diagnose
-import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_unpack
-import SSA.Projects.Firedancer.Avx512.Proof.Sub
-import SSA.Projects.Firedancer.Avx512.Proof.Quad
-import SSA.Projects.Firedancer.Proof.Memory
-import SSA.Projects.Firedancer.Proof.Overflow
-import SSA.Projects.Firedancer.Proof.Tactics
-import SSA.Projects.Firedancer.MLIR.DenoteStep
+module
+
+public import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_r43x6_ge_decode2
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.Basic
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_diagnose
+public import SSA.Projects.Firedancer.Avx512.Proof.Step.fd_r43x6_unpack
+public import SSA.Projects.Firedancer.Avx512.Proof.Sub
+public import SSA.Projects.Firedancer.Avx512.Proof.Quad
+public import SSA.Projects.Firedancer.Proof.Memory
+public import SSA.Projects.Firedancer.Proof.Overflow
+public import SSA.Projects.Firedancer.Proof.Tactics
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
 
 /-!
 # `fd_r43x6_ge_decode2`'s tail blocks
@@ -50,6 +52,8 @@ there: those are data, so they are hypotheses of the block's lemma
 structure of their own (`Bb2In`).
 -/
 
+@[expose] public section
+
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
@@ -66,25 +70,25 @@ the `int` to return. -/
 
 /-- `^bb1`, the second encoding's remaining square-root test. -/
 abbrev bb1 : SuccArgs fd_r43x6_ge_decode2.sigs :=
-  ⟨0, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨0, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb2`, the success path. -/
 abbrev bb2 : SuccArgs fd_r43x6_ge_decode2.sigs :=
-  ⟨1, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨1, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb3`, `_vsa` is not a point. -/
 abbrev bb3 : SuccArgs fd_r43x6_ge_decode2.sigs :=
-  ⟨2, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨2, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb4`, `_vsb` is not a point. -/
 abbrev bb4 : SuccArgs fd_r43x6_ge_decode2.sigs :=
-  ⟨3, by rfl, (.nil : HVector TyDenote.toType [])⟩
+  ⟨3, rfl, (.nil : HVector TyDenote.toType [])⟩
 
 /-- `^bb5( %309, %310 )`, the shared exit: the last out-vector and the
 returned `int`. -/
 abbrev bb5 (v : Vector (BitVec 64) 8) (r : LLVM.IntW 32) :
     SuccArgs fd_r43x6_ge_decode2.sigs :=
-  ⟨4, by rfl, ([v.map PoisonOr.value, r]ₕ :
+  ⟨4, rfl, ([v.map PoisonOr.value, r]ₕ :
     HVector TyDenote.toType [V8, SLLVM.Ty.bitvec 32])⟩
 
 /-! ### The two multipliers

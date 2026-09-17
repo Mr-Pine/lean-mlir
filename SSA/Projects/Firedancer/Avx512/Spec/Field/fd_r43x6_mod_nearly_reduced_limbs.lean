@@ -1,7 +1,9 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.R43x6
+module
+
+public import SSA.Projects.Firedancer.Avx512.R43x6
 
 /-!
 # What `fd_r43x6_mod_nearly_reduced_limbs` computes
@@ -29,6 +31,8 @@ The two halves are the two carry propagates below: `mnrA` adds the 19 and
 propagates, and `mnrE` takes the 19 back off (or not) and propagates the
 borrow. Limb 5 is masked to 40 bits between them, which is the `y -= q<<255`.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 

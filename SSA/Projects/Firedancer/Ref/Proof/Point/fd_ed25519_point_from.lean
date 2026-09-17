@@ -1,10 +1,12 @@
-import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_from
-import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
-import SSA.Projects.Firedancer.Ref.Proof.Point
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
+public import SSA.Projects.Firedancer.Ref.Spec.Point.fd_ed25519_point_from
+public import SSA.Projects.Firedancer.Ref.Mlir.Point.fd_ed25519_point_from
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+public import SSA.Projects.Firedancer.Ref.Proof.Point
+
+public import SSA.Projects.Firedancer.Ref.Proof.Field.fd_f25519_set
 
 /-!
 # `fd_ed25519_point_from` conformance
@@ -18,6 +20,8 @@ The equivalence chain leaves its intermediate types inferred: stating them as
 record literals makes each `have` re-check the splice chains definitionally,
 which is minutes, not seconds.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

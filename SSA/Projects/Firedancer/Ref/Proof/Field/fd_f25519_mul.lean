@@ -1,9 +1,13 @@
-import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
-import SSA.Projects.Firedancer.MLIR.DenoteStep
-import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+module
 
-import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_carry_mul
+public import SSA.Projects.Firedancer.Ref.Spec.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.Ref.Mlir.Field.fd_f25519_mul
+public import SSA.Projects.Firedancer.MLIR.DenoteStep
+public import SSA.Projects.Firedancer.Ref.Proof.MemoryOperations
+
+public import SSA.Projects.Firedancer.Ref.Proof.Fiat.fiat_25519_carry_mul
+
+@[expose] public section
 
 namespace Firedancer.Ref
 

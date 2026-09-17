@@ -3,11 +3,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 NOTE: the bulk of this file was machine-generated; the structure mirrors
 the data flow of `fd_r43x6_mul_fast`.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Common
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
-import SSA.Projects.Firedancer.MLIR.Poison
-import SSA.Projects.Firedancer.Ed25519
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Common
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_mul_fast
+public import SSA.Projects.Firedancer.MLIR.Poison
+public import SSA.Projects.Firedancer.Ed25519
 
 /-!
 # `fd_r43x6_mul_fast` multiplies in `ZMod p`
@@ -38,6 +40,8 @@ truncation the identity; the two zero lanes of `y` are consumed at the
 formed. Lanes 6 and 7 of `x` are ignored by the program itself (the
 `wwl_permute` masks select only lanes 0-5) and so are unconstrained.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 
@@ -738,16 +742,16 @@ abbrev mulIsMul (x y : Vector (BitVec 64) 8) :=
   (fun l => (R43x6.decode' l : ZMod p)) <$> mulValue x y =
     .value ((R43x6.decode' x : ZMod p) * (R43x6.decode' y : ZMod p))
 
-private def output_bounds_u44_u62 (x y : Vector (BitVec 64) 8) :=
+def output_bounds_u44_u62 (x y : Vector (BitVec 64) 8) :=
   R43x6.U44 x → R43x6.U44 y → R43x6.U62 (mulValue x y).getValue
 
-private def output_bounds_u45_u62 (x y : Vector (BitVec 64) 8) :=
+def output_bounds_u45_u62 (x y : Vector (BitVec 64) 8) :=
   R43x6.U45 x → R43x6.U45 y → R43x6.U62 (mulValue x y).getValue
 
-private def output_bounds_u46_u62 (x y : Vector (BitVec 64) 8) :=
+def output_bounds_u46_u62 (x y : Vector (BitVec 64) 8) :=
   R43x6.U46 x → R43x6.U46 y → R43x6.U62 (mulValue x y).getValue
 
-private def output_bounds_u47_u63 (x y : Vector (BitVec 64) 8) :=
+def output_bounds_u47_u63 (x y : Vector (BitVec 64) 8) :=
   R43x6.U47 x → R43x6.U47 y → R43x6.U63 (mulValue x y).getValue
 
 set_option maxHeartbeats 1000000 in

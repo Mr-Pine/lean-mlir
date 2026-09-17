@@ -1,11 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
-import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_is_nonzero
-import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_ge_is_eq
-import SSA.Projects.Firedancer.Curve
+module
+
+public import SSA.Projects.Firedancer.Avx512.Mlir.Field.fd_r43x6_ge_is_eq
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_quad_mul_fast
+public import SSA.Projects.Firedancer.Avx512.Proof.Field.fd_r43x6_is_nonzero
+public import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_r43x6_ge_is_eq
+public import SSA.Projects.Firedancer.Curve
 
 /-!
 # `fd_r43x6_ge_is_eq` decides point equality
@@ -33,6 +35,8 @@ The permutes are handled at the element level: `shufP`/`shufQ` are the two
 quad multiply on the permuted QUADs computes exactly the spec's four cross
 products.
 -/
+
+@[expose] public section
 
 namespace Firedancer.Avx512
 open LeanMLIR SLLVM
@@ -158,7 +162,7 @@ difference limbs of `subFast`, lanes 6 and 7 zero.
 Unlike `Avx512.subFastVec` of `Proof/Sub.lean` this adds plain `pLimbs`: the
 operands come straight from `quadMulLimb`, never through the signed fold, so
 there is no bias to compensate. -/
-private def subFastVecOfLimbs (x y : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
+def subFastVecOfLimbs (x y : Fin 6 → ℕ) : Vector (BitVec 64) 8 :=
   #v[BitVec.ofInt 64 (subFast x y 0), BitVec.ofInt 64 (subFast x y 1),
      BitVec.ofInt 64 (subFast x y 2), BitVec.ofInt 64 (subFast x y 3),
      BitVec.ofInt 64 (subFast x y 4), BitVec.ofInt 64 (subFast x y 5), 0, 0]
