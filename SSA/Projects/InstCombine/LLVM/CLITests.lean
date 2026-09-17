@@ -68,7 +68,7 @@ This property ensures that they are concrete, i.e. have no metavariables
 def CliTest.concrete : CliTest → Prop := fun test => test.mvars = 0
 
 instance {test : CliTest} : Decidable test.concrete :=
- inferInstanceAs (DecidableEq Nat) test.mvars 0
+ inferInstanceAs (Decidable (test.mvars = 0))
 
 
 structure ConcreteCliTest where
