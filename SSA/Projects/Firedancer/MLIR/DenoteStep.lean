@@ -535,63 +535,120 @@ attribute [simp_spine] HVector.map HVector.reverse_nil HVector.reverse_cons HVec
 attribute [simp_spine↓] SSA.simpValuationApply
 
 open Lean Meta in
+/-- The elements of a vector that reduces to a literal one (`HVector.nil.reverse` included).
+Bounded: a long operand vector is not a literal spine, and unfolding it is deep. -/
+private partial def vecElems (fuel : Nat) (xs : Expr) (elems : Array Expr) :
+    MetaM (Option (Array Expr)) := do
+  let fuel + 1 := fuel | return none
+  let xs ← whnfR xs
+  match_expr xs with
+  | HVector.cons _α _A _as _a x xs => vecElems fuel xs (elems.push x)
+  | HVector.nil _α _A => return some elems
+  | HVector.reverse _α _A _as ys =>
+    let some rs ← vecElems fuel ys #[] | return none
+    return some (elems ++ rs.reverse)
+  | _ => return none
+
+open Lean Meta in
 /-- The elements of a statically known valuation, head first: a `cons` chain ending in `nil`,
-or `ofHVector` of a vector that reduces to a literal one (`HVector.nil.reverse` included). -/
+or `ofHVector` of a literal vector, or such a vector itself (the `HVector ++ Valuation` form). -/
 private partial def spineElems (e : Expr) (elems : Array Expr := #[]) :
     MetaM (Option (Array Expr)) := do
   match_expr e with
   | Ctxt.Valuation.cons _Ty _inst _Γ _t x V => spineElems V (elems.push x)
   | Ctxt.Valuation.nil _Ty _inst => return some elems
-  | Ctxt.Valuation.ofHVector _Ty _inst _ts xs =>
-    -- bounded: a long operand vector is not a literal spine, and unfolding it is deep
-    let rec vec (fuel : Nat) (xs : Expr) (elems : Array Expr) : MetaM (Option (Array Expr)) := do
-      let fuel + 1 := fuel | return none
-      let xs ← whnfR xs
-      match_expr xs with
-      | HVector.cons _α _A _as _a x xs => vec fuel xs (elems.push x)
-      | HVector.nil _α _A => return some elems
-      | HVector.reverse _α _A _as ys =>
-        match_expr ← whnfR ys with
-        | HVector.nil _α _A => return some elems
-        | _ => return none
-      | _ => return none
-    vec 8 xs elems
-  | _ => return none
+  | Ctxt.Valuation.ofHVector _Ty _inst _ts xs => vecElems 32 xs elems
+  | _ =>
+    if e.isAppOf ``HVector.cons || e.isAppOf ``HVector.nil || e.isAppOf ``HVector.reverse then
+      vecElems 32 e elems
+    else return none
 
 open Lean Meta in
-/-- `(A ++ W) ⟨i, h⟩` for `A` a `cons` chain ending in `nil`: an element of `A` for a literal
-`i` below its length, else `W` at `i` less that length, `i` symbolic (`γ`, `γ + k`) included.
-No `cons_append`-style lemma reaches these: the `++` instance's index is `ofList args.reverse`,
-and `List.reverse` never reduces while an instance is matched. -/
+/-- `S ⟨i, h⟩` for `S` a spine of `cons` and `A ++ _` nodes, `A` statically known: an element
+of the spine for a literal `i`, else the valuation under it at `i` less the elements passed,
+`i` symbolic (`γ`, `γ + k`) included; that rebuild only past an `++` or at a symbolic `i`. -/
+private def spineLookup (e : Expr) : MetaM (Option Expr) := do
+  let args := e.getAppArgs
+  unless args.size ≥ 2 do return none
+  let t := args[args.size - 2]!; let v := args[args.size - 1]!
+  let S₀ := e.appFn!.appFn!
+  let (i, h?) ← match_expr v with
+    | Subtype.mk _α _p i h => pure (i, some h)
+    | Ctxt.Var.last _Ty _Γ _t => pure (mkNatLit 0, none)
+    | _ => return none
+  let (k?, m₀) ← match i.numeral? with
+    | some n => pure (none, n)
+    | none => match_expr i with
+      | HAdd.hAdd _ _ _ _ a b => pure <| match b.numeral? with
+          | some n => (some a, n)
+          | none => (some i, 0)
+      | _ => pure (some i, 0)
+  let mut S := S₀
+  let mut m := m₀
+  let mut crossed := false
+  let mut passed := 0
+  repeat
+    match_expr S with
+    | Ctxt.Valuation.cons _Ty _inst _Γ _t x W =>
+      if m == 0 then
+        if k?.isNone then return some x
+        break
+      S := W; m := m - 1; passed := passed + 1
+    | HAppend.hAppend _ _ _ _ A W =>
+      let some elems ← spineElems A | break
+      let len := elems.size
+      if k?.isNone && m < len then return some elems[m]!
+      if m < len then break
+      S := W; m := m - len; passed := passed + 1; crossed := true
+    | _ =>
+      -- an `abbrev` spine (an entry valuation): left to the caller's unfolding, since
+      -- `SSA.simpValuationApply` rebuilds a lookup into it unchanged, forever
+      if (← whnfR S).isAppOf ``Ctxt.Valuation.cons then return none
+      break
+  unless passed > 0 && (crossed || k?.isSome) do return none
+  let some h := h? | return none
+  let idx ← match k? with
+    | none => pure (mkNatLit m)
+    | some k => if m == 0 then pure k else mkAppM ``HAdd.hAdd #[k, mkNatLit m]
+  let .forallE _ _ body _ ← whnfD (← inferType S) | return none
+  let varTy ← whnfD (body.instantiate1 t).bindingDomain!
+  let_expr Subtype α p := varTy | return none
+  let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p idx h
+  -- defeq by `cons`' and `appendCases`' reductions; the kernel checks it
+  return some (mkApp2 S t v')
+
+open Lean Meta in
+/-- `(A ++ W) ⟨i, h⟩` by `spineLookup`. No `cons_append`-style lemma reaches these: the `++`
+instance's index is `ofList args.reverse`, and `List.reverse` never reduces while an instance
+is matched. -/
 dsimproc ↓ [simp_spine, simp_denote] simpValuationAppendApply
     ((HAppend.hAppend (α := Ctxt.Valuation (Ty := SLLVM.Ty) _)
       (β := Ctxt.Valuation (Ty := SLLVM.Ty) _) _ _ : Ctxt.Valuation (Ty := SLLVM.Ty) _) _) :=
   fun e => do
-    let args := e.getAppArgs
-    unless e.getAppFn.isConstOf ``HAppend.hAppend && args.size == 8 do return .continue
-    let A := args[4]!; let W := args[5]!; let t := args[6]!; let v := args[7]!
-    let some elems ← spineElems A | return .continue
-    let_expr Subtype.mk _α _p i h := v | return .continue
-    let (k?, m) ← match i.numeral? with
-      | some n => pure (none, n)
-      | none => match_expr i with
-        | HAdd.hAdd _ _ _ _ a b => pure <| match b.numeral? with
-            | some n => (some a, n)
-            | none => (some i, 0)
-        | _ => pure (some i, 0)
-    let len := elems.size
-    if k?.isNone && m < len then return .visit elems[m]!
-    if m < len then return .continue
-    let r := m - len
-    let idx ← match k? with
-      | none => pure (mkNatLit r)
-      | some k => if r == 0 then pure k else mkAppM ``HAdd.hAdd #[k, mkNatLit r]
-    let .forallE _ _ body _ ← whnfD (← inferType W) | return .continue
-    let varTy ← whnfD (body.instantiate1 t).bindingDomain!
-    let_expr Subtype α p := varTy | return .continue
-    let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p idx h
-    -- defeq by `appendCases`' `idx < Γ.length` branch; the kernel checks it
-    return .visit (mkApp2 W t v')
+    unless e.getAppFn.isConstOf ``HAppend.hAppend && e.getAppNumArgs == 8 do return .continue
+    let some r ← spineLookup e | return .continue
+    return .visit r
+
+open Lean Meta in
+/-- `(xs ++ W) ⟨i, h⟩` for a literal vector `xs`, by `spineLookup`: the `++` a `var` node's
+denotation builds. -/
+dsimproc ↓ [simp_spine, simp_denote] simpValuationHVectorAppendApply
+    ((HAppend.hAppend (α := HVector _ _) (β := Ctxt.Valuation (Ty := SLLVM.Ty) _) _ _ :
+      Ctxt.Valuation (Ty := SLLVM.Ty) _) _) :=
+  fun e => do
+    unless e.getAppFn.isConstOf ``HAppend.hAppend && e.getAppNumArgs == 8 do return .continue
+    let some r ← spineLookup e | return .continue
+    return .visit r
+
+open Lean Meta in
+/-- `(x ::ᵥ S) ⟨i, h⟩` by `spineLookup`, past a `++` or at a symbolic `i`: `cons_succ` stops at
+an `A ++ W` whose instance `simp` has left stale. -/
+dsimproc ↓ [simp_spine, simp_denote] simpValuationConsApply
+    ((Ctxt.Valuation.cons (Ty := SLLVM.Ty) _ _) _) :=
+  fun e => do
+    unless e.getAppFn.isConstOf ``Ctxt.Valuation.cons && e.getAppNumArgs == 8 do return .continue
+    let some r ← spineLookup e | return .continue
+    return .visit r
 
 /-! ### Entering a block
 
@@ -1572,6 +1629,15 @@ private def simpHyps (only : Bool) (args : Array Term) (hyps : Array Ident) : Ta
   | false, false => evalTactic (← `(tactic| simp [$[$args:term],*] at $hyps*))
 
 open Lean Elab Tactic in
+/-- `simpHyps`, but no progress is not an error. -/
+private def simpHyps? (only : Bool) (args : Array Term) (hyps : Array Ident) : TacticM Unit := do
+  match only, args.isEmpty with
+  | true,  true  => evalTactic (← `(tactic| simp -failIfUnchanged only [] at $hyps*))
+  | true,  false => evalTactic (← `(tactic| simp -failIfUnchanged only [$[$args:term],*] at $hyps*))
+  | false, true  => evalTactic (← `(tactic| simp -failIfUnchanged at $hyps*))
+  | false, false => evalTactic (← `(tactic| simp -failIfUnchanged [$[$args:term],*] at $hyps*))
+
+open Lean Elab Tactic in
 /-- `denote_eval base lo hi`, a `simp` over the same hypotheses, and -- with
 `fold` -- one more ascending pass that rewrites each of them into the ones
 after it: the shared body of `reduce_hv` and `denote_step_reduce`. -/
@@ -1581,7 +1647,8 @@ private def reduceHypsAt (base : Ident) (lo hi : Nat) (only : Bool) (args : Arra
   let hiStx := Syntax.mkNumLit (toString hi)
   evalTactic (← `(tactic| denote_eval $base $loStx:num $hiStx:num))
   let hyps ← denoteHyps base.getId lo hi
-  simpHyps only args hyps
+  -- v4.34: `denote_eval`'s lookup simprocs may leave nothing for this pass
+  simpHyps? only args hyps
   if fold then
     -- ascending, so `hv<i>` is already folded by the time it is used: each
     -- hypothesis is rewritten by every earlier one at once, which keeps a

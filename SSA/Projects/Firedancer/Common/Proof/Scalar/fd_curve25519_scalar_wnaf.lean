@@ -542,7 +542,7 @@ theorem Ti.abs_le_pow {bits : BitVec 32} {y : BitVec 16} (h : Ti bits y) :
   replace h := h.2
   by_cases hb : 14#32 < bits
   · have h15 : (2 : Int) ^ 15 ≤ 2 ^ bits.toNat :=
-      pow_le_pow_right₀ (by norm_num) (by rw [BitVec.lt_def] at hb; simpa using hb)
+      pow_le_pow_right₀ (by norm_num) (by rw [BitVec.lt_def] at hb; simp at hb; omega)
     have := BitVec.le_toInt y; have := BitVec.toInt_lt (x := y)
     rw [abs_le]; constructor <;> simp at * <;> omega
   · rcases h with h | rfl | ⟨h1, h2⟩
@@ -1133,7 +1133,7 @@ theorem step_bb1 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
       simp only [simp_spine, hV.c8, h20]
       rw [run_liftM (run_store_slot hsl hu (by omega) 0#16)]; rfl)]
   have hu' := store_slot_equiv hsl.2 hu (show 255 < 256 by omega) 0#16
-  refine term_br ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hV.c1, h19]
   refine ⟨Reach.bb3 0 _ (by omega) hu' (by rw [slot_spliceBits _ _ (by omega) (by omega), if_pos rfl]; rfl)
@@ -1163,7 +1163,6 @@ theorem step_bb2 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
   denote_step_reduce v 31 [LLVM.const?] fold
   simp only [simp_spine, hV.arg0, hV.c4, hV.c5] at hv27 hv28 hv29 hv30 hv31
   rw [hv22] at hv30
-  simp only [simp_spine] at hv30
   have h31 : v31 = PoisonOr.value (slotPtr slides k) := by rw [hv31, gep_slot]
   clear hv31
   refine (bit_value b k).elim fun x30 h30' => ?_
@@ -1181,7 +1180,7 @@ theorem step_bb2 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
   denote_step_reduce v 33 [LLVM.const?] fold
   simp only [simp_spine, hV.c6, hV.c7] at hv32 hv33
   rw [add64 _ (by omega), icmp_eq_ofNat (by omega) (by omega)] at hv33
-  refine term_condBr (by simp only [simp_spine, hv33]; rfl) ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+  refine term_condBr (by simp only [simp_spine, hv33]; rfl) ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hk1 : k + 1 = 255
   · rw [if_pos (ofBool_eq_one.mpr hk1)]
@@ -1211,7 +1210,7 @@ theorem step_bb3 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
   denote_step_reduce v 37 [LLVM.const?] fold
   simp only [simp_spine, hV.c8] at hv37
   refine term_condBr (b := BitVec.ofBool (slot w k == 0#16))
-    (by simp only [simp_spine, hv37]; rfl) ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    (by simp only [simp_spine, hv37]; rfl) ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hz : slot w k = 0#16
   · rw [if_pos (ofBool_beq_one.mpr hz)]
@@ -1236,7 +1235,7 @@ theorem step_bb4 (hV : EntryEnv V slides n bits) {u : GlobalState}
   simp only [simp_spine, hV.c6, hV.c17] at hv38 hv39
   rw [add64 _ (by omega), icmp_eq_ofNat (by omega) (by omega)] at hv39
   refine term_condBr (by simp only [simp_spine, hv39]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hk1 : k + 1 = 256
   · rw [if_pos (ofBool_eq_one.mpr hk1)]
@@ -1259,7 +1258,7 @@ theorem step_bb5 (hV : EntryEnv V slides n bits) {u : GlobalState}
   rw [trunc32 (show k < 2 ^ 32 by omega)] at hv40 hv41
   rw [icmp_slt32 (by omega) (by omega)] at hv41
   refine term_condBr (by simp only [simp_spine, hv41]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   rw [if_pos (ofBool_eq_one.mpr (by omega))]
   simp only [Target.denote_mk, HVector.map, simp_spine, hv40]
@@ -1282,7 +1281,7 @@ theorem step_bb6 (hV : EntryEnv V slides n bits) {u : GlobalState}
   rw [h45.2] at hv45
   rw [h43.2] at hv43
   rw [h44.2] at hv44
-  refine term_br ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hv43, hv44, hv45]
   exact ⟨Reach.bb7 i y43 y44 y45 (by omega) hu (Or.inl ht)
@@ -1301,7 +1300,7 @@ theorem step_bb7 (hV : EntryEnv V slides n bits) {u : GlobalState}
   simp only [simp_spine, hV.c13] at hv47
   rw [icmp_slt32 (by omega) (by omega)] at hv47
   refine term_condBr (by simp only [simp_spine, hv47]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hi1 : i < 255
   · rw [if_pos (ofBool_eq_one.mpr hi1)]
@@ -1325,7 +1324,7 @@ theorem step_bb8 (hV : EntryEnv V slides n bits) {u : GlobalState}
   denote_step_reduce v 49 [LLVM.const?] fold
   try simp only [simp_spine] at hv48 hv49
   simp only [hV.c14] at hv49
-  refine term_br ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   simp only [Target.denote_mk, HVector.map, simp_spine, hv48, hv49, hV.c5,
     sext64 (show i < 2 ^ 31 by omega), add32 _ (show i + 2 < 2 ^ 31 by omega)]
@@ -1353,7 +1352,7 @@ theorem step_bb9 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
   denote_step_reduce v 56 [LLVM.const?] fold
   simp only [simp_spine, hV.c8] at hv56
   refine term_condBr (b := BitVec.ofBool (slot w (j + 1) == 0#16))
-    (by simp only [simp_spine, hv56]; rfl) ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    (by simp only [simp_spine, hv56]; rfl) ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hz : slot w (j + 1) = 0#16
   · rw [if_pos (ofBool_beq_one.mpr hz)]
@@ -1379,7 +1378,6 @@ theorem step_bb10 (hs : s.WF) (hV : EntryEnv V slides n bits)
   dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
   denote_number_from 57
   denote_step_reduce v 58 [LLVM.const?] fold
-  simp only [simp_spine] at hv57 hv58
   rw [trunc32 (show j + 1 < 2 ^ 32 by omega), sub32 (by omega) (by omega)] at hv58
   have hwf : u.WF := (GlobalState.WF.splice hs).of_equiv hu.symm
   refine (fd_int_min_conforms v58 u hwf).elim fun u1 h => h.elim fun hcall he => ?_
@@ -1393,7 +1391,7 @@ theorem step_bb10 (hs : s.WF) (hV : EntryEnv V slides n bits)
   refine (delta_value (e := min (j + 1 - m) 14) (by omega) (by omega)).elim fun y61 h61 => ?_
   rw [h61.2.2] at hv61 hv62
   refine term_condBr (by simp only [simp_spine, hv62]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   split
   · simp only [Target.denote_mk, HVector.map, simp_spine]
@@ -1414,7 +1412,6 @@ theorem step_bb11 {u : GlobalState}
   dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
   denote_number_from 63
   denote_step_reduce v 66 [LLVM.const?] fold
-  simp only [simp_spine] at hv63 hv64 hv65 hv66
   refine term_condBr (by simp only [simp_spine, hv66]; rfl)
     ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
@@ -1459,7 +1456,6 @@ theorem step_bb13 {u : GlobalState}
   dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
   denote_number_from 67
   denote_step_reduce v 70 [LLVM.const?] fold
-  simp only [simp_spine] at hv67 hv68 hv69 hv70
   refine term_condBr (by simp only [simp_spine, hv70]; rfl)
     ⟨fun _ h => absurd h (by simp), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
@@ -1507,7 +1503,7 @@ theorem step_bb14 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
   denote_step_reduce v 76 [LLVM.const?] fold
   simp only [simp_spine, hV.c8] at hv76
   refine term_condBr (b := BitVec.ofBool (slot (spliceBits w (16 * (j + 1)) 0#16) (j + 2) == 0#16))
-    (by simp only [simp_spine, hv76]; rfl) ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    (by simp only [simp_spine, hv76]; rfl) ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hz : slot (spliceBits w (16 * (j + 1)) 0#16) (j + 2) = 0#16
   · rw [if_pos (ofBool_beq_one.mpr hz)]
@@ -1605,7 +1601,7 @@ theorem step_bb18 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
   denote_step_reduce v 86 [LLVM.const?] fold
   simp only [simp_spine, hV.c8] at hv86
   refine term_condBr (b := BitVec.ofBool (slot (spliceBits w (16 * c) 0#16) (c + 1) == 0#16))
-    (by simp only [simp_spine, hv86]; rfl) ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    (by simp only [simp_spine, hv86]; rfl) ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hz : slot (spliceBits w (16 * c) 0#16) (c + 1) = 0#16
   · rw [if_pos (ofBool_beq_one.mpr hz)]
@@ -1631,7 +1627,7 @@ theorem step_bb19 (hV : EntryEnv V slides n bits) {u : GlobalState}
   simp only [simp_spine, hV.c7, hV.c16] at hv88 hv89
   rw [icmp_eq_ofNat (by omega) (by omega)] at hv88
   refine term_condBr (by simp only [simp_spine, hv88]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   by_cases hc1 : c = 255
   · rw [if_pos (ofBool_eq_one.mpr hc1)]
@@ -1658,7 +1654,7 @@ theorem step_bb20 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
       simp only [simp_spine, h92]
       rw [run_liftM (run_store_slot hsl hu (by omega) y91)]; rfl)]
   have hu' := store_slot_equiv hsl.2 hu (show m < 256 by omega) y91
-  refine term_br ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+  refine term_br ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   exact ⟨Reach.bb23 hu' (hw.store256 hti.bnd (by omega)) fun hh => SumEq.finish (hI hh) (by omega),
     by rank_lt⟩
@@ -1703,7 +1699,7 @@ theorem step_bb22 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
   simp only [simp_spine, hV.c9] at hv97
   rw [icmp_slt32 (by omega) (by omega)] at hv97
   refine term_condBr (by simp only [simp_spine, hv97]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t hT => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t hT => ?_⟩
   obtain rfl := Sum.inr.inj hT
   rw [if_pos (ofBool_eq_one.mpr (by omega))]
   simp only [Target.denote_mk, HVector.map, simp_spine]

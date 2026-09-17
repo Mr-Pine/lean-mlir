@@ -91,7 +91,8 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
       ← `(HVector.reverseAux_nil), ← `(HVector.reverseAux_cons),
       ← `(Ctxt.Valuation.ofHVector_nil), ← `(Ctxt.Valuation.ofHVector_cons),
       ← `(Ctxt.Valuation.nil_append), ← `(Ctxt.Valuation.cons_append),
-      ← `(Ctxt.Valuation.cons_succ), ← `(simpValuationAppendApply)].mapM pure
+      ← `(Ctxt.Valuation.cons_succ), ← `(simpValuationAppendApply),
+      ← `(simpValuationConsApply), ← `(simpValuationHVectorAppendApply)].mapM pure
   let simpArgs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
     (defaults ++ extra).mapM fun t => `(Lean.Parser.Tactic.simpLemma| $t:term)
   let tys ← argTys.toSyntax
