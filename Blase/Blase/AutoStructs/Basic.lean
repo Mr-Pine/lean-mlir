@@ -540,7 +540,7 @@ lemma simulFun_sim_raw [LawfulBEq A] {m : RawCNFA A} (hwf : m.WF) f :
   rintro hsim; use {(s, q) | (f.invFun q).val = s}; constructor
   · rintro s q rfl; exact hsim.accept
   · rintro s hin; use f ⟨s, hwf.initials_lt hin⟩
-    simp only [Equiv.invFun_as_coe, Set.mem_setOf_eq, Equiv.symm_apply_apply, and_true]
+    simp only [Equiv.invFun_as_coe, Set.mem_ofPred_eq, Equiv.symm_apply_apply, and_true]
     obtain heq : s = (f.invFun (f ⟨s, hwf.initials_lt hin⟩)) := by simp
     rw [heq, ←hsim.initial] at hin; assumption
   · rintro q hin; rw [hsim.initial] at hin; simp_all
@@ -588,7 +588,7 @@ lemma simul_equiv {m : CNFA n} {M : NFA' n} :
   use {(s, q) | s.val ~[R] q}
   simp [CNFA.toNFA', CNFA.toNFA]
   constructor
-  · simp only [Set.mem_setOf_eq, Subtype.forall]; grind
+  · simp only [Set.mem_ofPred_eq, Subtype.forall]; grind
   · simp
     constructor
     · simp_all
@@ -596,8 +596,8 @@ lemma simul_equiv {m : CNFA n} {M : NFA' n} :
       rintro q hst
       obtain ⟨s, hi, hR⟩ := h₄ hst
       aesop
-  · simp only [Set.mem_setOf_eq, Subtype.forall]; grind
-  · simp only [Set.mem_setOf_eq, Subtype.exists, exists_and_left, exists_prop, Subtype.forall]
+  · simp only [Set.mem_ofPred_eq, Subtype.forall]; grind
+  · simp only [Set.mem_ofPred_eq, Subtype.exists, exists_and_left, exists_prop, Subtype.forall]
     rintro s₁ hs₁ q₁ a q₂ hR₁ hst
     obtain ⟨s₂, htr, hR₂⟩:= h₆ hR₁ hst (by simp) (by simp)
     use s₂, htr, RawCNFA.WF.trans_tgt_lt m.wf htr, hR₂

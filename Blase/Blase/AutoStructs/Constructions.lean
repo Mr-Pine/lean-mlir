@@ -332,7 +332,7 @@ lemma product.sim {m1 m2 : CNFA n}:
     · rintro ⟨q₁, q₂⟩ ⟨hst₁, hst₂⟩
       apply hsim₁.initial₂ at hst₁; obtain ⟨s₁, hi₁, hR₁⟩ := hst₁
       apply hsim₂.initial₂ at hst₂; obtain ⟨s₂, hi₂, hR₂⟩ := hst₂
-      simp only [nfa, Set.mem_setOf_eq, Prod.exists, inits_spec]
+      simp only [nfa, Set.mem_ofPred_eq, Prod.exists, inits_spec]
       have hin₁ : s₁ ∈ m1.m.states := by apply m1.wf.initials_lt hi₁
       have hin₂ : s₂ ∈ m2.m.states := by apply m2.wf.initials_lt hi₂
       use ⟨s₁, hin₁⟩, ⟨s₂, hin₂⟩
@@ -350,7 +350,7 @@ lemma product.sim {m1 m2 : CNFA n}:
     obtain ⟨s₂', hst₂, hR₂'⟩ := hsim₂.trans_match₂ hR₂ hst₂ (by simp) (by simp)
     have hin₁ : s₁' ∈ m1.m.states := by apply m1.wf.trans_tgt_lt hst₁;
     have hin₂ : s₂' ∈ m2.m.states := by apply m2.wf.trans_tgt_lt hst₂
-    simp only [nfa, Set.mem_setOf_eq, Prod.exists, f_spec]
+    simp only [nfa, Set.mem_ofPred_eq, Prod.exists, f_spec]
     use ⟨s₁', hin₁⟩, ⟨s₂', hin₂⟩
     simp_all [R]
 
@@ -533,8 +533,8 @@ lemma transSetBV_spec {m : CNFA n} {ss : BitVec m.m.stateMax} :
     have h := h (BitVec.zero _) s'
     unfold RawCNFA.transSetBV
     rw [h]
-    simp only [bv_to_set, BitVec.zero_eq, BitVec.getLsbD_zero, Bool.false_eq_true, Set.setOf_false,
-      Set.mem_empty_iff_false, Set.mem_setOf_eq, false_or]
+    simp only [bv_to_set, BitVec.zero_eq, BitVec.getLsbD_zero, Bool.false_eq_true, Set.ofPred_false,
+      Set.mem_empty_iff_false, Set.mem_ofPred_eq, false_or]
     constructor
     · rintro ⟨s', hin, _, _, htr⟩; use s', hin, htr
     · rintro ⟨s, hin, htr⟩
@@ -632,7 +632,7 @@ def CNFA.determinize_spec (m : CNFA n)
         simp [RawCNFA.states] at hlt
         use s, (by apply BitVec.ofFn_getLsbD_true.mpr; use hlt; simp [hinit])
     simp only [determinize.inits, nfa', nfa, NFA'.determinize, NFA.toDFA, List.mem_toArray,
-      List.mem_singleton, Set.setOf_eq_eq_singleton, beq_true, DFA.toNFA_start]
+      List.mem_singleton, Set.ofPred_eq_eq_singleton, beq_true, DFA.toNFA_start]
     constructor
     · rintro bv hin
       simp only [Set.mem_singleton_iff] at hin; subst hin
@@ -951,7 +951,7 @@ lemma RawCNFA.lift_wf (m : RawCNFA (BitVec n₁)) {f : Fin n₁ → Fin n₂} (h
         · rw [Std.HashMap.getD_eq_getD_getElem?, htr] at hin; simp at hin
         · rw [Std.HashMap.getD_eq_getD_getElem?, htr] at hin; apply ih' s a ss' _ htr hin
     · simp only [Std.HashMap.getElem?_insert, beq_iff_eq, Prod.mk.injEq] at heq
-      rw [ite_cond_eq_false] at heq
+      rw [ite_eq_right_of_eq_false] at heq
       on_goal 2 => simp_all
       exact ih' _ _ _ _ heq hin
 

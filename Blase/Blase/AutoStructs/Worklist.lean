@@ -597,7 +597,7 @@ omit [LawfulBEq A] [Fintype S] in
 lemma processOneElem_rel {s₁ s₂ : State} :
     s₂ ~[(processOneElem A S final s₁ st (a, sa)).rel] sa' ↔
       (s₂ ~[st.rel] sa' ∨ (s₂ = st.m.stateMax ∧ sa' = sa ∧ st.map[sa']? = none)) := by
-  simp only [worklist.St.rel, Set.mem_setOf_eq, getElem?_eq_none_iff]
+  simp only [worklist.St.rel, Set.mem_ofPred_eq, getElem?_eq_none_iff]
   grind [processOneElem_map]
 
 omit [LawfulBEq A] [Fintype S] [LawfulBEq S] [DecidableEq S] in
@@ -717,7 +717,7 @@ lemma processOneElem_spec {st : worklist.St A S} (s : State) (sa : S) (k : ℕ) 
         simp [nfa, hfin]
       · simp [nfa]
         suffices hnin : q ∉ st.map by
-          push_neg at h; specialize h hnin; simp_all
+          push Not at h; specialize h hnin; simp_all
           rintro hc; apply hwf.finals_lt at hc; simp at hc
         exact Std.HashMap.getElem?_none_not_mem heq }
   { rintro s₁ hs₁; rw [processOneElem_initials] at hs₁
@@ -754,7 +754,7 @@ lemma processOneElem_spec {st : worklist.St A S} (s : State) (sa : S) (k : ℕ) 
       apply inv'.map_inj hR hmap
     · exact hmap' }
   { rintro s₁ b q₁ q₂ hR hs hD hnT
-    simp only [ge_iff_le, Prod.mk.eta, Set.mem_setOf_eq, not_and, not_exists] at hnT
+    simp only [ge_iff_le, Prod.mk.eta, Set.mem_ofPred_eq, not_and, not_exists] at hnT
     have h := processOneElem_tr st final a b sa' s s₁
     split_ifs at h with hcond
     on_goal 2 =>
@@ -889,7 +889,7 @@ def worklistRun'_spec :
   · rintro s q hR
     obtain ⟨sa, hsa⟩ := inv.map_surj ⟨s, by exact inv.map_states _ s hR⟩
     rw [(hif _ _ hsa).2, nfa]
-    simp only [Set.mem_setOf_eq, Bool.coe_iff_coe]; congr
+    simp only [Set.mem_ofPred_eq, Bool.coe_iff_coe]; congr
     apply inv.map_inj hsa hR
   · rintro s hi
     obtain ⟨sa, hsa⟩ := inv.map_surj ⟨s, by apply inv.wf.initials_lt hi⟩
@@ -899,7 +899,7 @@ def worklistRun'_spec :
     · rw [←hmi]; exact Std.HashMap.mem_of_getElem? hsa
     · exact hsa
   · rintro q hs
-    simp only [nfa, Set.mem_setOf_eq] at hs
+    simp only [nfa, Set.mem_ofPred_eq] at hs
     rw [←hmi, Std.HashMap.mem_iff_getElem?] at hs
     obtain ⟨s, hR⟩ := hs
     use s

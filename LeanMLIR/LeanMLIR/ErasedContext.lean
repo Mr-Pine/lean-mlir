@@ -420,7 +420,7 @@ instance [DecidableEq Ty] {Γ : Ctxt Ty} {t : Ty} : Fintype (Γ.Var t) where
     refine Finset.mem_mk.mpr (Multiset.mem_coe.mpr (List.mem_filterMap.mpr ⟨v.val, ?_, ?_⟩))
     · exact List.mem_range.mpr v.val_lt
     · rcases v with ⟨i, hi⟩
-      rw [dif_pos hi]
+      rw [dite_eq_left hi]
 
 /-! ### Var Fin Helpers -/
 
@@ -891,12 +891,12 @@ def Valuation.reassignVars [DecidableEq Ty] {ts : List Ty} {Γ : Ctxt Ty}
       subst this
       have := h_eq.to_eq
       subst this
-      simp only [HVector.idxOf?, dif_pos (show ∃ h : t = t, w = h ▸ w from ⟨rfl, rfl⟩)]
+      simp only [HVector.idxOf?]
       rfl
     · unfold Var.eq at h_eq
       simp only [HVector.idxOf?, h_eq, ↓reduceDIte, List.get_eq_getElem, List.length_cons,
         HVector.map_cons]
-      split at ih <;> simp_all [HVector.map_cons] <;> exact ih
+      split at ih <;> simp_all
 
 @[simp] theorem Valuation.comap_with [DecidableEq Ty] {Γ Δ : Ctxt Ty}
     {V : Valuation Γ} {map : Δ.Hom Γ} {vs : HVector Δ.Var ty} {ws : HVector Γ.Var ty} :
@@ -960,10 +960,7 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     case nil => rfl
     case cons t Γ v vs ih =>
       simp [HVector.ofFn, ofHVector, -ofHVector_apply]
-      first
-      | exact ih
-      | (trace "B"; exact ⟨rfl, ih⟩)
-      | (trace "C"; simp [ih])
+      exact ih
 
 end Valuation
 

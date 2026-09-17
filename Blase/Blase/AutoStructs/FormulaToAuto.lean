@@ -264,9 +264,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
           rcases hsa with ⟨-, rfl⟩
           simp [FSM.carryBV]
           · apply FSM.carry_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
             simp [BitVec.getLsbD_cons]
             omega
@@ -276,9 +276,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
           rcases hsa with ⟨hsa, -⟩; simp [inFSMRel] at hsa
           simp [hsa, FSM.evalBV]
           apply FSM.eval_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-          rw [ite_cond_eq_true]
+          rw [ite_eq_left_of_eq_true]
           on_goal 2 => simp; omega
-          rw [ite_cond_eq_true]
+          rw [ite_eq_left_of_eq_true]
           on_goal 2 => simp; omega
           simp [BitVec.getLsbD_cons]
           omega
@@ -286,9 +286,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
         rcases hsa with ⟨-, rfl⟩
         simp [FSM.carryBV, FSM.carry]; congr 2
         · apply FSM.carry_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-          rw [ite_cond_eq_true]
+          rw [ite_eq_left_of_eq_true]
           on_goal 2 => simp; omega
-          rw [ite_cond_eq_true]
+          rw [ite_eq_left_of_eq_true]
           on_goal 2 => simp; omega
           simp [BitVec.getLsbD_cons]
           omega
@@ -308,9 +308,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
         simp only [FSM.evalBV]
         repeat rw [BitVec.ofFn_getElem _ (by omega)]
         apply FSM.eval_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-        rw [ite_cond_eq_true]
+        rw [ite_eq_left_of_eq_true]
         on_goal 2 => simp; omega
-        rw [ite_cond_eq_true]
+        rw [ite_eq_left_of_eq_true]
         simp [BitVec.getLsbD_cons]
         simp at hk; omega
         simp at hk ⊢; omega
@@ -318,9 +318,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
         constructor
         · simp [FSM.carryBV, FSM.carry]; congr 2
           · apply FSM.carry_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
             simp [BitVec.getLsbD_cons]
             omega
@@ -331,9 +331,9 @@ def NFA'.ofFSM_correct (p : FSM arity) :
           simp [BitVec.getElem_cons, heq] at hrel
           rw [hrel]; simp [FSM.evalBV, FSM.eval, FSM.carryBV]; congr 2
           · apply FSM.carry_eq_up_to; rintro ar k hk; simp [BitStream.ofBitVecSext]
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
-            rw [ite_cond_eq_true]
+            rw [ite_eq_left_of_eq_true]
             on_goal 2 => simp; omega
             simp [BitVec.getLsbD_cons]
             omega
@@ -472,7 +472,7 @@ lemma CNFA.ofFSM_spec (p : FSM arity) :
   · constructor <;> simp
   · aesop
   · rintro q₁ q₂ a q₂' h hst
-    simp only [Set.mem_setOf_eq] at h; subst h
+    simp only [Set.mem_ofPred_eq] at h; subst h
     use (finFunToBitVec q₂')
     simpa [hst]
 
@@ -658,17 +658,17 @@ lemma NFA'.autUnsignedCmp_correct cmp : autUnsignedCmp cmp |>.correct2 autUnsign
   · rintro (_ | _ | _) <;> simp
   · rintro (_ | _ | _) a w bv1 bv2 <;> simp [NFA.stepSet, NFA.unsignedCmpStep]
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [instFinEnumBV]
-      · rintro ⟨_, _⟩; use .eq; simp; fin_cases a <;> simp [instFinEnumBV] at * <;> tauto
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all
+      · rintro ⟨_, _⟩; use .eq; simp; fin_cases a <;> simp at * <;> tauto
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all
+      · rintro _; fin_cases a <;> simp at *
         · use .gt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .gt; simp_all
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all
+      · rintro _; fin_cases a <;> simp at *
         · use .lt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .lt; simp_all
@@ -820,29 +820,29 @@ lemma NFA'.autSignedCmp_correct cmp : autSignedCmp cmp |>.correct2 autSignedCmpS
   · rintro (_ | _ | _) <;> simp
   · rintro (_ | _ | _) a w bv1 bv2 <;> simp [NFA.stepSet]
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep, instFinEnumBV]
-      · rintro ⟨_, _⟩; use .eq; simp; fin_cases a <;> simp [instFinEnumBV] at * <;> tauto
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep]
+      · rintro ⟨_, _⟩; use .eq; simp; fin_cases a <;> simp at * <;> tauto
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep, instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep, instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep]
+      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep] at *
         · use .gt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .gt; simp_all
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep, instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep, instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep]
+      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep] at *
         · use .lt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .lt; simp_all
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep, instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep, instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep]
+      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep] at *
         · use .lt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .lt; simp_all
     · constructor
-      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep, instFinEnumBV]
-      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep, instFinEnumBV] at *
+      · rintro ⟨i, hi⟩; cases i <;> fin_cases a <;> simp_all [NFA.signedCmpStep]
+      · rintro _; fin_cases a <;> simp [NFA.signedCmpStep] at *
         · use .gt; simp_all
         · use (getState bv1 bv2); simp [getState]; split_ifs <;> simp_all; apply ucmp_tricho <;> assumption
         · use .gt; simp_all
@@ -964,9 +964,9 @@ def NFA.msbCorrect : NFA.autMsbSet.correct msbSA msbLang := by
       have h : NFA.autMsbSet.eval w = { q | w ∈ msbSA q } := by ext; simp [ih]
       simp [h]; rintro (_ | _)
       · simp [NFA.autMsbSet, msbSA, msbLang, stepSet, msbStep]
-        use .i; simp; fin_cases a <;> simp [instFinEnumBV]
+        use .i; simp; fin_cases a <;> simp
       · simp [NFA.autMsbSet, msbSA, msbLang, stepSet, msbStep]; constructor
-        · intro ⟨q, hq⟩; fin_cases a <;> simp [instFinEnumBV] at *
+        · intro ⟨q, hq⟩; fin_cases a <;> simp at *
           cases q <;> simp_all
         · rintro rfl; use .i; simp
 
@@ -995,7 +995,7 @@ lemma CNFA.autMsbSet_spec : CNFA.autMsbSet.Sim NFA'.autMsbSet := by
 lemma autMsbSet_accepts : NFA'.autMsbSet.accepts = langMsb := by
   simp [NFA'.accepts, NFA'.accepts', NFA'.autMsbSet]
   rw [NFA.correct_spec NFA.msbCorrect, NFA.msbLang]
-  ext bvs; simp only [BitVec.ofNat_eq_ofNat, Set.mem_image, Set.mem_setOf_eq]
+  ext bvs; simp only [BitVec.ofNat_eq_ofNat, Set.mem_image, Set.mem_ofPred_eq]
   constructor
   · rintro ⟨bvs', hl, heq⟩
     have _ : bvs'.length ≠ 0 := by cases bvs'; tauto; simp
@@ -1158,10 +1158,10 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
       simp only [autWidthSA, gt_iff_lt, autWidth]
       constructor
       · rintro ⟨q', hq, heq⟩
-        simp only [Set.mem_setOf_eq] at heq
+        simp only [Set.mem_ofPred_eq] at heq
         split_ifs at heq with hcond
         · subst heq hcond
-          simp_all only [Fin.val_last, ↓reduceIte, Language.mem_setOf_eq, List.length_append,
+          simp_all only [↓reduceIte, Language.mem_setOf_eq, List.length_append,
             List.length_cons, List.length_nil, zero_add]
           omega
         · subst heq; simp_all
@@ -1202,7 +1202,7 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
               have : q ≥ 1 := by omega
               simpa [Fin.le_def, Nat.mod_eq_of_lt hq]
           simp only [hneq, ↓reduceIte, Language.mem_setOf_eq, sub_add_cancel,
-            Set.setOf_eq_eq_singleton, Set.mem_singleton_iff]
+            Set.ofPred_eq_eq_singleton, Set.mem_singleton_iff]
           nth_rw 1 [←h]
           simp only [Nat.cast_add, Nat.cast_one, add_sub_cancel_right, Fin.val_natCast]
           constructor
@@ -1256,7 +1256,7 @@ lemma CNFA.autWidth_spec : autWidth wp n |>.Sim (NFA'.autWidth wp n) := by
   · rintro q; simp_all [NFA'.autWidth, NFA.autWidth]; apply autWidth_finals (q.isLt)
   · rintro q; simp_all [NFA'.autWidth, NFA.autWidth]; rw [autWidth_initials]; exact
     eq_iff_eq_of_cmp_eq_cmp rfl
-  · rintro a q q'; fin_cases a; simp_all [NFA'.autWidth, NFA.autWidth, instFinEnumBV];
+  · rintro a q q'; fin_cases a; simp_all [NFA'.autWidth, NFA.autWidth];
     have h := @autWidth_tr q.val n q'.val wp q.isLt q'.isLt
     unfold State at *
     simp_all
@@ -1817,7 +1817,7 @@ lemma TermUnop.alt_lang {t : Term} (op : TermUnop) :
     conv_rhs =>
       simp only [BitVecs.transport_getElem]
       simp [liftUnop]
-      rw [ite_cond_eq_true]
+      rw [ite_eq_left_of_eq_true]
       rfl
       tactic => simp only [eq_iff_iff, iff_true]; ext1; simp
     convert heq₂ using 1
@@ -1971,7 +1971,7 @@ theorem decision_procedure_is_correct {w} (φ : Formula) (env : Nat → BitVec w
   extract_lets bvs at hx
   have hin : bvs ∈ (⊤ : Set _) := by simp
   rw [←this] at hin
-  simp +zetaDelta [Set.instMembership] at hin
+  simp +zetaDelta at hin
   assumption
 
 @[simp]

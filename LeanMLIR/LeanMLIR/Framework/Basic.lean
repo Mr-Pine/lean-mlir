@@ -912,7 +912,7 @@ section Lemmas
   funext V
   induction com using Com.rec'
   · rfl
-  · simp [*, EffectKind.pure_pure]
+  · simp [*]
     rfl
 
 end Lemmas
@@ -1063,7 +1063,7 @@ def Lets.getPureExpr {Γ₁ Γ₂ : Ctxt d.Ty} (lets : Lets d Γ₁ eff Γ₂) {
   -- v4.34: neither `castCtxt` nor `appendInr` reduces on its own any more
   simp only [Ctxt.length_ofList] at this
   simp [Hom.castCodomain, Hom.appendCodomain, Ctxt.Var.castCtxt, Ctxt.Var.appendInr,
-    Ctxt.length_dropUntil, Ctxt.length_ofList]
+    Ctxt.length_ofList]
   omega
 
 

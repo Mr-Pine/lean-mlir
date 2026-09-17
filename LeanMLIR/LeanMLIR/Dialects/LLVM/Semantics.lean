@@ -51,7 +51,7 @@ having to duplicate that API for `LLVM.IntW`.
 theorem isRefinedBy_iff (x y : LLVM.IntW w) :
     x ⊑ y ↔ @HRefinement.IsRefinedBy (PoisonOr _) (PoisonOr _) _ x y := by
   -- v4.34: `simp` no longer unfolds the instance; the `dite` branch is all this needs
-  exact iff_of_eq (dif_pos rfl)
+  exact iff_of_eq (dite_eq_left rfl)
 
 @[simp, simp_llvm]
 theorem isRefinedBy_iff_of_width_neq {x : LLVM.IntW w} {y : LLVM.IntW v} (h : w ≠ v) :

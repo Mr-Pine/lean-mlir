@@ -866,11 +866,11 @@ def single [DecidableEq α] {s : List α} (x : ∀ a ∈ s, Bool) : Circuit α :
   constructor
   · intros h a ha
     specialize h a ha
-    rw [dif_pos ha] at h
+    rw [dite_eq_left ha] at h
     revert h
     cases x a ha <;> simp
   · intros h a ha
-    rw [dif_pos ha]
+    rw [dite_eq_left ha]
     specialize h a ha
     revert h
     cases x a ha <;> simp
@@ -985,12 +985,10 @@ lemma le_iff_implies : ∀ (c₁ c₂ : Circuit α), c₁ ≤ c₂ ↔ (∀ f, e
   intros c₁ c₂
   simp [le_def]
   constructor
-  · intros h
-    intros f
+  · intro h f
     specialize h f
     by_cases hc₁ : c₁.eval f  <;> by_cases hc₂ : c₂.eval f <;> simp_all
-  · intros h
-    intros f
+  · intro h f
     specialize h f
     by_cases hc₁ : c₁.eval f  <;> by_cases hc₂ : c₂.eval f <;> simp_all
 

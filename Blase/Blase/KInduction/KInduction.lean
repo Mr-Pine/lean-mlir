@@ -1043,8 +1043,7 @@ theorem mkSafetyCircuit_eval_eq_false_iff₁
       · apply hsafe
       · omega
     · apply hCircs
-  · intros h
-    intros hPrecond
+  · intro h hPrecond
     rw [eval_mkPostcondSafety_eq_false_iff]
     simp
     apply h
@@ -1302,8 +1301,7 @@ noncomputable def SimplePathOfPath.findStateOnSimplePath?
       subst states
       simp only [List.mem_map, List.mem_range, decide_eq_false_iff_not, forall_exists_index,
         and_imp, forall_apply_eq_imp_iff₂] at this
-      intros k hk
-      intros hcontra
+      intro k hk hcontra
       specialize this k (by omega)
       contradiction
     ⟩

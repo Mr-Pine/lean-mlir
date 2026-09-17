@@ -87,8 +87,8 @@ theorem Ctxt.delete_append_appendInl {Γ : Ctxt Ty} {us : List Ty} {r : DeleteRa
   rcases Γ with ⟨Γ⟩
   ext i t
   simp only [delete, ofList_append, length_ofList, List.length_append,
-    DeleteRange.val_start_appendInl, DeleteRange.val_num_appendInl, Fin.coe_cast, getElem_ofList,
-    dite_eq_ite, getElem?_ofList, List.getElem?_ofFn, Option.dite_none_right_eq_some,
+    DeleteRange.val_start_appendInl, DeleteRange.val_num_appendInl, Fin.val_cast, getElem_ofList,
+    getElem?_ofList, List.getElem?_ofFn, Option.dite_none_right_eq_some,
     Option.some.injEq]
   rw [List.getElem?_append]
   by_cases hi : i < us.length <;> simp only [reduceIte, hi]
@@ -206,8 +206,8 @@ lemma Deleted.toHom_append {Γ Γ' : Ctxt Ty} {vs : DeleteRange Γ}
   subst DEL'
   funext t v
   apply Subtype.ext
-  simp only [toHom, Hom.delete, Var.val_castCtxt, DeleteRange.val_start_appendInl,
-    DeleteRange.val_num_appendInl, Hom.append, Var.castCtxt_rfl]
+  simp only [toHom, Hom.delete, DeleteRange.val_start_appendInl,
+    DeleteRange.val_num_appendInl, Hom.append]
   cases v using Var.appendCases with
   -- v4.34: `grind` needs the `Var` value equations named explicitly
   | right _ =>

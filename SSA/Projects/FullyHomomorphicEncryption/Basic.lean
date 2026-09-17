@@ -280,7 +280,7 @@ theorem R.representative_fromPoly_toFun :
       (ZMod q)[X], ((R.fromPoly (n:=n) (q := q)).toFun a).representative = a %ₘ (f q n) := by
   intro a
   simp only [representative, RingHom.toMonoidHom_eq_coe, OneHom.toFun_eq_coe,
-    MonoidHom.toOneHom_coe, MonoidHom.coe_coe]
+    MonoidHom.toOneHom_coe, MonoidHom.coe_ofClass]
   have ⟨i,⟨hiI,hi_eq⟩⟩ := R.fromPoly_rep'_eq_ideal q n a
   apply Polynomial.modByMonic_eq_of_dvd_sub (f_monic q n)
   ring_nf

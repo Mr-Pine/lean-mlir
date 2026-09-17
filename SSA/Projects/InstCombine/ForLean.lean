@@ -59,7 +59,7 @@ theorem mod_eq_if {a b : Nat} :
     by_cases h₂ : a < 2 * b
     · simp [h₂]
       have : a / b = 1 := by
-        rw [Nat.div_eq]
+        rw [Nat.div_eq_ite]
         simp only [show 0 < b by omega, true_and]
         simp only [show b ≤ a by omega, ↓reduceIte, Nat.reduceEqDiff]
         apply Nat.div_eq_of_lt (by omega)

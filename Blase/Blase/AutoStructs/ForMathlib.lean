@@ -1,6 +1,6 @@
 import Mathlib.Computability.NFA
 import Mathlib.Data.FinEnum
-import Mathlib.Data.Rel
+import Mathlib.Basic.Rel
 import Mathlib.Data.Vector.Basic
 import Blase.AutoStructs.ForLean
 
@@ -282,9 +282,9 @@ def Complete' (M : NFA α σ) : Prop := ∀ q a, M.step q a ≠ ∅
 def Complete (M : NFA α σ) : Prop := ∀ w, Nonempty (M.eval w)
 
 lemma complete_stepSet_ne {M : NFA α σ} {hc : M.Complete'} : S ≠ ∅ → M.stepSet S a ≠ ∅ := by
-  push_neg; rintro ⟨q, hq⟩
+  push Not; rintro ⟨q, hq⟩
   have hne := hc q a
-  push_neg at hne
+  push Not at hne
   rcases hne with ⟨q', hq'⟩
   use q'; simp [stepSet]; use q
 
@@ -356,7 +356,7 @@ lemma reduce_stepSet' {M : NFA α σ} (q : M.Reachable) (S1 : Set M.Reachable) (
 
 lemma reduce_eval {M : NFA α σ} {w} (q : σ) : (∃ hq, ⟨q, hq⟩ ∈ M.reduce.eval w) ↔ q ∈ M.eval w := by
   induction w using List.reverseRecOn generalizing q
-  case nil => simp [reduce, Set.instMembership, Set.Mem]; intros hs; use .nil; simpa
+  case nil => simp [reduce]; intros hs; use .nil; simpa
   case append_singleton a w ih =>
     simp [eval]; constructor
     · rintro ⟨hq, hs⟩
@@ -429,13 +429,13 @@ lemma complete_stepSet {M : NFA α σ} (q : σ) :
 
 lemma complete_stepSet_sink {M : NFA α σ} :
     .inr () ∈ S → .inr () ∈ M.complete.stepSet S a := by
-  simp_all [complete, stepSet, Set.instMembership, Set.Mem]
+  simp_all [complete, stepSet]
 
 @[simp]
 lemma complete_eval {M : NFA α σ} {w} (q : σ) :
     (.inl q ∈ M.complete.eval w) ↔ q ∈ M.eval w := by
   induction w using List.reverseRecOn generalizing q
-  case nil => simp [complete, Set.instMembership, Set.Mem]
+  case nil => simp [complete]
   case append_singleton a w ih =>
     simp only [eval]; constructor
     · simp; rintro _; rw [←complete_stepSet]; assumption; apply ih

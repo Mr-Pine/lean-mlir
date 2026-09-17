@@ -382,8 +382,7 @@ theorem toBitVec_eq_toBitVec_iff_EqualUpTo {w : Nat} {x y : BitStream} :
     simp [hi]
     apply h
     omega
-  · intros h
-    intros i hi
+  · intro h i hi
     have := congrFun (congrArg BitVec.getLsbD h) i
     simp [hi] at this
     exact this
@@ -1404,7 +1403,7 @@ def denote (s : BitStream) (w : Nat) : BitVec w := s.toBitVec w
     simp [toBitVec, toBitVec]
     rw [ih]
     apply BitVec.eq_of_getLsbD_eq
-    simp only [BitVec.getLsbD_cons, BitVec.getLsbD_allOnes, Bool.if_true_left]
+    simp only [BitVec.getLsbD_cons, BitVec.getLsbD_allOnes, Bool.ite_true_left]
     intros i hi
     simp only [hi, decide_true, Bool.or_eq_true, decide_eq_true_eq]
     omega
@@ -1449,8 +1448,7 @@ theorem toBitVec_or (a b : BitStream) :
 theorem toBitVec_xor (a b : BitStream) :
     (a ^^^ b).toBitVec w = a.toBitVec w ^^^ b.toBitVec w := by
   apply BitVec.eq_of_getLsbD_eq
-  intros i
-  intros hi
+  intro i hi
   simp [hi]
 
 @[simp]

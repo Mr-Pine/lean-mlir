@@ -344,10 +344,10 @@ lemma formula_language_case_atom :
     constructor
     · unfold l; simp; split_ands
       · unfold lrel; simp only [Fin.isValue, BitVecs.transport_getElem,
-          liftLast2, Set.mem_setOf_eq, Fin.val_last, le_add_iff_nonneg_right, zero_le,
+          liftLast2, Set.mem_ofPred_eq, Fin.val_last, le_add_iff_nonneg_right, zero_le,
           List.Vector.append_get_ge]
         rw [List.Vector.append_get_ge (by dsimp; rw [Nat.mod_eq_of_lt]; omega)]
-        simp [Set.instMembership, Set.Mem] at h
+        simp at h
         convert h using 2
         · rfl
         · apply helper1; ext; simp; rw [Nat.mod_eq_of_lt] <;> omega
@@ -388,11 +388,11 @@ theorem formula_language (φ : Formula) :
            (φ2.sat fun n => bvs.bvs.get (Fin.castLE (by simp) n)) = true := by
       congr!
     rcases op <;>
-      simp [evalBinop, langBinop, Set.instMembership] <;> simp_all <;> tauto
+      simp [evalBinop, langBinop] <;> simp_all <;> tauto
   case msbSet t =>
     ext1 bvs; simp only [Formula.arity, Formula.language, Set.proj, Set.lift, langMsb, Fin.isValue,
-      Set.preimage_setOf_eq, Set.mem_image, Set.mem_inter_iff,
-      Set.mem_setOf_eq, Formula.sat]
+      Set.preimage_ofPred_eq, Set.mem_image, Set.mem_inter_iff,
+      Set.mem_ofPred_eq, Formula.sat]
     rcases bvs with ⟨w, bvs⟩
     constructor
     · rintro ⟨bvsb, ⟨ht, hmsb⟩, heq⟩

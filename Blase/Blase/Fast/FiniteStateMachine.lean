@@ -700,8 +700,7 @@ lemma eval_scanAnd_succ (x : Unit → BitStream) (n : Nat) :
   case succ n ih =>
     rw [eval_scanAnd_succ]
     constructor
-    · intros h
-      intros i hi
+    · intro h i hi
       have hScan := Bool.and_elim_left h
       have hxn := Bool.and_elim_right h
       have hi : (i = n+1) ∨ (i < n + 1) := by omega
@@ -760,8 +759,7 @@ lemma eval_scanOr_succ (x : Unit → BitStream) (n : Nat) :
   case succ n ih =>
     rw [eval_scanOr_succ]
     constructor
-    · intros h
-      intros i hi
+    · intro h i hi
       have := Bool.or_eq_false_iff.mp h
       have hi : (i = n+1) ∨ (i < n + 1) := by omega
       rcases hi with rfl | hi
@@ -1489,7 +1487,7 @@ instance {α β : Type} [Fintype α] [Fintype β] (b : Bool) :
                   (q₂.eval (fun i => x i))) := by
   rw [composeBinaryAux', FSM.eval_compose]
   ext b
-  cases b <;> congr <;> funext b <;> cases b <;> simp <;> rfl
+  cases b <;> congr <;> funext b <;> cases b <;> simp
 
 
 namespace FSM
@@ -1865,7 +1863,7 @@ def termEvalEqFSM : ∀ (t : Term), FSMTermSolution t
        toFSM := by dsimp [arity]; exact composeUnary (FSM.shiftLeft k) q,
        good := by
          ext x i
-         simp only [evalFin, BitStream.eval_shiftLeft, Bool.if_false_left, arity.eq_13, id_eq,
+         simp only [evalFin, BitStream.eval_shiftLeft, Bool.ite_false_left, arity.eq_13, id_eq,
            composeUnary_eval, FSM.eval_shiftLeft]
          by_cases hi : i < k
          · simp [hi]

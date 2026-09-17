@@ -208,8 +208,8 @@ def State.consOldExpr2Cache [DecidableEq d.Ty] [DecidableEq d.Op]
         intros Vstart
         ext i
         simp +zetaDelta only [List.get_eq_getElem, HVector.get_map, Valuation.comap_remapAppend,
-          Valuation.instAppendHVector, Var.allVarsIn, HVector.map_map, Valuation.append_appendInl,
-          Valuation.ofHVector_apply, HVector.getElem_map, HVector.get_ofFn]
+          Var.allVarsIn, HVector.map_map, 
+          HVector.get_ofFn]
         rw [← HVector.getElem_ofFin_eq_get]
         simp
       )  eneedle
