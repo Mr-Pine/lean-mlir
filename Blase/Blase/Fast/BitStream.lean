@@ -1,5 +1,6 @@
 import Mathlib.Tactic.NormNum
 import Mathlib.Logic.Function.Iterate
+import Std.Tactic.BVDecide
 -- import SSA.Projects.InstCombine.ForLean
 section UpStream
 
@@ -53,7 +54,7 @@ We have a decision procedure which operates on BitStream operations, but we'd li
 
 -/
 
-def BitStream : Type := Nat → Bool
+@[implicit_reducible] def BitStream : Type := Nat → Bool
 
 instance : Inhabited BitStream where
   default := fun _ => false
@@ -499,7 +500,7 @@ theorem scanOr_idem (s : BitStream) : s.scanOr.scanOr = s.scanOr := by
   simp [scanOr]
   induction n
   case zero => simp
-  case succ n ih => simp [ih]
+  case succ n ih => simp [ih]; exact fun h => Or.inl h
 
 /-- The result of `scanOr` is false at inde `i` if the bitstream has been false upto (and including) time `n`. -/
 theorem scanOr_false_iff (s : BitStream) (n : Nat) : s.scanOr n = false ↔ ∀ (i : Nat), (hi : i ≤ n) → s i = false := by
@@ -560,7 +561,7 @@ theorem scanAnd_idem (s : BitStream) : s.scanAnd.scanAnd = s.scanAnd := by
   simp [scanAnd]
   induction n
   case zero => simp
-  case succ n ih => simp [ih]
+  case succ n ih => simp [ih]; exact fun h _ => h
 
 /-- The result of `scanAnd` is true at index `i` if the bitstream has been true upto (and including) time `n`. -/
 theorem scanAnd_true_iff (s : BitStream) (n : Nat) :
@@ -994,6 +995,7 @@ theorem neg_neg : a = - - a := by
     case succ i ih =>
       simp only [negAux, neg, Bool.not_bne, Bool.not_not, Bool.bne_assoc, Prod.mk.injEq]
       rw [ih]
+      dsimp only
       bv_decide
   simp [Neg.neg, neg, neg_lemma]
 
@@ -1134,7 +1136,7 @@ theorem equal_up_to_trans (e1 : a ≈ʷ b) (e2 : b ≈ʷ c) : a ≈ʷ c := by
 instance congr_trans : Trans (EqualUpTo w) (EqualUpTo w) (EqualUpTo w) where
   trans := equal_up_to_trans
 
-instance congr_equiv : Equivalence (EqualUpTo w) where
+theorem congr_equiv : Equivalence (EqualUpTo w) where
   refl := fun _ => equal_up_to_refl
   symm := equal_up_to_symm
   trans := equal_up_to_trans
@@ -1740,5 +1742,5 @@ theorem ofBitVecZext_add_eq_ofBitVecZext_add_ofBitVecZext (a b : BitVec w)
   (BitStream.ofBitVecZext (a + b)) i  =
   (BitStream.ofBitVecZext a + BitStream.ofBitVecZext b) i
   := by
-rw [EqualUpTo_ofBitVecZext_add]
-omega
+  rw [EqualUpTo_ofBitVecZext_add]
+  omega

@@ -718,6 +718,7 @@ def fsmTermNe {wcard tcard : Nat}
 
 
 
+@[implicit_reducible]
 def fsmCarry' (initialCarryVal : Bool): FSM Bool :=
   let outputCirc :=
     let carry := Circuit.var true (Sum.inl ())
@@ -787,6 +788,7 @@ TODO: rewrite with 'induction' to be a clean proof script.
       simp only [carry_fsmCarry']
       simp
 
+@[implicit_reducible]
 def fsmCarry'' (initialCarryVal : Bool): FSM Bool :=
   let outputCirc :=
     let carry := Circuit.var true (Sum.inl ())
@@ -1938,7 +1940,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       rw [hw.heq (henv := htenv.toHWidthEnv)]
       constructor
       · intros h
-        simp at h
         ext N
         simp
         rw [h]
@@ -1969,7 +1970,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       rw [hw.heq (henv := htenv.toHWidthEnv)]
       constructor
       · intros h
-        simp at h
         ext N
         simp
         by_cases hw : N < w.toNat wenv
@@ -2017,7 +2017,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       -- This way, if 'a < b', then we print 111...(until w)<isLt><isLt><isLt>...
       -- jesus this stuff is crazy crazy annoying.
       · intros h
-        simp at h
         ext N
         simp
         by_cases hw : N < w.toNat wenv
@@ -2066,7 +2065,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       -- simp [Term.toBV]
       constructor
       · intros h
-        simp at h
         ext N
         simp
         by_cases hw : N < w.toNat wenv
@@ -2115,7 +2113,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       -- simp [Term.toBV]
       constructor
       · intros h
-        simp at h
         ext N
         simp
         by_cases hw : N < w.toNat wenv
@@ -2165,7 +2162,6 @@ def isGoodPredicateFSM_mkPredicateFSMAux {wcard tcard bcard ncard icard pcard : 
       rw [hwfsm.heq (henv := htenv.toHWidthEnv)]
       constructor
       · intros h
-        simp at h
         ext N
         simp
         by_cases hw : N < w.toNat wenv
@@ -2339,9 +2335,9 @@ theorem Term.toBV_of_KInductionCircuits
     (n : Nat)
     (circs : KInductionCircuits fsm.toFsmZext n)
     (hCircs : circs.IsLawful)
-    (sCert : Lean.Elab.Tactic.BVDecide.Frontend.LratCert)
+    (sCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hs : Circuit.verifyCircuit (circs.mkSafetyCircuit) sCert = true)
-    (indCert : Lean.Elab.Tactic.BVDecide.Frontend.LratCert)
+    (indCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hind : Circuit.verifyCircuit (circs.mkIndHypCycleBreaking) indCert = true)
     (wenv : WidthExpr.Env wcard)
     (penv : Predicate.Env pcard)
@@ -2387,9 +2383,9 @@ theorem Term.toBV_of_KInductionCircuits'
     (n : Nat)
     (circs : KInductionCircuits fsm.toFsmZext n)
     (hCircs : circs.IsLawful)
-    (sCert : Lean.Elab.Tactic.BVDecide.Frontend.LratCert)
+    (sCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hs : Circuit.verifyCircuit (circs.mkSafetyCircuit) sCert = true)
-    (indCert : Lean.Elab.Tactic.BVDecide.Frontend.LratCert)
+    (indCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hind : Circuit.verifyCircuit (circs.mkIndHypCycleBreaking) indCert = true)
     (wenv : WidthExpr.Env wcard)
     (tenv : tctx.Env wenv)

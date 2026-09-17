@@ -803,7 +803,22 @@ info: '_private.Blase.SingleWidth.Tactic.0.simple_test' depends on axioms: [hash
  Classical.choice,
  Lean.ofReduceBool,
  Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ simple_test._native.bv_automata_circuit.ax_1_1,
+ BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
+ BitStream.subCarries?_correct._native.bv_decide.ax_1_15,
+ CNFA.autEq_spec._native.native_decide.ax_1_1,
+ CNFA.autEq_spec._native.native_decide.ax_1_2,
+ CNFA.autEq_spec._native.native_decide.ax_1_3,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_1,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_2,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_3,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_3,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_3]
 -/
 #guard_msgs in
 #print axioms simple_test

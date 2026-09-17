@@ -350,11 +350,11 @@ attribute [bv_automata_nnf] Nat.succ_eq_add_one
 
 @[bv_automata_nnf]
 theorem BitVec.lt_ult {x y : BitVec w} : (x < y) = (x.ult y) := by
-  simp [instLTBitVec, BitVec.ult]
+  simp [BitVec.lt_def, BitVec.ult]
 
 @[bv_automata_nnf]
 theorem BitVec.le_ule {x y : BitVec w} : (x ≤ y) = (x.ule y) := by
-  simp [instLEBitVec, BitVec.ule]
+  simp [BitVec.le_def, BitVec.ule]
 
 -- Copy all the bool_to_prop lemmas
 
@@ -376,7 +376,7 @@ simproc [bv_automata_nnf] boolEqIff (@Eq Bool _ _) := fun e => do
       | true => pure .continue
       | false => pure .continue
       | _ =>
-        let it e := (mkApp3 (.const ``Eq [levelOne]) (.const ``Bool []) e (.const ``true []))
+        let it e := (mkApp3 (.const ``Eq [Level.one]) (.const ``Bool []) e (.const ``true []))
         let e' := mkApp2 (.const ``Iff []) (it e₁) (it e₂)
         let pf := mkApp2 (.const ``bool_eq_iff []) e₁ e₂
         pure $ .done { expr := e', proof? := some pf }
@@ -388,7 +388,7 @@ trace: w : ℕ
 ⊢ (∀ (x x_1 : BitVec w), x_1.ule x = true) ∧
     ∀ (x x_1 : BitVec w), x.ule x_1 = true ∨ x_1.ult x = true ∨ x.ule x_1 = true ∨ x ≠ x_1
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in example : ∀ (a b : BitVec w),  ¬ (a < b ∨ a > b ∧ a ≤ b ∧ a > b ∧ (¬ (a ≠ b))) := by
  bv_nnf;
@@ -398,7 +398,7 @@ warning: declaration uses 'sorry'
 trace: w : ℕ
 ⊢ ∀ (a b : BitVec w), a &&& b ≠ 0#w ∨ a = b
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in example : ∀ (a b : BitVec w), a &&& b = 0#w → a = b := by
  bv_nnf; trace_state; sorry

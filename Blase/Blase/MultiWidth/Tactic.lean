@@ -1169,11 +1169,10 @@ info: MultiWidth.Term.toBV_of_KInductionCircuits {wcard tcard bcard ncard icard 
   (_hpNondep : pNondep = Nondep.Term.ofDepTerm p) (fsm : TermFSM wcard tcard bcard ncard icard pcard pNondep)
   (_hfsm : fsm = mkTermFsmNondep wcard tcard bcard ncard icard pcard pNondep) (n : ℕ)
   (circs : ReflectVerif.BvDecide.KInductionCircuits fsm.toFsmZext n) (hCircs : circs.IsLawful)
-  (sCert : BVDecide.Frontend.LratCert) (hs : circs.mkSafetyCircuit.verifyCircuit sCert = true)
-  (indCert : BVDecide.Frontend.LratCert) (hind : circs.mkIndHypCycleBreaking.verifyCircuit indCert = true)
-  (wenv : WidthExpr.Env wcard) (penv : Predicate.Env pcard) (tenv : tctx.Env wenv) (benv : Term.BoolEnv bcard)
-  (nenv : Term.NatEnv ncard) (ienv : Term.IntEnv icard) (hautomata : p.isAutomtaDecidable = true) :
-  Term.toBV benv nenv ienv penv tenv p
+  (sCert : BVDecide.LratCert) (hs : circs.mkSafetyCircuit.verifyCircuit sCert = true) (indCert : BVDecide.LratCert)
+  (hind : circs.mkIndHypCycleBreaking.verifyCircuit indCert = true) (wenv : WidthExpr.Env wcard)
+  (penv : Predicate.Env pcard) (tenv : tctx.Env wenv) (benv : Term.BoolEnv bcard) (nenv : Term.NatEnv ncard)
+  (ienv : Term.IntEnv icard) (hautomata : p.isAutomtaDecidable = true) : Term.toBV benv nenv ienv penv tenv p
 -/
 #guard_msgs in #check MultiWidth.Term.toBV_of_KInductionCircuits
 
@@ -1324,6 +1323,10 @@ def solve (gorig : MVarId) : SolverM Unit := do
 def solveEntrypoint (g : MVarId) (cfg : Config) : TermElabM Unit :=
   let ctx := { toConfig := cfg}
   SolverM.run (ctx := ctx) (solve g)
+
+-- `SolverKind.external` carries functions, which `declare_config_elab` cannot derive evaluators for.
+open scoped Lean.Elab.ConfigEval in
+derive_eval_expr_instance_using_meta_eval SolverKind
 
 declare_config_elab elabBvMultiWidthConfig Config
 

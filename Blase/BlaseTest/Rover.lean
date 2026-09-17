@@ -181,10 +181,9 @@ theorem add_assoc_1'
 /--
 info: 'Test.Rover.add_assoc_1'' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
  Quot.sound,
- Test.Rover.AxBoundedModelCheck]
+ AxBoundedModelCheck,
+ add_assoc_1'._native.bv_decide.ax_1_12]
 -/
 #guard_msgs in #print axioms add_assoc_1'
 

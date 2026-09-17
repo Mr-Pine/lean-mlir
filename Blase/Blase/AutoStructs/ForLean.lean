@@ -3,6 +3,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 
 import Aesop
+import Std.Data.HashMap.Lemmas
+import Std.Data.HashSet.Lemmas
 
 /- Question:
 why does `Decidable (s ∈ l)` require `LawfulBEq` if `l` is a list but `DecidableEq` if `l` is an array?

@@ -103,11 +103,11 @@ the list.
 -/
 abbrev BitVecs' (n : Nat) := List (BitVec n)
 
-def enc (bvs : BitVecs n) : BitVecs' n :=
+@[implicit_reducible] def enc (bvs : BitVecs n) : BitVecs' n :=
   (List.finRange bvs.w).map (fun i =>
     BitVec.ofFn (fun (k : Fin n) => (bvs.bvs.get k)[i]))
 
-@[simps]
+@[simps, implicit_reducible]
 def dec (bvs' : BitVecs' n) : BitVecs n where
   w := bvs'.length
   bvs := List.Vector.ofFn fun k => BitVec.ofFn fun i => bvs'[i].getLsbD k
@@ -198,7 +198,7 @@ lemma dec_enc_image : dec '' (enc '' S) = S := Function.LeftInverse.image_image 
 @[simp]
 lemma env_dec_image : enc '' (dec '' S) = S :=  Function.LeftInverse.image_image enc_dec _
 
-def BitVecs.transport (f : Fin n → Fin m) (bvs : BitVecs m) : BitVecs n :=
+@[implicit_reducible] def BitVecs.transport (f : Fin n → Fin m) (bvs : BitVecs m) : BitVecs n :=
   { w := bvs.w, bvs := bvs.bvs.transport f }
 
 
@@ -211,7 +211,7 @@ lemma BitVecs.transport_getElem {bvs : BitVecs m} (f : Fin n → Fin m) (i : Fin
     (bvs.transport f).bvs.get i = bvs.bvs.get (f i) := by
   simp [transport, List.Vector.transport]
 
-def BitVecs'.transport (f : Fin n → Fin m) (bvs' : BitVecs' m): BitVecs' n :=
+@[implicit_reducible] def BitVecs'.transport (f : Fin n → Fin m) (bvs' : BitVecs' m): BitVecs' n :=
   bvs'.map fun bv => bv.transport f
 
 @[simp]
@@ -237,10 +237,6 @@ def dec_transport_idx {bvs' : BitVecs' n} (f : Fin m → Fin n) :
   ext1 j hj
   simp at h hj ⊢
   simp_all
-  simp at h ⊢
-  -- TODO: FIXME: why is this necessary to have the rewrite work?
-  generalize_proofs h1 h2 h3 h4
-  rw [BitVec.ofFn_getElem _ h4]
 
 @[simp]
 def dec_transport :
@@ -252,13 +248,13 @@ def dec_transport :
 @[simp]
 def enc_transport_idx {bvs : BitVecs n} (f : Fin m → Fin n) (i : Fin bvs.w) :
     (enc (bvs.transport f))[i] = (enc bvs)[i].transport f := by
-  ext1 k hk; simp_all [enc]; rfl
+  ext1 k hk; simp_all [enc]
 
 @[simp]
 def enc_transport :
      enc (bvs.transport f) = (enc bvs).transport f := by
   apply List.ext_getElem <;> simp
-  intros i hi hi'
+  intros i hi
   have _ := enc_transport_idx f ⟨i, hi⟩
   simp_all
 
@@ -332,9 +328,9 @@ theorem evalFrom_mono (M : NFA α σ) (S₁ S₂ : Set σ) (x : List α) (h : S�
 def Reachable (M : NFA α σ) : Set σ := λ q ↦ ∃ w, q ∈ M.eval w
 
 def reduce (M : NFA α σ) : NFA α M.Reachable where
-  start q :=  M.start q.val
-  accept q := M.accept q.val
-  step q a q' := M.step q.val a q'.val
+  start := {q | q.val ∈ M.start}
+  accept := {q | q.val ∈ M.accept}
+  step q a := {q' | q'.val ∈ M.step q.val a}
 
 lemma reduce_stepSet {M : NFA α σ} {q : σ} (S1 : Set M.Reachable) (S2 : Set σ) :
     (∀ q, (∃ hq, S1 ⟨q, hq⟩) ↔ S2 q) →
@@ -398,7 +394,7 @@ theorem reachable_sub_closed_set (M : NFA α σ) (S : Set σ) (hcl: M.closed_set
   case nil => aesop
   case append_singleton w a ih =>
     simp only [eval] at hw
-    rw [evalFrom_append_singleton, mem_stepSet] at hw
+    rw [evalFrom_append, evalFrom_singleton, mem_stepSet] at hw
     rcases hw with ⟨q', h1, h2⟩
     apply ih at h1
     suffices _ : q ∈ M.stepSet S a by aesop
@@ -429,7 +425,7 @@ lemma complete_cast {M : NFA α σ} (h : σ = ς) : (h ▸ M).Complete ↔ M.Com
 lemma complete_stepSet {M : NFA α σ} (q : σ) :
     (∀ q, (Sum.inl q ∈ S1) ↔ S2 q) →
     ((.inl q ∈ M.complete.stepSet S1 a) ↔ q ∈ M.stepSet S2 a) := by
-  simp_all [complete, stepSet, Set.instMembership, Set.Mem]
+  simp_all [complete, stepSet]; exact fun _ => Iff.rfl
 
 lemma complete_stepSet_sink {M : NFA α σ} :
     .inr () ∈ S → .inr () ∈ M.complete.stepSet S a := by
@@ -447,7 +443,7 @@ lemma complete_eval {M : NFA α σ} {w} (q : σ) :
 
 @[simp]
 theorem complete_accepts (M : NFA α σ) : M.complete.accepts = M.accepts := by
-  simp [accepts]
+  ext w; simp [accepts]
 
 @[simp]
 theorem complete_complete (M : NFA α σ) : M.complete.Complete := by
@@ -494,7 +490,7 @@ lemma product_eval {M : NFA α σ} {N : NFA α ς} {w} :
   (M.product accept? N).eval w = M.eval w ×ˢ N.eval w := by
   unfold eval; induction w using List.reverseRecOn
   case nil => ext; simp [product]
-  case append_singleton w a ih => simp only [evalFrom_append_singleton, product_stepSet, ih]
+  case append_singleton w a ih => simp only [evalFrom_append, evalFrom_singleton, product_stepSet, ih]
 
 @[simp]
 theorem inter_accepts (M : NFA α σ) (N : NFA α ς) :
@@ -537,14 +533,15 @@ theorem flipAccept_eval {M : NFA α σ} : M.flipAccept.eval w = M.eval w := by
 @[simp]
 theorem flipAccept_accepts (M : NFA α σ) (hc : M.Complete) (hdet : M.Deterministic) :
     M.flipAccept.accepts = M.acceptsᶜ := by
-  ext w; constructor; simp [accepts, Language.eq_def, Set.compl_def]; rintro q ha he
-  · intros q' ha' he'
+  ext w
+  show (∃ S ∈ M.flipAccept.accept, S ∈ M.eval w) ↔ ¬ ∃ S ∈ M.accept, S ∈ M.eval w
+  constructor
+  · rintro ⟨q, ha, he⟩ ⟨q', ha', he'⟩
     obtain rfl := deterministic_eval_subsingleton hdet w he he'
     simp_all [flipAccept, Set.compl]
-  · simp [accepts, Language.eq_def, Set.compl_def]
-    intros hw
+  · intros hw
     obtain ⟨qf, hqf⟩ := hc w
-    have ha : ¬ qf ∈ M.accept := by by_contra; apply hw <;> assumption
+    have ha : ¬ qf ∈ M.accept := fun h => hw ⟨qf, h, hqf⟩
     use qf; simp_all [flipAccept, Set.compl]
 
 def neg (M : NFA α σ) := M.toDFA.toNFA.flipAccept
@@ -596,7 +593,7 @@ lemma lift_eval (M : NFA (BitVec n) σ) (f : Fin n → Fin m) :
 @[simp]
 lemma lift_accepts (M : NFA (BitVec n) σ) (f : Fin n → Fin m) :
     (M.lift f).accepts = BitVecs'.transport f ⁻¹' M.accepts := by
-  simp [accepts]
+  ext w; simp [accepts]
 
 @[simps]
 def proj (M: NFA (BitVec n1) σ) (f : Fin n2 → Fin n1) : NFA (BitVec n2) σ where

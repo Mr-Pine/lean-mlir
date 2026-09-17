@@ -57,7 +57,7 @@ and thus is an upper bound on the number of free variables that occur in `t`.
 
 Note that the upper bound is not perfect:
 a term like `var 10` only has a single free variable, but its arity will be `11` -/
-@[simp] def Term.arity : Term → Nat
+@[simp, implicit_reducible] def Term.arity : Term → Nat
 | (var n) => n+1
 | zero => 0
 | one => 0
@@ -114,7 +114,7 @@ inductive Predicate : Type where
 deriving Repr, Inhabited, Lean.ToExpr
 
 -- TODO: This ugly definition is here to make the `predicateEvalEqFSM` function compile wihtout change.
-@[simp] def Predicate.arity : Predicate → Nat
+@[simp, implicit_reducible] def Predicate.arity : Predicate → Nat
 | .width _ _ => 0
 | .binary .eq t1 t2 => max t1.arity t2.arity
 | .binary .neq t₁ t₂ => max t₁.arity t₂.arity

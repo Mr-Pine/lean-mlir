@@ -83,7 +83,7 @@ lemma RawCNFA.Simul.rel_preserved_word {m : RawCNFA A} {M : NFA A Q} (hsim : m.S
   case nil => rintro h; use S₁; simp [h]
   case append_singleton w a ih =>
     rintro h; obtain ⟨S₂, hR⟩ := ih h; clear ih
-    simp only [NFA.evalFrom_append_singleton]
+    simp only [NFA.evalFrom_append, NFA.evalFrom_singleton]
     exact hsim.rel_preserved_letter hR
 
 lemma RawCNFA.Simul.eval_set_eq {m : RawCNFA A} {M : NFA A Q} (hsim : m.Simul M R ⊤ ∅) :
@@ -524,7 +524,7 @@ lemma createSink_trans [LawfulBEq A] {m : RawCNFA A} (hwf : m.WF) :
 
 def CNFA.transSet (m : CNFA n) (ss : Std.HashSet m.m.states) (a : BitVec n) : Std.HashSet m.m.states :=
   ss.fold (init := ∅) fun ss' (s : m.m.states) =>
-    let ssn := (m.m.tr s a).attachWith (λ s ↦ s ∈ m.m.states) (by simp only; rintro x hx; aesop)
+    let ssn := (m.m.tr s a).attachWith (λ s ↦ s ∈ m.m.states) (by rintro x hx; aesop)
     ss'.insertMany ssn
 
 instance RawCNFA_Inhabited : Inhabited (RawCNFA A) where

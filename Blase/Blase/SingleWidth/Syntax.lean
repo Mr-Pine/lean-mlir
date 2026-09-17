@@ -53,4 +53,4 @@ def Reflect.Map.empty : List (BitVec w) := []
 
 def Reflect.Map.append (w : Nat) (s : BitVec w)  (m : List (BitVec w)) : List (BitVec w) := m.append [s]
 
-def Reflect.Map.get (ix : ℕ) (_ : BitVec w)  (m : List (BitVec w)) : BitVec w := m[ix]!
+def Reflect.Map.get (ix : Nat) (_ : BitVec w)  (m : List (BitVec w)) : BitVec w := m[ix]!
