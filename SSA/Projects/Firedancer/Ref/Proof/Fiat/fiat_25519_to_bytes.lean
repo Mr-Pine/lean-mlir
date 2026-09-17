@@ -838,22 +838,25 @@ theorem limbSum_lt {a b c d e : ℕ} (ha : a ≤ 2^51) (hb : b ≤ 2^51) (hc : c
     (hd : d ≤ 2^51) (he : e ≤ 2^51) :
     a + 2^51 * b + 2^102 * c + 2^153 * d + 2^204 * e < 2^256 - 38 := by omega
 
-set_option maxRecDepth 8000 in
 /-- The spec's value is the limb sum reduced: `decodeFieldElem` is that sum cast
 into `ZMod p`, and `ZMod.val` of a cast is `% p`. -/
 theorem readFieldElem_val {m : MemoryState} {q : Pointer} (hq : IsFieldElemPtr m q) :
     (readFieldElem hq).val
       = (readLimb 0 hq + 2^51 * readLimb 1 hq + 2^102 * readLimb 2 hq + 2^153 * readLimb 3 hq
           + 2^204 * readLimb 4 hq) % (2^255 - 19) := by
-  rw [readFieldElem_eq_decode]
-  simp only [decodeFieldElem, Fin.isValue]
-  rw [← ZMod.val_natCast]
-  simp only [show 51 * Fin.toNat (0 : Fin 5) = 0 from rfl, show 51 * Fin.toNat (1 : Fin 5) = 51 from rfl,
-    show 51 * Fin.toNat (2 : Fin 5) = 102 from rfl, show 51 * Fin.toNat (3 : Fin 5) = 153 from rfl,
-    show 51 * Fin.toNat (4 : Fin 5) = 204 from rfl]
-  congr 1
-  simp only [Nat.cast_add, Nat.cast_mul, pow_zero, mul_one]
-  ring
+  -- the equation in `ZMod p` first: cast after `rw [← ZMod.val_natCast]`, the sum carries
+  -- `ZMod`'s ring instances rather than the field's, and `ring` can't match the two
+  have h : decodeFieldElem (fun i => readLimb i hq)
+      = ((readLimb 0 hq + 2^51 * readLimb 1 hq + 2^102 * readLimb 2 hq + 2^153 * readLimb 3 hq
+          + 2^204 * readLimb 4 hq : ℕ) : ZMod p) := by
+    simp only [decodeFieldElem, Fin.isValue]
+    simp only [show 51 * Fin.toNat (0 : Fin 5) = 0 from rfl, show 51 * Fin.toNat (1 : Fin 5) = 51 from rfl,
+      show 51 * Fin.toNat (2 : Fin 5) = 102 from rfl, show 51 * Fin.toNat (3 : Fin 5) = 153 from rfl,
+      show 51 * Fin.toNat (4 : Fin 5) = 204 from rfl]
+    push_cast
+    ring
+  rw [readFieldElem_eq_decode, h, ZMod.val_natCast]
+  rfl
 
 /-! The buffer-shaping lemmas. All four are closed facts about `BitVec` and
 `MemoryState`; stated inside the walk their `omega`s and `simp`s would each
