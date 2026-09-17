@@ -40,3 +40,4 @@ lakefile.olean
 SSA/Projects/InstCombine/tests/logs/generalizer
 
 **/.ruff_cache
+/.lean-fmt-cache/
