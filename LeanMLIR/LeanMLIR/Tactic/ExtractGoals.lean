@@ -51,6 +51,8 @@ private def mkHeader (kind : String) (id : Name) (levelParams : List Name) (type
   match (← getReducibilityStatus id) with
   | ReducibilityStatus.irreducible =>   attrs := attrs.push m!"irreducible"
   | ReducibilityStatus.reducible =>     attrs := attrs.push m!"reducible"
+  | ReducibilityStatus.implicitReducible => attrs := attrs.push m!"implicit_reducible"
+  | ReducibilityStatus.instanceReducible => attrs := attrs.push m!"instance_reducible"
   | ReducibilityStatus.semireducible => pure ()
 
   if defeqAttr.hasTag (← getEnv) id then
@@ -153,9 +155,9 @@ sorry
 info: theorem _example.extracted_1._3 : ∀ (P Q R : Prop), R :=
 sorry
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 ---
-warning: 'extract_goals' tactic does nothing
+warning: Unused tactic linter: `extract_goals` does nothing
 
 Note: This linter can be disabled with `set_option linter.unusedTactic false`
 -/
@@ -169,9 +171,9 @@ Note: This linter can be disabled with `set_option linter.unusedTactic false`
 info: theorem _example.extracted_1._1 : ∀ (P Q : Nat), P + Q = Q + P :=
 sorry
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 ---
-warning: 'extract_goals' tactic does nothing
+warning: Unused tactic linter: `extract_goals` does nothing
 
 Note: This linter can be disabled with `set_option linter.unusedTactic false`
 -/

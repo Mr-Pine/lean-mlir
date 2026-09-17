@@ -2,6 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Tactic
+import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Avx512.Mlir.Util.fd_long_if
 import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_long_if
 
@@ -32,7 +33,6 @@ theorem denote_fd_long_if (c : LLVM.IntW 32) :
       LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     by_cases h : v = 0#32
     · subst h; rfl
-    · have hb : (v == 0#32) = false := by simpa using h
-      simp [BitVec.ofBool, hb, h]
+    · simp [BitVec.ofBool, h, simp_spine]
 
 end Firedancer.Avx512

@@ -24,7 +24,7 @@ def push (Γ : Context Ty) (v : VarName) (ty : Ty) : Context Ty :=
 
 @[simp] theorem hasType_push {Γ : Context Ty} :
     (Γ.push v ty).hasType v ty := by
-  simp [push, hasType]
+  simp [push, hasType, List.lookup]
 
 @[simp] theorem hasType_push_of_neq {Γ : Context Ty} (h : w ≠ v) :
     (Γ.push v ty).hasType w ty' ↔ Γ.hasType w ty' := by

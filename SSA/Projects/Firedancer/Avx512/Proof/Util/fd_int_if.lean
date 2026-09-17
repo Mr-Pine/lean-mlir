@@ -2,6 +2,7 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import LeanMLIR.Tactic
+import SSA.Projects.Firedancer.MLIR.DenoteStep
 import SSA.Projects.Firedancer.Avx512.Spec.Util.fd_int_if
 
 /-!
@@ -33,8 +34,7 @@ theorem denote_fd_int_if (c t : LLVM.IntW 32) :
     simp only [LLVM.const?, fdIntIf, LLVM.select, LLVM.icmp, LLVM.icmp?, LLVM.icmp']
     by_cases h : v = 0#32
     · subst h; rfl
-    · have hb : (v == 0#32) = false := by simpa using h
-      simp [BitVec.ofBool, hb, h]
+    · simp [BitVec.ofBool, h, simp_spine]
 
 theorem fd_int_if_conforms (c t : LLVM.IntW 32) (s : GlobalState) (hs : s.WF) :
     fd_int_if_spec c t s := by
