@@ -392,20 +392,10 @@ and closes this goal with 'native_decide' of a 'rfl' proof.
 Assigns to the MVarId a proof.
 -/
 def mkEqRflNativeDecideProof (lhsExpr : Expr) (rhs : Bool) : TermElabM Expr := do
-    -- hoist a₁ into a top-level definition of 'Lean.ofReduceBool' to succeed.
-  let auxDeclName ← Term.mkAuxName `_mkEqRflNativeDecideProof
-  let decl := Declaration.defnDecl {
-    name := auxDeclName
-    levelParams := []
-    type := mkConst ``Bool
-    value := lhsExpr
-    hints := .abbrev
-    safety := .safe
-  }
-  addAndCompile decl
-  let lhsDef : Expr := mkConst auxDeclName
-  let rflProof ← mkEqRefl (toExpr rhs)
-  mkAppM ``Lean.ofReduceBool #[lhsDef, toExpr rhs, rflProof]
+  unless rhs do throwError "mkEqRflNativeDecideProof: only `= true` is supported"
+  match ← nativeEqTrue `bv_automata_gen lhsExpr with
+  | .success prf => pure prf
+  | .notTrue => throwError m!"native evaluation of {indentExpr lhsExpr} did not return `true`"
 
 
 /-- info: predicateEvalEqFSM (p : Predicate) : FSMPredicateSolution p -/
@@ -559,8 +549,6 @@ def reflectUniversalWidthBVs (g : MVarId) (cfg : Config) : TermElabM (List MVarI
           pure g
       let [g] ← g.apply <| (mkConst ``of_decide_eq_true)
         | throwError m!"Failed to apply `of_decide_eq_true on goal '{indentD g}'"
-      let [g] ← g.apply <| (mkConst ``Lean.ofReduceBool)
-        | throwError m!"Failed to apply `of_decide_eq_true on goal '{indentD g}'"
       return [g]
     | .circuit_cadical_verified maxIter checkTypes? =>
       let fsm := predicateEvalEqFSM predicate.e |>.toFSM
@@ -657,8 +645,6 @@ def reflectUniversalWidthBVs (g : MVarId) (cfg : Config) : TermElabM (List MVarI
             | throwError m!"Failed to apply `Predicate.denote_of_eval_eq` on goal '{indentD g}'"
           pure g
       let [g] ← g.apply <| (mkConst ``of_decide_eq_true)
-        | throwError m!"Failed to apply `of_decide_eq_true on goal '{indentD g}'"
-      let [g] ← g.apply <| (mkConst ``Lean.ofReduceBool)
         | throwError m!"Failed to apply `of_decide_eq_true on goal '{indentD g}'"
       return [g]
 
@@ -801,8 +787,6 @@ private lemma simple_test (x y : BitVec w) : x + y = y + x ∨ x = 0 := by
 info: '_private.Blase.SingleWidth.Tactic.0.simple_test' depends on axioms: [hashMap_missing,
  propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
  Quot.sound,
  simple_test._native.bv_automata_circuit.ax_1_1,
  BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,

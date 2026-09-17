@@ -20,9 +20,9 @@ def passriscv64 (fileName : String) : IO UInt32 := do
     match icom? with
     | none => return 1
     | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match eff with
+      match (dependent := true) eff with
       | EffectKind.pure =>
-        match retTy with
+        match (dependent := true) retTy with
         | [Ty.llvm (.bitvec _w)]  =>
           /- calls to the instruction selector defined in `InstructionLowering`,
             `true` indicates pseudo variable lowering, `fuel` is 150-/
@@ -47,9 +47,9 @@ def passriscv64_optimized (fileName : String) : IO UInt32 := do
     match icom? with
     | none => return 1
     | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match eff with
+      match (dependent := true) eff with
       | EffectKind.pure =>
-        match retTy with
+        match (dependent := true) retTy with
         | [Ty.llvm (.bitvec _w)]  =>
           /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/
@@ -73,9 +73,9 @@ def passriscv64_optimized_const (fileName : String) : IO UInt32 := do
     match icom? with
     | none => return 1
     | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match eff with
+      match (dependent := true) eff with
       | EffectKind.pure =>
-        match retTy with
+        match (dependent := true) retTy with
         | [Ty.llvm (.bitvec _w)]  =>
           /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/
@@ -99,9 +99,9 @@ def passriscv64_selectiondag (fileName : String) : IO UInt32 := do
     match icom? with
     | none => return 1
     | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match eff with
+      match (dependent := true) eff with
       | EffectKind.pure =>
-        match retTy with
+        match (dependent := true) retTy with
         | [Ty.llvm (.bitvec _w)]  =>
           /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/

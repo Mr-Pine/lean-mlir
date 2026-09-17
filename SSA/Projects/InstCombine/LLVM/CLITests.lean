@@ -16,11 +16,11 @@ instance instParseableTuple [A : Cli.ParseableType α] [B : Cli.ParseableType β
   Cli.ParseableType (α × β) where
     name :=  s!"({A.name} × {B.name})"
     parse? str := do
-      let str := str.trim.splitOn ","
+      let str := str.trimAscii.copy.splitOn ","
       match str with
       | [a, b] => do
-        let a ← A.parse? a.trim
-        let b ← B.parse? b.trim
+        let a ← A.parse? a.trimAscii.copy
+        let b ← B.parse? b.trimAscii.copy
         return (a, b)
       | _ => .none
 
