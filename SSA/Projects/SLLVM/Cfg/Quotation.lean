@@ -131,4 +131,53 @@ elab "[sllvm_cfg_of| " t:term " with " bs:sllvmCallee,+ "]" : term => do
   let table ← elabCfgCalleeTable bs.getElems
   elabCfgWithBindings (← elabRegionTerm t) table
 
+
+open Lean Elab Command Meta in
+/-- `sllvm_cfg_def X : Cfg Γin rets := v` defines a lifted program so that no tactic has to unfold
+all of it. The pieces become constants:
+* `X.cfgCtx`, `X.cfgSigs` (reducible): the literal out-context and block signatures;
+* `X.cfgEntry`, `X.cfgBlock_i` (reducible): one definition per block body;
+* `X.cfgBlocks`: the chain of `X.cfgBlock_i`, the one piece that stays folded;
+* `X` (`implicit_reducible`): `⟨X.cfgEntry, X.cfgBlocks⟩`.
+Unfolding `X` then shows names only, so `X.Γout` is the literal context at `implicit`
+transparency, and entering a block unfolds that block alone. -/
+elab mods:declModifiers "sllvm_cfg_def " id:ident " : " ty:term " := " val:term : command => do
+  let name := (← getCurrNamespace) ++ id.getId
+  let _ := mods
+  liftTermElabM do
+    let tyE ← elabType ty
+    let v ← elabTermEnsuringType val tyE
+    synthesizeSyntheticMVarsNoPostponing
+    let v ← instantiateMVars v
+    let tyE ← instantiateMVars tyE
+    let_expr Cfg.mk Γin rets sigs Γout entry blocks := v
+      | throwError "sllvm_cfg_def: expected a `Cfg.mk` value, got{indentExpr v}"
+    let add (n : Name) (t e : Expr) (st : ReducibilityStatus) : TermElabM Expr := do
+      let env ← getEnv
+      let hints := if st == .reducible then ReducibilityHints.abbrev
+        else .regular (getMaxHeight env e + 1)
+      addAndCompile <| .defnDecl (← mkDefinitionValInferringUnsafe n [] t e hints)
+      setReducibilityStatus n st
+      addDeclarationRangesFromSyntax n (← getRef)
+      return mkConst n
+    let ctx ← add (name ++ `cfgCtx) (← inferType Γout) Γout .reducible
+    let sigsC ← add (name ++ `cfgSigs) (← inferType sigs) sigs .reducible
+    -- a type as `BlockCom`/`Blocks` over the named context and signatures
+    let named (t : Expr) : Expr := t.replace fun e =>
+      if e == Γout then some ctx else if e == sigs then some sigsC else none
+    let entryC ← add (name ++ `cfgEntry) (named (← inferType entry)) entry .reducible
+    let rec chain (fuel : Nat) (e : Expr) (i : Nat) : TermElabM Expr := do
+      let fuel + 1 := fuel | throwError "sllvm_cfg_def: too many blocks"
+      match_expr e with
+      | Blocks.cons _Γamb rets' argTys rem _all Γo b bs =>
+        let bC ← add (name ++ Name.mkSimple s!"cfgBlock_{i}") (named (← inferType b)) b .reducible
+        return mkApp8 (mkConst ``Blocks.cons) ctx rets' argTys rem sigsC Γo bC (← chain fuel bs (i + 1))
+      | Blocks.nil _Γamb rets' _all => return mkApp3 (mkConst ``Blocks.nil) ctx rets' sigsC
+      | _ => throwError "sllvm_cfg_def: unexpected blocks{indentExpr e}"
+    let blocksV ← chain 10000 blocks 0
+    let blocksC ← add (name ++ `cfgBlocks) (mkApp4 (mkConst ``Blocks) ctx rets sigsC sigsC) blocksV
+      .semireducible
+    let _ ← add name tyE (mkApp6 (mkConst ``Cfg.mk) Γin rets sigsC ctx entryC blocksC)
+      .implicitReducible
+
 end LeanMLIR.SLLVM

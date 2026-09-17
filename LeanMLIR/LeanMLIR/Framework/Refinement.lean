@@ -162,7 +162,10 @@ partial def reduceIsRefinedByAux (inst lhs rhs : Expr) : SimpM (Option Expr) := 
   | ``«inferInstanceAs» =>
     simpInfer instArgs
   | _ =>
-    return none
+    -- v4.34: `simp` no longer unfolds instance arguments, so step through class
+    -- projections (e.g. a dialect's `MonadIsRefinedBy`) ourselves.
+    let some inst' ← unfoldProjInst? inst | return none
+    reduceIsRefinedByAux inst' lhs rhs
 where
   loop (e : Expr) (returnArgOnFail := true) : SimpM (Option Expr) :=
     let e? := if returnArgOnFail then some e else none

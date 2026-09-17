@@ -23,8 +23,6 @@ theorem fd_int_min_conforms (x : LLVM.IntW 32) (s : GlobalState) (hs : s.WF) :
   simp only [LLVM.const?, Ctxt.Valuation.singleton, simp_denote] at hv0 hv1
   subst hv0
   subst hv1
-  -- v4.34: `simp_return` leaves the `pure`-bind of the terminator's result.
   simp_return
-  rfl
 
 end Firedancer.Common

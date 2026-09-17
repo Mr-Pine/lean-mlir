@@ -46,7 +46,7 @@ def fiat_25519_add_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_add : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_add : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_add_region]
 
 end Firedancer.Ref

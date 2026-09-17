@@ -28,7 +28,7 @@ def fd_f25519_is_zero_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_is_zero : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_f25519_is_zero : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_f25519_is_zero_region]
 
 end Firedancer.Avx512

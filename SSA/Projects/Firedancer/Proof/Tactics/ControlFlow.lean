@@ -58,6 +58,11 @@ until the heartbeat limit. -/
 def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
     (extra : Array Term) : TacticM Unit := do
   -- `call {Γ Γout rets succs argTys retTys csigs cΓout} callee centry cblocks args body`
+  -- a call inside a lifted block constant only shows once the block is unfolded
+  let hasCall ← (← getMainGoal).withContext do
+    let tgt ← instantiateMVars (← (← getMainGoal).getType)
+    return (tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.BlockCom.call)).isSome
+  unless hasCall do evalTactic (← `(tactic| reduce_cfg_indices))
   let (argTys, isBind) ← (← getMainGoal).withContext do
     let tgt ← instantiateMVars (← (← getMainGoal).getType)
     let some callApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.BlockCom.call)
@@ -107,8 +112,6 @@ def peelCallCore (cfgLemN bindCfgLemN bindLemN : Name) (h : Term)
   -- check it cannot discharge rather than failing over. With a *concrete*
   -- valuation the plain path already works, and taking this one instead
   -- changes which `argVals` gets picked -- hence the gate.
-  -- v4.34: the `bind` around the call carries the lifted `Cfg`'s `Γout`/`sigs`; reduce them
-  -- or the target is not type-correct at `implicit` transparency and no `rw` matches.
   evalTactic (← `(tactic| reduce_cfg_indices))
   let byRef ← callArgsAreOfHVector h
   unless !byRef || !isBind do

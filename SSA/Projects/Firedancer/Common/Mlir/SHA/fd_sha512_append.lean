@@ -83,7 +83,7 @@ def fd_sha512_append_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_sha512_append : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_sha512_append : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_sha512_append_region with
     @fd_memcpy := fd_memcpy,
     @fd_sha512_core_ref := fd_sha512_core_ref]

@@ -152,7 +152,7 @@ def fd_curve25519_scalar_wnaf_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_curve25519_scalar_wnaf :
+sllvm_cfg_def fd_curve25519_scalar_wnaf :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fd_curve25519_scalar_wnaf_region with
     @fd_int_min := fd_int_min]

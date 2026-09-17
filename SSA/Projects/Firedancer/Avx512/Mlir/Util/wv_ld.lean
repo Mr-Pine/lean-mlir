@@ -15,7 +15,7 @@ def wv_ld_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def wv_ld : Cfg (Ctxt.ofList [SLLVM.Ty.ptr])
+sllvm_cfg_def wv_ld : Cfg (Ctxt.ofList [SLLVM.Ty.ptr])
     [SLLVM.Ty.arith (.vector 4 (.bitvec (.concrete 64)))] :=
   [sllvm_cfg_of| wv_ld_region]
 

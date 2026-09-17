@@ -51,7 +51,7 @@ def fd_r43x6_repsqr_mul2_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_r43x6_repsqr_mul2 :
+sllvm_cfg_def fd_r43x6_repsqr_mul2 :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64))), SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64))), SLLVM.Ty.ptr, SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64))), SLLVM.Ty.arith (.vector 8 (.bitvec (.concrete 64))),
       SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fd_r43x6_repsqr_mul2_region with

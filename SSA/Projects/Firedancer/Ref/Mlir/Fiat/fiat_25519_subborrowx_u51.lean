@@ -26,7 +26,7 @@ def fiat_25519_subborrowx_u51_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_subborrowx_u51 :
+sllvm_cfg_def fiat_25519_subborrowx_u51 :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 8, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_subborrowx_u51_region]
 

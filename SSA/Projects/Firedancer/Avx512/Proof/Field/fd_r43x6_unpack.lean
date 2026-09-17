@@ -136,7 +136,8 @@ theorem denote_fd_r43x6_unpack (u : Vector (BitVec 64) 4) :
     interval_cases j <;>
       (simp [InstCombine.binaryDenote, LLVM.lshr, LLVM.lshr?, LLVM.and, LLVM.and?,
          LLVM.Ty.dense, Vector.getElem_map]
-       simp only [v10lanes, unpackVec, wvBV, ub, Vector.getElem_mk]
+       simp only [v10lanes, unpackVec, wvBV, ub, Vector.getElem_mk, List.getElem_toArray,
+         List.getElem_cons_zero, List.getElem_cons_succ]
        bv_decide)
   subst v12Value
   simp_denote_only

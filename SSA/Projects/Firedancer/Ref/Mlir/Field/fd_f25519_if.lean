@@ -14,7 +14,7 @@ def fd_f25519_if_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_if : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 32, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_f25519_if : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 32, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_f25519_if_region with
     @fiat_25519_selectznz := fiat_25519_selectznz]
 

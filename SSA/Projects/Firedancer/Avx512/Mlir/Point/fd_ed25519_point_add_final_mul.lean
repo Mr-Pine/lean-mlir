@@ -16,7 +16,7 @@ def fd_ed25519_point_add_final_mul_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_add_final_mul :
+sllvm_cfg_def fd_ed25519_point_add_final_mul :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr])
       [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_ed25519_point_add_final_mul_region with

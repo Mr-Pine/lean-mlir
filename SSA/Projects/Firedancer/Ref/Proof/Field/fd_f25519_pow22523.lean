@@ -511,13 +511,15 @@ private lemma loop_run {γt γb γc exit self : Nat}
       peel_call hcall with Ctxt.Valuation.cons_succ, hVt
       denote_step_all w 3
       denote_eval w 2 3
-      -- v4.34: simp leaves the `liftEffect`/`cast` wrapper; `change` sees through it
-      simp [LLVM.add, LLVM.add?, hV1, h, h'] at hw2
+      have hlast : (PoisonOr.value (BitVec.ofInt 32 (1 + (k : Int))) ::ᵥ V)
+          (Ctxt.Var.last fd_f25519_pow22523.Γout (Ty.bitvec 32)) = .value (BitVec.ofInt 32 (1 + k)) :=
+        rfl
+      simp [Expr.toPure, HVector.get, LLVM.add, LLVM.add?, hlast, hV1, h, h'] at hw2
+      -- `simp` leaves the `liftEffect`/`cast` wrapper; `change` sees through it
       change w2 = .value (BitVec.ofInt 32 (1 + (k : Int)) + 1#32) at hw2
       subst hw2
-      simp [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hVb] at hw3
-      change w3 = .value (BitVec.ofBool
-        (BitVec.ofInt 32 (1 + (k : Int)) + 1#32 == BitVec.ofNat 32 n)) at hw3
+      set_option backward.isDefEq.respectTransparency false in
+        simp [Expr.toPure, HVector.get, LLVM.icmp, LLVM.icmp?, LLVM.icmp', hVb] at hw3
       subst hw3
       simp only [BlockCom.denote_term, simp_denote, simp_sllvm, apply_ite]
       simp only [exit_cond hk h2 h100]
@@ -608,9 +610,10 @@ private lemma inter_run {γmd γm₀ γm₁ γsd γss γc self next : Nat}
     case run =>
       peel_call hrun₁ with hVmd, hVm₀, hVm₁
       peel_call hrun₂ with hVsd, hVss
-      -- v4.34: `Target.denote_mk` does not match across the `[ptr] ++ _` context; unfold
-      simp only [BlockCom.denote_term, Terminator.denote_br, Target.denote,
-        simp_denote, simp_sllvm, hV1]
+      simp only [BlockCom.denote_term, Terminator.denote_br, Target.denote_mk,
+        simp_denote, simp_sllvm,
+        HVector.reverse_nil, Ctxt.Valuation.ofHVector_nil,
+        Ctxt.Valuation.nil_append, hV1]
       rfl
   obtain ⟨Vout, hrun⟩ := key
   refine ⟨u₂, ?_, h₂⟩
@@ -885,7 +888,7 @@ lemma bb13_run {t₀ t₁ t₂ a o : Pointer} {s₀ : GlobalState}
           = .value ((Vout, .inl [.value o]ₕ), u₄) := by
       -- `^bb13` is used once, so no `loopBody`-style template: reduce
       -- `blocks.get 12` to the literal block in place
-      dsimp only [fd_f25519_pow22523, Blocks.get]
+      denote_reduce_get
       refine ⟨?val, ?run⟩
       case run =>
         peel_call hrun₁ with env.v6, env.v7
@@ -893,8 +896,9 @@ lemma bb13_run {t₀ t₁ t₂ a o : Pointer} {s₀ : GlobalState}
         peel_call hrun₃ with env.v6
         peel_call hrun₄ with env.v6, env.va, env.vo
         simp only [BlockCom.denote_var, BlockCom.denote_term, Terminator.denote_ret,
-          simp_denote, simp_sllvm, HVector.map, env.vo]
-        rfl
+          simp_denote, simp_sllvm, HVector.map]
+        -- the returned lookup is `V`'s `%o` slot up to defeq
+        exact congrArg (fun x => ((_, Sum.inl (x ::ₕ HVector.nil)), u₄)) env.vo
     obtain ⟨Vout, hrun⟩ := key
     rw [Blocks.run_step (t := seg 12)]
     dsimp only

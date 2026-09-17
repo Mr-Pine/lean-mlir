@@ -18,7 +18,7 @@ def fd_memset_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_memset : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_memset : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_memset_region]
 
 end Firedancer.Common

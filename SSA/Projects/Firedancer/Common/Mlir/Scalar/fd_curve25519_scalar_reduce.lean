@@ -507,7 +507,7 @@ def fd_curve25519_scalar_reduce_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_curve25519_scalar_reduce : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_curve25519_scalar_reduce : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_curve25519_scalar_reduce_region with
     @fd_ulong_load_8 := fd_ulong_load_8]
 

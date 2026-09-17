@@ -143,7 +143,7 @@ def fd_curve25519_into_precomputed_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_curve25519_into_precomputed : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fd_curve25519_into_precomputed : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fd_curve25519_into_precomputed_region with
     @fd_r43x6_quad_mul_fast := fd_r43x6_quad_mul_fast]
 

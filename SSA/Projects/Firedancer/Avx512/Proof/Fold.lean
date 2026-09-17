@@ -376,12 +376,12 @@ def foldSignedLimb (x : Fin 6 → ℤ) : Fin 6 → ℤ :=
 overflow times `p`** -- `decodeNat_foldLimb_add` over `ℤ`. -/
 theorem decodeNat_acpLimb_add (x : Fin 6 → ℤ) :
     decodeNat (acpLimb x) + (p : ℤ) * (x 5 / 2 ^ 40) = decodeNat x := by
-  have d0 := Int.ediv_add_emod (x 0) (2 ^ 43)
-  have d1 := Int.ediv_add_emod (x 1) (2 ^ 43)
-  have d2 := Int.ediv_add_emod (x 2) (2 ^ 43)
-  have d3 := Int.ediv_add_emod (x 3) (2 ^ 43)
-  have d4 := Int.ediv_add_emod (x 4) (2 ^ 43)
-  have d5 := Int.ediv_add_emod (x 5) (2 ^ 40)
+  have d0 := Int.mul_ediv_add_emod (x 0) (2 ^ 43)
+  have d1 := Int.mul_ediv_add_emod (x 1) (2 ^ 43)
+  have d2 := Int.mul_ediv_add_emod (x 2) (2 ^ 43)
+  have d3 := Int.mul_ediv_add_emod (x 3) (2 ^ 43)
+  have d4 := Int.mul_ediv_add_emod (x 4) (2 ^ 43)
+  have d5 := Int.mul_ediv_add_emod (x 5) (2 ^ 40)
   simp only [decodeNat_eq, acpLimb, p]
   push_cast
   omega

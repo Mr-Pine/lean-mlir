@@ -117,7 +117,7 @@ def fiat_25519_carry_square_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_carry_square : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_carry_square : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_carry_square_region]
 
 end Firedancer.Ref

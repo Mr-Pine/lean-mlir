@@ -164,15 +164,10 @@ theorem BlockCom.denote_var_pureOp_single {Γ Γout : Ctxt SLLVM.Ty} {t rets suc
     exact Ctxt.Valuation.cons_nil_append ..
 
 open Lean Meta Elab Tactic in
-/-- v4.34: reduce a lifted program's `Cfg.Γout`/`Cfg.sigs` in the goal.
-
-`Cfg.denote` unfolds to `cfg.entry.denote V >>= k`, where the `bind`'s type argument is
-written `cfg.Γout.Valuation × (… ⊕ SuccArgs cfg.sigs)`. Once `simp` has replaced
-`cfg.entry` by the literal block -- which it does without touching that type argument --
-the application is only type-correct up to delta on the lifted `def`, so at `implicit`
-transparency it is ill-typed and `rw` finds no occurrence of any pattern through it. This
-reduces exactly those two projections and leaves `cfg.blocks` folded, which is what keeps
-the goal small. -/
+/-- Puts the goal's lifted program in the form the peeling tactics match: unfolds the
+`X.cfgEntry`/`X.cfgBlock_i` constants `sllvm_cfg_def` names (one block each), and reduces
+`Cfg.Γout`/`Cfg.sigs`, which the `bind` after `Cfg.denote` carries in its type and which at
+`implicit` transparency would otherwise leave the goal ill-typed. `cfg.blocks` stays folded. -/
 elab "reduce_cfg_indices" : tactic => do
   liftMetaTactic1 fun g => do
       let ty ← instantiateMVars (← g.getType)
@@ -189,6 +184,14 @@ elab "reduce_cfg_indices" : tactic => do
             return .continue)
       let keep ← folded.get
       let hit ← IO.mkRef false
+      -- a block `sllvm_cfg_def` named: unfold it, it is one block
+      let ty ← Meta.transform ty (post := fun e => do
+        let .const n us := e | return .continue
+        let .str _ s := n | return .continue
+        unless s == "cfgEntry" || s.startsWith "cfgBlock_" do return .continue
+        let some v := (← getEnv).find? n >>= (·.value?) | return .continue
+        hit.set true
+        return .done (v.instantiateLevelParams (← getConstInfo n).levelParams us))
       let ty' ←
         Meta.transform ty (post := fun e => do
             if e.getAppNumArgs == 3 then
@@ -555,6 +558,19 @@ attribute [simp_spine] HVector.map HVector.reverse_nil HVector.reverse_cons HVec
 attribute [simp_spine↓] SSA.simpValuationApply
 
 open Lean Meta in
+/-- The `Subtype` behind `Ctxt.Var Γ t` for `S : Γ.Valuation`, with `Γ` kept as written: a full
+`whnfD` would unfold a lifted program's `Γout` too, and the rebuilt variable would then no longer
+match hypotheses stated over it. -/
+def varSubtype (S t : Expr) : MetaM (Option (Expr × Expr × List Level)) := do
+  let SVal ← whnfR (← instantiateMVars (← inferType S))
+  let_expr Ctxt.Valuation Ty _inst Γ := SVal | return none
+  let varTy := mkApp3 (.const ``Ctxt.Var SVal.getAppFn.constLevels!) Ty Γ t
+  let some varTy ← unfoldDefinition? varTy | return none
+  let varTy ← whnfCore varTy
+  let_expr Subtype α p := varTy | return none
+  return some (α, p, varTy.getAppFn.constLevels!)
+
+open Lean Meta in
 /-- The elements of a vector that reduces to a literal one (`HVector.nil.reverse` included).
 Bounded: a long operand vector is not a literal spine, and unfolding it is deep. -/
 private partial def vecElems (fuel : Nat) (xs : Expr) (elems : Array Expr) :
@@ -630,10 +646,8 @@ private def spineLookup (e : Expr) : MetaM (Option Expr) := do
   let idx ← match k? with
     | none => pure (mkNatLit m)
     | some k => if m == 0 then pure k else mkAppM ``HAdd.hAdd #[k, mkNatLit m]
-  let .forallE _ _ body _ ← whnfD (← inferType S) | return none
-  let varTy ← whnfD (body.instantiate1 t).bindingDomain!
-  let_expr Subtype α p := varTy | return none
-  let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p idx h
+  let some (α, p, lvls) ← varSubtype S t | return none
+  let v' := mkApp4 (.const ``Subtype.mk lvls) α p idx h
   -- defeq by `cons`' and `appendCases`' reductions; the kernel checks it
   return some (mkApp2 S t v')
 
@@ -874,10 +888,8 @@ private def operandValue (V var t : Lean.Expr) : MetaM (Option Lean.Expr) := do
         | Ctxt.Valuation.cons _ _ _ _ x _ => some x
         | _ => none) then
       return some x
-  let .forallE _ _ body _ ← whnfD (← inferType W) | return none
-  let varTy ← whnfD (body.instantiate1 t).bindingDomain!
-  let_expr Subtype α p := varTy | return none
-  let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p (mkNatLit (n - k)) h
+  let some (α, p, lvls) ← LeanMLIR.SLLVM.varSubtype W t | return none
+  let v' := mkApp4 (.const ``Subtype.mk lvls) α p (mkNatLit (n - k)) h
   return some (mkApp2 W t v')
 
 open Lean Meta in
@@ -1385,12 +1397,15 @@ elab "denote_reduce_get" : tactic => do
   let goal ← getMainGoal
   let goal ←
     goal.withContext do
-        let tgt ← instantiateMVars (← goal.getType)
-        let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)
-          | throwError "denote_reduce_get: no `Blocks.get` in the goal"
-        let reduced ← whnf getApp
-        let tgt' := tgt.replace fun e => if e == getApp then some reduced else none
-        goal.replaceTargetDefEq tgt'
+        let mut tgt ← instantiateMVars (← goal.getType)
+        unless (tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get)).isSome do
+          throwError "denote_reduce_get: no `Blocks.get` in the goal"
+        -- every lookup: the block's valuation type carries its own copy of it
+        while let some getApp := tgt.find? (·.isAppOf ``LeanMLIR.SLLVM.Blocks.get) do
+          let reduced ← whnf getApp
+          if reduced == getApp then break
+          tgt := tgt.replace fun e => if e == getApp then some reduced else none
+        goal.replaceTargetDefEq tgt
   replaceMainGoal [goal]
   evalTactic (← `(tactic| dsimp only))
 
@@ -1403,41 +1418,7 @@ elab "denote_enter_block" : tactic => do
         Resolve the terminator first, so the target is a concrete `SuccArgs`."
   replaceMainGoal [g]
   evalTactic (← `(tactic| denote_reduce_get))
-
-open Lean Meta Elab Tactic in
-/-- `blk.denote (ofHVector args ++ V)`, as `denote_enter_block` leaves it, to `blk.denote
-(a₀ ::ᵥ … ::ᵥ V)` indexed by `blk`'s own context. v4.34: the original is ill-typed at `implicit`
-transparency (`List.reverse` in the index), so no `simp` lemma matches it. -/
-elab "block_args_as_cons" : tactic => liftMetaTactic1 fun g => g.withContext do
-  let ty ← instantiateMVars (← g.getType)
-  let ty' ← Meta.transform ty (post := fun e => do
-    unless e.isAppOfArity ``LeanMLIR.SLLVM.BlockCom.denote 6 do return .continue
-    let args := e.getAppArgs
-    let V := args[5]!
-    unless V.isAppOfArity ``HAppend.hAppend 6 do return .continue
-    let A := V.getAppArgs[4]!; let W := V.getAppArgs[5]!
-    let_expr Ctxt.Valuation.ofHVector _ _ _ xs := A | return .continue
-    let Γ := (← whnfR (← inferType args[4]!)).getAppArgs[0]!
-    if Γ == args[0]! then return .continue
-    -- `ofHVector (x ::ₕ xs) = x ::ᵥ ofHVector xs`: rebuild the arguments as a `cons` chain
-    let some Wty := (← whnfR (← inferType W)).getAppArgs[2]? | return .continue
-    let rec elems (fuel : Nat) (xs : Expr) : MetaM (Option (List (Expr × Expr))) := do
-      let fuel + 1 := fuel | return none
-      match_expr ← whnfD xs with
-      | HVector.nil _ _ => return some []
-      | HVector.cons _ _ _ a x xs => return (← elems fuel xs).map ((a, x) :: ·)
-      | _ => return none
-    let some es ← elems 32 xs | return .continue
-    let consC := Expr.const ``Ctxt.Valuation.cons A.getAppFn.constLevels!
-    let TyE := A.getAppArgs[0]!; let inst := A.getAppArgs[1]!
-    let mut V' := W; let mut Γc := Wty
-    for (a, x) in es.reverse do
-      V' := mkAppN consC #[TyE, inst, Γc, a, x, V']
-      Γc := mkAppN (.const ``Ctxt.cons A.getAppFn.constLevels!) #[TyE, a, Γc]
-    return .done (mkAppN e.getAppFn (args.set! 0 Γ |>.set! 5 V')))
-  if ty' == ty then return g
-  g.change ty' (checkDefEq := false)
-
+  evalTactic (← `(tactic| reduce_list_lits))
 
 open Lean Meta Elab Tactic in
 /-- `denote_expose` unfolds the goal's program to its first instruction without

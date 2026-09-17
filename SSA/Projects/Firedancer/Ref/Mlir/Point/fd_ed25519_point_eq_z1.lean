@@ -31,7 +31,7 @@ def fd_ed25519_point_eq_z1_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_eq_z1 : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_ed25519_point_eq_z1 : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_point_eq_z1_region with
     @fd_f25519_mul := fd_f25519_mul,
     @fd_f25519_eq := fd_f25519_eq]

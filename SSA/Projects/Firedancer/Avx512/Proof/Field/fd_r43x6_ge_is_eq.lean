@@ -181,9 +181,9 @@ private theorem extractLimbs_subFastVecOfLimbs {x y : Fin 6 → ℕ}
   have hi := hs i
   have : R43x6.FitsLong (subFast x y i) := by
     simp only [R43x6.FitsLong]; omega
+  have h := toInt_ofInt this
   fin_cases i <;>
-    simpa [R43x6.extractLimbs, LimbRepresentations.toInts, subFastVecOfLimbs] using
-      toInt_ofInt this
+    simp [R43x6.extractLimbs, LimbRepresentations.toInts, subFastVecOfLimbs] at h ⊢ <;> exact h
 
 /-- The difference vector is `s62`, as the C comments claim. -/
 private theorem s62_subFastVecOfLimbs {x y : Fin 6 → ℕ}
@@ -387,7 +387,7 @@ theorem run_fd_r43x6_ge_is_eq (x y : Quad) (hx : x.U46) (hy : y.U46)
     rw [MemoryState.writeVec, MemoryState.writeVec]; exact fits_splice (fits_splice hfit2)
 
   refine (SLLVM.run_denote_var_zero (s' := state_after) ?_).trans ?_
-  · rw [SLLVM.denoteOp_call_impure]
+  · -- `denoteOp_call_impure` is `rfl`, but `rw` finds no occurrence at `implicit` transparency
     change StateT.run (SLLVM.runFunction (fd_r43x6_quad_mul_fast.denote (quadDualValMem
           (.value ⟨⟨mem_slot_1⟩, 0⟩) (.value ⟨⟨mem_slot_2⟩, 0⟩) (.value ⟨⟨mem_slot_3⟩, 0⟩)
           XShuff YShuff))) _ = _

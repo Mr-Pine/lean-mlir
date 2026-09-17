@@ -18,7 +18,7 @@ def fd_f25519_mul3_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_mul3 :
+sllvm_cfg_def fd_f25519_mul3 :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr])
       [] :=
   [sllvm_cfg_of| fd_f25519_mul3_region with

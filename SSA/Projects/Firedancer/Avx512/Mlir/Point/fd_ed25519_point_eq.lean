@@ -24,7 +24,7 @@ def fd_ed25519_point_eq_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_eq : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_ed25519_point_eq : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_point_eq_region with
     @fd_r43x6_ge_is_eq := fd_r43x6_ge_is_eq]
 

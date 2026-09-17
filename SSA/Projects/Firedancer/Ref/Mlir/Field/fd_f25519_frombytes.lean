@@ -16,7 +16,7 @@ def fd_f25519_frombytes_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_frombytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_f25519_frombytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_f25519_frombytes_region with
     @fiat_25519_from_bytes := fiat_25519_from_bytes]
 

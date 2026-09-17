@@ -36,7 +36,7 @@ def fd_f25519_sub_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_f25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_f25519_sub_region]
 
 end Firedancer.Avx512

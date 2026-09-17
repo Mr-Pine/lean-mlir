@@ -49,7 +49,7 @@ def fd_curve25519_scalar_validate_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_curve25519_scalar_validate : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_curve25519_scalar_validate : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_curve25519_scalar_validate_region with
     @fd_ulong_load_8 := fd_ulong_load_8]
 

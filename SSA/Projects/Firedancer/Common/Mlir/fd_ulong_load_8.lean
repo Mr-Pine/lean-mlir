@@ -15,7 +15,7 @@ def fd_ulong_load_8_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ulong_load_8 : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 64] :=
+sllvm_cfg_def fd_ulong_load_8 : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 64] :=
   [sllvm_cfg_of| fd_ulong_load_8_region]
 
 end Firedancer.Common

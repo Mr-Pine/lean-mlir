@@ -52,7 +52,7 @@ def fd_ed25519_point_frombytes_2x_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxHeartbeats 1000000 in
-def fd_ed25519_point_frombytes_2x :
+sllvm_cfg_def fd_ed25519_point_frombytes_2x :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr])
       [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_point_frombytes_2x_region with

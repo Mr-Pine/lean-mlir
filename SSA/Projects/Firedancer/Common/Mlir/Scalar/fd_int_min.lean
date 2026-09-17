@@ -16,7 +16,7 @@ def fd_int_min_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_int_min : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_int_min : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_int_min_region]
 
 end Firedancer.Common

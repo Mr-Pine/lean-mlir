@@ -88,7 +88,6 @@ theorem fd_ed25519_point_is_zero_conforms (p: Pointer) (s: GlobalState)
     simp [LLVM.and, LLVM.and?] at hv7
     subst hv7
 
-    reduce_cfg_indices
     simp [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm]
 
     let P := readPoint hp

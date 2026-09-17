@@ -24,7 +24,7 @@ def fd_f25519_abs_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_abs : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_f25519_abs : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_f25519_abs_region with
     @fd_f25519_neg := fd_f25519_neg,
     @fd_f25519_sgn := fd_f25519_sgn,

@@ -123,10 +123,8 @@ elab "discharge_bad_case " i:num ", " target:num ", " caseH:ident ", " hlz:ident
   evalTactic (← `(tactic| clear e))
   evalTactic (← `(tactic| (
     denote_enter_block
-    block_args_as_cons
     simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
     denote_enter_block
-    block_args_as_cons
     simp only [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm]
     simp [Ctxt.Valuation.singleton, simp_sllvm]
   )))
@@ -217,23 +215,18 @@ theorem fd_f25519_is_zero_conforms' (p: Pointer) (s: GlobalState)
       simp [e0]
 
       denote_enter_block
-      block_args_as_cons
       discharge_bad 1@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      block_args_as_cons
       discharge_bad 2@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      block_args_as_cons
       discharge_bad 3@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      block_args_as_cons
       discharge_bad 4@0 with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
       denote_enter_block
-      block_args_as_cons
       simp only [BlockCom.denote_term, Terminator.denote_ret,
         Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
       simp [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append,
@@ -253,23 +246,18 @@ theorem fd_f25519_is_zero_conforms' (p: Pointer) (s: GlobalState)
         simp [e0, e1]
 
         denote_enter_block
-        block_args_as_cons
         discharge_bad 1@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        block_args_as_cons
         discharge_bad 2@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        block_args_as_cons
         discharge_bad 3@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        block_args_as_cons
         discharge_bad 4@0x7ffffffffffff with p, hp, s, hlimb and limb₀, hl₀, hread₀
 
         denote_enter_block
-        block_args_as_cons
         simp only [BlockCom.denote_term, Terminator.denote_ret,
           Ctxt.Valuation.singleton, simp_denote, simp_sllvm]
         simp [Ctxt.Valuation.ofHVector_cons, Ctxt.Valuation.cons_append, Ctxt.Valuation.nil_append,
@@ -283,10 +271,8 @@ theorem fd_f25519_is_zero_conforms' (p: Pointer) (s: GlobalState)
       case neg =>
         simp [Ne.symm hl₀, Ne.symm hl₀']
         denote_enter_block
-        block_args_as_cons
         simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
         denote_enter_block
-        block_args_as_cons
         simp only [BlockCom.denote_term, Terminator.denote_ret, simp_denote, simp_sllvm]
         simp [Ctxt.Valuation.singleton, simp_sllvm]
         -- Either pattern would force limb 0 to a value the switch already ruled

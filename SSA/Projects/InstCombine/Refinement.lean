@@ -28,3 +28,11 @@ def refinement : (t u : LLVM.Ty) → HRefinement (TyDenote.toType t) (TyDenote.t
 @[simp, simp_denote]
 instance instRefinement : DialectHRefinement LLVM LLVM where
   IsRefinedBy := @fun t u => refinement t u
+
+/-- v4.34 wraps `inferInstanceAs` in an auxiliary def, so `LLVM.IntW.isRefinedBy_iff`
+no longer matches `refinement (bitvec w) (bitvec w')`; this bridges the two. -/
+@[simp, simp_llvm, simp_denote]
+theorem refinement_bitvec_iff {w w' : Nat} (x : LLVM.IntW w) (y : LLVM.IntW w') :
+    @HRefinement.IsRefinedBy (LLVM.IntW w) (LLVM.IntW w') (refinement (bitvec w) (bitvec w')) x y ↔
+      @HRefinement.IsRefinedBy (LLVM.IntW w) (LLVM.IntW w') LLVM.IntW.instRefinement x y :=
+  Iff.rfl

@@ -22,7 +22,7 @@ def fd_ed25519_point_from_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_from :
+sllvm_cfg_def fd_ed25519_point_from :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr])
       [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_ed25519_point_from_region with

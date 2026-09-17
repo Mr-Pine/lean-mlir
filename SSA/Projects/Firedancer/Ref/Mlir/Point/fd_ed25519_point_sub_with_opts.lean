@@ -106,7 +106,7 @@ def fd_ed25519_point_sub_with_opts_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_sub_with_opts :
+sllvm_cfg_def fd_ed25519_point_sub_with_opts :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32,
       SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_ed25519_point_sub_with_opts_region with

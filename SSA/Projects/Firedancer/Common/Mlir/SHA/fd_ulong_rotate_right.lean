@@ -18,7 +18,7 @@ def fd_ulong_rotate_right_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_ulong_rotate_right : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]) [SLLVM.Ty.bitvec 64] :=
+sllvm_cfg_def fd_ulong_rotate_right : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]) [SLLVM.Ty.bitvec 64] :=
   [sllvm_cfg_of| fd_ulong_rotate_right_region]
 
 end Firedancer.Common

@@ -349,12 +349,6 @@ theorem fd_ed25519_point_frombytes_2x_conforms (r₁ buf₁ r₂ buf₂ : Pointe
     fun _ => hn₁
   have hg₂ : ∀ o : BitVec 64, (r₂.withOffset o).id.id < s.alloc.nextFreeBlock :=
     fun _ => hn₂
-  -- the two field offsets as naturals. `remainingFits` states the space it
-  -- leaves as `n - o.toNat * 8`, and neither `norm_num` nor `omega` evaluates
-  -- `BitVec.toNat` of a literal -- `is_zero` carries the same two `rfl`s.
-  have h64 : (64 : BitVec 64).toNat = 64 := rfl
-  have h128 : (128 : BitVec 64).toNat = 128 := rfl
-
   have hs1 : readVec? (slotPtr s 1) n₁.mem = some va14 :=
     readVec?_thru' slots hm₁ hn₁ hb1
   have hs2 : readVec? (slotPtr s 2) n₂.mem = some va25 :=
@@ -413,15 +407,13 @@ theorem fd_ed25519_point_frombytes_2x_conforms (r₁ buf₁ r₂ buf₂ : Pointe
     peel_load_vec va03, (slotPtr s 0), (hfw 0 (by norm_num)), (readVec_eq_of hb0), w
     peel_store va03, r₁, hq₁, w as n₁ := hn₁'
     peel_load_vec va14, (slotPtr s 1), hp1, (readVec_eq_of hs1), n₁
-    -- `peel_gep` leaves the size as `remainingFits` states it, `n - o.toNat *
-    -- 8`; `peel_store`'s own `Fits.mono … (by omega)` cannot evaluate the
-    -- `BitVec.toNat`, so each field's `Fits` is cut down to a literal here.
+    -- `peel_gep` leaves the field's size as a literal; each `Fits` is cut down to 512 here.
     peel_gep 64 with r₁, hf₁₁, n₁ as r₁f1
-    have hs₁f1 : Fits n₁.mem r₁f1 512 := Fits.mono hr₁f1 (by simp only [h64]; omega)
+    have hs₁f1 : Fits n₁.mem r₁f1 512 := Fits.mono hr₁f1 (by omega)
     peel_store va14, r₁f1, hs₁f1, n₁ as n₂ := hn₂'
     peel_load_vec va25, (slotPtr s 2), hp2, (readVec_eq_of hs2), n₂
     peel_gep 128 with r₁, hf₁₂, n₂ as r₁f2
-    have hs₁f2 : Fits n₂.mem r₁f2 512 := Fits.mono hr₁f2 (by simp only [h128]; omega)
+    have hs₁f2 : Fits n₂.mem r₁f2 512 := Fits.mono hr₁f2 (by omega)
     peel_store va25, r₁f2, hs₁f2, n₂ as n₃ := hn₃'
 
     -- `r₂`, the same three steps one state along
@@ -429,11 +421,11 @@ theorem fd_ed25519_point_frombytes_2x_conforms (r₁ buf₁ r₂ buf₂ : Pointe
     peel_store vb03, r₂, hf₂₃, n₃ as n₄ := hn₄'
     peel_load_vec vb14, (slotPtr s 4), hp4, (readVec_eq_of hs4), n₄
     peel_gep 64 with r₂, hf₂₄, n₄ as r₂f1
-    have hs₂f1 : Fits n₄.mem r₂f1 512 := Fits.mono hr₂f1 (by simp only [h64]; omega)
+    have hs₂f1 : Fits n₄.mem r₂f1 512 := Fits.mono hr₂f1 (by omega)
     peel_store vb14, r₂f1, hs₂f1, n₄ as n₅ := hn₅'
     peel_load_vec vb25, (slotPtr s 5), hp5, (readVec_eq_of hs5), n₅
     peel_gep 128 with r₂, hf₂₅, n₅ as r₂f2
-    have hs₂f2 : Fits n₅.mem r₂f2 512 := Fits.mono hr₂f2 (by simp only [h128]; omega)
+    have hs₂f2 : Fits n₅.mem r₂f2 512 := Fits.mono hr₂f2 (by omega)
     peel_store vb25, r₂f2, hs₂f2, n₅ as n₆ := hn₆'
     iterate 6 peel_lifetime
     simp_return

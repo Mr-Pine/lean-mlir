@@ -44,7 +44,7 @@ def fd_sha512_init_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_sha512_init : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_sha512_init : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_sha512_init_region]
 
 end Firedancer.Common

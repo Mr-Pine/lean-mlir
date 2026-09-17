@@ -53,7 +53,7 @@ def fiat_25519_sub_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_sub_region]
 
 end Firedancer.Ref

@@ -72,7 +72,6 @@ theorem run_fail₂ (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ 
   simp only [hv5, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
-  reduce_list_lits
   peel_call hrun₂
   -- the stepper counts the entry block's four arguments, so `^bb1`'s
   -- `%6 … %8` are `v10 … v12`
@@ -104,7 +103,6 @@ theorem run_ok (hrun₁ : Ran r₁ buf₁ ret₁ s w₁) (hret₁ : ret₁ = .va
   simp only [hv5, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
-  reduce_list_lits
   peel_call hrun₂
   have hrnull₂ : ¬ (r₂ = (⟨SLLVM.nullBlock, 0#64⟩ : Pointer)) := fun h => hnull₂ (by rw [h])
   denote_step_reduce v 11 [hv3, hret₂]

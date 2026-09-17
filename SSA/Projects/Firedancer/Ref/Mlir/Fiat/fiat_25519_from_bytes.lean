@@ -209,7 +209,7 @@ def fiat_25519_from_bytes_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_from_bytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_from_bytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_from_bytes_region]
 
 end Firedancer.Ref

@@ -795,7 +795,6 @@ theorem scalarReduce_determined : ScalarReduceDetermined := by
     refine name_of ({ u₂ with mem := u₂.mem.splice out24 b3 } : GlobalState) fun u₃ hu₃ => ?_
     rw [hb3]
     -- `peel_store64` spelled out: the macro's own nesting tips this store over `maxRecDepth`
-    reduce_cfg_indices
     rw [BlockCom.run_bind_denote_var_of_nil (s' := u₃) (by
       rw [denoteOp_store]
       resolve_deep_lookups

@@ -28,7 +28,7 @@ def fd_ed25519_point_frombytes_2x_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_frombytes_2x :
+sllvm_cfg_def fd_ed25519_point_frombytes_2x :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_point_frombytes_2x_region with
     @fd_ed25519_point_frombytes := fd_ed25519_point_frombytes]

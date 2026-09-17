@@ -75,7 +75,7 @@ def fd_f25519_sqrt_ratio_region : MLIR.AST.Region 0 := [mlir_region|
 -- conformance theorem (`fd_f25519_sqrtm1_init` says what that is).
 -- Returns `i32`, not a pointer: the artifact's `llvm.return` hands back the
 -- `or` of the two `fd_f25519_eq` results, i.e. whether a root exists.
-def fd_f25519_sqrt_ratio :
+sllvm_cfg_def fd_f25519_sqrt_ratio :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_f25519_sqrt_ratio_region with
     @fd_f25519_sqr := fd_f25519_sqr,

@@ -24,7 +24,7 @@ def fd_f25519_sgn_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_sgn : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_f25519_sgn : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_f25519_sgn_region with
     @fd_f25519_tobytes := fd_f25519_tobytes]
 

@@ -415,7 +415,6 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
 
   simp only [hv20, BlockCom.denote_term, Terminator.denote_condBr, simp_denote, simp_sllvm, hret, hS₁₂, hbuf₄]
   denote_enter_block
-  reduce_list_lits
 
   -- `^bb3`: both decoded, `s₆` holding `A` at `Aprime` and `R` at `R`
   have hRpAp : Rp.id ≠ Ap.id := by rw [hRpdef, hApdef]; simp [hctr₁]
@@ -466,7 +465,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     simp [hlowA] at hv19 <;>
     simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote,
       simp_sllvm] <;>
-    denote_enter_block <;> reduce_list_lits
+    denote_enter_block
   · -- `^bb6(-2)`: `A` has small order
     iterate 2 peel_lifetime
     simp_return
@@ -509,7 +508,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     simp [hlowR] at hv21 <;>
     simp only [hv21, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote,
       simp_sllvm] <;>
-    denote_enter_block <;> reduce_list_lits
+    denote_enter_block
   · -- `^bb6(-1)`: `R` has small order
     iterate 2 peel_lifetime
     simp_return

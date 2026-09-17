@@ -31,9 +31,6 @@ the two sign branches share, and is where the `x = 0` case -- RFC 8032 admits
 
 namespace Firedancer.Ref
 
--- v4.34: the literal blocks a walk enters are indexed by `Γout` unfolded
-set_option allowUnsafeReducibility true in
-attribute [local implicit_reducible] fd_ed25519_point_frombytes
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -831,7 +828,6 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
     simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
       simp_denote, simp_sllvm]
     denote_enter_block
-    reduce_list_lits
     iterate 5 peel_lifetime
     simp_return
     simp [hv5, hreturnValue]
@@ -845,7 +841,6 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
-  reduce_list_lits
 
   have isSquare : IsSquare (u / v) :=
     (isSquare_div_iff (denom_ne_zero y)).mpr squareness

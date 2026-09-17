@@ -18,7 +18,7 @@ def fd_f25519_sub_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
+sllvm_cfg_def fd_f25519_sub : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_f25519_sub_region with
     @fiat_25519_sub := fiat_25519_sub_region,
     @fiat_25519_carry := fiat_25519_carry_region

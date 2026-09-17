@@ -344,7 +344,7 @@ def fd_ed25519_point_dbln_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_point_dbln :
+sllvm_cfg_def fd_ed25519_point_dbln :
     Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32, SLLVM.Ty.ptr, SLLVM.Ty.ptr])
       [SLLVM.Ty.ptr] :=
   [sllvm_cfg_of| fd_ed25519_point_dbln_region with

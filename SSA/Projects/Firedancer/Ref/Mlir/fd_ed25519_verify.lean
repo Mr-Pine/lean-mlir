@@ -79,7 +79,7 @@ def fd_ed25519_verify_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_verify :
+sllvm_cfg_def fd_ed25519_verify :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr])
       [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_verify_region with

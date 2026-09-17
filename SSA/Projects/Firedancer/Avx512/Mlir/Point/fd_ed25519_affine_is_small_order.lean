@@ -40,7 +40,7 @@ def fd_ed25519_affine_is_small_order_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_ed25519_affine_is_small_order :
+sllvm_cfg_def fd_ed25519_affine_is_small_order :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_ed25519_affine_is_small_order_region with
     @fd_ed25519_point_to := fd_ed25519_point_to,

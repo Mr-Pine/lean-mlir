@@ -177,7 +177,7 @@ def fd_sha512_core_ref_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 100000 in
-def fd_sha512_core_ref : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fd_sha512_core_ref : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fd_sha512_core_ref_region with
     @fd_ulong_bswap := fd_ulong_bswap,
     @fd_ulong_rotate_right := fd_ulong_rotate_right]

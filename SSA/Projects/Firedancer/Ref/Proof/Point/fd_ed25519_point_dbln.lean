@@ -381,7 +381,8 @@ theorem loop_step {s : GlobalState} {r a t : Pointer} {n : BitVec 32} {P : Point
           rw [hv₂, hv₁, inv.val, Function.iterate_succ_apply']; rfl
         bX := bX₂, bY := bY₂, bZ := bZ₂, bT := bT₂ }
   case run =>
-    dsimp only [hdr, fd_ed25519_point_dbln, Blocks.get]
+    dsimp only [hdr]
+    denote_reduce_get
     peel_call hrun₁
     peel_call hrun₂
     denote_step_all w
@@ -539,7 +540,7 @@ theorem fd_ed25519_point_dbln_conforms (r a : Pointer) (n : BitVec 32) (s : Glob
                 Dbln.entryVal r a t n))
             uK =
           .value ((Vout, .inl [.value r]ₕ), uf) := by
-      dsimp only [fd_ed25519_point_dbln, Blocks.get]
+      denote_reduce_get
       refine ⟨?val, ?run⟩
       case run =>
         peel_call hrunf

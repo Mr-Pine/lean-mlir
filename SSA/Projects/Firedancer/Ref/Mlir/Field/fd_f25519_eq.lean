@@ -22,7 +22,7 @@ def fd_f25519_eq_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fd_f25519_eq : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
+sllvm_cfg_def fd_f25519_eq : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_f25519_eq_region with
     @fd_f25519_sub := fd_f25519_sub_region,
     @fiat_25519_sub := fiat_25519_sub_region,

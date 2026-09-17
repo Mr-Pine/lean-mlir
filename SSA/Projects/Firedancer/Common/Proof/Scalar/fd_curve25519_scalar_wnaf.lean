@@ -1110,7 +1110,7 @@ theorem step_bb23 {u : GlobalState} {w : BitVec 4096} (hu : u ≈ Sw s slides w)
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 22 rfl).2.denote
       (Ctxt.Valuation.ofHVector (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv m₀ p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   exact term_ret ⟨fun _ _ => ⟨w, hu, hw, hI⟩, fun _ h => absurd h (by simp)⟩
 
 theorem step_bb1 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides) {u : GlobalState}
@@ -1119,7 +1119,7 @@ theorem step_bb1 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 0 rfl).2.denote
       (Ctxt.Valuation.ofHVector (.nil : HVector (@TyDenote.toType SLLVM.Ty _) ([] : List SLLVM.Ty)).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨0, rfl, .nil⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 19
   denote_step_reduce v 20 [LLVM.const?] fold
   try simp only [simp_spine] at hv19 hv20
@@ -1147,7 +1147,7 @@ theorem step_bb2 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 1 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v64 k]ₕ : HVector toType [SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨1, rfl, [v64 k]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 22
   denote_step_reduce v 25 [LLVM.const?] fold
   simp only [simp_spine, hV.c2, hV.c3, hV.arg1] at hv23 hv24 hv25
@@ -1197,7 +1197,7 @@ theorem step_bb3 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 2 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v64 k, r32 y19]ₕ : HVector toType [SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨2, rfl, [v64 k, r32 y19]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 35
   denote_step_reduce v 35 [LLVM.const?] fold
   simp only [simp_spine, hV.arg0] at hv35
@@ -1229,7 +1229,7 @@ theorem step_bb4 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 3 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y19, v64 k]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨3, rfl, [r32 y19, v64 k]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 38
   denote_step_reduce v 39 [LLVM.const?] fold
   simp only [simp_spine, hV.c6, hV.c17] at hv38 hv39
@@ -1251,7 +1251,7 @@ theorem step_bb5 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 4 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y19, v64 k]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨4, rfl, [r32 y19, v64 k]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 40
   denote_step_reduce v 41 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv40 hv41
@@ -1271,7 +1271,7 @@ theorem step_bb6 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 5 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y19, v32 i]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨5, rfl, [r32 y19, v32 i]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 42
   denote_step_reduce v 45 [LLVM.const?] fold
   simp only [simp_spine, hV.c10, hV.c11, hV.c12] at hv42 hv43 hv44 hv45
@@ -1294,7 +1294,7 @@ theorem step_bb7 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 6 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v32 i, r32 y43, r32 y44, r32 y45]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨6, rfl, [v32 i, r32 y43, r32 y44, r32 y45]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 47
   denote_step_reduce v 47 [LLVM.const?] fold
   simp only [simp_spine, hV.c13] at hv47
@@ -1319,7 +1319,7 @@ theorem step_bb8 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 7 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v32 i]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨7, rfl, [r32 y43, r32 y44, r32 y45, v32 i]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 48
   denote_step_reduce v 49 [LLVM.const?] fold
   try simp only [simp_spine] at hv48 hv49
@@ -1338,7 +1338,7 @@ theorem step_bb9 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slides
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 8 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v32 (j + 2), v64 j, r16 y52, r32 y43, r32 y44, r32 y45, v32 m, v64 m]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨8, rfl, [v32 (j + 2), v64 j, r16 y52, r32 y43, r32 y44, r32 y45, v32 m, v64 m]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 53
   denote_step_reduce v 54 [LLVM.const?] fold
   simp only [simp_spine, hV.c6, hV.arg0] at hv53 hv54
@@ -1375,7 +1375,7 @@ theorem step_bb10 (hs : s.WF) (hV : EntryEnv V slides n bits)
           SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨9, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2), v64 j, r16 y52, v64 (j + 1),
           vp (slotPtr slides (j + 1))]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 57
   denote_step_reduce v 58 [LLVM.const?] fold
   rw [trunc32 (show j + 1 < 2 ^ 32 by omega), sub32 (by omega) (by omega)] at hv58
@@ -1409,7 +1409,7 @@ theorem step_bb11 {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 10 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2), v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r32 y61]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 32]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨10, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2), v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r32 y61]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 63
   denote_step_reduce v 66 [LLVM.const?] fold
   refine term_condBr (by simp only [simp_spine, hv66]; rfl)
@@ -1431,7 +1431,7 @@ theorem step_bb12 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 11 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2), v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y64]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨11, rfl, [r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (j + 2), v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y64]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   rw [run_denote_var_of_nil (s' := { u with mem := u.mem.splice (slotPtr slides (j + 1)) 0#16 }) (by
       simp only [Expr.denoteOp, simp_denote, simp_sllvm]
       simp only [simp_spine, hV.c8]
@@ -1453,7 +1453,7 @@ theorem step_bb13 {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 12 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y63]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨12, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j, r16 y52, v64 (j + 1), vp (slotPtr slides (j + 1)), r16 y63]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 67
   denote_step_reduce v 70 [LLVM.const?] fold
   refine term_condBr (by simp only [simp_spine, hv70]; rfl)
@@ -1475,7 +1475,7 @@ theorem step_bb14 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 13 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j, vp (slotPtr slides (j + 1)), r16 y68]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨13, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 (j + 2), v64 j, vp (slotPtr slides (j + 1)), r16 y68]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 71
   denote_step_reduce v 71 [LLVM.const?] fold
   try simp only [simp_spine] at hv71
@@ -1523,7 +1523,7 @@ theorem step_bb15 {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 14 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v64 m, v32 c, r16 y68, vp (slotPtr slides c)]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 16, SLLVM.Ty.ptr]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨14, rfl, [r32 y43, r32 y44, r32 y45, v64 m, v32 c, r16 y68, vp (slotPtr slides c)]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 77
   denote_step_reduce v 77 [LLVM.const?] fold
   try simp only [simp_spine] at hv77
@@ -1539,7 +1539,7 @@ theorem step_bb16 {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 15 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v64 m, r16 y68, v64 c, vp (slotPtr slides c)]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨15, rfl, [r32 y43, r32 y44, r32 y45, v64 m, r16 y68, v64 c, vp (slotPtr slides c)]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 78
   denote_step_reduce v 78 [LLVM.const?] fold
   try simp only [simp_spine] at hv78
@@ -1555,7 +1555,7 @@ theorem step_bb17 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 16 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v32 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45, v64 m, r16 y68]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨16, rfl, [v32 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45, v64 m, r16 y68]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   rw [run_denote_var_of_nil (s' := { u with mem := u.mem.splice (slotPtr slides c) 1#16 }) (by
       simp only [Expr.denoteOp, simp_denote, simp_sllvm]
       simp only [simp_spine, hV.c5]
@@ -1577,7 +1577,7 @@ theorem step_bb18 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 17 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v64 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45, v64 m, r16 y68]ₕ : HVector toType [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨17, rfl, [v64 c, vp (slotPtr slides c), r32 y43, r32 y44, r32 y45, v64 m, r16 y68]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   rw [run_denote_var_of_nil (s' := { u with mem := u.mem.splice (slotPtr slides c) 0#16 }) (by
       simp only [Expr.denoteOp, simp_denote, simp_sllvm]
       simp only [simp_spine, hV.c8]
@@ -1621,7 +1621,7 @@ theorem step_bb19 (hV : EntryEnv V slides n bits) {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 18 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r16 y87, r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (c + 1), v64 c]ₕ : HVector toType [SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨18, rfl, [r16 y87, r32 y43, r32 y44, r32 y45, v32 m, v64 m, v32 (c + 1), v64 c]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 88
   denote_step_reduce v 89 [LLVM.const?] fold
   simp only [simp_spine, hV.c7, hV.c16] at hv88 hv89
@@ -1643,7 +1643,7 @@ theorem step_bb20 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 19 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v64 m, r16 y91]ₕ : HVector toType [SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨19, rfl, [v64 m, r16 y91]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 92
   denote_step_reduce v 92 [LLVM.const?] fold
   simp only [simp_spine, hV.arg0] at hv92
@@ -1666,7 +1666,7 @@ theorem step_bb21 {u : GlobalState}
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 20 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([r32 y43, r32 y44, r32 y45, v64 m, r16 y52, v64 c]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨20, rfl, [r32 y43, r32 y44, r32 y45, v64 m, r16 y52, v64 c]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 93
   denote_step_reduce v 93 [LLVM.const?] fold
   try simp only [simp_spine] at hv93
@@ -1682,7 +1682,7 @@ theorem step_bb22 (hV : EntryEnv V slides n bits) (hsl : IsSlidesPtr s.mem slide
     ∃ p u', StateT.run ((fd_curve25519_scalar_wnaf.blocks.get 21 rfl).2.denote
       (Ctxt.Valuation.ofHVector ([v32 c, r16 y95, r32 y43, r32 y44, r32 y45, v64 m]ₕ : HVector toType [SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 16, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 32, SLLVM.Ty.bitvec 64]).reverse ++ V)) u
         = .value (p, u') ∧ Post s slides bits H Nv (μ ⟨21, rfl, [v32 c, r16 y95, r32 y43, r32 y44, r32 y45, v64 m]ₕ⟩ u) p u' := by
-  dsimp only [fd_curve25519_scalar_wnaf, Blocks.get]
+  denote_reduce_get
   denote_number_from 96
   denote_step_reduce v 96 [LLVM.const?] fold
   simp only [simp_spine, hV.arg0] at hv96

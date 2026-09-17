@@ -65,7 +65,7 @@ def fiat_25519_selectznz_region : MLIR.AST.Region 0 := [mlir_region|
 }
 ]
 
-def fiat_25519_selectznz : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 8, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_selectznz : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.bitvec 8, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_selectznz_region with
     @fiat_25519_cmovznz_u64 := fiat_25519_cmovznz_u64]
 

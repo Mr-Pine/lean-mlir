@@ -279,7 +279,7 @@ def fiat_25519_to_bytes_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxRecDepth 20000 in
-def fiat_25519_to_bytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
+sllvm_cfg_def fiat_25519_to_bytes : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [] :=
   [sllvm_cfg_of| fiat_25519_to_bytes_region with
     @fiat_25519_addcarryx_u51 := fiat_25519_addcarryx_u51,
     @fiat_25519_subborrowx_u51 := fiat_25519_subborrowx_u51,

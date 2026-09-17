@@ -374,7 +374,7 @@ def fd_r43x6_ge_decode2_region : MLIR.AST.Region 0 := [mlir_region|
 ]
 
 set_option maxHeartbeats 1000000 in
-def fd_r43x6_ge_decode2 :
+sllvm_cfg_def fd_r43x6_ge_decode2 :
     Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr,
       SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.bitvec 32] :=
   [sllvm_cfg_of| fd_r43x6_ge_decode2_region with
