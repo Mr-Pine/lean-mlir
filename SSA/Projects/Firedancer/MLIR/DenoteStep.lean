@@ -534,6 +534,50 @@ attribute [simp_spine] HVector.map HVector.reverse_nil HVector.reverse_cons HVec
 -- time. Named in a simp list the simproc would run post, after `cons_succ`.
 attribute [simp_spine↓] SSA.simpValuationApply
 
+open Lean Meta in
+/-- The known elements of a `cons` chain, head first, and what the chain ends in. -/
+private partial def spineElems (e : Expr) (elems : Array Expr := #[]) : Array Expr × Expr :=
+  match_expr e with
+  | Ctxt.Valuation.cons _Ty _inst _Γ _t x V => spineElems V (elems.push x)
+  | _ => (elems, e)
+
+open Lean Meta in
+/-- `(A ++ W) ⟨i, h⟩` for `A` a `cons` chain ending in `nil`: an element of `A` for a literal
+`i` below its length, else `W` at `i` less that length, `i` symbolic (`γ`, `γ + k`) included.
+No `cons_append`-style lemma reaches these: the `++` instance's index is `ofList args.reverse`,
+and `List.reverse` never reduces while an instance is matched. -/
+dsimproc ↓ [simp_spine, simp_denote] simpValuationAppendApply
+    ((HAppend.hAppend (α := Ctxt.Valuation (Ty := SLLVM.Ty) _)
+      (β := Ctxt.Valuation (Ty := SLLVM.Ty) _) _ _ : Ctxt.Valuation (Ty := SLLVM.Ty) _) _) :=
+  fun e => do
+    let args := e.getAppArgs
+    unless e.getAppFn.isConstOf ``HAppend.hAppend && args.size == 8 do return .continue
+    let A := args[4]!; let W := args[5]!; let t := args[6]!; let v := args[7]!
+    let (elems, rest) := spineElems A
+    unless rest.isAppOf ``Ctxt.Valuation.nil do return .continue
+    let_expr Subtype.mk _α _p i h := v | return .continue
+    let (k?, m) ← match i.numeral? with
+      | some n => pure (none, n)
+      | none => match_expr i with
+        | HAdd.hAdd _ _ _ _ a b => pure <| match b.numeral? with
+            | some n => (some a, n)
+            | none => (some i, 0)
+        | _ => pure (some i, 0)
+    let len := elems.size
+    if k?.isNone && m < len then return .visit elems[m]!
+    if m < len then return .continue
+    let r := m - len
+    let idx ← match k? with
+      | none => pure (mkNatLit r)
+      | some k => if r == 0 then pure k else mkAppM ``HAdd.hAdd #[k, mkNatLit r]
+    let .forallE _ _ body _ ← whnfD (← inferType W) | return .continue
+    let varTy ← whnfD (body.instantiate1 t).bindingDomain!
+    let_expr Subtype α p := varTy | return .continue
+    let v' := mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p idx h
+    let res := mkApp2 W t v'
+    unless ← withDefault (isDefEq e res) do return .continue
+    return .visit res
+
 /-! ### Entering a block
 
 With back-edges, the walk through the tail blocks is `Blocks.run`, and
