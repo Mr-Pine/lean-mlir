@@ -11,6 +11,12 @@ import Lean.LabelAttribute
 open Lean
 open Lean.Elab.Tactic
 
+/-- Shifts by a constant `BitVec` amount go through `Nat`: v4.34 `bv_decide` fails on them
+with "constant shift should have been eliminated". -/
+theorem shiftLeft_ofNat_eq_shiftLeft_toNat {w v : Nat} (x : BitVec w) (n : Nat) :
+    x <<< BitVec.ofNat v n = x <<< (BitVec.ofNat v n).toNat :=
+  BitVec.shiftLeft_eq' ..
+
 /-
 This file defines the `simp_lowering` tactic, which combines the LLVM tactics with the RISC-V simplification
 tactic and invokes `bv_decide`. The tactic is designed to solve instruction lowering patterns that
@@ -29,5 +35,10 @@ macro "simp_lowering" : tactic => `(tactic|(
     simp_riscv
     simp_alive_ops
     simp_alive_case_bash
-    simp_alive_split
+    -- v4.34: case bashing leaves raw `nat_lit` widths in binder types, which `bv_decide` rejects
+    all_goals try dsimp only
+    -- v4.34: `simp_riscv` rewrites `if` conditions but not their `Decidable` instances,
+    -- which then only typecheck past `implicit` transparency
+    set_option backward.isDefEq.respectTransparency false in simp_alive_split
+    all_goals try simp only [shiftLeft_ofNat_eq_shiftLeft_toNat]
   ))

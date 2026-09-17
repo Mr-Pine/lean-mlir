@@ -9,15 +9,18 @@ error.
 -/
 
 namespace MWE
+
 open Ctxt (Valuation)
 
 inductive Ty
   | felt
 
-def BabyBear := 2^31 - 2^27 + 1
+def BabyBear :=
+  2 ^ 31 - 2 ^ 27 + 1
 
-instance : TyDenote Ty where toType
-  | .felt => Fin BabyBear
+instance : TyDenote Ty where
+  toType
+    | .felt => Fin BabyBear
 
 set_option warn.sorry false in
 example (i : Fin BabyBear) :

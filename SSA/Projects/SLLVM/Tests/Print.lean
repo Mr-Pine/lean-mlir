@@ -13,11 +13,11 @@ info: builtin.module {
     "llvm.return"(%2) : (!ptr) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%p: !ptr, %x: i64):
-    %q = "ptr.add"(%p, %x) : (!ptr, i64) -> (!ptr)
-    "llvm.return"(%q) : (!ptr) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm|
+      {^entry(%p:!ptr,%x:i64):%q="ptr.add"(%p, %x):(!ptr, i64)->(!ptr)"llvm.return"(%q):(!ptr)->()}]
 
 /--
 info: builtin.module {
@@ -26,11 +26,10 @@ info: builtin.module {
     "llvm.return"(%1) : (i64) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%p: !ptr):
-    %x = "ptr.load"(%p) : (!ptr) -> (i64)
-    "llvm.return"(%x) : (i64) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm| {^entry(%p:!ptr):%x="ptr.load"(%p):(!ptr)->(i64)"llvm.return"(%x):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -39,11 +38,10 @@ info: builtin.module {
     "llvm.return"() : () -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%p: !ptr, %x: i64):
-    "ptr.store"(%p, %x) : (!ptr, i64) -> ()
-    "llvm.return"() : () -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm| {^entry(%p:!ptr,%x:i64):"ptr.store"(%p, %x):(!ptr, i64)->()"llvm.return"():()->()}]
 
 /--
 info: builtin.module {
@@ -78,11 +76,11 @@ info: builtin.module {
     "llvm.return"(%2) : (i64) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%x: i64, %y: i64):
-    %z = "llvm.add"(%x, %y) : (i64, i64) -> (i64)
-    "llvm.return"(%z) : (i64) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm|
+      {^entry(%x:i64,%y:i64):%z="llvm.add"(%x, %y):(i64, i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -91,11 +89,13 @@ info: builtin.module {
     "llvm.return"(%2) : (i64) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%x: i64, %y: i64):
-    %z = "llvm.add"(%x, %y) {overflowFlags = #llvm.overflow<"nsw","nuw">} : (i64, i64) -> (i64)
-    "llvm.return"(%z) : (i64) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm|
+      {^entry(%x:i64,%y:i64):%z="llvm.add"(%x,
+              %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
+              i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -104,11 +104,11 @@ info: builtin.module {
     "llvm.return"(%2) : (i64) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%x: i64, %y: i64):
-    %z = "llvm.udiv"(%x, %y) : (i64, i64) -> (i64)
-    "llvm.return"(%z) : (i64) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm|
+      {^entry(%x:i64,%y:i64):%z="llvm.udiv"(%x, %y):(i64, i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -117,8 +117,9 @@ info: builtin.module {
     "llvm.return"(%2) : (i64) -> ()
 }
 -/
-#guard_msgs in #eval Com.printModule [sllvm| {
-  ^entry(%x: i64, %y: i64):
-    %z = "llvm.udiv"(%x, %y) {isExact} : (i64, i64) -> (i64)
-    "llvm.return"(%z) : (i64) -> ()
-}]
+#guard_msgs in
+#eval
+  Com.printModule
+    [sllvm|
+      {^entry(%x:i64,%y:i64):%z="llvm.udiv"(%x, %y){isExact}:(i64,
+              i64)->(i64)"llvm.return"(%z):(i64)->()}]

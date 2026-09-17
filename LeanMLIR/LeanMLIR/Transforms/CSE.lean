@@ -23,6 +23,19 @@ def Hom.remapAppend {αs : List Ty} (Γ : Ctxt Ty) (var : HVector Γ.Var αs) :
     V.comap (.remapAppend _ vs) = (vs.map V) ++ V := by
   funext t v; cases v using Var.appendCases <;> simp [Hom.remapAppend]
 
+-- v4.34: `comap_appendCodomain` is stated for a `Valuation` on the left; simp no longer
+-- sees through the `HVector` append instance, so it needs its own copy.
+@[simp] lemma Valuation.comap_appendHVector_appendCodomain {Γ Δ : Ctxt Ty} {ts : List Ty}
+    (vals : HVector TyDenote.toType ts) (V : Valuation Γ) (f : Δ.Hom Γ) :
+    (vals ++ V).comap f.appendCodomain = V.comap f := by
+  funext t v; simp
+
+-- v4.34: ditto for `append_inj_left`.
+@[simp] lemma Valuation.appendHVector_inj_left {Γ : Ctxt Ty} {ts : List Ty}
+    {xs ys : HVector TyDenote.toType ts} {V : Valuation Γ} :
+    (xs ++ V) = (ys ++ V) ↔ xs = ys :=
+  Iff.trans Valuation.append_inj_left (Valuation.ofHVector_inj ..)
+
 end Ctxt
 
 /- Decidable Equality for Coms. -/
@@ -184,8 +197,8 @@ def State.consOldExpr2Cache [DecidableEq d.Ty] [DecidableEq d.Op]
       apply Subtype.mk <| vold[v].appendInr
       intro V
       specialize henew V
-      simp only [Expr.denote_unfold, Valuation.instAppendHVector, Id.map_eq'] at henew
-      rw [Valuation.append_inj_left, Valuation.ofHVector_inj] at henew
+      simp only [Expr.denote_unfold, EffectKind.pureMonad_map_eq] at henew
+      rw [Valuation.appendHVector_inj_left] at henew
       simp [henew, hv]
 
   expr2cache := fun β eneedle =>
@@ -198,12 +211,13 @@ def State.consOldExpr2Cache [DecidableEq d.Ty] [DecidableEq d.Op]
           Valuation.instAppendHVector, Var.allVarsIn, HVector.map_map, Valuation.append_appendInl,
           Valuation.ofHVector_apply, HVector.getElem_map, HVector.get_ofFn]
         rw [← HVector.getElem_ofFin_eq_get]
-        rfl
+        simp
       )  eneedle
     match s.expr2cache β eneedle' with
     | .none => .none
     | .some ⟨e', he'⟩ => .some ⟨e'.map fun _ v => v.appendInr, by
-        simp_all [Expr.denote_unfold, Lets.denotePure, Expr.pdenoteOp, HVector.map_map, homRemap]
+        simp_all [Expr.denote_unfold, Lets.denotePure, Expr.pdenoteOp, HVector.map_map, homRemap,
+          EffectKind.pureMonad_map_eq]
       ⟩
 
 /-- Replace the variables in `as` with new variables that have the same valuation -/
@@ -307,7 +321,7 @@ def State.cseExpr
         simp +zetaDelta only [Expr.denote_unfold]
         congr 1
         apply Expr.denoteOp_eq_denoteOp_of
-        · simpa [Ctxt.Valuation.eval] using (hargs' _).symm
+        · exact (hargs' _).symm
         · simpa using hregArgs'.symm
         · rfl
       }⟩,

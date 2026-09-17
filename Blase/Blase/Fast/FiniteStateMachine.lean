@@ -790,7 +790,7 @@ lemma eval_scanOr_succ (x : Unit → BitStream) (n : Nat) :
   case zero => simp
   case succ n ih => simp [ih]
 
-def add : FSM Bool :=
+@[implicit_reducible] def add : FSM Bool :=
   { α := Unit,
     initCarry := λ _ => false,
     nextStateCirc := fun () =>
@@ -1237,7 +1237,7 @@ def eval_induction_1 {fsm : FSM arity} {inputs : arity → BitStream}
 end EvalInduction
 
 -- hold the input stream's value at 0 forever.
-def hold0Forever : FSM Unit where
+@[implicit_reducible] def hold0Forever : FSM Unit where
   α := Fin 2
   -- bit 0: if we are in state 0.
   -- bit 1: held value.
@@ -1265,15 +1265,15 @@ theorem eval_hold0Forever (xs : Unit → BitStream) :
        (i = 0 → state 0 = true) ∧
        ((i ≥ 1) → state 0 = false ∧ state 1 = xs () 0)
     )
-  · case h.hstate0 =>
+  · case hstate0 =>
       simp [hold0Forever]
-  · case h.hStateSucc n state ih =>
+  · case hStateSucc n state ih =>
       obtain ⟨h0, h1⟩ := ih
       simp [nextBitState, hold0Forever, nextBit]
       rcases n with rfl | n
       · simp [h0 (by omega)]
       · simp [h1 (by omega)]
-  · case h.hEval n state ih =>
+  · case hEval n state ih =>
       simp [hold0Forever, nextBitOutput, nextBit]
       rcases n with rfl | n
       · simp [ih]
@@ -1460,7 +1460,7 @@ def composeBinary
                   (q₂.eval (fun i => x (Fin.castLE (by simp) i)))) := by
   rw [composeBinaryAux, FSM.eval_compose]
   ext b
-  cases b <;> dsimp <;> congr <;> funext b <;> cases b <;> simp
+  cases b <;> congr <;> funext b <;> cases b <;> simp <;> rfl
 
 @[simp] lemma composeBinary_eval
     (p : FSM Bool)
@@ -1473,7 +1473,7 @@ def composeBinary
                   (t₂.evalFin (fun i => x (Fin.castLE (by simp) i)))) := by
   rw [composeBinary, composeBinaryAux, FSM.eval_compose, q₁.good, q₂.good]
   ext b
-  cases b <;> dsimp <;> congr <;> funext b <;> cases b <;> simp
+  cases b <;> congr <;> funext b <;> cases b <;> simp <;> rfl
 
 instance {α β : Type} [Fintype α] [Fintype β] (b : Bool) :
     Fintype (cond b α β) := by
@@ -1489,7 +1489,7 @@ instance {α β : Type} [Fintype α] [Fintype β] (b : Bool) :
                   (q₂.eval (fun i => x i))) := by
   rw [composeBinaryAux', FSM.eval_compose]
   ext b
-  cases b <;> dsimp <;> congr <;> funext b <;> cases b <;> simp
+  cases b <;> congr <;> funext b <;> cases b <;> simp <;> rfl
 
 
 namespace FSM

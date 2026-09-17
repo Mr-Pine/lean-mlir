@@ -24,13 +24,8 @@ path = "SexprPBV"
 rev = "main"
 
 [[require]]
-name = "Cli"
-git = "https://github.com/mhuisi/lean4-cli.git"
-rev = "nightly-testing"
-
-[[require]]
 name = "leanwuzla"
-git = "https://github.com/hargoniX/Leanwuzla.git"
+git = "https://github.com/Mr-Pine/Leanwuzla.git"
 rev = "main"
 
 [[lean_lib]]
@@ -81,3 +76,8 @@ roots = ["SSA.Projects.ISL.ISL"]
 name = "SailRV64"
 git = "https://github.com/opencompl/riscv-lean.git"
 rev = "main"
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4-nightly-testing"
+rev = "nightly-testing-2026-09-16"

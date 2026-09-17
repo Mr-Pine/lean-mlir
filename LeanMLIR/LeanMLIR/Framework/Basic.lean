@@ -16,6 +16,20 @@ theorem Id.pure_eq' (a : α) : (pure a : Id α) = a := rfl
 theorem Id.map_eq' (x : Id α) (f : α → β) : f <$> x = f x := rfl
 theorem Id.bind_eq' (x : Id α) (f : α → id β) : x >>= f = f x := rfl
 
+/-! v4.34: `simp` no longer unfolds `toMonad` far enough to spot the `Id` above, so the pure
+effect needs its own copies. -/
+section PureMonad
+variable {m : Type → Type} [Monad m]
+
+theorem EffectKind.pureMonad_pure_eq (a : α) :
+    (Pure.pure a : EffectKind.pure.toMonad m α) = a := rfl
+theorem EffectKind.pureMonad_map_eq (x : EffectKind.pure.toMonad m α) (f : α → β) :
+    f <$> x = (f x : EffectKind.pure.toMonad m β) := rfl
+theorem EffectKind.pureMonad_bind_eq (x : EffectKind.pure.toMonad m α)
+    (f : α → EffectKind.pure.toMonad m β) : x >>= f = f x := rfl
+
+end PureMonad
+
 open Ctxt (Var VarSet Valuation Hom)
 open TyDenote (toType)
 
@@ -82,10 +96,12 @@ export DialectSignature (signature)
 namespace DialectSignature
 variable {d} [s : DialectSignature d]
 
-def sig          := Signature.sig ∘ s.signature
-def regSig       := Signature.regSig ∘ s.signature
-def returnTypes  := Signature.returnTypes ∘ s.signature
-def effectKind   := Signature.effectKind ∘ s.signature
+-- v4.34 checks applications at `implicit` transparency, so these have to unfold to the
+-- `Signature` projections they abbreviate.
+@[implicit_reducible] def sig          := Signature.sig ∘ s.signature
+@[implicit_reducible] def regSig       := Signature.regSig ∘ s.signature
+@[implicit_reducible] def returnTypes  := Signature.returnTypes ∘ s.signature
+@[implicit_reducible] def effectKind   := Signature.effectKind ∘ s.signature
 
 end DialectSignature
 
@@ -221,8 +237,9 @@ protected instance Com.decidableEq [DecidableEq d.Op] [DecidableEq d.Ty]
       letI := Com.decidableEq body₁ body₂
       exact decidable_of_iff (e₁ = e₂ ∧ body₁ = body₂) (by simp)
     else isFalse (by simp_all)
-  | .rets _, .var _ _ => isFalse (fun h => Com.noConfusion h)
-  | .var _ _, .rets _ => isFalse (fun h => Com.noConfusion h)
+  -- v4.34: `noConfusion` no longer picks a motive here; `nofun` does.
+  | .rets _, .var _ _ => isFalse nofun
+  | .var _ _, .rets _ => isFalse nofun
 
 end -- decEq
 
@@ -299,7 +316,8 @@ theorem Com.recAux'_eq :
 
 end Rec
 
-def Expr.op {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} (e : Expr d Γ eff ty) : d.Op :=
+-- v4.34: reducible, so applications stay type-correct at `implicit` transparency.
+@[implicit_reducible] def Expr.op {Γ : Ctxt d.Ty} {eff : EffectKind} {ty} (e : Expr d Γ eff ty) : d.Op :=
   Expr.casesOn e (fun op _ _ _ _ => op)
 
 theorem Expr.eff_le {Γ : Ctxt d.Ty} {ty} (e : Expr d Γ eff ty) :
@@ -440,8 +458,9 @@ section Lemmas
     = e.contextHom.comp body.outContextHom := by
   funext t v
   apply Subtype.ext
+  -- v4.34: `val_toHom_apply` no longer fires here, so unfold `toHom`/`appendInr` for `omega`
   simp [outContextHom, outContextDiff, Expr.contextHom, Ctxt.Hom.comp, Expr.bvars,
-    e.ty_eq]
+    Ctxt.Diff.toHom, Ctxt.Var.appendInr, e.ty_eq]
   omega
 
 @[simp] theorem Com.returnVars_rets : returnVars (rets vs : Com d Γ eff t) = vs := rfl
@@ -585,9 +604,15 @@ the congruence, you can do: `rw [← Lets.denotePure]; congr`
 /-! ### simp-lemmas about `denote` functions -/
 section Lemmas
 
+/-- Comapping along `contextHom` drops whatever was appended, denotation or not. -/
+@[simp] theorem Expr.comap_append_contextHom (e : Expr d Γ eff ty) (vals : HVector toType ty)
+    (V : Γ.Valuation) : Valuation.comap (vals ++ V) e.contextHom = V := by
+  funext t v; simp [contextHom]
+
 @[simp] theorem Expr.comap_denote_contextHom (e : Expr d Γ .pure ty) (V : Γ.Valuation) :
     (Valuation.comap (e.denote V) e.contextHom) = V := by
-  funext t v; simp [Expr.denote_unfold, Id.map_eq']
+  funext t v
+  simp [Expr.denote_unfold, EffectKind.pureMonad_map_eq]
 
 @[simp] theorem HVector.denote_nil
     (T : HVector (fun (t : Ctxt d.Ty × List d.Ty) => Com d t.1 .impure t.2) []) :
@@ -614,7 +639,10 @@ section Lemmas
         fun V => e.denote V >>= body.denoteLets := by
   cases eff
   · rfl
-  · simp [denoteLets, bind_pure]
+  · funext V
+    simp only [denoteLets]
+    -- v4.34: `Valuation.cast ⋯` is `id` only up to defeq, so this is `bind_pure`
+    exact bind_pure _
 
 @[simp] theorem Lets.denote_nil {Γ : Ctxt d.Ty} :
     (Lets.nil : Lets d Γ eff Γ).denote = (return ·) := by
@@ -653,7 +681,11 @@ variable {Γ Γ' : Ctxt d.Ty} {t} (f : Γ.Hom Γ') (e : Expr d Γ eff t) (V : Γ
 
 @[simp] theorem Expr.denoteOp_changeVars  :
     (e.changeVars f).denoteOp V = e.denoteOp (V.comap f) := by
-  simp [denoteOp, HVector.map_map]; rfl
+  -- v4.34: rewriting under `denoteOp` is not type-correct, so go through the congruence lemma
+  refine denoteOp_eq_denoteOp_of rfl ?_ HEq.rfl
+  show HVector.map V (e.args.map f) = HVector.map (V.comap f) e.args
+  rw [HVector.map_map]
+  rfl
 
 @[simp] theorem Expr.denote_changeVars {Γ Γ' : Ctxt d.Ty}
     (varsMap : Γ.Hom Γ')
@@ -705,7 +737,9 @@ end Lemmas
     c.returnVars.map (c.denoteLets V) = c.denote V := by
   induction c using Com.rec'
   case rets v  => rfl
-  case var ih => simp [denoteLets, Id.pure_eq', Id.bind_eq', ih, denote]
+  case var ih =>
+    simp only [denoteLets, EffectKind.pureMonad_pure_eq, EffectKind.pureMonad_bind_eq, denote]
+    exact ih _
 
 @[simp] theorem Expr.changeVars_changeVars (e : Expr d Γ eff ty) (f : Γ.Hom Δ) (g : Δ.Hom Ξ) :
     (e.changeVars f).changeVars g = e.changeVars (f.comp g) := by
@@ -856,7 +890,7 @@ section Lemmas
 
 @[simp] theorem Com.returnVars_castPureToEff (eff : _) (com : Com d Γ .pure tys) :
     (com.castPureToEff eff).returnVars = com.returnVars.map (fun _ v => v.castCtxt (by simp)) := by
-  induction com <;> simp_all
+  induction com <;> simp_all <;> exact (HVector.map_id _).symm
 
 /-! denotations of `castPureToEff` -/
 
@@ -867,15 +901,19 @@ section Lemmas
   case pure => rfl
   case impure =>
     funext V
-    simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk,
-      EffectKind.pure_map, EffectKind.pure_liftEffect]
+    have hop : DialectSignature.effectKind op = .pure := EffectKind.eq_of_le_pure eff_le
+    simp only [castPureToEff, changeEffect, denote_unfold, denoteOp, op_mk, args_mk, regArgs_mk]
+    simp only [EffectKind.pure_map]
+    exact congrArg _
+      (congrFun (EffectKind.liftEffect_compose eff_le (EffectKind.pure_le _)) _).symm
 
 @[simp] theorem Com.denote_castPureToEff {com : Com d Γ .pure ty} :
     denote (com.castPureToEff eff) = fun V => pure (com.denote V) := by
   funext V
   induction com using Com.rec'
   · rfl
-  · simp [*]; rfl
+  · simp [*, EffectKind.pure_pure]
+    rfl
 
 end Lemmas
 
@@ -925,7 +963,11 @@ theorem Expr.denote_pure {e : Expr d Γ .pure ty} :
 @[simp]
 theorem Expr.pure_denoteOp_toPure (e : Expr d Γ eff ty) (h : e.HasPureOp) :
     pure ((e.toPure h).denoteOp V) = (e.denoteOp V) := by
-  simp [denoteOp]
+  cases eff
+  · rfl
+  · simp only [denoteOp, Expr.toPure, op_mk, args_mk, regArgs_mk]
+    exact congrFun (EffectKind.liftEffect_compose (m := d.m) (EffectKind.le_of_eq h)
+      (EffectKind.pure_le EffectKind.impure) e.eff_le) _
 
 /-- The denotation of toPure? -/
 theorem Expr.denote_toPure? {e : Expr d Γ eff ty} {e': Expr d Γ .pure ty}
@@ -949,7 +991,7 @@ section DenoteInsert
 
 @[simp] theorem Expr.denote_appendInr (e : Expr d Γ .pure t) (V : Γ.Valuation) (v : Γ.Var u) :
     e.denote V v.appendInr = V v := by
-  simp [denote_unfold, Id.map_eq']
+  simp [denote_unfold, EffectKind.pureMonad_map_eq]
 
 /-- Denoting any of the free variables of a program through `Com.denoteLets` just returns the
 assignment of that variable in the input valuation -/
@@ -960,7 +1002,7 @@ assignment of that variable in the input valuation -/
   · simp; rfl
   case var e body ih =>
     rw [outContextHom_var]
-    simp [Id.bind_eq', Hom.comp, ih]
+    simp [EffectKind.pureMonad_bind_eq, Hom.comp, ih]
 
 @[simp] theorem Ctxt.Valuation.comap_outContextHom_denoteLets {com : Com d Γ .pure ty} {V} :
     Valuation.comap (com.denoteLets V) com.outContextHom = V := by
@@ -1018,7 +1060,11 @@ def Lets.getPureExpr {Γ₁ Γ₂ : Ctxt d.Ty} (lets : Lets d Γ₁ eff Γ₂) {
   funext _ v'
   apply Subtype.ext
   have := v.val_lt
-  simp; grind
+  -- v4.34: neither `castCtxt` nor `appendInr` reduces on its own any more
+  simp only [Ctxt.length_ofList] at this
+  simp [Hom.castCodomain, Hom.appendCodomain, Ctxt.Var.castCtxt, Ctxt.Var.appendInr,
+    Ctxt.length_dropUntil, Ctxt.length_ofList]
+  omega
 
 
 @[simp] theorem Lets.getPureExprAux_var_appendInr (lets : Lets d Γ_in eff Γ_out)
@@ -1120,6 +1166,8 @@ def Expr.changeDialect : Expr d Γ eff ty → Expr d' (Γ.map f.mapTy) eff (f.ma
         HVector.changeDialect regs
     ⟩
 termination_by e => sizeOf e
+-- v4.34: the default tactic no longer unfolds `sizeOf` through the constructor
+decreasing_by simp only [Expr.mk.sizeOf_spec]; omega
 
 /-- Inline of `HVector.map'` for the termination checker -/
 def HVector.changeDialect : ∀ {regSig : RegionSignature d.Ty},
@@ -1152,7 +1200,8 @@ section Lemmas
   simp only [changeDialect]
 
 @[simp] theorem HVector.changeDialect_nil {eff : EffectKind} (f : DialectMorphism d d') :
-    HVector.changeDialect (eff := eff) f nil = nil := by simp [HVector.changeDialect]
+    HVector.changeDialect (eff := eff) f nil = nil := by
+  unfold HVector.changeDialect; rfl
 
 end Lemmas
 
@@ -1194,7 +1243,7 @@ section Lemmas
     (lets.castPureToEff eff).addComToEnd (com.castPureToEff eff)
     = cast (by simp) ((lets.addComToEnd com).castPureToEff eff) := by
   induction com using Com.rec'
-  case rets => simp
+  case rets => exact (cast_eq _ _).symm
   case var ih =>
     simp only [Com.castPureToEff_var, Com.outContext_var, addComToEnd_var,
       ← Lets.castPureToEff_var, ih]
@@ -1230,7 +1279,9 @@ theorem Com.denoteLets_eq {com : Com d Γ eff t} : com.denoteLets = com.toLets.d
   funext V
   induction com using Com.rec'
   · simp
-  · simp [*]; rfl
+    rfl
+  · simp [*]
+    rfl
 
 end Lemmas
 

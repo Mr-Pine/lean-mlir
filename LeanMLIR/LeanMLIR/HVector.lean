@@ -221,6 +221,24 @@ theorem map_map {A B C : α → Type*} {l : List α} (t : HVector A l)
     (t.map f).map g = t.map (fun a v => g a (f a v)) := by
   induction t <;> simp_all [map]
 
+/-- `get` at a literal index. Without these, a `Fin` literal no longer reduces through `get`'s
+`match`, and every `simp` that used to see through a cons stalls. -/
+@[simp] theorem get_cons_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) :
+    (HVector.cons x xs).get 0 = x := rfl
+
+@[simp] theorem get_cons_mk_zero {a : α} {as : List α} (x : A a) (xs : HVector A as) (h) :
+    (HVector.cons x xs).get ⟨0, h⟩ = x := rfl
+
+@[simp] theorem get_cons_succ {a : α} {as : List α} (x : A a) (xs : HVector A as)
+    (i : Fin as.length) : (HVector.cons x xs).get i.succ = xs.get i := rfl
+
+@[simp] theorem get_cons_mk_succ {a : α} {as : List α} (x : A a) (xs : HVector A as) (i : Nat)
+    (h : i + 1 < (a :: as).length) :
+    (HVector.cons x xs).get ⟨i + 1, h⟩ = xs.get ⟨i, Nat.succ_lt_succ_iff.mp h⟩ := rfl
+
+@[simp] theorem map_id (xs : HVector A as) : xs.map (fun _ v => v) = xs := by
+  induction xs <;> simp_all [map]
+
 @[simp] theorem get_map (xs : HVector A as) (f : (a : α) → A a → B a) :
     (xs.map f).get i = f _ (xs.get i) := by
   induction xs with
@@ -285,7 +303,7 @@ def ofFn (A : α → Type _) (as : List α) (f : (i : Fin as.length) → A as[i]
   case cons ih =>
     cases i using Fin.succRec
     · rfl
-    · simp [ofFn, ih]
+    · exact ih
 
 end OfFn
 

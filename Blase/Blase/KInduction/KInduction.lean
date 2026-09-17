@@ -375,7 +375,6 @@ theorem mkOutputAssignCircuitLeN_eq_false_iff {arity : Type _}
   · intros h c i hi hc
     subst hc
     simp only [Circuit.eval_map, eval_mkOutputAssignCircuitN_eq_false_iff]
-    simp only at h
     specialize h i hi
     simp only [Vars.castLe_outputs_mk_eq_outputs]
     rw [← h]
@@ -734,11 +733,9 @@ theorem IsLawful_mkSucc_of_IsLawful {arity : Type _}
     · intros h
       constructor
       · intros s
-        simp only at h ⊢
         rw [h s _ (by omega)]
       · rw [hPrev.hCSuccCarryAssignCirc]
         intros s i hi
-        simp only at h
         simp only [Vars.castLe_stateN_eq_stateN, Circuit.eval_map,
           Vars.castLe_castLe_eq_castLe_self, mkCarryAssignCircuitNAux_eval_eq,
           Vars.castLe_inputs_eq_inputs]
@@ -760,8 +757,7 @@ theorem IsLawful_mkSucc_of_IsLawful {arity : Type _}
         apply h₁
     · intros h
       constructor
-      · simp only at h ⊢
-        rw [h]
+      · rw [h]
       · rw [hPrev.hCOutAssignCirc]
         intros i hi
         simp
@@ -790,7 +786,6 @@ theorem IsLawful_mkSucc_of_IsLawful {arity : Type _}
         omega
       · simp [hPrev.hCStatesUniqueCirc]
         intros i j hij jn
-        simp at h ⊢
         apply h i j
         omega
         omega
@@ -895,7 +890,7 @@ theorem mkSuccCarryAndOutsAssignPrecond_eval_eq_false_of_eq_envBool_of_envBitstr
     rcases x with x | x
     · simp [Vars.stateN]
       rfl
-    · simp [Vars.inputN]
+    · simp [Vars.inputN]; rfl
 
 -- | TODO: remove duplication, reuse
 -- `mkSuccCarryAndOutsAssignPrecond_eval_eq_false_of_eq_envBool_of_envBitstream_of_state`
@@ -979,7 +974,6 @@ theorem eval_mkPostcondSafety_eq_false_iff
   simp
   constructor
   · intros h hinit i hi
-    simp only at h
     rw [eval_mkInitCarryAssignCircuit_eq_false_iff] at h
     rw [mkOutEqZeroCircuitLeN_eval_eq_false_iff] at h
     apply h
@@ -1819,9 +1813,9 @@ theorem Predicate.denote_of_verifyCircuit_mkSafetyCircuit_of_verifyCircuit_mkInd
     (circs : KInductionCircuits (predicateEvalEqFSM p).toFSM n)
     (hCircs : circs.IsLawful)
     (vars : List (BitVec w))
-    (sCert : BVDecide.Frontend.LratCert)
+    (sCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hs : Circuit.verifyCircuit (mkSafetyCircuit circs) sCert = true)
-    (indCert : BVDecide.Frontend.LratCert)
+    (indCert : Lean.Meta.Tactic.BVDecide.LratCert)
     (hind : Circuit.verifyCircuit (mkIndHypCycleBreaking circs) indCert = true) :
     p.denote w vars := by
   apply Predicate.denote_of_eval
@@ -1841,9 +1835,9 @@ theorem Predicate.denote_of_verifyCircuit_mkSafetyCircuit_of_verifyCircuit_mkInd
 /--
 info: 'ReflectVerif.BvDecide.KInductionCircuits.Predicate.denote_of_verifyCircuit_mkSafetyCircuit_of_verifyCircuit_mkIndHypCycleBreaking' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
+ BitStream.subCarries?_correct._native.bv_decide.ax_1_15]
 -/
 #guard_msgs in #print axioms Predicate.denote_of_verifyCircuit_mkSafetyCircuit_of_verifyCircuit_mkIndHypCycleBreaking
 
@@ -1863,7 +1857,7 @@ inductive DecideIfZerosOutput
 /-- Was unable to establish invariant even at these many iterations. -/
 | exhaustedIterations (numIters : Nat)
 /-- we have proven both the safety and inductive invariant property. -/
-| provenByKIndCycleBreaking (numIters : Nat) (safetyCert : BVDecide.Frontend.LratCert) (indCertCycleBreaking : BVDecide.Frontend.LratCert)
+| provenByKIndCycleBreaking (numIters : Nat) (safetyCert : Lean.Meta.Tactic.BVDecide.LratCert) (indCertCycleBreaking : Lean.Meta.Tactic.BVDecide.LratCert)
 
 namespace DecideIfZerosOutput
 def isSuccess : DecideIfZerosOutput → Bool

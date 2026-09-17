@@ -77,6 +77,7 @@ def Tensor1d.map [Inhabited α] (f : α → α) (t : Tensor1d α) : Tensor1d α 
 theorem Tensor1d.extract_map [Inhabited α] (t: Tensor1d α) (left len: Index) :
   (t.extract left len).map f = (t.map f).extract left len := by {
     simp[Tensor1d.extract, Tensor1d.map]
+    refine ⟨rfl, ?_⟩
     funext ix;
     by_cases VALID_EXTRACT : left + len < t.size <;> simp[VALID_EXTRACT]
     by_cases VALID_INDEX : ix < len <;> simp[VALID_INDEX]
@@ -100,6 +101,7 @@ def Tensor1d.fill [Inhabited α] (t: Tensor1d α) (v: α) : Tensor1d α where
 theorem Tensor1d.extract_fill [Inhabited α] (t: Tensor1d α):
   (t.extract left len).fill v = (t.fill v).extract left len := by {
     simp[Tensor1d.extract, Tensor1d.fill]
+    refine ⟨rfl, ?_⟩
     funext ix;
     by_cases VALID_EXTRACT : left + len < t.size <;> simp[VALID_EXTRACT]
     by_cases VALID_INDEX : ix < len <;> simp[VALID_INDEX]

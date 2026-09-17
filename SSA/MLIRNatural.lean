@@ -19,9 +19,10 @@ def runTest (test : ConcreteCliTest) (arg : String) : IO Bool := do
         return false
     let res ← test.eval (p.map Option.some)
     -- Add the first match to help lean reduce the TyDenote instance
-    match test.ty, res with
+    (match test.ty, res with
       | bitvec _, .value val => IO.println s!"result: {val}"
       | bitvec _, .poison => IO.println s!"no result (undefined behavior)"
+      : IO Unit)
     return true
 
 def listAllTests : IO Unit := do

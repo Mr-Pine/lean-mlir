@@ -61,8 +61,10 @@ instance : TyDenote LLVMPlusRiscV.Ty where
 @[simp]
 instance LLVMPlusRiscVSignature : DialectSignature LLVMPlusRiscV where
   signature
-  | .llvm llvmOp => .llvm <$> DialectSignature.signature llvmOp
-  | .riscv riscvOp => .riscv <$> DialectSignature.signature riscvOp
+  -- v4.34: neither dialect has regions; a literal `[]` keeps `regSig` reducible at
+  -- `implicit` transparency, which `List.map` over the inner `[]` is not
+  | .llvm llvmOp => { .llvm <$> DialectSignature.signature llvmOp with regSig := [] }
+  | .riscv riscvOp => { .riscv <$> DialectSignature.signature riscvOp with regSig := [] }
   | .castRiscv w =>
       {sig := [Ty.riscv .bv], returnTypes := [Ty.llvm (.bitvec w)], regSig := []}
   | .castLLVM w =>
@@ -185,7 +187,7 @@ def transformExprLLVM (e : Expr (InstCombine.MetaLLVM 0) (ctxtTransformToLLVM Γ
                 Should haven been caught by the LLVM parser."
               | .llvm originalLLVMTy =>
                 if hty' : originalLLVMTy = t then
-                  return ⟨v.val, by rw [h, hty']⟩
+                  return ⟨v.val, by rw [h, hty, hty']⟩
                 else
                   throw <|.generic s!"INTERNAL ERROR: This case is impossible, LLVM expression is pointing to an incorrect bitwidth LLVM argument."
             | none =>

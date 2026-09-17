@@ -25,7 +25,7 @@ inductive Factor
 | not (x : Factor)
 deriving Repr
 
-def Factor.numVars : Factor → Nat
+@[implicit_reducible] def Factor.numVars : Factor → Nat
 | .var n => n+1
 | .and x y | .or x y | xor x y => max (x.numVars) (y.numVars)
 | .not x => x.numVars
@@ -76,7 +76,7 @@ We need `Factor.reflectFin` to show that our brute-force evaluation for length 1
 We need `Factor.reflect` to def-eq-unify with the user's given goal state.
 We show their equivalence to allow us to decide on `denoteFin`, and to use this when proving facts about `denote`.
 -/
-def EnvFin (w : Nat) (n : Nat) := Fin n → (BitVec w)
+@[implicit_reducible] def EnvFin (w : Nat) (n : Nat) := Fin n → (BitVec w)
 def EnvFin.getLsb {w : Nat} (env : EnvFin (w + 1) n) : EnvFin 1 n := fun n => BitVec.ofBool <| (env n)[0]
 def EnvFin.getNonLsbs {w : Nat} (env : EnvFin (w + 1) n) : EnvFin w n := fun n => (env n).extractLsb' 1 w
 
@@ -349,7 +349,7 @@ instance : ToExpr Term where
   toExpr := Term.toExpr
   toTypeExpr := mkConst ``Term
 
-def Term.numVars (t : Term) : Nat := t.f.numVars
+@[implicit_reducible] def Term.numVars (t : Term) : Nat := t.f.numVars
 
 /-- Reflect is what we use for reflection -/
 def Term.reflect {w : Nat}  (t : Term) (xs: Env w) : BitVec w :=
@@ -401,7 +401,7 @@ theorem Term.denote_width_zero  (t : Term) (env : Env 0) :
 theorem Term.denoteFin_width_zero  (t : Term) (env : EnvFin 0 t.numVars) :
     t.denoteFin env = 0 := by simp [Term.denoteFin, Factor.denoteFin]
 
-def Eqn := List Term
+@[implicit_reducible] def Eqn := List Term
 
 instance : Repr Eqn := inferInstanceAs (Repr (List Term))
 
@@ -418,7 +418,7 @@ instance : ToExpr Term where
   toExpr := Term.toExpr
   toTypeExpr := mkConst ``Term
 
-def Eqn.numVars (e : Eqn) : Nat :=
+@[implicit_reducible] def Eqn.numVars (e : Eqn) : Nat :=
   match e with
   | [] => 0
   | e :: es => max e.numVars (Eqn.numVars es)

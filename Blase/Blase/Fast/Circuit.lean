@@ -5,6 +5,8 @@ import Mathlib.Data.Fin.Basic
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Defs
 import Mathlib.Data.Fintype.Basic
+import Std.Tactic.BVDecide
+import Lean.Elab.Tactic.BVDecide
 
 open Std Sat AIG
 
@@ -67,8 +69,7 @@ def varsFinset [DecidableEq α] (c : Circuit α) : Finset α :=
   ⟨c.vars, nodup_vars c⟩
 
 lemma mem_varsFinset [DecidableEq α] {c : Circuit α} :
-    ∀ {x : α}, x ∈ c.varsFinset ↔ x ∈ c.vars := by
-  simp [varsFinset]
+    ∀ {x : α}, x ∈ c.varsFinset ↔ x ∈ c.vars := Iff.rfl
 
 @[simp]
 def eval : Circuit α → (α → Bool) → Bool
@@ -106,7 +107,7 @@ instance : LE (Circuit α) :=
   ⟨λ c₁ c₂ => ∀ f, eval c₁ f → eval c₂ f⟩
 
 instance : Preorder (Circuit α) :=
-  { inferInstanceAs (LE (Circuit α)) with
+  { (inferInstance : LE (Circuit α)) with
     le_refl := λ c f h => h,
     le_trans := λ c₁ c₂ c₃ h₁₂ h₂₃ f h₁ => h₂₃ f (h₁₂ f h₁) }
 
@@ -745,7 +746,7 @@ theorem card_varsFinset_assignVars_lt [DecidableEq α] [DecidableEq β]
           true_and]
         constructor
         · use a
-          simp [ha, varsFinset, hfa]
+          simp [ha, mem_varsFinset, hfa]
         · rintro b₁ b₂ a' ha' hb₂ rfl
           simp only [mem_varsFinset.1 ha', dite_true] at hb₂
           use a'
@@ -958,8 +959,8 @@ def always_false [DecidableEq α] (c : Circuit α) : Bool :=
 @[simp]
 lemma always_false_iff [DecidableEq α] (c : Circuit α) :
     always_false c ↔ ∀ x, ¬ eval c x := by
-rw [always_false]
-simp [nonempty_eq_false_iff]
+  rw [always_false]
+  simp [nonempty_eq_false_iff]
 
 def always_true [DecidableEq α] (c : Circuit α) : Bool :=
   !(nonempty (~~~ c))
@@ -1297,13 +1298,11 @@ def toAIGAux {α : Type}
     have decl_eq : ∀ (idx : Nat) (h1 : idx < aig.decls.size) (h2),
         ret.aig.decls[idx]'h2 = aig.decls[idx]'h1 := by
       intro idx h1 h2
-      simp [ret]
-      have := LawfulOperator.decl_eq (f := mkAndCached) raig.out input idx
-      rw [this]
-      · rw [raig.decl_eq]
-        · rw [laig.decl_eq]
-        · omega
-      · omega
+      -- `omega` here hits kernel deep recursion on v4.34.
+      have h3 : idx < laig.out.decls.size := Nat.lt_of_lt_of_le h1 laig.le_size
+      have h4 : idx < raig.out.decls.size := Nat.lt_of_lt_of_le h3 raig.le_size
+      exact (LawfulOperator.decl_eq (f := mkAndCached) raig.out input idx h4 h2).trans
+        ((raig.decl_eq idx h3 h4).trans (laig.decl_eq idx h1 h3))
     {
       out := ret.aig,
       ref := ret.ref,
@@ -1345,13 +1344,11 @@ def toAIGAux {α : Type}
     have decl_eq : ∀ (idx : Nat) (h1 : idx < aig.decls.size) (h2),
         ret.aig.decls[idx]'h2 = aig.decls[idx]'h1 := by
       intro idx h1 h2
-      simp [ret]
-      have := LawfulOperator.decl_eq (f := mkOrCached) raig.out input idx
-      rw [this]
-      · rw [raig.decl_eq]
-        · rw [laig.decl_eq]
-        · omega
-      · omega
+      -- `omega` here hits kernel deep recursion on v4.34.
+      have h3 : idx < laig.out.decls.size := Nat.lt_of_lt_of_le h1 laig.le_size
+      have h4 : idx < raig.out.decls.size := Nat.lt_of_lt_of_le h3 raig.le_size
+      exact (LawfulOperator.decl_eq (f := mkOrCached) raig.out input idx h4 h2).trans
+        ((raig.decl_eq idx h3 h4).trans (laig.decl_eq idx h1 h3))
     {
       out := ret.aig,
       ref := ret.ref,
@@ -1393,13 +1390,11 @@ def toAIGAux {α : Type}
     have decl_eq : ∀ (idx : Nat) (h1 : idx < aig.decls.size) (h2),
         ret.aig.decls[idx]'h2 = aig.decls[idx]'h1 := by
       intro idx h1 h2
-      simp [ret]
-      have := LawfulOperator.decl_eq (f := mkXorCached) raig.out input idx
-      rw [this]
-      · rw [raig.decl_eq]
-        · rw [laig.decl_eq]
-        · omega
-      · omega
+      -- `omega` here hits kernel deep recursion on v4.34.
+      have h3 : idx < laig.out.decls.size := Nat.lt_of_lt_of_le h1 laig.le_size
+      have h4 : idx < raig.out.decls.size := Nat.lt_of_lt_of_le h3 raig.le_size
+      exact (LawfulOperator.decl_eq (f := mkXorCached) raig.out input idx h4 h2).trans
+        ((raig.decl_eq idx h3 h4).trans (laig.decl_eq idx h1 h3))
     {
       out := ret.aig,
       ref := ret.ref,
@@ -1530,7 +1525,7 @@ def checkCircuitUnsatAux {α : Type} [DecidableEq α] [Hashable α] [Fintype α]
     (c : Circuit α) : TermElabM (Option LratCert) := do
   let cfg : BVDecideConfig := { timeout := cadicalTimeoutSec }
   IO.FS.withTempFile fun _ lratFile => do
-    let cfg ← BVDecide.Frontend.TacticContext.new lratFile cfg
+    let cfg ← Lean.Meta.Tactic.BVDecide.TacticContext.new lratFile cfg
     let entrypoint:= c.toAIG.val
     let ⟨entrypoint, _labelling⟩ := entrypoint.relabelNat'
     let cnf := toCNF entrypoint
@@ -1538,6 +1533,7 @@ def checkCircuitUnsatAux {α : Type} [DecidableEq α] [Hashable α] [Fintype α]
       (trimProofs := true)
       (timeout := cadicalTimeoutSec)
       (binaryProofs := true)
+      (solverMode := cfg.config.solverMode)
     match out with
     | .error _model => return .none
     | .ok cert => return .some cert

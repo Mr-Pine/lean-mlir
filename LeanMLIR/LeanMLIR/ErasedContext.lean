@@ -41,21 +41,21 @@ instance : Coe (List Ty) (Ctxt Ty) where
 
 end Instances
 
-def empty : Ctxt Ty := .ofList []
+@[implicit_reducible] def empty : Ctxt Ty := .ofList []
 
 instance : EmptyCollection (Ctxt Ty) := ⟨Ctxt.empty⟩
 instance : Inhabited (Ctxt Ty) := ⟨Ctxt.empty⟩
 
 theorem empty_eq : (∅ : Ctxt Ty) = .empty := rfl
 
-@[match_pattern]
+@[match_pattern, implicit_reducible]
 def cons (hd : Ty) : Ctxt Ty → Ctxt Ty
 | ⟨tl⟩ => ⟨hd :: tl⟩
 
 @[deprecated cons (since := "2025-09-14")]
 abbrev snoc := fun Γ t => @cons Ty t Γ
 
-@[grind=]
+@[grind=, implicit_reducible]
 def length (Γ : Ctxt Ty) : Nat := Γ.toList.length
 
 instance : GetElem? (Ctxt Ty) Nat Ty (fun Γ i => i < Γ.length) where
@@ -169,7 +169,7 @@ end Rec
 
 /-! ## Variables -/
 
-def Var (Γ : Ctxt Ty) (t : Ty) : Type :=
+@[implicit_reducible] def Var (Γ : Ctxt Ty) (t : Ty) : Type :=
   { i : Nat // Γ[i]? = some t }
 
 namespace Var
@@ -245,7 +245,7 @@ def casesOn
           simp_all only [zero_eq_last]
           ) <| @last Γ t
     | ⟨i+1, h⟩ =>
-        toCons ⟨i, by simpa [cons] using h⟩
+        toCons ⟨i, by simpa [cons, getElem?_eq_toList_getElem?] using h⟩
 
 /-- `Ctxt.Var.casesOn` behaves in the expected way when applied to the last variable -/
 @[simp]
@@ -408,13 +408,19 @@ instance [DecidableEq Ty] {Γ : Ctxt Ty} {t : Ty} : Fintype (Γ.Var t) where
                       none
       nodup := by
         apply List.Nodup.filterMap ?_ List.nodup_range
-        simp only [Option.mem_def, Option.dite_none_right_eq_some, Option.some.injEq,
-          forall_exists_index, forall_apply_eq_imp_iff]
-        intro i j hi hj h_eq
-        cases h_eq
-        rfl
+        intro i j v hi hj
+        simp only [Option.mem_def, Option.dite_none_right_eq_some] at hi hj
+        obtain ⟨hi', hi⟩ := hi
+        obtain ⟨hj', hj⟩ := hj
+        injection hi with hi
+        injection hj with hj
+        exact congrArg Subtype.val (hi.trans hj.symm)
     }
-  complete v := by simpa using ⟨v.val, v.val_lt, v.prop, rfl⟩
+  complete v := by
+    refine Finset.mem_mk.mpr (Multiset.mem_coe.mpr (List.mem_filterMap.mpr ⟨v.val, ?_, ?_⟩))
+    · exact List.mem_range.mpr v.val_lt
+    · rcases v with ⟨i, hi⟩
+      rw [dif_pos hi]
 
 /-! ### Var Fin Helpers -/
 
@@ -463,7 +469,7 @@ instance {Γ} : GetElem (HVector A as) (Var Γ a) (A a) (fun _ _ => as = Γ.toLi
     subst h
     congr 1
     rcases i with ⟨i, h⟩
-    simpa [Ctxt.Var.toFin, List.getElem_eq_iff] using h
+    simpa [Ctxt.Var.toFin, List.getElem_eq_iff, getElem?_eq_toList_getElem?] using h
 
 namespace HVector
 variable {A : α → _} {as : List α} (xs : HVector A as) {Γ : Ctxt α}
@@ -473,21 +479,20 @@ variable {A : α → _} {as : List α} (xs : HVector A as) {Γ : Ctxt α}
 @[simp] theorem getElem_map (xs : HVector A as) (v : Var ⟨as⟩ a) :
     (xs.map f)[v] = f _ xs[v] := by
   cases v using Var.ofFinCases
-  rw [getElem_ofFin_eq_get, getElem_ofFin_eq_get]
-  simp only [length_ofList, get_map, List.get_eq_getElem]
-  rfl
+  exact get_map ..
 
 @[simp] theorem cons_getElem_toCons (x : A a) (v : Var Γ u)
     (h : as = Γ.toList := by rfl) (h' : a :: as = (Γ.cons a).toList := by rfl) :
     (HVector.cons x xs)[v.toCons (t' := a)]'h' = xs[v]'h := by
-  simp only [GetElem.getElem]
-  simp
+  subst h
+  simp only [GetElem.getElem, Ctxt.Var.toFin, Ctxt.Var.toCons]
+  rfl
 
 @[simp] theorem cons_getElem_last (x : A a)
     (h' : a :: as = (Γ.cons a).toList := by rfl) :
     (HVector.cons x xs)[Var.last Γ a]'h' = x := by
-  simp only [GetElem.getElem]
-  simp
+  simp only [GetElem.getElem, Ctxt.Var.toFin, Ctxt.Var.last]
+  rfl
 
 end HVector
 namespace Ctxt
@@ -614,7 +619,9 @@ variable [TyDenote Ty]
 -- ^^ for a valuation, we need to evaluate the Lean `Type` corresponding to a `Ty`
 
 /-- A valuation for a context. Provide a way to evaluate every variable in a context. -/
-def Valuation (Γ : Ctxt Ty) : Type :=
+-- v4.34 checks applications at `implicit` transparency, so a valuation has to unfold
+-- to its function type for `HVector.map V ..` to typecheck.
+@[implicit_reducible] def Valuation (Γ : Ctxt Ty) : Type :=
   ⦃t : Ty⦄ → Γ.Var t → (toType t)
 
 /-- A valuation for a context. Provide a way to evaluate every variable in a context. -/
@@ -622,12 +629,12 @@ def Valuation.eval {Γ : Ctxt Ty} (VAL : Valuation Γ) ⦃t : Ty⦄ (v : Γ.Var 
     VAL v
 
 /-- Make a valuation for the empty context. -/
-def Valuation.nil : Ctxt.Valuation (∅ : Ctxt Ty) := fun _ v => v.emptyElim
+@[implicit_reducible] def Valuation.nil : Ctxt.Valuation (∅ : Ctxt Ty) := fun _ v => v.emptyElim
 
 instance : Inhabited (Ctxt.Valuation (∅ : Ctxt Ty)) := ⟨Valuation.nil⟩
 
 /-- Make a valuation for `Γ.cons t` from a valuation for `Γ` and an element of `t.toType`. -/
-def Valuation.cons {Γ : Ctxt Ty} {t : Ty} (x : toType t) (V : Γ.Valuation) :
+@[implicit_reducible] def Valuation.cons {Γ : Ctxt Ty} {t : Ty} (x : toType t) (V : Γ.Valuation) :
     (Γ.cons t).Valuation := by
   intro t' v
   revert x V
@@ -765,8 +772,22 @@ variable {ts : List Ty}
   case nil => exact v.emptyElim
   case cons x xs ih =>
     cases v using Var.casesOn
-    · simpa [ih] using (HVector.cons_getElem_toCons _ _ _).symm
-    · simpa [ih] using (HVector.cons_getElem_last _ _ _).symm
+    · rw [Valuation.ofHVector_cons, Valuation.cons_toCons, ih]
+      exact (HVector.cons_getElem_toCons ..).symm
+    · rw [Valuation.ofHVector_cons, Valuation.cons_last]
+      exact (HVector.cons_getElem_last ..).symm
+
+/-! The two `Valuation` append lemmas through the `HVector`-on-the-left append. -/
+
+@[simp] theorem Valuation.appendHVector_appendInl {Γ : Ctxt Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) (v : Var ⟨ts⟩ t) :
+    (vals ++ V) v.appendInl = ofHVector vals v :=
+  append_appendInl
+
+@[simp] theorem Valuation.appendHVector_appendInr {Γ : Ctxt Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) (v : Var Γ t) :
+    (vals ++ V) v.appendInr = V v :=
+  append_appendInr
 
 @[simp] theorem Valuation.ofHVector_inj (xs ys : HVector toType ts) :
     ofHVector xs = ofHVector ys ↔ xs = ys := by
@@ -790,7 +811,7 @@ end Lemmas
 /-! ## Valuation Construction Helpers -/
 
 /-- Make a a valuation for a singleton value -/
-def Valuation.singleton {t : Ty} (v : toType t) : Ctxt.Valuation ⟨[t]⟩ :=
+@[implicit_reducible] def Valuation.singleton {t : Ty} (v : toType t) : Ctxt.Valuation ⟨[t]⟩ :=
   Ctxt.Valuation.nil.cons v
 
 /-- Build valuation from a vector of values of types `types`. -/
@@ -837,6 +858,12 @@ def Valuation.comap {Γi Γo : Ctxt Ty} (Γiv: Γi.Valuation) (hom : Ctxt.Hom Γ
     (W ++ V).comap (f.append) = W ++ (V.comap f) := by
   funext t v; cases v using Var.appendCases <;> simp
 
+@[simp] theorem Valuation.comap_append {Γ Δ : Ctxt Ty} {ts : List Ty}
+    (vals : HVector toType ts) (V : Γ.Valuation) (f : Δ.Hom Γ) :
+    (vals ++ V).comap f.append = vals ++ V.comap f := by
+  funext t v
+  cases v using Var.appendCases <;> simp
+
 @[simp] theorem Valuation.comap_appendCodomain {Γ Δ ζ : Ctxt Ty}
     (V : Γ.Valuation) (W : ζ.Valuation) (f : Δ.Hom Γ) :
     (W ++ V).comap f.appendCodomain = V.comap f := by
@@ -864,18 +891,23 @@ def Valuation.reassignVars [DecidableEq Ty] {ts : List Ty} {Γ : Ctxt Ty}
       subst this
       have := h_eq.to_eq
       subst this
-      simp
+      simp only [HVector.idxOf?, dif_pos (show ∃ h : t = t, w = h ▸ w from ⟨rfl, rfl⟩)]
+      rfl
     · unfold Var.eq at h_eq
       simp only [HVector.idxOf?, h_eq, ↓reduceDIte, List.get_eq_getElem, List.length_cons,
         HVector.map_cons]
-      split at ih <;> simp_all
+      split at ih <;> simp_all [HVector.map_cons] <;> exact ih
 
 @[simp] theorem Valuation.comap_with [DecidableEq Ty] {Γ Δ : Ctxt Ty}
     {V : Valuation Γ} {map : Δ.Hom Γ} {vs : HVector Δ.Var ty} {ws : HVector Γ.Var ty} :
     V.comap (map.with vs ws) = (V.comap map).reassignVars vs (ws.map V) := by
   funext t' v'
   simp only [comap, Hom.with, reassignVars]
-  split <;> aesop
+  split
+  · rfl
+  -- v4.34: the `some` branch keeps the `Var.cast`; substituting its type equation
+  -- turns both casts into `rfl` and leaves `HVector.get_map`.
+  · next _ hty _ => subst hty; exact (HVector.get_map ws V).symm
 
 /-! ### Recursion -/
 
@@ -898,6 +930,11 @@ def Valuation.cast {Γ Δ : Ctxt Ty} (h : Γ = Δ) (V : Valuation Γ) : Valuatio
   fun _ v => V <| v.castCtxt h.symm
 
 @[simp] theorem Valuation.cast_rfl {Γ : Ctxt Ty} (h : Γ = Γ) (V : Valuation Γ) : V.cast h = V := rfl
+
+/-- Pointfree `cast_rfl`, for the casts that sit under a `<$>`. -/
+@[simp] theorem Valuation.cast_rfl_eq_id {Γ : Ctxt Ty} (h : Γ = Γ) :
+    Valuation.cast h = (id : Γ.Valuation → Γ.Valuation) := rfl
+
 
 @[simp] theorem Valuation.cast_apply {Γ : Ctxt Ty} (h : Γ = Δ) (V : Γ.Valuation) (v : Δ.Var t) :
     V.cast h v = V (v.castCtxt h.symm) := rfl
@@ -922,7 +959,11 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     induction vs
     case nil => rfl
     case cons t Γ v vs ih =>
-      simp [HVector.ofFn, ofHVector, ih, -ofHVector_apply]
+      simp [HVector.ofFn, ofHVector, -ofHVector_apply]
+      first
+      | exact ih
+      | (trace "B"; exact ⟨rfl, ih⟩)
+      | (trace "C"; simp [ih])
 
 end Valuation
 
@@ -1146,6 +1187,9 @@ def dropUntil : Ctxt Ty :=
 
 variable {Γ} {v}
 
+@[simp] theorem length_dropUntil : (Γ.dropUntil v).length = Γ.length - (v.val + 1) :=
+  List.length_drop ..
+
 @[simp] theorem dropUntil_last   : dropUntil (cons ty Γ) (Var.last Γ ty) = Γ := rfl
 @[simp] theorem dropUntil_toCons : dropUntil (cons ty Γ) (Var.toCons v) = dropUntil Γ v := rfl
 
@@ -1186,7 +1230,7 @@ def dropUntilDiff : Diff (Γ.dropUntil v) Γ :=
       cases v using Var.casesOn
       · simp only [Var.val_toCons] at h ⊢
         apply ih h
-      · simpa! using h
+      · exact h
   ⟩
 
 /-- Context homomorphism from `(Γ.dropUntil v)` to `Γ`, see also `dropUntilDiff` -/

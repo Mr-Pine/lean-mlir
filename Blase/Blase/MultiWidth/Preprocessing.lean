@@ -77,14 +77,14 @@ with BitVec.ofNat -/
 /-! Normal form for < and ≤: we normalize them into ult and ule -/
 @[bv_multi_width_normalize] theorem BitVec.lt_eq_ult {x y : BitVec w} :
     (x < y) = ((x.ult y) = true) := by
-  simp [instLTBitVec, BitVec.ult]
+  simp [BitVec.lt_def, BitVec.ult]
 
 
 /-! Normal form for < and ≤: we normalize them into 'ult = true' and 'ule = true'.
 Recall that booleans are coerced into props by writing it as '<bool> = true'. -/
 @[bv_multi_width_normalize] theorem BitVec.le_eq_ule {x y : BitVec w} :
     (x ≤ y) = ((x.ule y) = true) := by
-  simp [instLEBitVec, BitVec.ule]
+  simp [BitVec.le_def, BitVec.ule]
 
 /-! Normal form for shifts
 
@@ -346,11 +346,11 @@ attribute [bv_multi_width_normalize] Nat.succ_eq_add_one
 
 @[bv_multi_width_normalize]
 theorem BitVec.lt_ult {x y : BitVec w} : (x < y) = (x.ult y) := by
-  simp [instLTBitVec, BitVec.ult]
+  simp [BitVec.lt_def, BitVec.ult]
 
 @[bv_multi_width_normalize]
 theorem BitVec.le_ule {x y : BitVec w} : (x ≤ y) = (x.ule y) := by
-  simp [instLEBitVec, BitVec.ule]
+  simp [BitVec.le_def, BitVec.ule]
 
 -- Copy all the bool_to_prop lemmas
 
@@ -491,7 +491,7 @@ simproc [bv_multi_width_normalize] boolEqIff (@Eq Bool _ _) := fun e => do
       | true => pure .continue
       | false => pure .continue
       | _ =>
-        let it e := (mkApp3 (.const ``Eq [levelOne]) (.const ``Bool []) e (.const ``true []))
+        let it e := (mkApp3 (.const ``Eq [Level.one]) (.const ``Bool []) e (.const ``true []))
         let e' := mkApp2 (.const ``Iff []) (it e₁) (it e₂)
         let pf := mkApp2 (.const ``bool_eq_iff []) e₁ e₂
         pure $ .done { expr := e', proof? := some pf }
@@ -605,7 +605,7 @@ elab "bv_multi_width_normalize" : tactic => do
 trace: w : ℕ
 ⊢ ∀ (a b : BitVec w), b.ule a = true ∧ (a.ule b = true ∨ b.ult a = true ∨ a.ule b = true ∨ a ≠ b)
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in example : ∀ (a b : BitVec w),  ¬ (a < b ∨ a > b ∧ a ≤ b ∧ a > b ∧ (¬ (a ≠ b))) := by
  bv_multi_width_normalize
@@ -615,7 +615,7 @@ warning: declaration uses 'sorry'
 trace: w : ℕ
 ⊢ ∀ (a b : BitVec w), a &&& b ≠ 0#w ∨ a = b
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in example : ∀ (a b : BitVec w), a &&& b = 0#w → a = b := by
  bv_multi_width_normalize; trace_state; sorry

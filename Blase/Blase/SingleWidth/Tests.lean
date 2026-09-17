@@ -51,9 +51,9 @@ theorem check_axioms_cadical (w : Nat) (a b : BitVec w) : a + b = b + a := by
 /--
 info: 'TestsSingleWidth.check_axioms_cadical' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
+ BitStream.subCarries?_correct._native.bv_decide.ax_1_15]
 -/
 #guard_msgs in #print axioms check_axioms_cadical
 
@@ -64,9 +64,22 @@ theorem check_axioms_presburger (w : Nat) (a b : BitVec w) : a + b = b + a := by
 info: 'TestsSingleWidth.check_axioms_presburger' depends on axioms: [hashMap_missing,
  propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
+ BitStream.subCarries?_correct._native.bv_decide.ax_1_15,
+ CNFA.autEq_spec._native.native_decide.ax_1_1,
+ CNFA.autEq_spec._native.native_decide.ax_1_2,
+ CNFA.autEq_spec._native.native_decide.ax_1_3,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_1,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_2,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_3,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_3,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_3,
+ check_axioms_presburger._native.bv_automata_circuit.ax_1_1]
 -/
 #guard_msgs in #print axioms check_axioms_presburger
 

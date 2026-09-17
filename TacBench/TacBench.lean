@@ -46,7 +46,7 @@ def setTraceOptions (opt : Options) : Options := opt
     |>.setBool `trace.profiler true
     |>.setBool `trace.Meta.Tactic.bv true
     |>.setBool `trace.Meta.Tactic.sat true
-    |>.setNat `trace.profiler.threshold 1
+    |>.set `trace.profiler.threshold (1 : Nat)
 
 def withFreshTraceState {α : Type} (x : TacticM α) : TacticM α := do
     let traces ← getTraceState

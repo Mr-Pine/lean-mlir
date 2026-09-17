@@ -24,6 +24,11 @@ open Ctxt (Var Valuation DerivedCtxt Hom)
 
 open Lean Elab Tactic Meta
 
+/-- Unfolds `Valuation.instAppendHVector`, which v4.34 `simp` no longer unfolds itself. -/
+theorem _root_.Ctxt.Valuation.hvectorAppend_eq {Ty : Type} [TyDenote Ty] {Γ : Ctxt Ty} {ts : List Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) : vals ++ V = Valuation.ofHVector vals ++ V :=
+  rfl
+
 attribute [simp_denote]
   Int.ofNat_eq_coe DerivedCtxt.cons DerivedCtxt.ofCtxt
   DerivedCtxt.ofCtxt_empty Valuation.cons_last
@@ -278,8 +283,9 @@ macro "simp_peephole" loc:(location)? : tactic =>
       | skip
 
       -- Then, we simplify with the `simp_denote` simpset
+      -- (v4.34: `simp` no longer unfolds `Valuation.instAppendHVector`, hence its lemma)
       simp (config := {failIfUnchanged := false}) only
-        [Expr.denote_castPureToEff, simp_denote] $[$loc]?
+        [Expr.denote_castPureToEff, Ctxt.Valuation.hvectorAppend_eq, simp_denote] $[$loc]?
       -- ^^^^^^^^^^^^^^^^^^^^^^^^^
       -- `denote_castPureToEff` is already part of the simp_denote simpset
       -- Still, omitting it here somehow causes motive-related errors.

@@ -16,11 +16,11 @@ instance instParseableTuple [A : Cli.ParseableType α] [B : Cli.ParseableType β
   Cli.ParseableType (α × β) where
     name :=  s!"({A.name} × {B.name})"
     parse? str := do
-      let str := str.trim.splitOn ","
+      let str := str.trimAscii.copy.splitOn ","
       match str with
       | [a, b] => do
-        let a ← A.parse? a.trim
-        let b ← B.parse? b.trim
+        let a ← A.parse? a.trimAscii.copy
+        let b ← B.parse? b.trimAscii.copy
         return (a, b)
       | _ => .none
 
@@ -68,7 +68,7 @@ This property ensures that they are concrete, i.e. have no metavariables
 def CliTest.concrete : CliTest → Prop := fun test => test.mvars = 0
 
 instance {test : CliTest} : Decidable test.concrete :=
- inferInstanceAs (DecidableEq Nat) test.mvars 0
+ inferInstanceAs (Decidable (test.mvars = 0))
 
 
 structure ConcreteCliTest where
@@ -217,7 +217,7 @@ open LLVM.Ty in
 instance {test : ConcreteCliTest} : ToString (toType test.ty) where
   toString :=
     match test.ty with
-    | bitvec w => inferInstanceAs (ToString (PoisonOr <| BitVec w)) |>.toString
+    | bitvec w => (inferInstance : ToString (PoisonOr <| BitVec w)).toString
 
 -- Define an attribute to add up all LLVM tests
 -- https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/.E2.9C.94.20Stateful.2FAggregating.20Macros.3F/near/301067121

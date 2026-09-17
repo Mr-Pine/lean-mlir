@@ -53,7 +53,7 @@ instance : GetElem? MemoryState BlockId Block (fun m i => i ∈ m.mem) where
   getElem mem id h := mem.mem[id]
   getElem? mem id  := mem.mem[id]?
 
-def LiveBlock.lengthInBits (b : LiveBlock) : Nat :=
+@[implicit_reducible] def LiveBlock.lengthInBits (b : LiveBlock) : Nat :=
   8 * b.length
 
 def Pointer.offsetInBits (p : Pointer) : Nat :=

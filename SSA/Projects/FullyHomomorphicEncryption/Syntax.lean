@@ -76,7 +76,7 @@ section CstComputable
 def ROfZComputable_impl (z : ℤ) : R q n :=
   let zq : ZMod q := z
   let p : (ZMod q)[X] := {
-      toFinsupp := Finsupp.mk
+      toFinsupp := .ofCoeff <| Finsupp.mk
         (support := List.toFinset (if zq = 0 then  [] else [0]))
         (toFun := fun i => if i = 0 then z else 0)
         (mem_support_toFun := by
@@ -93,7 +93,7 @@ def ROfZComputable_impl (z : ℤ) : R q n :=
         )
       : (ZMod q)[X]
   }
-  R.fromPoly p
+  (Quot.mk _ p : R q n)
 
 /-#
 Explanation of what's going on:
@@ -153,7 +153,7 @@ def mkExpr (Γ : Ctxt (FHE q n).Ty) (opStx : MLIR.AST.Op 0) :
     | v₁Stx::v₂Stx::[] =>
       let ⟨ty₁, v₁⟩ ← MLIR.AST.TypedSSAVal.mkVal Γ v₁Stx
       let ⟨ty₂, v₂⟩ ← MLIR.AST.TypedSSAVal.mkVal Γ v₂Stx
-      match ty₁, ty₂ with
+      match (dependent := true) ty₁, ty₂ with
         | .integer, .index => return ⟨_, [.polynomialLike], mon v₁ v₂⟩
         | _, _ => throw <|
           .generic (s!"expected operands to be of types `integer` and " ++
@@ -165,7 +165,7 @@ def mkExpr (Γ : Ctxt (FHE q n).Ty) (opStx : MLIR.AST.Op 0) :
     | v₁Stx::v₂Stx::[] =>
       let ⟨ty₁, v₁⟩ ← MLIR.AST.TypedSSAVal.mkVal Γ v₁Stx
       let ⟨ty₂, v₂⟩ ← MLIR.AST.TypedSSAVal.mkVal Γ v₂Stx
-      match ty₁, ty₂ with
+      match (dependent := true) ty₁, ty₂ with
         | .polynomialLike, .polynomialLike => return ⟨_, [.polynomialLike], add v₁ v₂⟩
         | _, _ => throw <| .generic s!"expected both operands to be of type 'polynomialLike'"
     | _ => throw <|

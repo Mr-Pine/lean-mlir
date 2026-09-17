@@ -420,15 +420,15 @@ private theorem evalMsbEq_denote_true_iff {w : Nat} (a b : Term) (vars : List (B
 
 theorem eq_true_iff_of_eq_false_iff (b : Bool) (rhs : Prop) (h : (b = false) ↔ rhs) :
     (b = true) ↔ ¬ rhs := by
-constructor
-· intros h'
-  apply h.not.mp
-  simp [h']
-· intros h'
-  by_contra hcontra
-  simp at hcontra
-  have := h.mp hcontra
-  exact h' this
+  constructor
+  · intros h'
+    apply h.not.mp
+    simp [h']
+  · intros h'
+    by_contra hcontra
+    simp at hcontra
+    have := h.mp hcontra
+    exact h' this
 
 /-- TODO: Minimize this proof by a metric fuckton. -/
 private theorem Predicate.evalSlt_denote_false_iff {w : Nat} (a b : Term) (vars : List (BitVec w)) :

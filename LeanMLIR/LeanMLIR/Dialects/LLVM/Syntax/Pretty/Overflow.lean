@@ -1,7 +1,9 @@
 import LeanMLIR.MLIRSyntax.PrettyEDSL
+
 open Lean
 
 namespace MLIR.EDSL
+
 open Pretty
 
 /-!
@@ -13,13 +15,16 @@ Additionally, `overflow_op`s may be annotated with overflow flags, which are `ns
 The pretty syntax for these flags is `overflow<flags>`.
 It gets translated to `<{overflowFlags = #llvm.overflow< flags >}>` in the generic syntax.
 -/
+
 declare_syntax_cat MLIR.Pretty.overflow_op
+
 declare_syntax_cat MLIR.Pretty.overflow_int_cast_op
 
 syntax no_wrap_flag := "nsw" <|> "nuw"
 
-syntax (mlir_op_operand " = ")? MLIR.Pretty.overflow_op mlir_op_operand,* (" overflow<" no_wrap_flag,* "> ")?
-  (" : " mlir_type)? : mlir_op
+syntax (mlir_op_operand " = ")? MLIR.Pretty.overflow_op mlir_op_operand,*
+  (" overflow<" no_wrap_flag,* "> ")? (" : " mlir_type)? : mlir_op
+
 macro_rules
   | `(mlir_op| $[$resName =]? $name:MLIR.Pretty.overflow_op $xs,* $[overflow< $[$noWrapFlags],* >]? $[: $t]? ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported
@@ -36,7 +41,9 @@ macro_rules
       | _ => Macro.throwUnsupported
     `([mlir_op| $[$resName =]? $opName ($xs,*) $[<{overflowFlags = #llvm.overflow< $ovflags,* >}>]? : ($argTys,*) -> ($retTy:mlir_type,*) ])
 
-syntax mlir_op_operand " = " MLIR.Pretty.overflow_int_cast_op mlir_op_operand (" overflow<" no_wrap_flag,* "> ")? " : " mlir_type " to " mlir_type : mlir_op
+syntax mlir_op_operand " = " MLIR.Pretty.overflow_int_cast_op mlir_op_operand (" overflow<" no_wrap_flag,* "> ")? " : " mlir_type " to " mlir_type :
+  mlir_op
+
 macro_rules
   | `(mlir_op| $resName:mlir_op_operand = $name:MLIR.Pretty.overflow_int_cast_op $x $[overflow< $[$noWrapFlags],* >]? : $t to $t' ) => do
     let some opName := extractOpName name.raw | Macro.throwUnsupported

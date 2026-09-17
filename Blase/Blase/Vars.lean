@@ -78,10 +78,8 @@ def univ [DecidableEq ι] [Fintype ι] (n : Nat) :
   ⟨out, by
     intros i
     obtain ⟨ix, input⟩ := i
-    simp [out]
-    constructor
-    · apply Fintype.complete
-    · apply Fintype.complete
+    simp [out, ixs, inputs]
+    exact ⟨ix, input, rfl⟩
   ⟩
 
 
@@ -166,7 +164,7 @@ instance [DecidableEq σ] [DecidableEq ι] [Fintype σ] [Fintype ι] : Fintype (
   complete := by
     intros x
     simp
-    rcases x with s | i  <;> simp
+    rcases x with s | i <;> simp <;> exact ⟨_, rfl⟩
 
 open Lean in
 def Vars.format (fσ : σ → Format) (fι : ι → Format) {n : Nat} (v : Vars σ ι n) : Format :=

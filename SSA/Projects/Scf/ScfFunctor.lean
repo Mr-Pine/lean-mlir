@@ -36,6 +36,7 @@ inductive Scf.Op (Op' Ty' : Type) (m') [TyDenote Ty'] [DialectSignature ⟨Op', 
   deriving DecidableEq, Repr
 
 -- TODO: this probably doesn't need `DialectDenote`
+@[implicit_reducible]
 def Scf (d : Dialect) [TyDenote d.Ty] [DialectSignature d] [DialectDenote d] : Dialect where
   Op := Scf.Op d.Op d.Ty d.m
   Ty := d.Ty
@@ -49,6 +50,7 @@ variable {d : Dialect} [TyDenote d.Ty] [DialectSignature d] [DialectDenote d]
 instance [inst : Monad d.m] : Monad (Scf d).m := inst
 instance [Monad d.m] [inst : LawfulMonad d.m] : LawfulMonad (Scf d).m := inst
 
+set_option backward.inferInstanceAs.wrap false in
 instance : TyDenote (Scf d).Ty := inferInstanceAs (TyDenote d.Ty)
 
 instance [DecidableEq d.Op] [DecidableEq d.Ty] : DecidableEq (Scf d).Op :=
@@ -210,9 +212,9 @@ theorem constant_iterate {α : Type} (k : ℕ) (δ : Int) :
     fun (args : ℤ × α) => (args.fst + k * δ, args.snd) := by
   funext ⟨i, v⟩
   induction k generalizing i v
-  case h.zero =>
+  case zero =>
     simp
-  case h.succ n ihn =>
+  case succ n ihn =>
     simp only [Function.iterate_succ, Function.comp_apply, constant, ihn, Nat.cast_add,
       Nat.cast_one, Prod.mk.injEq, and_true]
     linarith
@@ -444,6 +446,7 @@ theorem for_return {t : Arith.Ty} (istart istep: Var Γ Arith.Ty.int)
     Expr.denoteOp (for_ (t := t) istart istep niters v (RegionRet t ⟨1, by simp⟩)) Γv = [Γv v]ₕ := by
   simp_peephole
   simp [Scf.LoopBody.counterDecorator.constant_iterate]
+  rfl
 
 /-# Repeatedly adding a constant in a loop is replaced with a multiplication.
 

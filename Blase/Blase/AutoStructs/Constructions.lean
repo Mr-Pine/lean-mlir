@@ -33,7 +33,7 @@ lemma CNFA.addSink_spec (m : CNFA n) (M : NFA' n) :
     exact ⟨q, hs, m.wf.initials_lt hi, hRi⟩
   · simp [CNFA.addSink, RawCNFA.addSink, NFA'.complete, NFA.complete, R]
     rintro q hq; obtain ⟨s, hi, hRi⟩ := hsim.initial₂ hq
-    use s, .inr hi, m.wf.initials_lt hi, hRi
+    use s, hi, m.wf.initials_lt hi, hRi
   · simp [CNFA.addSink, RawCNFA.addSink, NFA'.complete, NFA.complete, R]
     rintro s s' a; constructor
     on_goal 2 => rintro rfl (⟨_, rfl⟩ | hh); rfl; simp_all
@@ -282,7 +282,7 @@ lemma product.f_spec {m₁ m₂ : CNFA n} {s₁ : m₁.m.states} {s₂ : m₂.m.
       (by rintro _ _ _ _ ⟨rfl, rfl, rfl⟩; tauto)
       (fun _ => m₁.wf.trans_tgt_lt (s := s₁)) (fun _ => m₂.wf.trans_tgt_lt (s := s₂) (a := a))
       hnd
-      (by dsimp; rintro s₁ s₂ hin; apply hnew at hin; simp at hin)
+      (by rintro s₁ s₂ hin; apply hnew at hin; simp at hin)
     dsimp
     have hmem : ∀ b s₁' s₂', b ≠ a → (b, s₁', s₂') ∈ prodArray' (fun s₁' s₂' => (a, s₁', s₂'))
         (fun _ => m₁.wf.trans_tgt_lt (s := s₁) (a := a))
@@ -647,7 +647,7 @@ def CNFA.determinize_spec (m : CNFA n)
     · simp only [NFA.mem_stepSet]; rintro q' ⟨q, hq, hst⟩
       obtain ⟨s, hs, hRi⟩ := hR.2 hq
       obtain ⟨s', hs', hRi'⟩ := hsim.trans_match₂ hRi hst (by simp) (by simp)
-      use s'; simp_all only [Set.top_eq_univ, and_true]; tauto
+      use s'; simp_all only [Set.top_eq_univ, and_true]; exact (hq₁' (s' := s')).mpr ⟨s, hs, hs'⟩
   · simp [nfa', nfa, NFA'.determinize, NFA.toDFA, determinize.f_spec]
     rintro q₁ q₂ a hR
     use m.m.transSetBV q₁ a
@@ -1040,7 +1040,6 @@ lemma CNFA.lift_spec (m : CNFA n1) (f : Fin n1 → Fin n2) {M : NFA' n1} :
     obtain ⟨q', hst, hR'⟩ := hsim.trans_match₁ hR htr
     simp [NFA'.lift]; use q', hst, hR'
   · rintro s s' a q hR htr
-    simp at htr
     obtain ⟨q', hst, hR'⟩ := hsim.trans_match₂ hR htr (by simp) (by simp)
     simp; use q', hst, hR'
 
@@ -1177,7 +1176,7 @@ def CNFA.proj_spec (m : CNFA n2) (f : Fin n1 → Fin n2) {M : NFA' n2} :
     obtain ⟨q', hst, hR'⟩ := hsim.trans_match₁ hR htr
     simp [NFA'.proj]; use q', ⟨a', rfl, hst⟩, hR'
   · rintro s s' a q hR htr
-    simp at htr; rcases htr with ⟨a', rfl, htr⟩
+    rcases htr with ⟨a', rfl, htr⟩
     obtain ⟨q', hst, hR'⟩ := hsim.trans_match₂ hR htr (by simp) (by simp)
     simp [NFA'.proj]; use q', ⟨a', rfl, hst⟩, hR'
 

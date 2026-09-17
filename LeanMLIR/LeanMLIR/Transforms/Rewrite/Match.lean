@@ -9,10 +9,9 @@ pattern of a peephole rewrite, and attempt to find a location in the program
 where the peephole is applicable.
 
 -/
+
 set_option deprecated.oldSectionVars true
-
 open Ctxt (Var VarSet Valuation Hom)
-
 variable {d} [DialectSignature d] [DecidableEq d.Ty]
 variable {Γ : Ctxt d.Ty} {ty : d.Ty}
 
@@ -20,23 +19,21 @@ variable {Γ : Ctxt d.Ty} {ty : d.Ty}
 ## MatchVarM Monad
 -/
 
-abbrev MatchVarM (Δ Γ : Ctxt d.Ty) := (StateT (Mapping Δ Γ) Option)
-abbrev MatchVar (Δ Γ : Ctxt d.Ty)  := MatchVarM Δ Γ Unit
+abbrev MatchVarM (Δ Γ : Ctxt d.Ty) :=
+  (StateT (Mapping Δ Γ) Option)
+
+abbrev MatchVar (Δ Γ : Ctxt d.Ty) :=
+  MatchVarM Δ Γ Unit
 
 /--
 Given two variables `v` and `w`, ensure the mapping state maps `w` to `v`,
 or fail if `w` is already assigned to a different variable.
 -/
-def MatchVarM.unifyVars {Δ Γ : Ctxt d.Ty} (v : Δ.Var t) (w : Γ.Var t) : MatchVar Δ Γ :=
-  fun ma =>
-    match ma.lookup ⟨_, v⟩ with
-    | some v =>
-      if v = w then
-        some ((), ma)
-      else
-        none
-    | none =>
-      some ((), AList.insert ⟨_, v⟩ w ma)
+def MatchVarM.unifyVars {Δ Γ : Ctxt d.Ty} (v : Δ.Var t) (w : Γ.Var t) : MatchVar Δ Γ := fun ma =>
+  match ma.lookup ⟨_, v⟩ with
+  | some v => if v = w then some ((), ma) else none
+  | none => some ((), AList.insert ⟨_, v⟩ w ma)
+
 open MatchVarM
 
 /-!
@@ -124,45 +121,42 @@ end
 /-!
 ## Semantics Theorems
 -/
-section MatchVar
-variable [DecidableEq d.Op] {Γ_in Γ_out Δ_in Δ_out t te}
-          {lets : Lets d Γ_in eff Γ_out} {v : Var Γ_out t}
-          {matchLets : Lets d Δ_in .pure Δ_out}
-          {matchExpr : Expr d Δ_out .pure te}
 
-@[simp] theorem matchVar_appendInr (w : Δ_out.Var t) :
-    matchVar lets v (.var matchLets matchExpr) w.appendInr
-    = matchVar lets v matchLets w := by
+section MatchVar
+
+variable [DecidableEq d.Op] {Γ_in Γ_out Δ_in Δ_out t te} {lets : Lets d Γ_in eff Γ_out}
+  {v : Var Γ_out t} {matchLets : Lets d Δ_in .pure Δ_out} {matchExpr : Expr d Δ_out .pure te}
+
+@[simp]
+theorem matchVar_appendInr (w : Δ_out.Var t) :
+    matchVar lets v (.var matchLets matchExpr) w.appendInr = matchVar lets v matchLets w := by
   simp [matchVar]
 
 @[simp]
 theorem unifyVars_eq_some_iff :
-    unifyVars w v mapIn = some ((), mapOut)
-    ↔ ( mapIn.lookup ⟨t, w⟩ = none ∧ mapIn.insert ⟨t, w⟩ v = mapOut
-        ∨ mapIn.lookup ⟨t, w⟩ = v ∧ mapIn = mapOut
-      ) := by
+    unifyVars w v mapIn = some ((), mapOut) ↔
+      (mapIn.lookup ⟨t, w⟩ = none ∧ mapIn.insert ⟨t, w⟩ v = mapOut ∨
+        mapIn.lookup ⟨t, w⟩ = v ∧ mapIn = mapOut) := by
   simp only [unifyVars]
   split <;> simp_all
 
-@[simp] theorem matchVar_nil_eq {lets : Lets d Γ_in eff Γ_out} :
-    matchVar lets v (.nil : Lets d Δ .pure Δ) w = unifyVars w v := by
-  simp only [matchVar]
+@[simp]
+theorem matchVar_nil_eq {lets : Lets d Γ_in eff Γ_out} :
+    matchVar lets v (.nil : Lets d Δ .pure Δ) w = unifyVars w v := by simp only [matchVar]
 
 theorem matchVar_nil {lets : Lets d Γ_in eff Γ_out} :
     matchVar lets v (.nil : Lets d Δ .pure Δ) w ma = some ((), ma') →
-    ma'.lookup ⟨_, w⟩ = some v := by
+      ma'.lookup ⟨_, w⟩ = some v := by
   simp only [matchVar_nil_eq, unifyVars_eq_some_iff]
   rintro (⟨_, rfl⟩ | ⟨h_lookup, rfl⟩)
   · simp
   · exact h_lookup
 
 @[simp]
-theorem MatchVar.liftM_bind_eq_some_iff (x? : Option α)
-    (f : α → MatchVarM Δ Γ β) :
-    ((liftM x? >>= f) mapIn = some mapOut)
-    ↔ ( ∃ h : x?.isSome,
-        f (x?.get h) mapIn = some mapOut ) := by
-  rcases x? with _|x
+theorem MatchVar.liftM_bind_eq_some_iff (x? : Option α) (f : α → MatchVarM Δ Γ β) :
+    ((liftM x? >>= f) mapIn = some mapOut) ↔
+      (∃ h : x?.isSome, f (x?.get h) mapIn = some mapOut) := by
+  rcases x? with _ | x
   · simp only [Option.isSome_none, Bool.false_eq_true, IsEmpty.exists_iff, iff_false]
     show none ≠ some _
     simp
@@ -170,10 +164,10 @@ theorem MatchVar.liftM_bind_eq_some_iff (x? : Option α)
 
 theorem matchVar_appendInl {w : Var ⟨te⟩ t} :
     matchVar lets v (.var matchLets matchExpr) w.appendInl ma = some ma' →
-    ∃ args,
-      lets.getPureExpr v
-        = some ⟨_, w, matchExpr.op, matchExpr.ty_eq, matchExpr.eff_le, args, matchExpr.regArgs⟩
-      ∧ matchArg lets matchLets args matchExpr.args ma = some ma' := by
+      ∃ args,
+        lets.getPureExpr v =
+            some ⟨_, w, matchExpr.op, matchExpr.ty_eq, matchExpr.eff_le, args, matchExpr.regArgs⟩ ∧
+          matchArg lets matchLets args matchExpr.args ma = some ma' := by
   unfold matchVar
   simp only [Var.appendCases_appendInl]
   simp only [MatchVar.liftM_bind_eq_some_iff, forall_exists_index]
@@ -188,32 +182,31 @@ theorem matchVar_appendInl {w : Var ⟨te⟩ t} :
     rcases Option.isSome_iff_exists.mp h_isSome with ⟨⟨tys', w', e'⟩, rfl⟩
     simp only [Option.get_some, Expr.op_mk, Expr.regArgs_mk, Option.some.injEq, Sigma.mk.injEq,
       Expr.args_mk]
-    obtain rfl : te = tys' := by
-      simpa [e'.ty_eq]
+    obtain rfl : te = tys' := by simpa [e'.ty_eq]
     rcases e' with ⟨_op, _ty_eq, _eff_le, args, regArgs⟩
-    obtain rfl : w = w' := by
-      simp_all [Option.get_some]
-
+    obtain rfl : w = w' := by simp_all [Option.get_some]
     exact ⟨args, ⟨rfl, by rfl⟩, h⟩
 
 /-!
 ### Subtypes
 -/
+
 attribute [refl] List.Subset.refl -- TODO: upstream somewhere
 
 variable (lets v matchLets w) (mapIn : Mapping _ _) in
-def MatchVarResult := { mapOut : Mapping _ _ //
-  ∃ (mapIn' mapOut' : Mapping _ _),
-    mapIn.entries ⊆ mapIn'.entries
-    ∧ mapOut'.entries ⊆ mapOut.entries
-    ∧ matchVar lets v matchLets w mapIn' = some ((), mapOut') }
+def MatchVarResult :=
+  { mapOut : Mapping _ _ //
+    ∃ (mapIn' mapOut' : Mapping _ _),
+      mapIn.entries ⊆ mapIn'.entries ∧
+        mapOut'.entries ⊆ mapOut.entries ∧ matchVar lets v matchLets w mapIn' = some ((), mapOut') }
 
 variable (lets matchLets) {tys} (vs ws : HVector _ tys) (mapIn : Mapping _ _) in
-def MatchArgResult := { mapOut : Mapping _ _ //
-  ∃ (mapIn' mapOut' : Mapping _ _),
-    mapIn.entries ⊆ mapIn'.entries
-    ∧ mapOut'.entries ⊆ mapOut.entries
-    ∧ matchArg lets matchLets vs ws mapIn' = some ((), mapOut') }
+def MatchArgResult :=
+  { mapOut : Mapping _ _ //
+    ∃ (mapIn' mapOut' : Mapping _ _),
+      mapIn.entries ⊆ mapIn'.entries ∧
+        mapOut'.entries ⊆ mapOut.entries ∧
+        matchArg lets matchLets vs ws mapIn' = some ((), mapOut') }
 
 def MatchVarResult.mk {mapOut : Mapping _ _}
     (h : matchVar lets v matchLets w mapIn = some ((), mapOut) := by simp_all) :
@@ -229,7 +222,8 @@ def MatchArgResult.mk {mapOut : Mapping _ _}
 ### Subtype-based lemmas
 -/
 
-@[simp] theorem lookup_matchVar_nil (m : MatchVarResult lets v .nil w ma) :
+@[simp]
+theorem lookup_matchVar_nil (m : MatchVarResult lets v .nil w ma) :
     m.val.lookup ⟨_, w⟩ = some v := by
   rcases m with ⟨m, -, m', -, h_entries_out, hm'⟩
   rw [← Option.mem_def, AList.mem_lookup_iff]
@@ -248,46 +242,49 @@ theorem ofSubsetEntries {varMap₁ : MatchVarResult lets v matchLets w ma} {varM
 /-! ### nil lemmas -/
 
 variable [TyDenote d.Ty] [∀ (t : d.Ty), Inhabited ⟦t⟧] in
-@[simp] theorem mapValuation_nil (mapOut : MatchVarResult lets v .nil w mapIn) (V) :
-    mapOut.val.mapValuation V w = V v := by
-  simp [Mapping.mapValuation]
+@[simp]
+theorem mapValuation_nil (mapOut : MatchVarResult lets v .nil w mapIn) (V) :
+    mapOut.val.mapValuation V w = V v := by simp [Mapping.mapValuation]
 
 /-! ### var_appendInl lemmas -/
+
 section Left
+
 variable {w : Δ_out.Var t}
 
-def eqvVarLeft  :
-    MatchVarResult lets v (.var matchLets matchExpr) w.appendInr ma
-    ≃ MatchVarResult lets v matchLets w ma where
+def eqvVarLeft :
+    MatchVarResult lets v (.var matchLets matchExpr) w.appendInr ma ≃
+      MatchVarResult lets v matchLets w ma
+    where
   toFun := fun ⟨x, h⟩ => ⟨x, by simp_all⟩
   invFun := fun ⟨x, h⟩ => ⟨x, by simp_all⟩
 
 @[simp, defeq]
 theorem entries_symm_eqvVar (varMap : MatchVarResult lets v matchLets w ma) :
-  (eqvVarLeft (matchExpr:=matchExpr) |>.symm  varMap).val.entries = varMap.val.entries := rfl
+    (eqvVarLeft (matchExpr := matchExpr) |>.symm varMap).val.entries = varMap.val.entries :=
+  rfl
 
 variable {mapIn} (mapOut : MatchVarResult lets v (.var matchLets matchExpr) w.appendInr mapIn)
 
-@[simp, defeq] theorem entries_eqvVar : (eqvVarLeft mapOut).val.entries = mapOut.val.entries := rfl
+@[simp, defeq]
+theorem entries_eqvVar : (eqvVarLeft mapOut).val.entries = mapOut.val.entries :=
+  rfl
 
 end Left
+
 /-! ### var_appendInr lemmas -/
+
 variable {w : Var ⟨te⟩ _} {mapIn}
 
 theorem getPureExpr_eq_some
     (mapOut : MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn) :
-    ∃ args, lets.getPureExpr v = some ⟨te, w, ⟨
-        matchExpr.op,
-        matchExpr.ty_eq,
-        matchExpr.eff_le,
-        args,
-        matchExpr.regArgs
-      ⟩⟩ := by
+    ∃ args,
+      lets.getPureExpr v =
+        some
+          ⟨te, w, ⟨matchExpr.op, matchExpr.ty_eq, matchExpr.eff_le, args, matchExpr.regArgs⟩⟩ := by
   rcases mapOut with ⟨mapOut, _, map', _, _, h⟩
   obtain ⟨args, h₁, h₂⟩ := matchVar_appendInl h
   use args, h₁
-
-
 
 noncomputable def toArgResult
     (mapOut : MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn) :
@@ -297,18 +294,20 @@ noncomputable def toArgResult
     rcases mapOut with ⟨mapOut, mapIn', mapOut', h₁, h₂, h₃⟩
     use mapIn', mapOut', h₁, h₂
     have ⟨args, h'₁, h'₂⟩ := matchVar_appendInl h₃
-    simp [*]
-  ⟩
+    simp [*]⟩
 
 noncomputable instance :
-  CoeDep (MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn)
-        mapOut
+    CoeDep (MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn) mapOut
         (let args := mapOut.getPureExpr_eq_some.choose
-         MatchArgResult lets matchLets args matchExpr.args mapIn) where
+         MatchArgResult lets matchLets args matchExpr.args mapIn)
+    where
   coe := mapOut.toArgResult
 
-@[simp] theorem val_toArgResult (mapOut : MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn) :
-    mapOut.toArgResult.val = mapOut.val := rfl
+@[simp]
+theorem val_toArgResult
+    (mapOut : MatchVarResult lets v (.var matchLets matchExpr) w.appendInl mapIn) :
+    mapOut.toArgResult.val = mapOut.val :=
+  rfl
 
 end MatchVarResult
 
@@ -323,9 +322,10 @@ mapping.
 
 section SubsetEntries
 
-@[simp] theorem MatchVarM.liftM_eq_some_iff (x? : Option α) :
-    (liftM x? : no_index MatchVarM Δ Γ α) mapIn = some (x, mapOut)
-    ↔ x? = some x ∧ mapIn = mapOut := by
+@[simp]
+theorem MatchVarM.liftM_eq_some_iff (x? : Option α) :
+    (liftM x? : no_index MatchVarM Δ Γ α) mapIn = some (x, mapOut) ↔
+      x? = some x ∧ mapIn = mapOut := by
   cases x?
   · simp only [reduceCtorEq, false_and, iff_false]
     show none ≠ some _
@@ -335,8 +335,8 @@ section SubsetEntries
     simp
 
 def MatchVar.IsMonotone (f : MatchVar Δ Γ) : Prop :=
-    ∀ mapIn, ∀ mapOut ∈ f mapIn,
-      mapIn.entries ⊆ mapOut.2.entries
+  ∀ mapIn, ∀ mapOut ∈ f mapIn, mapIn.entries ⊆ mapOut.2.entries
+
 open MatchVar
 
 @[simp]
@@ -344,7 +344,7 @@ theorem MatchVar.isMonotone_bind {f : MatchVar Δ Γ} {g : Unit → MatchVar Δ 
     f.IsMonotone → (g ()).IsMonotone → IsMonotone (f >>= g) := by
   intro hf hg mapIn ⟨(), mapOut⟩ hvarMap
   obtain ⟨⟨⟨⟩, mapMid⟩, hMid⟩ :
-      ∃ mapMid, f mapIn = some mapMid ∧ g () mapMid.2 = some ((), mapOut) := by
+    ∃ mapMid, f mapIn = some mapMid ∧ g () mapMid.2 = some ((), mapOut) := by
     simpa [bind, StateT.bind, Option.bind_eq_some_iff] using hvarMap
   apply List.Subset.trans
   · apply hf mapIn ((), mapMid) hMid.1
@@ -353,20 +353,22 @@ theorem MatchVar.isMonotone_bind {f : MatchVar Δ Γ} {g : Unit → MatchVar Δ 
 @[simp]
 theorem MatchVar.isMonotone_bind_liftM {x? : Option α} {g : α → MatchVar Δ Γ} :
     IsMonotone (liftM x? >>= g) ↔ (∀ x ∈ x?, (g x).IsMonotone) := by
-  rcases x? with _|x
+  rcases x? with _ | x
   · simp only [Option.mem_def, reduceCtorEq, IsEmpty.forall_iff, implies_true, iff_true]
     intro _ _ (h : _ ∈ none)
     contradiction
   · simp only [Option.mem_def, Option.some.injEq, forall_eq']
     exact Iff.rfl
 
-@[simp] theorem MatchVar.isMonotone_none : IsMonotone (none : MatchVar Δ Γ) := by
+@[simp]
+theorem MatchVar.isMonotone_none : IsMonotone (none : MatchVar Δ Γ) := by
   intro mapIn mapOut (h : _ ∈ none); contradiction
 
 section UnifyVars
+
 variable {Δ Γ : Ctxt d.Ty} {t} (w : Δ.Var t) (v : Γ.Var t)
 
-theorem MatchVar.isMonotone_unifyVars  : IsMonotone (unifyVars w v) := by
+theorem MatchVar.isMonotone_unifyVars : IsMonotone (unifyVars w v) := by
   intro mapIn ⟨(), mapOut⟩ hMapOut
   simp only [Option.mem_def, unifyVars_eq_some_iff] at hMapOut
   rcases hMapOut with ⟨h_lookup, rfl⟩ | ⟨_, rfl⟩
@@ -384,53 +386,38 @@ Auxiliary mutual induction for `subset_entries_matchArg`
 and `subset_entries_matchVar`
 -/
 theorem isMonotone_matchVarArg_aux (lets : Lets d Γ_in eff Γ_out) :
-    (
-     ∀  (Δ_out : Ctxt d.Ty)
-        (matchLets : Lets d Δ_in EffectKind.pure Δ_out) (l : List d.Ty)
+    (∀ (Δ_out : Ctxt d.Ty) (matchLets : Lets d Δ_in EffectKind.pure Δ_out) (l : List d.Ty)
         (argsl : HVector Γ_out.Var l) (argsr : HVector Δ_out.Var l),
-        (matchArg lets matchLets argsl argsr).IsMonotone
-    )
-    ∧ (
-      ∀ (Δ_out : Ctxt d.Ty) (t : d.Ty) (v : Γ_out.Var t)
-        (matchLets : Lets d Δ_in EffectKind.pure Δ_out)
-        (w : Var Δ_out t),
-        (matchVar lets v matchLets w).IsMonotone
-    ) := by
-  apply matchArg.mutual_induct (d:=d)
+        (matchArg lets matchLets argsl argsr).IsMonotone) ∧
+      (∀ (Δ_out : Ctxt d.Ty) (t : d.Ty) (v : Γ_out.Var t)
+        (matchLets : Lets d Δ_in EffectKind.pure Δ_out) (w : Var Δ_out t),
+        (matchVar lets v matchLets w).IsMonotone) := by
+  apply matchArg.mutual_induct (d := d)
   · intro _ _ mapIn ⟨(), mapOut⟩ hvarMap
     obtain rfl : mapIn = mapOut := by
       simp only [matchArg] at hvarMap
       change some ((), _) = some ((), _) at hvarMap
       simp_all
     exact Set.Subset.refl _
-
   · intros
     simp only [matchArg]
     apply isMonotone_bind <;> assumption
-
   · intro _ _ Δ_out u matchLets matchExpr l h ih
     cases l using Var.appendCases with
     | right _ => simp [ih]
-    | left _ =>
-      simp only [matchVar, Var.appendCases_appendInl, isMonotone_bind_liftM,
-      Option.mem_def]
+    | left
+      _ =>
+      simp only [matchVar, Var.appendCases_appendInl, isMonotone_bind_liftM, Option.mem_def]
       intro ⟨_, e⟩ h_getPureExpr
       split_ifs
       · apply h; assumption
       · exact isMonotone_none
       · exact isMonotone_none
-
   · simp [isMonotone_unifyVars]
 
-
-
-theorem isMonotone_matchArg [DecidableEq d.Op]
-    {Γ_out Δ_in Δ_out : Ctxt d.Ty}
-    {lets : Lets d Γ_in eff Γ_out}
-    {matchLets : Lets d Δ_in .pure Δ_out}
-    {l : List d.Ty}
-    {argsl : HVector (Var Γ_out) l}
-    {argsr : HVector (Var Δ_out) l} :
+theorem isMonotone_matchArg [DecidableEq d.Op] {Γ_out Δ_in Δ_out : Ctxt d.Ty}
+    {lets : Lets d Γ_in eff Γ_out} {matchLets : Lets d Δ_in .pure Δ_out} {l : List d.Ty}
+    {argsl : HVector (Var Γ_out) l} {argsr : HVector (Var Δ_out) l} :
     (matchArg lets matchLets argsl argsr).IsMonotone :=
   (@isMonotone_matchVarArg_aux _ _ _ _ _ _ _ _ _).1 _ _ _ _ _
 
@@ -440,26 +427,21 @@ matchVar only adds new entries:
   then ma is a subset of varMap.
 Said differently, The output mapping of `matchVar` extends the input mapping when it succeeds.
 -/
-theorem isMonotone_matchVar
-    {lets : Lets d Γ_in eff Γ_out} {v : Var Γ_out t}
-    {matchLets : Lets d Δ_in .pure Δ_out}
-    {w : Var Δ_out t} :
+theorem isMonotone_matchVar {lets : Lets d Γ_in eff Γ_out} {v : Var Γ_out t}
+    {matchLets : Lets d Δ_in .pure Δ_out} {w : Var Δ_out t} :
     (matchVar lets v matchLets w).IsMonotone :=
   (@isMonotone_matchVarArg_aux _ _ _ _ _ _ _ _ _).2 _ _ _ _ _
 
 end SubsetEntries
 
 /-! ## MatchArgResult -/
+
 namespace MatchArgResult
-variable [DecidableEq d.Op] {Γ_in Γ_out Δ_in Δ_out te}
-          {lets : Lets d Γ_in eff Γ_out}
-          {matchLets : Lets d Δ_in .pure Δ_out}
-          {matchExpr : Expr d Δ_out .pure te}
-          {u us}
-          {v : Γ_out.Var u} {vs : HVector Γ_out.Var us}
-          {w : Δ_out.Var u} {ws : HVector Δ_out.Var us}
-          {mapIn : Mapping _ _}
-          (mapOut : MatchArgResult lets matchLets (v ::ₕ vs) (w ::ₕ ws) mapIn)
+
+variable [DecidableEq d.Op] {Γ_in Γ_out Δ_in Δ_out te} {lets : Lets d Γ_in eff Γ_out}
+  {matchLets : Lets d Δ_in .pure Δ_out} {matchExpr : Expr d Δ_out .pure te} {u us} {v : Γ_out.Var u}
+  {vs : HVector Γ_out.Var us} {w : Δ_out.Var u} {ws : HVector Δ_out.Var us} {mapIn : Mapping _ _}
+  (mapOut : MatchArgResult lets matchLets (v::ₕvs) (w::ₕws) mapIn)
 
 def consLeft : MatchVarResult lets v matchLets w mapIn :=
   ⟨mapOut.val, by
@@ -471,8 +453,7 @@ def consLeft : MatchVarResult lets v matchLets w mapIn :=
     refine ⟨mapIn', mapOut'', h_entries_in, ?_, h₁⟩
     trans mapOut'.entries
     · exact isMonotone_matchArg _ _ h₂
-    · exact h_entries_out
-  ⟩
+    · exact h_entries_out⟩
 
 def consRight : MatchArgResult lets matchLets vs ws mapIn :=
   ⟨mapOut.val, by
@@ -484,34 +465,36 @@ def consRight : MatchArgResult lets matchLets vs ws mapIn :=
     refine ⟨_, _, ?_, h_entries_out, h₂⟩
     trans mapIn'.entries
     · exact h_entries_in
-    · exact isMonotone_matchVar _ _ h₁
-  ⟩
+    · exact isMonotone_matchVar _ _ h₁⟩
 
-@[simp, grind=] theorem val_consLeft : mapOut.consLeft.val = mapOut.val := rfl
-@[simp, grind=] theorem val_consRight : mapOut.consRight.val = mapOut.val := rfl
+@[simp, grind =]
+theorem val_consLeft : mapOut.consLeft.val = mapOut.val :=
+  rfl
+
+@[simp, grind =]
+theorem val_consRight : mapOut.consRight.val = mapOut.val :=
+  rfl
 
 end MatchArgResult
 
 /-!
 ## Semantics Preservation
 -/
+
 section DenoteLemmas
 
 -- TODO: this assumption is too strong, we also want to be able to model non-inhabited types
 variable [TyDenote d.Ty] [DecidableEq d.Op]
 variable [∀ (t : d.Ty), Inhabited ⟦t⟧]
 
-theorem HVector.map_eq_map_of_matchArg
-    {lets : Lets d Γ_in eff Γ_out}
-    {matchLets : Lets d Δ_in .pure Δ_out}
-    {ma : Mapping Δ_in Γ_out}
-    {l : List d.Ty} {args₁ : HVector _ l} {args₂ : HVector _ l}
-    (mapOut : MatchArgResult lets matchLets args₁ args₂ ma)
-    (f₁ f₂ : (t : d.Ty) → Var _ t → ⟦t⟧)
-    (hf : ∀ {t v₁ v₂},
-      (mapOut' : MatchVarResult lets v₁ matchLets v₂ ma)
-      → mapOut'.val = mapOut.val
-      → f₂ t v₂ = f₁ t v₁) :
+theorem HVector.map_eq_map_of_matchArg {lets : Lets d Γ_in eff Γ_out}
+    {matchLets : Lets d Δ_in .pure Δ_out} {ma : Mapping Δ_in Γ_out} {l : List d.Ty}
+    {args₁ : HVector _ l} {args₂ : HVector _ l}
+    (mapOut : MatchArgResult lets matchLets args₁ args₂ ma) (f₁ f₂ : (t : d.Ty) → Var _ t → ⟦t⟧)
+    (hf :
+      ∀ {t v₁ v₂},
+        (mapOut' : MatchVarResult lets v₁ matchLets v₂ ma) →
+          mapOut'.val = mapOut.val → f₂ t v₂ = f₁ t v₁) :
     HVector.map f₂ args₂ = HVector.map f₁ args₁ := by
   induction args₁ <;> cases args₂
   case nil.nil => rfl
@@ -536,15 +519,17 @@ abbrev Expr.IsDenotationForPureE (e : Expr d Γ eff tys) (Γv : Valuation Γ)
   ∀ (ePure : Expr d Γ .pure tys), e.toPure? = some ePure → ePure.denoteOp Γv = x
 
 def Expr.denoteOpIntoSubtype (e : Expr d Γ_in eff tys) (Γv : Valuation Γ_in) :
-    eff.toMonad d.m {x // e.IsDenotationForPureE Γv x} :=
+    eff.toMonad d.m { x // e.IsDenotationForPureE Γv x } :=
   match h_pure : e.toPure? with
-    | some ePure => pure ⟨ePure.denoteOp Γv, by simp [IsDenotationForPureE, h_pure]⟩
-    | none => (Subtype.mk · (by simp [IsDenotationForPureE, h_pure])) <$> (e.denoteOp Γv)
+  | some ePure => pure ⟨ePure.denoteOp Γv, by simp [IsDenotationForPureE, h_pure]⟩
+  | none => (Subtype.mk · (by simp [IsDenotationForPureE, h_pure])) <$> (e.denoteOp Γv)
 
+-- v4.34: has to unfold to its subtype, or the monad laws cannot see the `Subtype.val`
+@[implicit_reducible]
 def Lets.ValidDenotation (lets : Lets d Γ_in eff Γ_out) :=
-  { V // ∀ {t ts} {v : Var _ t} {w : Var ⟨ts⟩ t} {e} ,
-          lets.getPureExpr v = some ⟨ts, w, e⟩
-          → (e.pdenoteOp V)[w] = V v }
+  { V //
+    ∀ {t ts} {v : Var _ t} {w : Var ⟨ts⟩ t} {e},
+      lets.getPureExpr v = some ⟨ts, w, e⟩ → (e.pdenoteOp V)[w] = V v }
 
 /-- An alternative version of `Lets.denote`, whose returned type carries a proof that the valuation
 agrees with the denotation of every pure expression in `lets`.
@@ -554,31 +539,32 @@ The subtype allows us to carry the property with us when doing congruence proofs
 def Lets.denoteIntoSubtype (lets : Lets d Γ_in eff Γ_out) (Γv : Valuation Γ_in) :
     eff.toMonad d.m lets.ValidDenotation :=
   match lets with
-    | .nil => return ⟨Γv, by simp⟩
-    | @Lets.var _ _ _ _ Γ_out eTy body e => do
-        let ⟨Vout, h⟩ ← body.denoteIntoSubtype Γv
-        let Ve ← e.denoteOpIntoSubtype Vout
-        return ⟨Ve.val ++ Vout, by
-          intro t' _ v' w ePure h_getPureExpr
-          induction v' using Var.appendCases with
-          | right _ =>
-            obtain ⟨tys', w', ePure', h_ePure', rfl, h_ePure⟩ := by
-              simp only [getPureExpr_var_appendInr, Option.map_eq_map, Option.map_eq_some_iff,
-                Sigma.mk.injEq, Sigma.exists, Prod.exists] at h_getPureExpr
-              exact h_getPureExpr
-            clear h_getPureExpr
-            obtain ⟨(rfl : w' = w), (rfl : ePure'.changeVars e.contextHom = ePure)⟩ := by
-              simpa using h_ePure
-            clear h_ePure
-            simpa using h h_ePure'
-          | left _ =>
-            simp only [getPureExpr_var_appendInl, Option.map_eq_some_iff,
+  | .nil => return ⟨Γv, by simp⟩
+  | @Lets.var _ _ _ _ Γ_out eTy body e => do
+    let ⟨Vout, h⟩ ← body.denoteIntoSubtype Γv
+    let Ve ← e.denoteOpIntoSubtype Vout
+    return ⟨Ve.val ++ Vout, by
+        intro t' _ v' w ePure h_getPureExpr
+        induction v' using Var.appendCases with
+        | right
+          _ =>
+          obtain ⟨tys', w', ePure', h_ePure', rfl, h_ePure⟩ := by
+            simp only [getPureExpr_var_appendInr, Option.map_eq_map, Option.map_eq_some_iff,
+              Sigma.mk.injEq, Sigma.exists, Prod.exists] at h_getPureExpr
+            exact h_getPureExpr
+          clear h_getPureExpr
+          obtain ⟨(rfl : w' = w), (rfl : ePure'.changeVars e.contextHom = ePure)⟩ := by
+            simpa using h_ePure
+          clear h_ePure
+          simpa using h h_ePure'
+        | left
+          _ =>
+          simp only [getPureExpr_var_appendInl, Option.map_eq_some_iff,
             Sigma.mk.injEq] at h_getPureExpr
-            rcases h_getPureExpr with ⟨ePure', h_toPure?, rfl, h_ePure⟩
-            obtain ⟨(rfl : _ = w), (rfl : ePure'.changeVars e.contextHom = ePure)⟩ := by
-              simpa using h_ePure
-            simp [Ve.prop _ h_toPure?]
-        ⟩
+          rcases h_getPureExpr with ⟨ePure', h_toPure?, rfl, h_ePure⟩
+          obtain ⟨(rfl : _ = w), (rfl : ePure'.changeVars e.contextHom = ePure)⟩ := by
+            simpa using h_ePure
+          simp [Ve.prop _ h_toPure?]⟩
 
 theorem Expr.denoteOp_eq_denoteOpIntoSubtype (e : Expr d Γ eff tys) (V : Valuation Γ) :
     e.denoteOp V = Subtype.val <$> e.denoteOpIntoSubtype V := by
@@ -595,22 +581,22 @@ theorem Lets.denote_eq_denoteIntoSubtype (lets : Lets d Γ_in eff Γ_out) (Γv :
   induction lets
   case nil => simp [denoteIntoSubtype]
   case var body e ih =>
-    simp [ValidDenotation, denote, denoteIntoSubtype, ih,
-      Expr.denote_unfold, Expr.denoteOp_eq_denoteOpIntoSubtype]
+    simp [ValidDenotation, denote, denoteIntoSubtype, ih, Expr.denote_unfold,
+      Expr.denoteOp_eq_denoteOpIntoSubtype]
 
 end DenoteIntoSubtype
 
-@[simp] theorem Lets.denote_var_appendInl_pure (lets : Lets d Γ_in .pure Γ_out)
-    (e : Expr d Γ_out .pure tys) (V_in : Valuation Γ_in) (v : Var _ u) :
-    Lets.denote (var lets e) V_in v.appendInl
-    = let xs : HVector .. := e.denoteOp (lets.denote V_in)
+@[simp]
+theorem Lets.denote_var_appendInl_pure (lets : Lets d Γ_in .pure Γ_out) (e : Expr d Γ_out .pure tys)
+    (V_in : Valuation Γ_in) (v : Var _ u) :
+    Lets.denote (var lets e) V_in v.appendInl =
+      let xs : HVector .. := e.denoteOp (lets.denote V_in)
       xs[v] := by
   show e.denote (lets.denote _) _ = _
-  simp [Expr.denote_unfold, Id.map_eq']
+  simp [Expr.denote_unfold, EffectKind.pureMonad_map_eq]
 
-variable {Γ_in Γ_out Δ_in Δ_out : Ctxt d.Ty}
-    {lets : Lets d Γ_in eff Γ_out}
-    {matchLets : Lets d Δ_in .pure Δ_out}
+variable {Γ_in Γ_out Δ_in Δ_out : Ctxt d.Ty} {lets : Lets d Γ_in eff Γ_out}
+  {matchLets : Lets d Δ_in .pure Δ_out}
 
 /--
 if matchVar lets v matchLets w ma = .some varMap,
@@ -619,27 +605,23 @@ then informally:
    Γ_in --⟦lets⟧--> Γ_out --comap ma--> Δ_in --⟦matchLets⟧ --> Δ_out --w--> t =
      Γ_in ⟦lets⟧ --> Γ_out --v--> t
 -/
-theorem denote_matchVar
-    {v w : Var _ t}
-    (mapOut : MatchVarResult lets v matchLets w mapIn)
+theorem denote_matchVar {v w : Var _ t} (mapOut : MatchVarResult lets v matchLets w mapIn)
     (V : lets.ValidDenotation) :
-    (matchLets.denote (mapOut.val.mapValuation V.val) w)
-    = V.val v := by
+    (matchLets.denote (mapOut.val.mapValuation V.val) w) = V.val v := by
   induction matchLets generalizing v mapIn t
-  case nil => simp [Id.pure_eq']
+  case nil => simp [EffectKind.pureMonad_pure_eq]
   case var t' matchLets matchExpr ih =>
     cases w using Var.appendCases with
     | right w =>
       specialize ih mapOut.eqvVarLeft
-      simpa [Id.bind_eq'] using ih
+      simp [EffectKind.pureMonad_bind_eq]
+      exact ih
     | left w =>
       let mapOut' := mapOut.toArgResult
       have h := Exists.choose_spec mapOut.getPureExpr_eq_some
-
       rw [← V.prop h]
       simp
       congr 1
-
       apply Expr.denoteOp_eq_denoteOp_of (by rfl)
       · simp only [Expr.op_mk, Expr.args_mk]
         rw [HVector.map_eq_map_of_matchArg (f₁ := V.val) (mapOut := mapOut')]
@@ -647,10 +629,8 @@ theorem denote_matchVar
           simp [← ih mapOut'', mapOut_eq, mapOut']
       · rfl
 
-theorem denote_matchArg
-    {vs ws : HVector (Var _) ts}
-    (mapOut : MatchArgResult lets matchLets vs ws mapIn)
-    (V : lets.ValidDenotation) :
+theorem denote_matchArg {vs ws : HVector (Var _) ts}
+    (mapOut : MatchArgResult lets matchLets vs ws mapIn) (V : lets.ValidDenotation) :
     HVector.map (matchLets.denote (mapOut.val.mapValuation V.val)) ws = HVector.map (V.val) vs := by
   apply HVector.map_eq_map_of_matchArg mapOut
   intro t v₁ v₂ mapOut' mapOut_eq
@@ -658,7 +638,6 @@ theorem denote_matchArg
   -- NOTE: there is a little bit of duplication between the last bit of the `denote_matchVar` proof
   --       and the `denote_matchArg` proof, but resolving it is not worth the hassle of introducing
   --       a mutual theorem block.
-
 
 /-!
 ## Post-match membership
@@ -670,44 +649,36 @@ on successfull match, instead of a mapping.
 
 -/
 
-local macro_rules | `(tactic| decreasing_trivial) => `(tactic| simp +arith)
+local macro_rules
+  | `(tactic| decreasing_trivial) => `(tactic| simp +arith)
+
 -- ^^ This is needed for the following mutual block to be recognized as terminating
 
-
 mutual
-
-theorem mem_matchArg {Δ_out}
-    {lets : Lets d Γ_in eff Γ_out}
-    {matchLets : Lets d Δ_in .pure Δ_out}
-    {l : List d.Ty} {argsₗ : HVector (Var Γ_out) l}
-    {argsᵣ : HVector (Var Δ_out) l} {ma : Mapping Δ_in Γ_out}
-    {varMap : Mapping Δ_in Γ_out}
-    (hvarMap : ((), varMap) ∈ matchArg lets matchLets argsₗ argsᵣ ma)
-    {t' v'} : ⟨t', v'⟩ ∈ matchLets.varsOfVec argsᵣ → ⟨t', v'⟩ ∈ varMap :=
-  match l, argsₗ, argsᵣ/- , ma, varMap, hvarMap -/ with
+theorem mem_matchArg {Δ_out} {lets : Lets d Γ_in eff Γ_out} {matchLets : Lets d Δ_in .pure Δ_out}
+    {l : List d.Ty} {argsₗ : HVector (Var Γ_out) l} {argsᵣ : HVector (Var Δ_out) l}
+    {ma : Mapping Δ_in Γ_out} {varMap : Mapping Δ_in Γ_out}
+    (hvarMap : ((), varMap) ∈ matchArg lets matchLets argsₗ argsᵣ ma) {t' v'} :
+    ⟨t', v'⟩ ∈ matchLets.varsOfVec argsᵣ → ⟨t', v'⟩ ∈ varMap :=
+  match l, argsₗ, argsᵣ /- , ma, varMap, hvarMap -/ with
   | .nil, .nil, .nil /- , _, varMap, _ -/ => by simp [Lets.varsOfVec]
   | .cons t ts, .cons vₗ argsₗ, .cons vᵣ args /-, ma, varMap, h -/ => by
     simp only [matchArg, bind, Option.mem_def, StateT.bind, Option.bind_eq_some_iff] at hvarMap
     rcases hvarMap with ⟨ma', h₁, h₂⟩
-    simp only [HVector.vars_cons, Finset.biUnion_insert, Finset.mem_union,
-      Finset.mem_biUnion, Sigma.exists, Lets.varsOfVec]
+    simp only [HVector.vars_cons, Finset.biUnion_insert, Finset.mem_union, Finset.mem_biUnion,
+      Sigma.exists, Lets.varsOfVec]
     rintro (h | ⟨a, b, hab⟩)
-    · exact AList.keys_subset_keys_of_entries_subset_entries
-        (isMonotone_matchArg _ _ h₂)
-        (mem_matchVar (matchLets := matchLets) h₁ h)
+    · exact
+        AList.keys_subset_keys_of_entries_subset_entries (isMonotone_matchArg _ _ h₂)
+          (mem_matchVar (matchLets := matchLets) h₁ h)
     · apply mem_matchArg h₂
       unfold Lets.varsOfVec
       apply Finset.mem_biUnion.mpr ⟨_, hab.1, hab.2⟩
-
 /-- All variables containing in `matchExpr` are assigned by `matchVar`. -/
-theorem mem_matchVar {Δ_out}
-    {varMap : Mapping Δ_in Γ_out} {ma : Mapping Δ_in Γ_out}
-    {lets : Lets d Γ_in eff Γ_out} {v : Var Γ_out t} /- : -/
-    {matchLets : Lets d Δ_in .pure Δ_out}  {w : Var Δ_out t}
-    (hvarMap : ((), varMap) ∈ matchVar lets v matchLets w ma)
-    {t': _ } {v' : _}
-    (hMatchLets : ⟨t', v'⟩ ∈ matchLets.vars w) :
-  ⟨t', v'⟩ ∈ varMap :=
+theorem mem_matchVar {Δ_out} {varMap : Mapping Δ_in Γ_out} {ma : Mapping Δ_in Γ_out}
+    {lets : Lets d Γ_in eff Γ_out} {v : Var Γ_out t} /- : -/ {matchLets : Lets d Δ_in .pure Δ_out}
+    {w : Var Δ_out t} (hvarMap : ((), varMap) ∈ matchVar lets v matchLets w ma) {t' : _} {v' : _}
+    (hMatchLets : ⟨t', v'⟩ ∈ matchLets.vars w) : ⟨t', v'⟩ ∈ varMap :=
   match matchLets /- , hvarMap, t', v' -/ with
   | .nil => by
     revert hMatchLets
@@ -717,24 +688,22 @@ theorem mem_matchVar {Δ_out}
     rcases hvarMap with ⟨_, rfl⟩ | ⟨h_lookup, rfl⟩
     · simp
     · simp [← AList.lookup_isSome, h_lookup]
-
   | .var matchLets matchE => by
     simp only [matchVar, Option.mem_def] at hvarMap
     cases w using Var.appendCases with
     | right w =>
-        simp only [Var.appendCases_appendInr] at hvarMap
-        apply mem_matchVar hvarMap
-        simpa [Lets.vars] using hMatchLets
+      simp only [Var.appendCases_appendInr] at hvarMap
+      apply mem_matchVar hvarMap
+      simpa [Lets.vars] using hMatchLets
     | left w =>
-        simp only [Var.appendCases_appendInl, MatchVar.liftM_bind_eq_some_iff] at hvarMap
-        rcases hvarMap with ⟨h_isSome, hvarMap⟩
-        split_ifs at hvarMap with h_pure h_var <;> (try contradiction)
-        subst h_var
-        apply mem_matchArg hvarMap
-        rcases matchE with ⟨matchOp, _⟩
-        obtain rfl : matchOp = _ := h_pure.1.symm
-        simpa [Lets.vars] using hMatchLets
-
+      simp only [Var.appendCases_appendInl, MatchVar.liftM_bind_eq_some_iff] at hvarMap
+      rcases hvarMap with ⟨h_isSome, hvarMap⟩
+      split_ifs at hvarMap with h_pure h_var <;> (try contradiction)
+      subst h_var
+      apply mem_matchArg hvarMap
+      rcases matchE with ⟨matchOp, _⟩
+      obtain rfl : matchOp = _ := h_pure.1.symm
+      simpa [Lets.vars] using hMatchLets
 end
 
 /--
@@ -742,10 +711,8 @@ end
 map as a `MatchVarResult`, and drops the accumulator map input (instead setting
 it to the default empty map).
 -/
-def matchArgRes (lets : Lets d Γ_in eff Γ_out)
-    (matchLets : Lets d Δ_in .pure Δ_out)
-    (vs : HVector Γ_out.Var ts)
-    (ws : HVector Δ_out.Var ts) :
+def matchArgRes (lets : Lets d Γ_in eff Γ_out) (matchLets : Lets d Δ_in .pure Δ_out)
+    (vs : HVector Γ_out.Var ts) (ws : HVector Δ_out.Var ts) :
     Option (MatchArgResult lets matchLets vs ws ∅) := do
   (matchArg lets matchLets vs ws ∅).attach.map fun ⟨⟨_, _⟩, h⟩ => .mk h
 
@@ -753,60 +720,45 @@ def matchArgRes (lets : Lets d Γ_in eff Γ_out)
 If a `matchLets` contains all variables in context `Δ_in`, the corresponding
 `matchVar` result mapping is in fact a total context morphism.
 -/
-def MatchVarResult.isTotal_of
-    (map : MatchVarResult lets v matchLets w mapIn)
-    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.vars w) :
-    map.val.IsTotal := by
+def MatchVarResult.isTotal_of (map : MatchVarResult lets v matchLets w mapIn)
+    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.vars w) : map.val.IsTotal := by
   intro t v
   have ⟨_, map', _, h_entries, h_matchVar⟩ := map.prop
   apply AList.keys_subset_keys_of_entries_subset_entries h_entries
   apply mem_matchVar h_matchVar (hvars _ v)
 
 /-- Wrapper around `Mapping.toHom` and `MatchVarResult.isTotal_of`. -/
-def MatchVarResult.toHom
-    (map : MatchVarResult lets v matchLets w mapIn)
-    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.vars w) :
-    Δ_in.Hom Γ_out :=
+def MatchVarResult.toHom (map : MatchVarResult lets v matchLets w mapIn)
+    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.vars w) : Δ_in.Hom Γ_out :=
   map.val.toHom <| map.isTotal_of hvars
 
 /--
 If a `matchLets` contains all variables in context `Δ_in`, the corresponding
 `matchVar` result mapping is in fact a total context morphism.
 -/
-def MatchArgResult.isTotal_of
-    (map : MatchArgResult lets matchLets vs ws mapIn)
-    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws) :
-    map.val.IsTotal := by
+def MatchArgResult.isTotal_of (map : MatchArgResult lets matchLets vs ws mapIn)
+    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws) : map.val.IsTotal := by
   intro t v
   have ⟨_, map', _, h_entries, h_match⟩ := map.prop
   apply AList.keys_subset_keys_of_entries_subset_entries h_entries
   apply mem_matchArg h_match (hvars _ v)
 
 /-- Wrapper around `Mapping.toHom` and `MatchArgResult.isTotal_of`. -/
-def MatchArgResult.toHom
-    (map : MatchArgResult lets matchLets vs ws mapIn)
-    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws) :
-    Δ_in.Hom Γ_out :=
+def MatchArgResult.toHom (map : MatchArgResult lets matchLets vs ws mapIn)
+    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws) : Δ_in.Hom Γ_out :=
   map.val.toHom <| map.isTotal_of hvars
 
-variable
-  {Γ_in Γ_out Δ_in Δ_out : Ctxt d.Ty}
-  {lets : Lets d Γ_in eff Γ_out}
-  {matchTy}
-  {v : Var Γ_out matchTy}
-  {matchLets : Lets d Δ_in .pure Δ_out}
-  {w : Var Δ_out matchTy}
-in
-theorem denote_matchLets_of
-    (map : MatchArgResult lets matchLets vs ws mapIn)
-    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws)
-    (V : lets.ValidDenotation) :
+variable {Γ_in Γ_out Δ_in Δ_out : Ctxt d.Ty} {lets : Lets d Γ_in eff Γ_out} {matchTy}
+    {v : Var Γ_out matchTy} {matchLets : Lets d Δ_in .pure Δ_out} {w : Var Δ_out matchTy} in
+theorem denote_matchLets_of (map : MatchArgResult lets matchLets vs ws mapIn)
+    (hvars : ∀ t (v : Var Δ_in t), ⟨t, v⟩ ∈ matchLets.varsOfVec ws) (V : lets.ValidDenotation) :
     ws.map (matchLets.denote (V.val.comap <| map.toHom h)) = vs.map V.val := by
   unfold MatchArgResult.toHom
   rw [Mapping.toHom_eq_mapValuation (map.isTotal_of hvars)]
   apply denote_matchArg
 
 /-- info: 'denote_matchLets_of' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms denote_matchLets_of
+#guard_msgs in
+#print axioms denote_matchLets_of
 
 end DenoteLemmas

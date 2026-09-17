@@ -25,7 +25,23 @@ open Mathlib
 
 @[simp] theorem Language.trivial : x ∈ (⊤ : Language α) := by trivial
 
-def NFA.sa (_ : NFA α σ) := σ → Language α
+/-! `fin_cases` on `BitVec w` yields `FinEnum.equiv.symm i : Fin (2 ^ w)` with the card already
+evaluated, which the generic instance no longer unfolds under simp; name the small widths. -/
+@[simp] lemma BitVec.finEnum_symm_two (x : Fin 4) :
+    @DFunLike.coe _ _ _ EquivLike.toFunLike (@Equiv.symm (BitVec 2) (Fin 4) FinEnum.equiv) x =
+      BitVec.ofNat 2 x := by
+  show BitVec.ofFin (w := 2) x = _; apply BitVec.eq_of_toNat_eq; simp
+
+@[simp] lemma BitVec.finEnum_symm_one (x : Fin 2) :
+    @DFunLike.coe _ _ _ EquivLike.toFunLike (@Equiv.symm (BitVec 1) (Fin 2) FinEnum.equiv) x =
+      BitVec.ofNat 1 x := by
+  show BitVec.ofFin (w := 1) x = _; apply BitVec.eq_of_toNat_eq; simp
+
+@[simp] lemma BitVec.finEnum_symm_zero (x : Fin 1) :
+    @DFunLike.coe _ _ _ EquivLike.toFunLike (@Equiv.symm (BitVec 0) (Fin 1) FinEnum.equiv) x =
+      BitVec.ofNat 0 x := Subsingleton.elim _ _
+
+@[implicit_reducible] def NFA.sa (_ : NFA α σ) := σ → Language α
 
 structure NFA.correct (M : NFA α σ) (ζ : M.sa) (L : Language α) where
   cond1 : ∀ w, (w ∈ L ↔ ∃ q ∈ M.accept, w ∈ ζ q)
@@ -40,8 +56,8 @@ lemma NFA.correct_spec {M : NFA α σ} {ζ : M.sa} {L : Language α} :
 abbrev BVRel := ∀ ⦃w⦄, BitVec w → BitVec w → Prop
 abbrev BVNRel n := ∀ ⦃w⦄, List.Vector (BitVec w) n → Prop
 
-def NFA'.sa (M : NFA' n) := M.σ → BVNRel n
-def NFA'.sa2 (M : NFA' 2) := M.σ → BVRel
+@[implicit_reducible] def NFA'.sa (M : NFA' n) := M.σ → BVNRel n
+@[implicit_reducible] def NFA'.sa2 (M : NFA' 2) := M.σ → BVRel
 
 def langRel (R : BVNRel n) : Set (BitVecs n) :=
   { bvs | R bvs.bvs }
@@ -54,6 +70,11 @@ lemma in_enc : x ∈ enc '' S ↔ dec x ∈ S := by
   simp; constructor
   · simp; rintro y hS rfl; simp_all
   · rintro hS; use dec x; simp_all
+
+/-- `in_enc` for `Language` membership, which `Set` lemmas no longer see through. -/
+@[simp]
+lemma in_enc_language {S : Set (BitVecs n)} {x : BitVecs' n} :
+    @Membership.mem _ (Language (BitVec n)) _ (enc '' S) x ↔ dec x ∈ S := in_enc
 
 @[simp]
 lemma List.Vector.ofFn_0 {f : Fin 0 → α} : ofFn f = .nil := by
@@ -134,18 +155,17 @@ lemma NFA'.correct_spec {M : NFA' n} {ζ : M.sa} {L : BVNRel n} :
   simp [accepts, accepts']
   have heq : dec '' (enc '' langRel L) = langRel L := by simp
   rw [←heq]
-  congr!
   suffices h : M.M.correct (fun q => enc '' langRel (ζ q)) (enc '' langRel L) by
-    apply NFA.correct_spec h
+    rw [NFA.correct_spec h]
   constructor
-  · intros w; rw [in_enc]; simp [langRel, h1]; simp_rw [@in_enc _ _ w]; rfl
+  · intros w; rw [in_enc_language]; simp [langRel, h1]
   intros w; induction w using List.reverseRecOn
   case nil =>
-    intros q; simp only [NFA.eval_nil]; rw [in_enc]; simp [h2, langRel]
+    intros q; simp only [NFA.eval_nil]; rw [in_enc_language]; simp [h2, langRel]
   case append_singleton w a ih =>
     rintro q
     simp only [NFA.eval_append_singleton]
-    rw [in_enc]
+    rw [in_enc_language]
     have h : M.M.eval w = { q | w ∈ enc '' langRel (ζ q) } := by
       ext; rw [ih]; dsimp; rfl
     rw [dec_snoc_in_langRel]
@@ -199,6 +219,7 @@ def NFA.ofFSM (p : FSM arity) : NFA (Alphabet arity) (p.α → Bool) where
     let (s'', b) := p.nextBit s (bitVecToFinFun (a.truncate $ FinEnum.card arity))
     s' = s'' ∧ a.msb = b }
 
+@[implicit_reducible]
 def _root_.NFA'.ofFSM'  (p : FSM arity) : NFA' (FinEnum.card arity + 1) where
   σ := p.α → Bool
   M := NFA.ofFSM p
@@ -318,6 +339,7 @@ def NFA'.ofFSM_correct (p : FSM arity) :
             omega
           · unfold bitVecToFinFun; simp [BitVec.getElem_cons]; rfl
 
+@[implicit_reducible]
 def _root_.NFA'.ofFSM  (p : FSM arity) : NFA' (FinEnum.card arity + 1) :=
   _root_.NFA'.ofFSM' p -- |>.reduce
 
@@ -490,6 +512,7 @@ def CNFA.autEq : CNFA 2 :=
 def NFA.autEq : NFA (BitVec 2) Unit :=
   { start := ⊤, accept := ⊤, step _ a := { _s' | if a = 0 ∨ a = 3 then true else false }}
 
+@[implicit_reducible]
 def NFA'.autEq : NFA' 2 :=
   ⟨Unit, NFA.autEq⟩
 
@@ -563,7 +586,12 @@ lemma CNFA.autUnsignedCmp_states cmp : s ∈ (autUnsignedCmp cmp).m.states ↔  
 
 inductive NFA.unsignedCmpState : Type where
 | eq | gt | lt
-deriving Fintype, DecidableEq
+deriving DecidableEq
+
+-- `deriving Fintype` fails on Mathlib v4.34.0.
+instance : Fintype NFA.unsignedCmpState where
+  elems := {.eq, .gt, .lt}
+  complete x := by cases x <;> simp
 
 def NFA.unsignedCmpStep (q : NFA.unsignedCmpState) (a : BitVec 2) : List NFA.unsignedCmpState :=
   match q, a with
@@ -576,6 +604,7 @@ def NFA.autUnsignedCmp (cmp: RelationOrdering) : NFA (BitVec 2) unsignedCmpState
   start := {s | s = .eq }
   accept := { s | s ∈ match cmp with | .lt => [unsignedCmpState.lt] | .le => [.lt, .eq] | .gt => [.gt] | .ge => [.gt, .eq] }
 
+@[implicit_reducible]
 def NFA'.autUnsignedCmp (cmp: RelationOrdering) : NFA' 2 :=
   ⟨_, NFA.autUnsignedCmp cmp⟩
 
@@ -705,7 +734,12 @@ lemma CNFA.SignedCmp_states cmp : s ∈ (autSignedCmp cmp).m.states ↔  s < 5 :
 
 inductive NFA.signedCmpState : Type where
 | eq | gt | lt | ltfin | gtfin
-deriving DecidableEq, Fintype
+deriving DecidableEq
+
+-- `deriving Fintype` fails on Mathlib v4.34.0.
+instance : Fintype NFA.signedCmpState where
+  elems := {.eq, .gt, .lt, .ltfin, .gtfin}
+  complete x := by cases x <;> simp
 
 def NFA.signedCmpStep (q : NFA.signedCmpState) (a : BitVec 2) : List NFA.signedCmpState :=
   match q, a with
@@ -720,6 +754,7 @@ def NFA.autSignedCmp (cmp: RelationOrdering) : NFA (BitVec 2) signedCmpState whe
   start := { s | s = signedCmpState.eq }
   accept := { s | s ∈ match cmp with | .lt => [NFA.signedCmpState.ltfin] | .le => [.ltfin, .eq] | .gt => [.gtfin] | .ge => [.gtfin, .eq] }
 
+@[implicit_reducible]
 def NFA'.autSignedCmp (cmp: RelationOrdering) : NFA' 2 :=
   ⟨_, NFA.autSignedCmp cmp⟩
 
@@ -885,7 +920,12 @@ def CNFA.autMsbSet : CNFA 1 :=
 
 inductive NFA.msbState : Type where
 | i | f
-deriving DecidableEq, Fintype
+deriving DecidableEq
+
+-- `deriving Fintype` fails on Mathlib v4.34.0.
+instance : Fintype NFA.msbState where
+  elems := {.i, .f}
+  complete x := by cases x <;> simp
 
 def NFA.msbStep (q : NFA.msbState) (a : BitVec 1) : List NFA.msbState :=
   match q, a with
@@ -898,6 +938,7 @@ def NFA.autMsbSet : NFA (BitVec 1) msbState where
   start := {.i}
   accept := {.f}
 
+@[implicit_reducible]
 def NFA'.autMsbSet : NFA' 1 := ⟨_, NFA.autMsbSet⟩
 
 instance : Fintype (NFA'.autMsbSet).σ := by simp [NFA'.autMsbSet]; infer_instance
@@ -1071,6 +1112,7 @@ def NFA.autWidth (wp : WidthPredicate) (n : Nat) : NFA (BitVec 0) (Fin (n+2)) wh
   accept := { s | wp.final? n s }
   step s₁ _ := { s₂ | if s₁ = Fin.last (n+1) then s₁ = s₂ else s₂ = s₁ + 1 }
 
+@[implicit_reducible]
 def NFA'.autWidth (wp : WidthPredicate) (n : Nat) : NFA' 0 := ⟨_, NFA.autWidth wp n⟩
 
 def NFA.autWidthLang (wp : WidthPredicate) (n : Nat) : Language (BitVec 0) := { bvs  | wp.final? n bvs.length }
@@ -1095,21 +1137,21 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
       simp_all only [Fin.coe_clamp, Fin.clamp_eq_bound]
       constructor
       · cases wp <;> simp_all [WidthPredicate.final?]; omega
-      · split
-        · simp only [Language.mem_setOf_eq]
+      · by_cases hc : n + 1 ≤ w.length
+        · simp only [hc, ↓reduceIte, Language.mem_setOf_eq]
           omega
-        · simp only [Language.mem_setOf_eq, left_eq_inf]
+        · simp only [hc, ↓reduceIte, Language.mem_setOf_eq, left_eq_inf]
           omega
     · rintro ⟨q, hfin, hlen⟩
-      split at hlen <;> simp_all
+      split_ifs at hlen <;> simp_all
       cases wp <;> simp_all [WidthPredicate.final?] <;> omega
 
   · intros w; induction w using List.reverseRecOn
     case nil =>
       simp only [autWidth, eval_nil, Set.mem_singleton_iff, autWidthSA, gt_iff_lt]
       rintro q; constructor
-      · rintro rfl; split <;> simp_all; exact rfl
-      · split <;> simp_all
+      · rintro rfl; split_ifs <;> simp_all; exact rfl
+      · split_ifs <;> simp_all
         rintro h; exact (Fin.eq_of_val_eq h).symm
     case append_singleton w a ih =>
       rintro q; simp only [eval_append_singleton, stepSet, ih, Set.mem_iUnion, exists_prop]
@@ -1119,7 +1161,7 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
         simp only [Set.mem_setOf_eq] at heq
         split_ifs at heq with hcond
         · subst heq hcond
-          simp_all only [Fin.val_last, ite_true, Language.mem_setOf_eq, List.length_append,
+          simp_all only [Fin.val_last, ↓reduceIte, Language.mem_setOf_eq, List.length_append,
             List.length_cons, List.length_nil, zero_add]
           omega
         · subst heq; simp_all
@@ -1130,7 +1172,8 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
             rw [Fin.val_add_one_of_lt hcond] at hcond'
             simp_all
           · exact (Fin.val_add_one_of_lt hcond).symm
-      · rintro h; rcases q with ⟨q, hq⟩; split_ifs at h with hcond
+      · rintro h; rcases q with ⟨q, hq⟩
+        by_cases hcond : (⟨q, hq⟩ : Fin (n+2)) = Fin.last (n+1) <;> simp only [hcond, ↓reduceIte] at h
         · simp at h
           by_cases hlen: w.length = n
           · use ⟨n, by omega⟩; simp [←hcond]
@@ -1168,7 +1211,7 @@ def NFA.autWidth_correct : (autWidth wp n).correct (autWidthSA n) (autWidthLang 
 
 @[simp]
 def NFA.autWidth_spec : (autWidth wp n).accepts = { bv | wp.sat bv.length n } := by
-   simp [autWidthLang, correct_spec autWidth_correct, WidthPredicate.final?]
+   simp [autWidthLang, correct_spec autWidth_correct, WidthPredicate.final?]; rfl
 
 @[simp]
 def NFA'.autWidth_spec : (autWidth wp n).accepts = { bv | wp.sat bv.w n } := by
@@ -1405,7 +1448,7 @@ def autOfTermBinop (op : TermBinop) (m₁ : CNFA (n + 1)) (m₂ : CNFA (m + 1)) 
 
 @[simp]
 lemma Set.mem_cast (A : W → Type) (P : A w → Prop) (h : w = w') (x : A w') :
-  x ∈ h ▸ setOf P ↔
+  x ∈ h ▸ Set.ofPred P ↔
   P (h ▸ x) := by
   cases h
   simp
@@ -1534,6 +1577,7 @@ lemma TermBinop.alt_lang {t₁ t₂ : Term} (op : TermBinop) :
       simp
       rw [List.Vector.append_get_lt (by simp; rw [Nat.mod_eq_of_lt (by omega)]; omega)]
       convert heq using 1
+      · rfl
       have h n : n + 1 < n + 3 := by omega
       have h' n m k : n < m → n < (k ⊔ m) + 1 := by omega
       · cases op <;>
@@ -1573,6 +1617,7 @@ lemma TermBinop.alt_lang {t₁ t₂ : Term} (op : TermBinop) :
     simp [liftMaxSuccSucc1, liftMaxSuccSucc2] at heq₁ heq₂
     rw [liftLast3] at heq₃
     convert heq₃ using 1
+    · rfl
     have h₁ : (t₁.evalFinBV fun i => bvs'.bvs.get (liftOp (t₁.arity ⊔ t₂.arity) (Fin.castLE (by omega) i).castSucc)) =
                   bvs'.bvs.get (liftLast3 (t₁.arity ⊔ t₂.arity) 0) := by
       simp only [liftOp_unchanged, Fin.castLE_castLE, liftLast3]; convert heq₁ using 1
@@ -1746,6 +1791,7 @@ lemma TermUnop.alt_lang {t : Term} (op : TermUnop) :
           simp +arith
       rw [hget]
       convert heq using 1
+      · rfl
       · have hbvs' : bvs'.get t.arity = t.evalFinBV fun n => bvs.bvs.get n := by
           simp [bvs']
         simp [openTerm]
@@ -1775,8 +1821,10 @@ lemma TermUnop.alt_lang {t : Term} (op : TermUnop) :
       rfl
       tactic => simp only [eq_iff_iff, iff_true]; ext1; simp
     convert heq₂ using 1
-    rcases op with _ | _ | _ <;>
-    . simp [subst, openTerm] at *; congr
+    · rfl
+    · rcases op with _ | _ | _ <;>
+      . simp [subst, openTerm] at *; congr
+    · rfl
 
 lemma autOfTermUnop_bv_language op {t : Term} (m : CNFA (t.arity + 1)) :
     m.bv_recognizes t.language →
@@ -1955,9 +2003,21 @@ theorem Formula.denote_of_isUniversal {p : Predicate}
 info: 'Formula.denote_of_isUniversal' depends on axioms: [hashMap_missing,
  propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ BitStream.subAux_inductive_lemma._native.bv_decide.ax_1_18,
+ BitStream.subCarries?_correct._native.bv_decide.ax_1_15,
+ CNFA.autEq_spec._native.native_decide.ax_1_1,
+ CNFA.autEq_spec._native.native_decide.ax_1_2,
+ CNFA.autEq_spec._native.native_decide.ax_1_3,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_1,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_2,
+ CNFA.autMsbSet_spec._native.native_decide.ax_1_3,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autSignedCmp_spec._native.native_decide.ax_1_3,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_1,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_2,
+ CNFA.autUnsignedCmp_spec._native.native_decide.ax_1_3]
 -/
 #guard_msgs in #print axioms Formula.denote_of_isUniversal
 

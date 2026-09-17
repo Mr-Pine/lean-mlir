@@ -76,12 +76,14 @@ instance : DialectParse Simple 0 where
 
   isValidReturn _Γ opStx := return opStx.name == "return"
 
-  mkExpr Γ opStx := do opStx.mkExprOf Γ <|← match opStx.name with
-    | "add"   => return .add
-    | "const" => do
-        let ⟨val, _type⟩ ← opStx.getIntAttr "value"
-        return .const val
-    | opName => throw <| .unsupportedOp opName
+  mkExpr Γ opStx := do
+    let op : Op ← match opStx.name with
+      | "add"   => pure .add
+      | "const" => do
+          let ⟨val, _type⟩ ← opStx.getIntAttr "value"
+          pure (.const val)
+      | opName => throw <| .unsupportedOp opName
+    opStx.mkExprOf Γ op
 
 elab "[simple_com| " reg:mlir_region "]" : term => SSA.elabIntoCom' reg (Simple)
 

@@ -50,7 +50,7 @@ def _root_.FSM.toAiger {arity : Type}
   let stdAig := res.out
   let bad := res.ref
   let nextMap := nextMap.map fun _ r => r.cast res.le_size
-  have hmapmem : ∀ {a : fsm.α}, a ∈ nextMap := by grind only [HashMap.mem_map]
+  have hmapmem : ∀ {a : fsm.α}, a ∈ nextMap := HashMap.mem_map.mpr hmapmem
 
   let res := Valaig.Aig.fromStdAIG stdAig fun atom =>
     match atom with

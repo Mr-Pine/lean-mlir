@@ -14,7 +14,10 @@ Otherwise, we end up not being able to close many boolean problems.
 This also exposes a TODO: where we should add `ofBool` support to the reflection.
 -/
 /--
-warning: unused variable `x`
+warning: Variable name `x` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _x
 
 Note: This linter can be disabled with `set_option linter.unusedVariables false`
 -/

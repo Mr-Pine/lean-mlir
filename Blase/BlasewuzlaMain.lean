@@ -11,9 +11,8 @@ import Cli
 import Lean
 import Std
 import Std.Data.Iterators
-import Lean.Elab.Tactic.BVDecide.Frontend.BVDecide.SatAtBVLogical
-import Lean.Elab.Tactic.BVDecide.Frontend.Normalize
-import Lean.Elab.Tactic.BVDecide.Frontend.LRAT
+import Lean.Elab.Tactic.BVDecide
+import Lean.Meta.Tactic.Grind.Main
 
 open Lean Elab Meta
 open MultiWidth
@@ -118,8 +117,8 @@ def checkBVLogicalExprIsUnsat (e : BVLogicalExpr) (satSolverTimeout : Nat) : Met
   let tBlasted ← IO.monoMsNow
   let cfg : BVDecideConfig := { timeout := satSolverTimeout }
   IO.FS.withTempFile fun _ lratFile => do
-  let ctx ← (BVDecide.Frontend.TacticContext.new lratFile cfg).run' { declName? := `lrat }
-  let res ← Lean.Elab.Tactic.BVDecide.Frontend.runExternal cnf ctx.solver ctx.lratPath ctx.config.trimProofs ctx.config.timeout ctx.config.binaryProofs
+  let ctx ← (Lean.Meta.Tactic.BVDecide.TacticContext.new lratFile cfg).run' { declName? := `lrat }
+  let res ← Lean.Meta.Tactic.BVDecide.runExternal cnf ctx.solver ctx.lratPath ctx.config.trimProofs ctx.config.timeout ctx.config.binaryProofs ctx.config.solverMode
   let tSolved ← IO.monoMsNow
   let isUnsat := match res with
     | .ok _cert => true
@@ -153,8 +152,9 @@ def proveGoalByBvDecide (gType : Expr) : MetaM Bool := do
       IO.println <| ← MessageData.toString <| m!"hyp: {← ppExpr hyp.toExpr} : {hyp.type}"
     let cfg : BVDecideConfig := {}
     IO.FS.withTempFile fun _ lratFile => do
-      let cfg ← (BVDecide.Frontend.TacticContext.new lratFile cfg).run' { declName? := `lrat }
-      let res ← Tactic.BVDecide.Frontend.bvDecide g cfg
+      let cfg ← (Lean.Meta.Tactic.BVDecide.TacticContext.new lratFile cfg).run' { declName? := `lrat }
+      let res ← Grind.GrindM.run (params := ← Grind.mkDefaultParams {}) <|
+        Lean.Meta.Tactic.BVDecide.bvDecide (.mvarIdTarget g) cfg
       return res.lratCert.isSome
 
 structure Config where

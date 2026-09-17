@@ -125,7 +125,12 @@ def Term.language (t : Term) : Set (BitVecs (t.arity + 1)) :=
 
 inductive RelationOrdering
 | lt | le | gt | ge
-deriving Repr, Fintype
+deriving Repr, DecidableEq
+
+-- `deriving Fintype` fails on Mathlib v4.34.0.
+instance : Fintype RelationOrdering where
+  elems := {.lt, .le, .gt, .ge}
+  complete x := by cases x <;> simp
 
 inductive Relation
 | eq
@@ -208,7 +213,7 @@ def formula_of_predicate (p : Predicate) : Formula :=
 
 instance : Inhabited Formula := ⟨Formula.msbSet default⟩
 
-@[simp]
+@[simp, implicit_reducible]
 def Formula.arity : Formula → Nat
 | width _ _ => 0
 | atom _ t1 t2 => max t1.arity t2.arity
@@ -278,7 +283,7 @@ lemma msb_coe {x : BitVec w1} (heq : w1 = w2) : x.msb = (heq ▸ x).msb := by rc
 
 lemma formula_language_case_atom :
     let φ := Formula.atom rel t1 t2
-    φ.language = λ (bvs : BitVecs φ.arity) => φ.sat (fun k => bvs.bvs.get k) := by
+    φ.language = { (bvs : BitVecs φ.arity) | φ.sat (fun k => bvs.bvs.get k) } := by
   unfold Formula.language
   rintro φ
   let n := φ.arity
@@ -344,6 +349,7 @@ lemma formula_language_case_atom :
         rw [List.Vector.append_get_ge (by dsimp; rw [Nat.mod_eq_of_lt]; omega)]
         simp [Set.instMembership, Set.Mem] at h
         convert h using 2
+        · rfl
         · apply helper1; ext; simp; rw [Nat.mod_eq_of_lt] <;> omega
         · apply helper2; ext; simp
       · unfold l1 Term.language; simp [liftMaxSucc1]

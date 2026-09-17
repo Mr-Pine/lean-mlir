@@ -12,7 +12,8 @@ namespace LeanMLIR
 /--
 `EffectM` is the monad of side-effects for the SLLVM dialect
 -/
-def EffectM := StateT GlobalState PoisonOr
+-- v4.34: reducible, or the `EffectM.run_*` lemmas no longer match.
+@[implicit_reducible] def EffectM := StateT GlobalState PoisonOr
 
 /--
 `MemorySSAM` is the monad of just the subset of side-effects of SLLVM

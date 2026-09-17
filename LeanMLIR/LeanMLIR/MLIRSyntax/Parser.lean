@@ -1,13 +1,16 @@
 import LeanMLIR.MLIRSyntax.AST
 import LeanMLIR.MLIRSyntax.EDSL
 import Lean
+
 /- Parse  a raw file into `MLIR.AST.*` constructs. -/
 open Lean
-
 variable {ParseOutput : Type} [ToString ParseOutput]
 
-abbrev ParseError := String
-abbrev ParseFun : Type := Lean.Environment → String → EIO ParseError ParseOutput
+abbrev ParseError :=
+  String
+
+abbrev ParseFun : Type :=
+  Lean.Environment → String → EIO ParseError ParseOutput
 
 -- We use unification with `isDefEq` to find the synthetic metavariables, and
 -- then we synthesize and instantiate them
@@ -23,18 +26,19 @@ unsafe def elabIntoTermTactic {α : Type} (expectedType : Expr) (stx : Lean.Synt
 
 namespace Lean.Elab.Tactic
 
-@[inline] private def TacticM.runCore (x : TacticM α) (ctx : Context) (s : State) :
-    TermElabM (α × State) :=
+@[inline]
+private def TacticM.runCore (x : TacticM α) (ctx : Context) (s : State) : TermElabM (α × State) :=
   x ctx |>.run s
 
-@[inline] private def TacticM.runCore' (x : TacticM α) (ctx : Context) (s : State) : TermElabM α :=
+@[inline]
+private def TacticM.runCore' (x : TacticM α) (ctx : Context) (s : State) : TermElabM α :=
   Prod.fst <$> x.runCore ctx s
 
 end Lean.Elab.Tactic
 
 unsafe def elabIntoTermElab {α : Type} (expectedType : Expr) (stx : Lean.Syntax) :
     Elab.Term.TermElabM α := do
-  elabIntoTermTactic (α := α) expectedType stx  |>.runCore' { elaborator := `ParserHack} default
+  elabIntoTermTactic (α := α) expectedType stx |>.runCore' { elaborator := `ParserHack } default
 
 unsafe def elabIntoMeta {α : Type} (expectedType : Expr) (stx : Lean.Syntax) : MetaM α :=
   elabIntoTermElab (α := α) expectedType stx |>.run'
@@ -47,23 +51,28 @@ def printException : Except Exception α → IO String
   | Except.error e => e.toMessageData.toString
 
 unsafe def elabIntoEIO {α : Type} (env : Lean.Environment) (typeName : Lean.Expr)
-    (stx : Lean.Syntax) : EIO ParseError α :=
-  fun s =>
+    (stx : Lean.Syntax) : EIO ParseError α := fun s =>
     let resE : EIO Exception α :=
-        elabIntoCore (α := α) typeName stx |>.run'
-        {fileName := "parserHack", fileMap := default, maxHeartbeats := 0} {env := env}
+    elabIntoCore (α := α) typeName stx |>.run'
+      { fileName := "parserHack", fileMap := default, maxHeartbeats := 0 } { env := env }
     match resE s with
-    | .ok a s => .ok a s
-    | .error exception s =>
+  | .ok a s => .ok a s
+  | .error exception s =>
       let errMsgIO : IO String := exception.toMessageData.toString
       match errMsgIO s with
-      | .ok errMsg s => .error s!"failed elaboration {stx}. Error: {errMsg}" s
-      | .error e s => .error (s!" Failed elaborating {stx}.\n" ++
-        s!"Unable to pretty-print exception at 'elabIntoEIO':\n{e}.") s
+    | .ok errMsg s => .error s!"failed elaboration {stx}. Error: {errMsg}" s
+    | .error e s =>
+      .error
+        (s!" Failed elaborating {stx}.\n" ++
+          s!"Unable to pretty-print exception at 'elabIntoEIO':\n{e}.")
+        s
 
-def region0Expr := (Expr.app (Expr.const `MLIR.AST.Region []) (Expr.const `Nat.zero []))
+def region0Expr :=
+  (Expr.app (Expr.const `MLIR.AST.Region []) (Expr.const `Nat.zero []))
 
-def op0Expr := (Expr.app (Expr.const `MLIR.AST.Op []) (Expr.const `Nat.zero []))
+def op0Expr :=
+  (Expr.app (Expr.const `MLIR.AST.Op []) (Expr.const `Nat.zero []))
+
 /--
   Parse `Lean.Syntax` into `MLIR.AST.Region`.
 
@@ -71,8 +80,8 @@ def op0Expr := (Expr.app (Expr.const `MLIR.AST.Op []) (Expr.const `Nat.zero []))
   It should be safe (if we trust the lean parser) since we ensure that the types match: see
   https://leanprover-community.github.io/mathlib4_docs/Std/Util/TermUnsafe.html#Std.TermUnsafe.termUnsafe_
  -/
-def elabRegion (env : Lean.Environment) (stx : Lean.Syntax) :
-    EIO ParseError (MLIR.AST.Region 0) := do
+def elabRegion (env : Lean.Environment) (stx : Lean.Syntax) : EIO ParseError (MLIR.AST.Region 0) :=
+  do
   let reg ← unsafe elabIntoEIO (α := MLIR.AST.Region 0) env region0Expr stx
   return reg
 
@@ -86,34 +95,36 @@ def elabRegion (env : Lean.Environment) (stx : Lean.Syntax) :
 def elabOp (env : Lean.Environment) (stx : Lean.Syntax) : EIO ParseError (MLIR.AST.Op 0) :=
   unsafe elabIntoEIO (α := MLIR.AST.Op 0) env op0Expr stx
 
-def mkParseFun (syntaxcat : Name)
-    (ntparser : Syntax → EIO ParseError ParseOutput)
-    (s : String) (env : Environment) : EIO ParseError ParseOutput := do
+def mkParseFun (syntaxcat : Name) (ntparser : Syntax → EIO ParseError ParseOutput) (s : String)
+    (env : Environment) : EIO ParseError ParseOutput := do
   match Parser.runParserCategory env syntaxcat s with
-    | .error msg => throw msg
-    | .ok syn => ntparser syn
+  | .error msg =>
+    throw msg
+  | .ok syn =>
+    ntparser syn
 
-private def mkNonTerminalParser (syntaxcat : Name)
-    (ntparser : Syntax → EIO ParseError ParseOutput)
+private def mkNonTerminalParser (syntaxcat : Name) (ntparser : Syntax → EIO ParseError ParseOutput)
     (env : Environment) (s : String) : EIO ParseError ParseOutput :=
   let parseFun := mkParseFun syntaxcat ntparser
   parseFun s env
 
 -- TODO: do we need this copy of the environment, or can I remove it from one of the two?
-def regionParser : @ParseFun (MLIR.AST.Region 0) :=
-  fun env : Lean.Environment => mkNonTerminalParser `mlir_region (elabRegion env) env
+def regionParser : @ParseFun (MLIR.AST.Region 0) := fun env : Lean.Environment =>
+  mkNonTerminalParser `mlir_region (elabRegion env) env
 
-private def parseFile (env: Lean.Environment)
-    (parser: @ParseFun ParseOutput)
-    (filepath: System.FilePath) : IO (Option ParseOutput) := do
+private def parseFile (env : Lean.Environment) (parser : @ParseFun ParseOutput)
+    (filepath : System.FilePath) : IO (Option ParseOutput) := do
   let lines ← IO.FS.lines filepath
   let fileStr := "\n".intercalate lines.toList
   let parsed ← EIO.toIO' <| parser env fileStr
   match parsed with
-  | .ok parseOutput => return parseOutput
-  | .error msg => IO.println s!"Error parsing {filepath}:\n{msg}"; return none
+  | .ok parseOutput =>
+    return parseOutput
+  | .error msg =>
+    IO.println s!"Error parsing {filepath}:\n{msg}";
+    return none
 
-private def isFile (p: System.FilePath) : IO Bool := do
+private def isFile (p : System.FilePath) : IO Bool := do
   return (← p.metadata).type == IO.FS.FileType.file
 
 def runParser (parser : @ParseFun ParseOutput) (fileName : String) : IO (Option ParseOutput) := do
@@ -126,31 +137,36 @@ def runParser (parser : @ParseFun ParseOutput) (fileName : String) : IO (Option 
     | .none => []
     | .some colonSeparatedPaths => colonSeparatedPaths.splitOn ":"
   if packagePaths.isEmpty then
-    throw <| IO.userError ("Expected `LEAN_PATH` environment variable to be set. " ++
-    " Are you running via `lake exec opt`?")
+    throw <|
+        IO.userError
+          ("Expected `LEAN_PATH` environment variable to be set. " ++
+            " Are you running via `lake exec opt`?")
   initSearchPath (← Lean.findSysroot) packagePaths
   let modules : Array Import := #[⟨`LeanMLIR.MLIRSyntax.EDSL, false, false, false⟩]
-  let env ← importModules (loadExts := true)  modules {}
+  let env ← importModules (loadExts := true) modules {}
   let filePath := System.mkFilePath [fileName]
   if !(← isFile filePath) then
     throw <| IO.userError s!"File {fileName} does not exist"
   parseFile env parser filePath
 
 def parseRegionFromFile (fileName : String)
-    (regionParseFun : MLIR.AST.Region 0 → Except ParseError α) : IO (Option α)  := do
+    (regionParseFun : MLIR.AST.Region 0 → Except ParseError α) : IO (Option α) := do
   let ast ← runParser regionParser fileName
   match Option.map regionParseFun ast with
-  | .some (.ok res) => return res
-  | .some (.error msg) => throw <| IO.userError s!"Error parsing {fileName}:\n{msg}"; return none
-  | .none => return none
+  | .some (.ok res) =>
+    return res
+  | .some (.error msg) =>
+    throw <| IO.userError s!"Error parsing {fileName}:\n{msg}";
+    return none
+  | .none =>
+    return none
 
 open MLIR.AST in
-def Com.parseFromFile (d : Dialect)
-    [DialectSignature d] [TransformTy d 0] [TransformExpr d 0] [TransformReturn d 0]
-    (fileName : String) :
+def Com.parseFromFile (d : Dialect) [DialectSignature d] [TransformTy d 0] [TransformExpr d 0]
+    [TransformReturn d 0] (fileName : String) :
     IO (Option (Σ (Γ' : Ctxt d.Ty) (eff : EffectKind) (ty : List d.Ty), Com d Γ' eff ty)) := do
   parseRegionFromFile fileName fun region =>
-    let res := mkCom (d:= d) region
-    match res with
-    | Except.error e => Except.error s!"Error:\n{reprStr e}"
-    | Except.ok res => Except.ok res
+      let res := mkCom (d := d) region
+      match res with
+      | Except.error e => Except.error s!"Error:\n{reprStr e}"
+      | Except.ok res => Except.ok res

@@ -252,7 +252,7 @@ trace: ⊢ ∀ (x y : BitVec 3) (zs : List (BitVec 5)), x = x
 trace: ⊢ ∀ (w w_1 w_2 : ℕ) (x y : BitVec w_1) (zs : List (BitVec w_2)) (z : BitVec w),
     52 + 10 = 42 → x = y → BitVec.zeroExtend w x = BitVec.zeroExtend w y + 0
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in theorem test_bv_generalize
       (x y : BitVec 32) (zs : List (BitVec 44)) (z : BitVec 10)
@@ -266,7 +266,7 @@ warning: declaration uses 'sorry'
 trace: ⊢ ∀ (w w_1 w_2 : ℕ) (x y : BitVec w_1) (zs : List (BitVec w_2)) (z : BitVec w),
     52 + 10 = 42 → x = y → BitVec.zeroExtend w x = BitVec.zeroExtend w y + 0
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 -/
 #guard_msgs in theorem test_bv_generalize_spec (x y : BitVec 32) (zs : List (BitVec 44)) (z : BitVec 10) (h : 52 + 10 = 42) (heq : x = y) :
     x.zeroExtend 10 = y.zeroExtend 10 + 0 := by
@@ -294,9 +294,9 @@ theorem test_thm.extracted_1._1 : ∀ (x : BitVec 64),
 /--
 trace: ⊢ ∀ (w : ℕ) (x : BitVec 1) (y : BitVec w), x = x
 ---
-warning: declaration uses 'sorry'
+warning: declaration uses `sorry`
 ---
-warning: 'intros' tactic does nothing
+warning: Unused tactic linter: `intros` does nothing
 
 Note: This linter can be disabled with `set_option linter.unusedTactic false`
 -/
