@@ -601,8 +601,7 @@ theorem fd_f25519_sqrt_ratio_conforms (r u v : Pointer) (s : GlobalState)
         (isFieldElemPtr_splice hr) = readFieldElem hq := by
     intro m q hq
     rw [readFieldElem_eq_of (readFieldElem?_splice _ hr.left), readFieldElem_eq_decode hq]
-    congr 1
-    funext i
+    refine congrArg decodeFieldElem (funext fun i => ?_)
     simp only [extractLsb'_packLimbs, BitVec.natCast_eq_ofNat, BitVec.toNat_ofNat]
     exact Nat.mod_eq_of_lt (readLimb_lt i hq)
 

@@ -69,41 +69,6 @@ private lemma readFieldElem_eq_zero_iff (p : Pointer) (m : MemoryState)
       (ZMod.natCast_eq_zero_iff _ _).mpr (by norm_num [_root_.p])
     simpa [decodeFieldElem, r, -Nat.reducePow] using hp0
 
-open Lean Meta Elab Tactic in
-/-- `blk.denote (ofHVector args ++ V)`, as `denote_enter_block` leaves it, to `blk.denote
-(a₀ ::ᵥ … ::ᵥ V)` indexed by `blk`'s own context. v4.34: the original is ill-typed at `implicit`
-transparency (`List.reverse` in the index), so no `simp` lemma matches it. -/
-elab "block_args_as_cons" : tactic => liftMetaTactic1 fun g => g.withContext do
-  let ty ← instantiateMVars (← g.getType)
-  let ty' ← Meta.transform ty (post := fun e => do
-    unless e.isAppOfArity ``LeanMLIR.SLLVM.BlockCom.denote 6 do return .continue
-    let args := e.getAppArgs
-    let V := args[5]!
-    unless V.isAppOfArity ``HAppend.hAppend 6 do return .continue
-    let A := V.getAppArgs[4]!; let W := V.getAppArgs[5]!
-    let_expr Ctxt.Valuation.ofHVector _ _ _ xs := A | return .continue
-    let Γ := (← whnfR (← inferType args[4]!)).getAppArgs[0]!
-    if Γ == args[0]! then return .continue
-    -- `ofHVector (x ::ₕ xs) = x ::ᵥ ofHVector xs`: rebuild the arguments as a `cons` chain
-    let some Wty := (← whnfR (← inferType W)).getAppArgs[2]? | return .continue
-    let rec elems (fuel : Nat) (xs : Expr) : MetaM (Option (List (Expr × Expr))) := do
-      let fuel + 1 := fuel | return none
-      match_expr ← whnfD xs with
-      | HVector.nil _ _ => return some []
-      | HVector.cons _ _ _ a x xs => return (← elems fuel xs).map ((a, x) :: ·)
-      | _ => return none
-    let some es ← elems 32 xs | return .continue
-    let consC := Expr.const ``Ctxt.Valuation.cons A.getAppFn.constLevels!
-    let TyE := A.getAppArgs[0]!; let inst := A.getAppArgs[1]!
-    let mut V' := W; let mut Γc := Wty
-    for (a, x) in es.reverse do
-      V' := mkAppN consC #[TyE, inst, Γc, a, x, V']
-      Γc := mkAppN (.const ``Ctxt.cons A.getAppFn.constLevels!) #[TyE, a, Γc]
-    return .done (mkAppN e.getAppFn (args.set! 0 Γ |>.set! 5 V')))
-  if ty' == ty then return g
-  g.change ty' (checkDefEq := false)
-
-
 open Lean Elab Tactic
 elab "read_limb " i:num ", " p:term ", " hp:term ", " st:term : tactic => do
   let num := i.getNat

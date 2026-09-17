@@ -647,6 +647,6 @@ elab "store_limbs " x:term ", " p:ident ", " hp:term ", " st:ident : tactic => d
 
 /-- `skip_lifetime` steps the next instruction, which must be a lifetime
 marker. It moves neither state nor valuation, so it takes no arguments. -/
-macro "skip_lifetime" : tactic => `(tactic| rw [BlockCom.run_bind_denote_lifetime])
+macro "skip_lifetime" : tactic => `(tactic| (reduce_cfg_indices; rw [BlockCom.run_bind_denote_lifetime]))
 
 end Firedancer.Ref

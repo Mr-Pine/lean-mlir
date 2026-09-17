@@ -12,6 +12,10 @@ exchanged for `Y` and `Z` at `^bb8`; the step lemmas are add's.
 -/
 
 namespace Firedancer.Ref
+
+-- v4.34: the literal blocks a walk enters are indexed by `Γout` unfolded
+set_option allowUnsafeReducibility true in
+attribute [local implicit_reducible] fd_ed25519_point_sub_with_opts
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -64,6 +68,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
       HVector.map f (.nil : HVector A []) = .nil := fun _ => rfl
   -- `^bb5`: `b_is_precomputed ≠ 0`, so no `mul` by `k`
   denote_enter_block
+  reduce_list_lits
   simp only [BlockCom.denote_term]
   rw [Terminator.denote_condBr_value (b := 0#1) (by exact hv1)]
   simp only [simp_denote, simp_sllvm]
@@ -71,6 +76,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
 
   -- `^bb7`: `skip_last_mul ≠ 0`
   denote_enter_block
+  reduce_list_lits
   denote_number_from 32
   denote_step_reduce v 32 [LLVM.icmp, LLVM.icmp?, LLVM.icmp']
   have e32 : v32 = .value 0#1 := by simp only [hv32, hv17, hv15]; rfl
@@ -81,6 +87,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
 
   -- `^bb8`: `X = r6 - r5`
   denote_enter_block
+  reduce_list_lits
   denote_number_from 33
   have hr0 : IsFieldElemPtr w.mem r :=
     isFieldElemPtr_of_live?_eq (F.live r.id hnr) (coordPtr_zero r ▸ isCoordPtr hr 0)
@@ -133,6 +140,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
   -- `^bb10`
   simp only [BlockCom.denote_term, Terminator.denote_br, simp_denote, simp_sllvm]
   denote_enter_block
+  reduce_list_lits
   iterate 9 peel_lifetime
   simp_return
   simp [hv22]
@@ -256,6 +264,7 @@ theorem fd_ed25519_point_sub_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
 
   -- `^bb2(b->Y, b)`: branch on `b_Z_is_one`
   denote_enter_block
+  reduce_list_lits
   denote_number_from 21
   denote_step_reduce v 21 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hv1]
   simp only [BlockCom.denote_term]
@@ -283,6 +292,7 @@ theorem fd_ed25519_point_sub_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
   · -- `^bb4`: `t = 2 a->Z`, then four `mul`s, the last by `b->Z`
     rw [if_pos (by simp [hz] : BitVec.ofBool (bZ1 == 0#32) = 1)]
     denote_enter_block
+    reduce_list_lits
     denote_number_from 26
     denote_step_reduce v 26 [gepConst, ptradd, LLVM.const?]
     have e26 : v26 = .value (a.withOffset 120) := hv26
@@ -334,6 +344,7 @@ theorem fd_ed25519_point_sub_with_opts_conforms (r a b : Pointer) (bZ1 bPre skip
     have hz' : (bZ1 == 0#32) = false := by simpa using hz
     rw [hz', if_neg (by decide)]
     denote_enter_block
+    reduce_list_lits
     denote_number_from 22
     denote_step_reduce v 23 [gepConst, ptradd, LLVM.const?]
     have e22 : v22 = .value (a.withOffset 80) := hv22

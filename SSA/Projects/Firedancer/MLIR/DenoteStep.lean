@@ -205,6 +205,26 @@ elab "reduce_cfg_indices" : tactic => do
       else
         return some g
 
+open Lean Meta Elab Tactic in
+/-- Replaces each `List.reverse l` or `Target.ts t` in the goal that evaluates to a literal list
+with that literal. v4.34: `[].reverse` is not `[]` at `implicit` transparency, so a `++` instance
+indexed by it goes stale once `simp` rewrites the operand. -/
+elab "reduce_list_lits" : tactic => liftMetaTactic1 fun g => g.withContext do
+  let rec lit (e : Expr) (fuel : Nat) : MetaM (Option (List Expr)) := do
+    let fuel + 1 := fuel | return none
+    match_expr ← whnfD e with
+    | List.nil _ => return some []
+    | List.cons _ x xs => return (← lit xs fuel).map (x :: ·)
+    | _ => return none
+  let tgt ← instantiateMVars (← g.getType)
+  let tgt' ← Meta.transform tgt (post := fun e => do
+    unless e.isAppOfArity ``List.reverse 2 || e.isAppOfArity ``Target.ts 3 do return .continue
+    let some xs ← lit e 64 | return .continue
+    let_expr List α := ← whnfR (← inferType e) | return .continue
+    return .done (← mkListLit α xs))
+  if tgt' == tgt then return g
+  g.change tgt' (checkDefEq := false)
+
 /-! ### Peeling an impure instruction
 
 The stepper stops at a load or a store: its value is not a function of the
@@ -1383,6 +1403,41 @@ elab "denote_enter_block" : tactic => do
         Resolve the terminator first, so the target is a concrete `SuccArgs`."
   replaceMainGoal [g]
   evalTactic (← `(tactic| denote_reduce_get))
+
+open Lean Meta Elab Tactic in
+/-- `blk.denote (ofHVector args ++ V)`, as `denote_enter_block` leaves it, to `blk.denote
+(a₀ ::ᵥ … ::ᵥ V)` indexed by `blk`'s own context. v4.34: the original is ill-typed at `implicit`
+transparency (`List.reverse` in the index), so no `simp` lemma matches it. -/
+elab "block_args_as_cons" : tactic => liftMetaTactic1 fun g => g.withContext do
+  let ty ← instantiateMVars (← g.getType)
+  let ty' ← Meta.transform ty (post := fun e => do
+    unless e.isAppOfArity ``LeanMLIR.SLLVM.BlockCom.denote 6 do return .continue
+    let args := e.getAppArgs
+    let V := args[5]!
+    unless V.isAppOfArity ``HAppend.hAppend 6 do return .continue
+    let A := V.getAppArgs[4]!; let W := V.getAppArgs[5]!
+    let_expr Ctxt.Valuation.ofHVector _ _ _ xs := A | return .continue
+    let Γ := (← whnfR (← inferType args[4]!)).getAppArgs[0]!
+    if Γ == args[0]! then return .continue
+    -- `ofHVector (x ::ₕ xs) = x ::ᵥ ofHVector xs`: rebuild the arguments as a `cons` chain
+    let some Wty := (← whnfR (← inferType W)).getAppArgs[2]? | return .continue
+    let rec elems (fuel : Nat) (xs : Expr) : MetaM (Option (List (Expr × Expr))) := do
+      let fuel + 1 := fuel | return none
+      match_expr ← whnfD xs with
+      | HVector.nil _ _ => return some []
+      | HVector.cons _ _ _ a x xs => return (← elems fuel xs).map ((a, x) :: ·)
+      | _ => return none
+    let some es ← elems 32 xs | return .continue
+    let consC := Expr.const ``Ctxt.Valuation.cons A.getAppFn.constLevels!
+    let TyE := A.getAppArgs[0]!; let inst := A.getAppArgs[1]!
+    let mut V' := W; let mut Γc := Wty
+    for (a, x) in es.reverse do
+      V' := mkAppN consC #[TyE, inst, Γc, a, x, V']
+      Γc := mkAppN (.const ``Ctxt.cons A.getAppFn.constLevels!) #[TyE, a, Γc]
+    return .done (mkAppN e.getAppFn (args.set! 0 Γ |>.set! 5 V')))
+  if ty' == ty then return g
+  g.change ty' (checkDefEq := false)
+
 
 open Lean Meta Elab Tactic in
 /-- `denote_expose` unfolds the goal's program to its first instruction without

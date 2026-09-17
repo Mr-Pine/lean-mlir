@@ -26,6 +26,10 @@ in `tail_run`, stated over the opaque entry valuation.
 -/
 
 namespace Firedancer.Ref
+
+-- v4.34: the literal blocks a walk enters are indexed by `Γout` unfolded
+set_option allowUnsafeReducibility true in
+attribute [local implicit_reducible] fd_ed25519_point_add_with_opts
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -307,6 +311,7 @@ theorem tail_run {s w : GlobalState} {r : Pointer} (hs : s.WF) (hr : IsPointPtr 
 
   -- `^bb8`: `X = r6 - r5`
   denote_enter_block
+  reduce_list_lits
   denote_number_from 33
   have hr0 : IsFieldElemPtr w.mem r :=
     isFieldElemPtr_of_live?_eq (F.live r.id hnr) (coordPtr_zero r ▸ isCoordPtr hr 0)
