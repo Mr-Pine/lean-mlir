@@ -38,7 +38,7 @@ def Encodes (bytes : BitVec 256) (V : Edwards.Point curve) : Prop :=
 abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
-    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
+    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
     (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
     (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
     (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
@@ -58,15 +58,15 @@ abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Poi
     msg.offset.toNat + sz.toNat ≤ 2 ^ 64 →
     IsSha512Ptr s.mem sha →
     sha.offset.toNat + 256 ≤ 2 ^ 64 →
-    Sha512KHolds s sha →
+    Sha512KHolds s sha kbits →
     sha.id ≠ sig.id →
     sha.id ≠ pk.id →
     sha.id ≠ msg.id →
     s.RefWF [sha] →
     ScalarReduceBy f →
     Sha512InitBy fInit →
-    Sha512AppendBy fApp →
-    Sha512FiniBy fFini →
+    Sha512AppendBy kbits fApp →
+    Sha512FiniBy kbits fFini →
     ∀ Bt,
       BaseTableHolds s Bt →
         BaseVals Bt basePoint wellFormed_basePoint →

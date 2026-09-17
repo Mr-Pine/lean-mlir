@@ -50,12 +50,12 @@ namespace Firedancer.Common
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
-/-- The round constants survive states that keep the symbol table and every caller block but
-`sha`'s. -/
-theorem Sha512KHolds.of_live?_eq {s t : GlobalState} {sha : Pointer} (hs : s.WF)
-    (h : Sha512KHolds s sha) (hg : t.globals = s.globals)
+/-- The round-constant table survives states that keep the symbol table and every caller block
+but `sha`'s. -/
+theorem Sha512KHolds.of_live?_eq {s t : GlobalState} {sha : Pointer} {k : BitVec (80 * 64)}
+    (hs : s.WF) (h : Sha512KHolds s sha k) (hg : t.globals = s.globals)
     (hl : ∀ b : BlockId, b ≠ sha.id → b.id < s.alloc.nextFreeBlock → t.mem.live? b = s.mem.live? b) :
-    Sha512KHolds t sha :=
+    Sha512KHolds t sha k :=
   let ⟨q, ⟨hp, hfit, hval⟩, hne⟩ := h
   ⟨q, ⟨by unfold GlobalPtr at hp ⊢; rw [hg]; exact hp,
     (readWord_of_live?_eq (hl q.id hne (lt_nextFreeBlock_of_fits hs hfit)) hfit).imp
@@ -210,11 +210,11 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
     (hsignull : sig.id ≠ SLLVM.nullBlock)
-    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
+    (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
     (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
     (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
     (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
-    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f fInit fApp fFini := by
+    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f kbits fInit fApp fFini := by
   simp only [fd_ed25519_verify_spec, Cfg.denote]
   intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hf hInit hApp hFini Bt hTbl hB
     dig hdig w hw
@@ -516,7 +516,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   have hg₉ : s₉.globals = s.globals :=
     hg₉₈.trans (heq₂₀.globals.symm.trans (heq₁₈.globals.symm.trans
       (hs₆.globals.trans (by rw [← heq₁₂.globals, hs₄def, hs₃def, hs₂def, hs₁def]; rfl))))
-  have hK₉ : Sha512KHolds s₉ sha :=
+  have hK₉ : Sha512KHolds s₉ sha kbits :=
     hK.of_live?_eq hm.wf hg₉ fun b hb hb' => (fr₉ b hb).trans (fb₈ b hb')
 
   -- `%23`: `fd_sha512_append( sha, r, 32 )`
@@ -529,7 +529,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   obtain ⟨s₁₀, hrun₂₃, hwf₁₀, -, hg₁₀, fr₁₀, hblk₁₀⟩ := hret₂₃ b₁ hb₁
   subst hv5
   peel_call hrun₂₃
-  have hK₁₀ : Sha512KHolds s₁₀ sha :=
+  have hK₁₀ : Sha512KHolds s₁₀ sha kbits :=
     hK.of_live?_eq hm.wf (hg₁₀.trans hg₉) fun b hb hb' => (fr₁₀ b hb).trans ((fr₉ b hb).trans (fb₈ b hb'))
 
   -- `%24`: `fd_sha512_append( sha, public_key, 32 )`
@@ -542,7 +542,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   rw [hblk₁₀, hw₁₀] at hret₂₄
   obtain ⟨s₁₁, hrun₂₄, hwf₁₁, -, hg₁₁, fr₁₁, hblk₁₁⟩ := hret₂₄ b₂ hb₂
   peel_call hrun₂₄
-  have hK₁₁ : Sha512KHolds s₁₁ sha :=
+  have hK₁₁ : Sha512KHolds s₁₁ sha kbits :=
     hK.of_live?_eq hm.wf (hg₁₁.trans (hg₁₀.trans hg₉)) fun b hb hb' =>
       (fr₁₁ b hb).trans ((fr₁₀ b hb).trans ((fr₉ b hb).trans (fb₈ b hb')))
 
@@ -557,7 +557,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   rw [hblk₁₁, hw₁₁] at hret₂₅
   obtain ⟨s₁₂, hrun₂₅, hwf₁₂, -, hg₁₂, fr₁₂, hblk₁₂⟩ := hret₂₅ b₃ hb₃
   peel_call hrun₂₅
-  have hK₁₂ : Sha512KHolds s₁₂ sha :=
+  have hK₁₂ : Sha512KHolds s₁₂ sha kbits :=
     hK.of_live?_eq hm.wf (hg₁₂.trans (hg₁₁.trans (hg₁₀.trans hg₉))) fun b hb hb' =>
       (fr₁₂ b hb).trans ((fr₁₁ b hb).trans ((fr₁₀ b hb).trans ((fr₉ b hb).trans (fb₈ b hb'))))
 
