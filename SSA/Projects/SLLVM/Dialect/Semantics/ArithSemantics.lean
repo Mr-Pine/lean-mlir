@@ -15,7 +15,9 @@ def LLVM.IntW.canBe (x : LLVM.IntW w) (y : BitVec w) : Bool :=
 namespace LeanMLIR.SLLVM
 
 /-- An LLVM pointer, or `poison` -/
-@[implicit_reducible] def Ptr : Type := PoisonOr Pointer
+@[implicit_reducible]
+def Ptr : Type :=
+  PoisonOr Pointer
 
 /-! ### div / rem -/
 
@@ -52,7 +54,7 @@ def srem (x y : LLVM.IntW w) : EffectM (LLVM.IntW w) := do
 def ptradd (p : SLLVM.Ptr) (x : LLVM.IntW 64) : SLLVM.Ptr := do
   let p ← p
   let x ← x
-  return { p with offset := p.offset + x}
+  return { p with offset := p.offset + x }
 
 /-!
 **SIMPLIFICATION**

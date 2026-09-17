@@ -7,7 +7,6 @@ import Lean.Meta.Tactic.Simp.SimpTheorems
 import Lean.Meta.Tactic.Simp.RegisterCommand
 import Lean.LabelAttribute
 
-
 open Lean
 open Lean.Elab.Tactic
 
@@ -29,16 +28,16 @@ To enable this proof automation, rewrite implementors must tag their rewrite rul
 
 The purpose of this tactic is to maximize proof automation for instruction lowering rewrite patterns
 -/
-macro "simp_lowering" : tactic => `(tactic|(
-    simp_peephole
-    simp_alive_undef
-    simp_riscv
-    simp_alive_ops
-    simp_alive_case_bash
-    -- v4.34: case bashing leaves raw `nat_lit` widths in binder types, which `bv_decide` rejects
-    all_goals try dsimp only
-    -- v4.34: `simp_riscv` rewrites `if` conditions but not their `Decidable` instances,
-    -- which then only typecheck past `implicit` transparency
-    set_option backward.isDefEq.respectTransparency false in simp_alive_split
-    all_goals try simp only [shiftLeft_ofNat_eq_shiftLeft_toNat]
-  ))
+macro "simp_lowering" : tactic =>
+  `(tactic|
+    ( simp_peephole
+      simp_alive_undef
+      simp_riscv
+      simp_alive_ops
+      simp_alive_case_bash
+      -- v4.34: case bashing leaves raw `nat_lit` widths in binder types, which `bv_decide` rejects
+      all_goals try dsimp only
+      -- v4.34: `simp_riscv` rewrites `if` conditions but not their `Decidable` instances,
+      -- which then only typecheck past `implicit` transparency
+      set_option backward.isDefEq.respectTransparency false in simp_alive_split
+      all_goals try simp only [shiftLeft_ofNat_eq_shiftLeft_toNat]))

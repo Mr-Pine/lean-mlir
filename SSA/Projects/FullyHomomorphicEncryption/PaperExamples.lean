@@ -13,7 +13,6 @@ import SSA.Projects.FullyHomomorphicEncryption.Syntax
 import SSA.Projects.FullyHomomorphicEncryption.PrettySyntax
 
 open Ctxt (Var Valuation DerivedCtxt)
-
 open MLIR AST -- need this to support the unhygenic macros in the EDSL
 
 /- Lemmas about the elements of the quotient ring. -/
@@ -34,30 +33,22 @@ theorem dialect_add_f_eq (a : R q n) : a + (f q n) = a := by
 
 end RingLemmas
 
-
 namespace ExampleComm
 
 variable {q : Nat} {n : Nat} [hq : Fact (q > 1)]
 
 def lhs :=
-[poly q, n, hq| {
-^bb0(%A : ! R, %B : ! R):
-  %v1 = "poly.add" (%A,%B) : (! R, ! R) -> (! R)
-  "return" (%v1) : (! R) -> ()
-}]
+  [polyq,n,hq | {^bb0(%A:!R,%B:!R):%v1="poly.add"(%A, %B):(!R, !R)->(!R)"return"(%v1):(!R)->()}]
 
 def rhs :=
-[poly q, n, hq| {
-^bb0(%A : ! R, %B : ! R):
-  %v1 = "poly.add" (%B,%A) : (! R, ! R) -> (! R)
-  "return" (%v1) : (! R) -> ()
-}]
+  [polyq,n,hq | {^bb0(%A:!R,%B:!R):%v1="poly.add"(%B, %A):(!R, !R)->(!R)"return"(%v1):(!R)->()}]
 
 open MLIR AST in
-noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike, .polynomialLike]
-    [.polynomialLike] :=
-  { lhs := lhs, rhs := rhs, correct :=
-    by
+noncomputable def p1 :
+    PeepholeRewrite (FHE q n) [.polynomialLike, .polynomialLike] [.polynomialLike] :=
+  {
+    lhs := lhs, rhs := rhs,
+    correct := by
       rw [lhs, rhs]
       /-:
       Com.denote
@@ -66,12 +57,13 @@ noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike, .polynomialLi
         (Com.ret { val := 0, property := ex1.proof_3 }))) =
       Com.denote (Com.ret { val := 0, property := _ })
       -/
-      set_option backward.isDefEq.respectTransparency false in
-      simp_peephole
-      /- ⊢ ∀ (a b : R 2 3), b + a = a + b -/
-      intros a b
-      rw [add_comm]
-      /- No goals-/
+      set_option backward.isDefEq.respectTransparency
+        false in
+        simp_peephole
+        /- ⊢ ∀ (a b : R 2 3), b + a = a + b -/
+        intros a b
+        rw [add_comm]
+    /- No goals-/
     }
 
 end ExampleComm
@@ -79,44 +71,39 @@ end ExampleComm
 section ExampleModulo
 
 @[irreducible]
-def irreduciblePow (q n : Nat) : Nat := q^n
-infixl:50 "**" => irreduciblePow
+def irreduciblePow (q n : Nat) : Nat :=
+  q ^ n
 
+infixl:50 "**" => irreduciblePow
 
 variable {q : Nat} {n : Nat} [hq : Fact (q > 1)]
 
 -- We mark this as noncomputable due to the presence of poly.const, which
 -- creates a value of type R.  This operation is noncomputable, as we use `coe`
 -- from `Int` to `R`, which is a noncomputable instance.
-noncomputable def a_plus_generator_eq_a := [poly q, n, hq| {
-^bb0(%a : !R):
-  %one_int = arith.const 1 : i16
-  %two_to_the_n = arith.const ${2**n} : index
-  %x2n = poly.monomial %one_int, %two_to_the_n : (i16, index) -> !R
-  %oner = poly.const 1 : !R
-  %p = poly.add %x2n, %oner : !R
-  %v1 = poly.add %a, %p : !R
-  return %v1 : !R
-}]
+noncomputable def a_plus_generator_eq_a :=
+  [polyq,n,hq |
+    {^bb0(%a:!R):%one_int = arith.const 1 :
+          i16%two_to_the_n = arith.const${2**n} :
+          index%x2n = poly.monomial%one_int, %two_to_the_n : (i16, index) ->
+          !R%oner = poly.const 1 :
+          !R%p = poly.add%x2n, %oner : !R%v1 = poly.add%a, %p : !R return%v1 : !R}]
 
-def rhs := [poly q, n, hq | {
-^bb0(%a : !R):
-  return %a : !R
-
-}]
+def rhs :=
+  [polyq,n,hq | {^bb0(%a:!R):return%a : !R}]
 
 /-- info: 'a_plus_generator_eq_a' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms a_plus_generator_eq_a
+#guard_msgs in
+#print axioms a_plus_generator_eq_a
 
 /-  `x^(2^n) + a = a`, since we quotient the polynomial ring with x^(2^n) -/
 open MLIR AST in
 noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike] [.polynomialLike] :=
-  { lhs := a_plus_generator_eq_a,
-     rhs := rhs
-  , correct :=
-    by
+  {
+    lhs := a_plus_generator_eq_a, rhs := rhs,
+    correct := by
       unfold a_plus_generator_eq_a rhs
-       /-
+      /-
       Com.denote
           (Com.var (Expr.mk (Op.const_int (Int.ofNat 1)) lhs.proof_2 HVector.nil HVector.nil)
             (Com.var (Expr.mk (Op.const_idx 1) lhs.proof_3 HVector.nil HVector.nil)
@@ -140,28 +127,33 @@ noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike] [.polynomialL
           Γv =
         Com.denote (Com.ret { val := 0, property := rhs.proof_2 }) Γv
        -/
-      set_option backward.isDefEq.respectTransparency false in
-      simp_peephole
-      /- ⊢ ∀ (a : ⟦Ty.polynomialLike⟧), a + (R.monomial q n 1 (2**n) + 1) = a -/
-      show ∀ a : R q n,
-        a + (R.monomial ((1 : ℤ) : ZMod q) (2**n) + ROfZComputable_stuck_term q n 1) = a
-      simp only [R.monomial, R.fromPoly, Int.cast_one, ROfZComputable_def]
-      /- ⊢ a + ((Ideal.Quotient.mk (Ideal.span {f q n})) ((Polynomial.monomial
+      set_option backward.isDefEq.respectTransparency
+        false in
+        simp_peephole
+        /- ⊢ ∀ (a : ⟦Ty.polynomialLike⟧), a + (R.monomial q n 1 (2**n) + 1) = a -/
+        show
+          ∀ a : R q n,
+            a + (R.monomial ((1 : ℤ) : ZMod q) (2**n) + ROfZComputable_stuck_term q n 1) = a
+        simp only [R.monomial, R.fromPoly, Int.cast_one, ROfZComputable_def]
+        /- ⊢ a + ((Ideal.Quotient.mk (Ideal.span {f q n})) ((Polynomial.monomial
       (2**n)) 1) + 1) = a -/
-      intros a
-      unfold irreduciblePow
-      have hgenerator :
-        f q n - (1 : Polynomial (ZMod q)) =
-          (Polynomial.monomial (R := ZMod q) (2^n : Nat) 1)  := by
-            simp [f, Polynomial.X_pow_eq_monomial]
-      rw [← hgenerator]
-      have add_congr_quotient :
-          ((Ideal.Quotient.mk (Ideal.span {f q n})) (f q n - 1) + 1)  =
-            ((Ideal.Quotient.mk (Ideal.span {f q n})) (f q n )) := by
-        simp
-      rw [add_congr_quotient]
-      apply Poly.add_f_eq
+        intros a
+        unfold irreduciblePow
+        have hgenerator :
+          f q n - (1 : Polynomial (ZMod q)) =
+            (Polynomial.monomial (R := ZMod q) (2 ^ n : Nat) 1) := by
+          simp [f, Polynomial.X_pow_eq_monomial]
+        rw [← hgenerator]
+        have add_congr_quotient :
+          ((Ideal.Quotient.mk (Ideal.span {f q n})) (f q n - 1) + 1) =
+            ((Ideal.Quotient.mk (Ideal.span {f q n})) (f q n)) := by
+          simp
+        rw [add_congr_quotient]
+        apply Poly.add_f_eq
     }
+
 /--info: 'p1' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms p1
+#guard_msgs in
+#print axioms p1
+
 end ExampleModulo

@@ -15,7 +15,7 @@ def Term.quote (t : _root_.Term) : Expr :=
   | zero => mkConst ``Term.zero
   | one => mkConst ``Term.one
   | negOne => mkConst ``Term.negOne
--- | decr t => mkApp (mkConst ``Term.decr) (t.quote)
+  -- | decr t => mkApp (mkConst ``Term.decr) (t.quote)
   -- | incr t => mkApp (mkConst ``Term.incr) (t.quote)
   | neg t => mkApp (mkConst ``Term.neg) (t.quote)
   | not t => mkApp (mkConst ``Term.not) (t.quote)
@@ -48,9 +48,11 @@ def Predicate.quote (p : Predicate) : Expr :=
   | land p q => mkApp2 (mkConst ``Predicate.land) (Predicate.quote p) (Predicate.quote q)
   | lor p q => mkApp2 (mkConst ``Predicate.lor) (Predicate.quote p) (Predicate.quote q)
 
+def Reflect.Map.empty : List (BitVec w) :=
+  []
 
-def Reflect.Map.empty : List (BitVec w) := []
+def Reflect.Map.append (w : Nat) (s : BitVec w) (m : List (BitVec w)) : List (BitVec w) :=
+  m.append [s]
 
-def Reflect.Map.append (w : Nat) (s : BitVec w)  (m : List (BitVec w)) : List (BitVec w) := m.append [s]
-
-def Reflect.Map.get (ix : Nat) (_ : BitVec w)  (m : List (BitVec w)) : BitVec w := m[ix]!
+def Reflect.Map.get (ix : Nat) (_ : BitVec w) (m : List (BitVec w)) : BitVec w :=
+  m[ix]!

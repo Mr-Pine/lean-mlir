@@ -7,6 +7,7 @@ import SSA.Projects.LLVMRiscV.Pipeline.InstructionLowering
 
 open MLIR AST InstCombine
 open LLVMRiscV
+
 /-!
   This file extends the `opt` tool, to specifically support the `LLVMPlusRiscV` dialect.
 -/
@@ -16,24 +17,24 @@ open LLVMRiscV
   prints it to standart output.
   If any of the steps fails, we print an error message and return exit code 1. -/
 def passriscv64 (fileName : String) : IO UInt32 := do
-    let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
-    match icom? with
-    | none => return 1
-    | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match (dependent := true) eff with
-      | EffectKind.pure =>
-        match (dependent := true) retTy with
-        | [Ty.llvm (.bitvec _w)]  =>
-          /- calls to the instruction selector defined in `InstructionLowering`,
+  let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
+  match icom? with
+  | none =>
+    return 1
+  | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
+    match (dependent := true) eff with
+    | EffectKind.pure =>
+      match (dependent := true) retTy with
+      | [Ty.llvm (.bitvec _w)] =>
+        /- calls to the instruction selector defined in `InstructionLowering`,
             `true` indicates pseudo variable lowering, `fuel` is 150-/
-          let lowered := selectionPipeFuelWithCSE 150 c true
-
-          IO.println <| lowered.printModule
-          return 0
-        | _ =>
+        let lowered := selectionPipeFuelWithCSE 150 c true
+        IO.println <| lowered.printModule
+        return 0
+      | _ =>
         IO.println s!" debug: WRONG RETURN TYPE : expected Ty.llvm (Ty.bitvec 64) "
         return 1
-      | _ =>
+    | _ =>
       IO.println s!" debug: WRONG EFFECT KIND : expected pure program "
       return 1
 
@@ -43,23 +44,24 @@ def passriscv64 (fileName : String) : IO UInt32 := do
   This pass applies the optimization patterns from `GlobalISel` on both LLVM and RISCV.
   If any of the steps fails, we print an error message and return exit code 1. -/
 def passriscv64_optimized (fileName : String) : IO UInt32 := do
-    let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
-    match icom? with
-    | none => return 1
-    | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match (dependent := true) eff with
-      | EffectKind.pure =>
-        match (dependent := true) retTy with
-        | [Ty.llvm (.bitvec _w)]  =>
-          /- calls to the optimized instruction selector defined in `InstructionLowering`,
+  let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
+  match icom? with
+  | none =>
+    return 1
+  | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
+    match (dependent := true) eff with
+    | EffectKind.pure =>
+      match (dependent := true) retTy with
+      | [Ty.llvm (.bitvec _w)] =>
+        /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/
-          let lowered := selectionPipeFuelWithCSEWithOpt 150 c true
-          IO.println <| lowered.printModule
-          return 0
-        | _ =>
+        let lowered := selectionPipeFuelWithCSEWithOpt 150 c true
+        IO.println <| lowered.printModule
+        return 0
+      | _ =>
         IO.println s!" debug: WRONG RETURN TYPE : expected Ty.llvm (Ty.bitvec 64) "
         return 1
-      | _ =>
+    | _ =>
       IO.println s!" debug: WRONG EFFECT KIND : expected pure program "
       return 1
 
@@ -69,23 +71,24 @@ def passriscv64_optimized (fileName : String) : IO UInt32 := do
   This pass applies the optimization patterns from `GlobalISel` on both LLVM and RISCV.
   If any of the steps fails, we print an error message and return exit code 1. -/
 def passriscv64_optimized_const (fileName : String) : IO UInt32 := do
-    let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
-    match icom? with
-    | none => return 1
-    | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match (dependent := true) eff with
-      | EffectKind.pure =>
-        match (dependent := true) retTy with
-        | [Ty.llvm (.bitvec _w)]  =>
-          /- calls to the optimized instruction selector defined in `InstructionLowering`,
+  let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
+  match icom? with
+  | none =>
+    return 1
+  | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
+    match (dependent := true) eff with
+    | EffectKind.pure =>
+      match (dependent := true) retTy with
+      | [Ty.llvm (.bitvec _w)] =>
+        /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/
-          let lowered := selectionPipeFuelWithCSEWithOptConst 150 c true
-          IO.println <| lowered.printModule
-          return 0
-        | _ =>
+        let lowered := selectionPipeFuelWithCSEWithOptConst 150 c true
+        IO.println <| lowered.printModule
+        return 0
+      | _ =>
         IO.println s!" debug: WRONG RETURN TYPE : expected Ty.llvm (Ty.bitvec 64) "
         return 1
-      | _ =>
+    | _ =>
       IO.println s!" debug: WRONG EFFECT KIND : expected pure program "
       return 1
 
@@ -95,22 +98,23 @@ def passriscv64_optimized_const (fileName : String) : IO UInt32 := do
   This pass applies the optimization patterns from `SelectionDAG` on both LLVM and RISCV.
   If any of the steps fails, we print an error message and return exit code 1. -/
 def passriscv64_selectiondag (fileName : String) : IO UInt32 := do
-    let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
-    match icom? with
-    | none => return 1
-    | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
-      match (dependent := true) eff with
-      | EffectKind.pure =>
-        match (dependent := true) retTy with
-        | [Ty.llvm (.bitvec _w)]  =>
-          /- calls to the optimized instruction selector defined in `InstructionLowering`,
+  let icom? ← Com.parseFromFile LLVMPlusRiscV fileName
+  match icom? with
+  | none =>
+    return 1
+  | some (Sigma.mk _Γ ⟨eff, ⟨retTy, c⟩⟩) =>
+    match (dependent := true) eff with
+    | EffectKind.pure =>
+      match (dependent := true) retTy with
+      | [Ty.llvm (.bitvec _w)] =>
+        /- calls to the optimized instruction selector defined in `InstructionLowering`,
           `true` indicates pseudo variable lowering, `fuel` is 150 -/
-          let lowered := selectionPipeWithSelectionDAG 150 c true
-          IO.println <| lowered.printModule
-          return 0
-        | _ =>
+        let lowered := selectionPipeWithSelectionDAG 150 c true
+        IO.println <| lowered.printModule
+        return 0
+      | _ =>
         IO.println s!" debug: WRONG RETURN TYPE : expected Ty.llvm (Ty.bitvec 64) "
         return 1
-      | _ =>
+    | _ =>
       IO.println s!" debug: WRONG EFFECT KIND : expected pure program "
       return 1

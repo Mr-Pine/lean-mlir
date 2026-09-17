@@ -116,7 +116,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.add"(%x, %y){overflowFlags = #llvm.overflow<none>}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -130,7 +130,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.add"(%x, %y){overflowFlags = #llvm.overflow<"nsw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -144,7 +144,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.add"(%x, %y){overflowFlags = #llvm.overflow<"nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -158,7 +158,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.add"(%x, %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -172,7 +172,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%0:i64,%1:i64):%2="llvm.add"(%0, %1){overflowFlags = 0:i64}:(i64,
-              i64)->i64"llvm.return"(%2):(i64)->()}]
+            i64)->i64"llvm.return"(%2):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -186,7 +186,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%0:i64,%1:i64):%2="llvm.add"(%0, %1){overflowFlags = 1:i64}:(i64,
-              i64)->i64"llvm.return"(%2):(i64)->()}]
+            i64)->i64"llvm.return"(%2):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -200,7 +200,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%0:i64,%1:i64):%2="llvm.add"(%0, %1){overflowFlags = 2:i64}:(i64,
-              i64)->i64"llvm.return"(%2):(i64)->()}]
+            i64)->i64"llvm.return"(%2):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -214,7 +214,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%0:i64,%1:i64):%2="llvm.add"(%0, %1){overflowFlags = 3:i64}:(i64,
-              i64)->i64"llvm.return"(%2):(i64)->()}]
+            i64)->i64"llvm.return"(%2):(i64)->()}]
 
 /-! #### sub -/
 
@@ -269,7 +269,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.sub"(%x, %y){overflowFlags = #llvm.overflow<"none">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### sub (flags) -/
 
@@ -285,7 +285,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.sub"(%x, %y){overflowFlags = #llvm.overflow<"nsw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -299,7 +299,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.sub"(%x, %y){overflowFlags = #llvm.overflow<"nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -313,7 +313,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.sub"(%x, %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### mul -/
 
@@ -368,7 +368,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.mul"(%x, %y){overflowFlags = #llvm.overflow<"none">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -382,7 +382,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.mul"(%x, %y){overflowFlags = #llvm.overflow<"nsw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -396,7 +396,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.mul"(%x, %y){overflowFlags = #llvm.overflow<"nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -410,7 +410,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.mul"(%x, %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### udiv -/
 
@@ -466,7 +466,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.udiv"(%x, %y){isExact}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### sdiv -/
 
@@ -522,7 +522,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.sdiv"(%x, %y){isExact}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### urem -/
 
@@ -879,7 +879,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.shl"(%x, %y){overflowFlags = #llvm.overflow<"nsw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -893,7 +893,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.shl"(%x, %y){overflowFlags = #llvm.overflow<"nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -907,7 +907,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%x:i64,%y:i64):%z="llvm.shl"(%x, %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### lshr -/
 
@@ -1108,7 +1108,7 @@ info: builtin.module {
   Com.printModule
     [llvm|
       {^bb0(%cond:i1,%x:i64,%y:i64):%z="llvm.select"(%cond, %x, %y):(i1, i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: {
@@ -1123,7 +1123,7 @@ info: {
     toString
       [llvm|
         {^bb0(%cond:i1,%x:i64,%y:i64):%z="llvm.select"(%cond, %x, %y):(i1, i64,
-                i64)->(i64)"llvm.return"(%z):(i64)->()}]
+              i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: {
@@ -1136,7 +1136,7 @@ info: {
 #eval
   [llvm|
     {^bb0(%cond:i1,%x:i64,%y:i64):%z="llvm.select"(%cond, %x, %y):(i1, i64,
-            i64)->(i64)"llvm.return"(%z):(i64)->()}]
+          i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /-! #### icmp -/
 

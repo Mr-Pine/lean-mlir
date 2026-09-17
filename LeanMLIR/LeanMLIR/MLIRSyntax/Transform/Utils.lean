@@ -9,6 +9,7 @@ are usefull to implementors of `Transform` typeclasses
 namespace MLIR.AST
 
 namespace Op
+
 variable {φ} (op : Op φ)
 variable {d : Dialect} [DialectSignature d] [DecidableEq d.Ty] [TransformTy d φ] [ToString d.Ty]
 
@@ -35,8 +36,10 @@ Throws an error if the attribute is not present, or if the value of the attribut
 has the wrong type.
 -/
 def getBoolAttr (attr : String) : Except TransformError Bool := do
-  let .bool b ← op.getAttr attr
-    | .error <| .generic s!"Expected attribute `{attr}` to be of type Bool, but found:\n\
+  let .bool b ← op.getAttr attr |
+    .error <|
+        .generic
+          s!"Expected attribute `{attr}` to be of type Bool, but found:\n\
         \t{attr}"
   return b
 
@@ -49,13 +52,17 @@ has the wrong type.
 If `coeBool` is true, then an attribute of Boolean type is automatically coerced
 to a 1-bit (signless) integer, where `true` maps to `1` and `false` to `0`.
 -/
-def getIntAttr (attr : String) (coeBool : Bool := true) : Except TransformError (Int × MLIRType φ) := do
+def getIntAttr (attr : String) (coeBool : Bool := true) :
+    Except TransformError (Int × MLIRType φ) := do
   let attrVal ← op.getAttr attr
-  if coeBool then if let .bool b := attrVal then
-    return (if b then 1 else 0, .int .Signless (.concrete 1))
-
+  if coeBool then
+    if let .bool b := attrVal then
+      return (if b then 1 else 0, .int .Signless (.concrete 1))
   let .int val ty := attrVal
-    | .error <| .generic s!"Expected attribute `{attr}` to be of type Int, but found:\n\
+    |
+    .error <|
+        .generic
+          s!"Expected attribute `{attr}` to be of type Int, but found:\n\
         \t{attr}"
   return (val, ty)
 
@@ -66,8 +73,10 @@ Throws an error if the attribute is not present, or if the value of the attribut
 has the wrong type.
 -/
 def getTypeAttr (attr : String) : Except TransformError (MLIRType φ) := do
-  let .type ty ← op.getAttr attr
-    | .error <| .generic s!"Expected attribute `{attr}` to be a type, but found a:\n\
+  let .type ty ← op.getAttr attr |
+    .error <|
+        .generic
+          s!"Expected attribute `{attr}` to be a type, but found a:\n\
         \t{attr}"
   return (ty)
 
@@ -78,7 +87,8 @@ def getTypeAttr (attr : String) : Except TransformError (MLIRType φ) := do
 -/
 structure ParsedArgs (Γ : Ctxt d.Ty) (n? : Option Nat := none) where
   toList : List (Σ t, Γ.Var t)
-  length_eq : match n? with
+  length_eq :
+    match n? with
     | some n => toList.length = n
     | none => True
 
@@ -95,17 +105,19 @@ def parseArgs (Γ : Ctxt d.Ty) : ReaderM d (ParsedArgs Γ) :=
   ParsedArgs.ofList <$> op.args.mapM (TypedSSAVal.mkVal Γ)
 
 namespace ParsedArgs
+
 variable {Γ : Ctxt d.Ty} {n?} (args : ParsedArgs Γ n?)
 
 /-- Returns the list of types of each argument. -/
-def types : List d.Ty := args.toList.map Sigma.fst
+def types : List d.Ty :=
+  args.toList.map Sigma.fst
 
 /-- Return the collection of argument variables as an HVector. -/
 def toHVector : HVector Γ.Var args.types :=
-  go args.toList where
-    go {α} {f : α → Type} : (as : List (Σ a, f a)) → HVector f (as.map Sigma.fst)
+  go args.toList
+where go {α} {f : α → Type} : (as : List (Σ a, f a)) → HVector f (as.map Sigma.fst)
     | [] => .nil
-    | ⟨_, x⟩::xs => .cons x (go xs)
+    | ⟨_, x⟩ :: xs => .cons x (go xs)
 
 /--
 `parsedArgs.withSignature sig` returns an HVector of variables with the given
@@ -119,21 +131,22 @@ def withSignature (sig : List d.Ty) : Except TransformError (HVector Γ.Var sig)
   if h : args.types = sig then
     return h ▸ args.toHVector
   else
-    throw <| .generic "Argument types don't match expected signature. Expected:\n\
+    throw <|
+        .generic
+          "Argument types don't match expected signature. Expected:\n\
         \t{sig}\nfound:\n\t{args.types}"
-    -- TODO: we could figure out why exactly these aren't equal and throw a more
-    --       informative error
+
+-- TODO: we could figure out why exactly these aren't equal and throw a more
+--       informative error
 
 /-! ### Arity -/
 
 /-- Throw an error if there are not exactly `n` arguments -/
 def assumeArity (n : Nat) : Except TransformError (ParsedArgs Γ n) :=
-  if h : n? = some n then
-    return h ▸ args
-  else if h : args.toList.length = n then
-    return ⟨args.toList, h⟩
+  if h : n? = some n then return h ▸ args
   else
-    throw <| .generic s!"Expected exactly {n} argument(s), but found {args.toList.length}"
+    if h : args.toList.length = n then return ⟨args.toList, h⟩
+    else throw <| .generic s!"Expected exactly {n} argument(s), but found {args.toList.length}"
 
 def withArity : Σ n, ParsedArgs Γ (some n) :=
   ⟨args.toList.length, ⟨args.toList, rfl⟩⟩
@@ -159,37 +172,33 @@ of the operation.
 
 **Panics** if the given operation expects regions arguments!
 -/
-def mkExprOf (Γ : Ctxt d.Ty) (parsedOp : d.Op)
-    (args? : Option (ParsedArgs Γ) := none):
+def mkExprOf (Γ : Ctxt d.Ty) (parsedOp : d.Op) (args? : Option (ParsedArgs Γ) := none) :
     ReaderM d (Σ eff returnTy, Expr d Γ eff returnTy) := do
   let args ← args?.getDM (op.parseArgs Γ)
   let signature := DialectSignature.signature parsedOp
   let argsVec := args.toHVector
   let eff := signature.effectKind
   let returnTy := signature.returnTypes
-
   -- TODO: parse regions
   if h_noRegions : ¬signature.regSig.isEmpty then
     panic! s!"mkExprOf shouldn't be called with an operation that expects regions!"
   else
-    return ⟨eff, returnTy, ⟨
-      parsedOp,
-      rfl,
-      EffectKind.le_refl _,
-      ← args.withSignature _,
-      -- v4.34: `regSig` is a `Function.comp`; unfold it so the hypothesis' head matches.
-      have : DialectSignature.regSig parsedOp = [] := by
-        simpa [DialectSignature.regSig] using h_noRegions
-      this ▸ .nil
-    ⟩⟩
+    return ⟨eff, returnTy,
+        ⟨parsedOp, rfl, EffectKind.le_refl _, ← args.withSignature _,
+          -- v4.34: `regSig` is a `Function.comp`; unfold it so the hypothesis' head matches.
+          have : DialectSignature.regSig parsedOp = [] := by
+            simpa [DialectSignature.regSig] using h_noRegions
+      this ▸ .nil⟩⟩
 
 end Op
+
 end MLIR.AST
 
 /-! ## DialectParse Convenience Class -/
-namespace LeanMLIR
-open MLIR.AST
 
+namespace LeanMLIR
+
+open MLIR.AST
 variable (d : Dialect) [DialectSignature d] [DecidableEq d.Ty] [ToString d.Ty]
 
 /--
@@ -197,9 +206,8 @@ variable (d : Dialect) [DialectSignature d] [DecidableEq d.Ty] [ToString d.Ty]
   `TransformReturn` and `TransformExpr`. Whenever an instance of these classes
   is required, strongly consider implementing `DialectParse` instead!
 -/
-class DialectParse (d : Dialect) (φ : outParam Nat) [DialectSignature d]
-    [DecidableEq d.Ty] [ToString d.Ty]
-    extends TransformTy d φ where
+class DialectParse (d : Dialect) (φ : outParam Nat) [DialectSignature d] [DecidableEq d.Ty]
+    [ToString d.Ty] extends TransformTy d φ where
   /--
   Return whether `opStx` is a valid return operation.
 
@@ -210,17 +218,15 @@ class DialectParse (d : Dialect) (φ : outParam Nat) [DialectSignature d]
   in-scope, that will be checked in the framework
   -/
   isValidReturn : (Γ : Ctxt d.Ty) → (opStx : Op φ) → ReaderM d Bool
-
   /--
   See `TransformExpr.mkExpr`; We duplicate the field, rather than use `extends`
   so that we can add the `TransformTy` instance.
   -/
   --
-  mkExpr [TransformTy d φ] : (Γ : Ctxt d.Ty) → (opStx : Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
-
+  mkExpr [TransformTy d φ] :
+    (Γ : Ctxt d.Ty) → (opStx : Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
 
 variable {d}
-
 variable [DialectParse d φ]
 
 instance : TransformReturn d φ where

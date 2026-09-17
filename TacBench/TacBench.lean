@@ -11,6 +11,7 @@ References:
 Authors: Siddharth Bhat
 -/
 import Lean
+
 open Lean.Parser.Tactic
 open Lean Meta Elab Tactic
 open Lean.Meta
@@ -18,10 +19,10 @@ open Lean.Meta
 namespace TacBench
 
 inductive Config.OutputType
-| text  -- TACSTART..TACEND
-| csv -- CSV
-| jsonl -- JSONL
-deriving Repr, DecidableEq
+  | text -- TACSTART..TACEND
+  | csv -- CSV
+  | jsonl -- JSONL
+  deriving Repr, DecidableEq
 
 structure Config where
   outputType : Config.OutputType := .text
@@ -39,39 +40,41 @@ Run `tac_bench <name> <tacticSeq>` to run a sequence of tactics whose runtime is
 This does not affect the current goal state, and thus allow multiple `tac_bench` statements to be run in sequence.
 -/
 syntax tacBenchItem := str &":" tacticSeq
-syntax (name := tacBench) "tac_bench" (Lean.Parser.Tactic.config)? "["(tacBenchItem),*,?"]" : tactic
 
+syntax (name := tacBench) "tac_bench" (Lean.Parser.Tactic.config)? "[" (tacBenchItem),*,? "]" :
+  tactic
 
-def setTraceOptions (opt : Options) : Options := opt
-    |>.setBool `trace.profiler true
-    |>.setBool `trace.Meta.Tactic.bv true
-    |>.setBool `trace.Meta.Tactic.sat true
-    |>.set `trace.profiler.threshold (1 : Nat)
+def setTraceOptions (opt : Options) : Options :=
+  opt |>.setBool `trace.profiler true |>.setBool `trace.Meta.Tactic.bv true |>.setBool
+      `trace.Meta.Tactic.sat true |>.set
+    `trace.profiler.threshold (1 : Nat)
 
 def withFreshTraceState {α : Type} (x : TacticM α) : TacticM α := do
-    let traces ← getTraceState
-    resetTraceState
-    try x finally setTraceState traces
+  let traces ← getTraceState
+  resetTraceState
+  try
+    x
+  finally
+    setTraceState traces
 
-def Nat.deltaInMs (now past : Nat) : Float := (Float.ofNat <| now - past) / 1000000.0
+def Nat.deltaInMs (now past : Nat) : Float :=
+  (Float.ofNat <| now - past) / 1000000.0
 
 structure Item where
- name : String
- tac : Syntax
-
+  name : String
+  tac : Syntax
 
 /-- TODO: convert to a structure with a field. -/
 inductive Result
-| ok (item : Item) (time : Float) (nSamples : Nat) (iSample: Nat) (trace : String)
-| err (item : Item) (time : Float) (e : Exception) (nSamples : Nat) (iSample: Nat) (trace : String)
-
+  | ok (item : Item) (time : Float) (nSamples : Nat) (iSample : Nat) (trace : String)
+  |
+  err (item : Item) (time : Float) (e : Exception) (nSamples : Nat) (iSample : Nat) (trace : String)
 
 def csvEscapeString (s : String) : String :=
   let s := s.replace "\n" " "
   let s := s.replace "," " "
   let s := s.replace "\t" " "
   s
-
 
 def Result.nSamples (r : Result) : Nat :=
   match r with
@@ -95,12 +98,12 @@ def Result.isOk (r : Result) : Bool :=
 
 def Result.timeElapsed (r : Result) : Float :=
   match r with
-  | .ok (time := time) ..  => time
+  | .ok (time := time) .. => time
   | .err (time := time) .. => time
 
 def Result.trace (r : Result) : String :=
   match r with
-  | .ok (trace := trace) ..  => trace
+  | .ok (trace := trace) .. => trace
   | .err (trace := trace) .. => trace
 
 def Result.item (r : Result) : Item :=
@@ -108,10 +111,10 @@ def Result.item (r : Result) : Item :=
   | .ok item .. => item
   | .err item .. => item
 
-
 def Result.toMessageData : Result → MessageData
-| .ok item timeMs .. => m!"TACBENCH {item.name} PASS, TIME_ELAPSED {timeMs} ms, "
-| .err item timeMs e .. => m!"TACBENCH {item.name} FAIL, TIME_ELAPSED {timeMs} ms, MSGSTART {indentD e.toMessageData} MSGEND"
+  | .ok item timeMs .. => m!"TACBENCH {item.name} PASS, TIME_ELAPSED {timeMs} ms, "
+  | .err item timeMs e .. =>
+    m!"TACBENCH {item.name} FAIL, TIME_ELAPSED {timeMs} ms, MSGSTART {indentD e.toMessageData} MSGEND"
 
 instance : ToMessageData Result where
   toMessageData := Result.toMessageData
@@ -127,23 +130,27 @@ def formatTraces : TacticM String := do
   let trace := Format.joinSep traces.toList Format.line
   return trace.pretty (width := 80)
 
-def hermeticRun (g : MVarId) (item : Item) (nSamples : Nat) (iSample : Nat) : TacticM Result := g.withContext do
-  let t1 ← IO.monoNanosNow
-  -- TODO: think if we need this, I'm just stealing from Henrik at this point.
-  -- We can configure more options here to enable/disable tracing as needed.
-  withOptions setTraceOptions <| withoutModifyingEnv <| withoutModifyingState <| withFreshTraceState do
-    try
-      withoutRecover <| evalTactic item.tac
-      let t2 ← IO.monoNanosNow
-      return .ok item (Nat.deltaInMs t2 t1) nSamples iSample (← formatTraces)
-    catch e =>
-      let t2 ← IO.monoNanosNow
-      return .err item (Nat.deltaInMs t2 t1) e nSamples iSample (← formatTraces)
+def hermeticRun (g : MVarId) (item : Item) (nSamples : Nat) (iSample : Nat) : TacticM Result :=
+  g.withContext do
+    let t1 ← IO.monoNanosNow
+    -- TODO: think if we need this, I'm just stealing from Henrik at this point.
+    -- We can configure more options here to enable/disable tracing as needed.
+    withOptions setTraceOptions <|
+        withoutModifyingEnv <|
+        withoutModifyingState <|
+        withFreshTraceState do
+          try
+            withoutRecover <| evalTactic item.tac
+            let t2 ← IO.monoNanosNow
+            return .ok item (Nat.deltaInMs t2 t1) nSamples iSample (← formatTraces)
+          catch e =>
+            let t2 ← IO.monoNanosNow
+            return .err item (Nat.deltaInMs t2 t1) e nSamples iSample (← formatTraces)
 
 def parseTacBenchItem : TSyntax ``tacBenchItem → TacticM Item
-| `(tacBenchItem| $name:str : $tac:tacticSeq) =>
-     return { name := name.getString, tac := tac : Item }
-| _ => throwUnsupportedSyntax
+  | `(tacBenchItem| $name:str : $tac:tacticSeq) =>
+    return { name := name.getString, tac := tac : Item }
+  | _ => throwUnsupportedSyntax
 
 private def toMessageDataToString [ToMessageData α] (a : α) : MetaM String := do
   return ← MessageData.toString <| ← addMessageContextFull <| toMessageData a
@@ -172,7 +179,7 @@ structure RecordRow where
   iSample : Nat
   /-- Trace string. -/
   trace : String
-deriving Repr, Inhabited, ToJson
+  deriving Repr, Inhabited, ToJson
 
 @[tactic tacBench]
 def evalTacBench : Tactic := fun
@@ -224,8 +231,8 @@ def evalTacBench : Tactic := fun
           if let some path := cfg.outputPath then
             IO.FS.writeFile path outStr
 | _ => throwUnsupportedSyntax
-end TacBench
 
+end TacBench
 
 section Examples
 /-

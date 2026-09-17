@@ -94,8 +94,8 @@ info: builtin.module {
   Com.printModule
     [sllvm|
       {^entry(%x:i64,%y:i64):%z="llvm.add"(%x,
-              %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            %y){overflowFlags = #llvm.overflow<"nsw", "nuw">}:(i64,
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
 
 /--
 info: builtin.module {
@@ -122,4 +122,4 @@ info: builtin.module {
   Com.printModule
     [sllvm|
       {^entry(%x:i64,%y:i64):%z="llvm.udiv"(%x, %y){isExact}:(i64,
-              i64)->(i64)"llvm.return"(%z):(i64)->()}]
+            i64)->(i64)"llvm.return"(%z):(i64)->()}]
