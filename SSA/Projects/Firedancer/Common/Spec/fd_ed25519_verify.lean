@@ -3,6 +3,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_init
+import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_core_ref
 import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_append
 import SSA.Projects.Firedancer.Common.Spec.SHA.fd_sha512_fini
 import SSA.Projects.Firedancer.Proof.Globals
@@ -16,8 +17,9 @@ both whether the call returns and what it leaves behind. The digest in `k` is th
 `sha`'s block, `R`, `A` and the message, and of nothing else. The compression function reads its
 round constants from the global `fd_sha512_core_ref.K`, which must therefore hold them.
 
-That such functions exist is assumed (`sha512Append_determined`, `sha512Fini_determined`): it is
-the SHA-512 regions' side of the comparison, which nothing here proves.
+That such functions exist is assumed for all four SHA-512 regions (`sha512Init_determined`,
+`sha512CoreRef_determined`, `sha512Append_determined`, `sha512Fini_determined`): it is their side
+of the comparison, which nothing here proves.
 -/
 
 namespace Firedancer.Common
@@ -88,6 +90,52 @@ def sha512InitBlock (off : BitVec 64) (blk : Option LiveBlock) : Option LiveBloc
       spliceAt off 144 (sha512IV 2) <|
       spliceAt off 136 (sha512IV 1) <| spliceAt off 128 (sha512IV 0) b
 
+/-- **`fd_sha512_init` is decided by what it reads.** `f` gives the block the call leaves at
+`sha` -- `none` if it does not return -- from the block that was there and `sha`'s offset. -/
+def Sha512InitBy (f : Option LiveBlock → BitVec 64 → Option (Option LiveBlock)) : Prop :=
+  ∀ (sha : Pointer) (s : GlobalState),
+    s.WF →
+      IsSha512Ptr s.mem sha →
+        let invocation := runFunction (fd_sha512_init.denote (Ctxt.Valuation.singleton (.value sha)))
+        (∀ blk,
+            f (s.mem.live? sha.id) sha.offset = some blk →
+              ∃ s' : GlobalState,
+                StateT.run invocation s = .value ([.value sha]ₕ, s') ∧
+                  s'.WF ∧
+                  s'.alloc = s.alloc ∧
+                  s'.globals = s.globals ∧
+                  (∀ b : BlockId, b ≠ sha.id → s'.mem.live? b = s.mem.live? b) ∧
+                  s'.mem.live? sha.id = blk) ∧
+          (f (s.mem.live? sha.id) sha.offset = none → StateT.run invocation s = .poison)
+
+/-- **`fd_sha512_core_ref` is decided by what it reads.** `f` gives the block the call leaves at
+`st` -- `none` if it does not return -- from the block that was there, `st`'s offset and the
+`cnt * 128` bytes at `blk`. `blk` may lie in `st`'s own block, as `append` passes `sha->buf`. -/
+def Sha512CoreRefBy
+    (f : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock)) : Prop :=
+  ∀ (st blk : Pointer) (cnt : BitVec 64) (s : GlobalState),
+    s.WF →
+      -- the loop is a `do … while (--block_cnt)`: at 0 it would read past the stated bytes
+      cnt ≠ 0 →
+      blk.offset.toNat + cnt.toNat * 128 ≤ 2 ^ 64 →
+        Sha512KHolds s st →
+          ∀ hblk : Fits s.mem blk (cnt.toNat * 128 * 8),
+            let invocation :=
+              runFunction
+                (fd_sha512_core_ref.denote
+                  (Ctxt.Valuation.ofHVector [.value cnt, .value blk, .value st]ₕ))
+            (∀ b',
+                f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = some b' →
+                  ∃ s' : GlobalState,
+                    StateT.run invocation s = .value (.nil, s') ∧
+                      s'.WF ∧
+                      s'.alloc = s.alloc ∧
+                      s'.globals = s.globals ∧
+                      (∀ b : BlockId, b ≠ st.id → s'.mem.live? b = s.mem.live? b) ∧
+                      s'.mem.live? st.id = b') ∧
+              (f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = none →
+                StateT.run invocation s = .poison)
+
 /-- **`fd_sha512_append` is decided by what it reads.** `f` gives the block the call leaves at
 `sha` -- `none` if it does not return -- from the block that was there, `sha`'s offset and the
 bytes at `data`. What that block is stays open; the rest is the footprint. -/
@@ -141,6 +189,12 @@ def Sha512FiniBy
                         ∃ h : Fits s'.mem hash (64 * 8), readWord h = d) ∧
                 (f (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset = none →
                   StateT.run invocation s = .poison)
+
+/-- Assumed: `fd_sha512_init` reads nothing else. -/
+axiom sha512Init_determined : ∃ f, Sha512InitBy f
+
+/-- Assumed: `fd_sha512_core_ref` reads nothing else. -/
+axiom sha512CoreRef_determined : ∃ f, Sha512CoreRefBy f
 
 /-- Assumed: `fd_sha512_append` reads nothing else. -/
 axiom sha512Append_determined : ∃ f, Sha512AppendBy f
