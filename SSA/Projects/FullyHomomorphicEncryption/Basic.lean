@@ -114,7 +114,7 @@ abbrev R := (ZMod q)[X] ⧸ (Ideal.span {f q n})
 -- TODO: get this from mathlib
 
 /-- Canonical epimorphism / quotient map: `ZMod q[X] ->*+ R q n` -/
-abbrev R.fromPoly {q n : Nat} : (ZMod q)[X] →+* R q n := Ideal.Quotient.mk (Ideal.span {f q n})
+noncomputable abbrev R.fromPoly {q n : Nat} : (ZMod q)[X] →+* R q n := Ideal.Quotient.mk (Ideal.span {f q n})
 
 /-- fromPoly, the canonical epi from `ZMod q[X] →*+ R q n` is surjective -/
 theorem R.surjective_fromPoly (q n : ℕ) : Function.Surjective (R.fromPoly (q := q) (n := n)) := by
@@ -167,7 +167,7 @@ theorem R.fromPoly_representative [Fact (q > 1)]:
     forall a : R q n, (R.fromPoly (n:=n) (R.representative q n a)) = a := by
  intro a
  simp only [representative]
- rw [Polynomial.modByMonic_eq_sub_mul_div _ (f_monic q n)]
+ rw [Polynomial.modByMonic_eq_sub_mul_div _ (f q n)]
  rw [RingHom.map_sub (R.fromPoly (q := q) (n:=n)) _ _]
  rw [R.fromPoly_kernel_eq_zero]
  simp only [sub_zero]
@@ -327,16 +327,15 @@ theorem R.representative_mul (a b : R q n) :
   rw [← map_mul] at hab'
   rw [hab']
   repeat rw [R.representative_fromPoly]
-  rw [modByMonic_eq_sub_mul_div (p := a') (_hq := f_monic q n)]
-  rw [modByMonic_eq_sub_mul_div (p := b') (_hq := f_monic q n)]
+  rw [modByMonic_eq_sub_mul_div (p := a') (q := f q n)]
+  rw [modByMonic_eq_sub_mul_div (p := b') (q := f q n)]
   ring_nf
   repeat rw [Polynomial.add_modByMonic]
   ring_nf
   simp
 
-  have H1 : (-(a' * f q n * (b' /ₘ f q n))) %ₘ f q n = 0 := by
+  have H1 : a' * f q n * (b' /ₘ f q n) %ₘ f q n = 0 := by
     rw [modByMonic_eq_zero_iff_dvd (hq := f_monic q n)]
-    rw [dvd_neg]
     apply dvd_mul_of_dvd_left
     apply dvd_mul_of_dvd_right
     apply dvd_rfl
@@ -418,13 +417,7 @@ theorem R.repLength_lt_n_plus_1 [Fact (q > 1)]: forall a : R q n, a.repLength < 
   rcases H : degree (R.representative' q n a %ₘ f q n) <;> simp
   case some val' =>
     rw [H] at this
-    rw [WithBot.lt_def] at this
-    simp at this
-    obtain ⟨val'', twon, hval', heq1, heq2⟩ := this
-    rw [Option.some_inj.mp heq1]
-    have := Option.some_inj.mp heq2
-    subst this
-    simp_all
+    exact WithBot.coe_lt_coe.mp this
 
 section Coeff
 /--
@@ -525,11 +518,11 @@ variable {q n : Nat}
   to enable reasoning about values using mathlib's notions of
   support, coefficients, etc. -/
 noncomputable def R.fromTensorFinsupp (q : Nat) (coeffs : List Int) : (ZMod q)[X] :=
-  Polynomial.ofFinsupp (List.toFinsupp (coeffs.map Int.cast))
+  Polynomial.ofFinsupp (.ofCoeff (List.toFinsupp (coeffs.map Int.cast)))
 
 theorem Polynomial.degree_toFinsupp [Semiring M] [DecidableEq M]
   (xs : List M) :
-  degree { toFinsupp := List.toFinsupp (l := xs) } ≤ List.length xs := by
+  degree { toFinsupp := .ofCoeff (List.toFinsupp (l := xs)) } ≤ List.length xs := by
     cases xs
     case nil => simp [degree]
     case cons x xs =>
@@ -572,12 +565,12 @@ theorem R.fromTensorFinsupp_coeffs (coeffs : List Int) :
 /-- concatenating into a `fromTensorFinsupp` is the same as adding a ⟨Finsupp.single⟩. -/
 theorem R.fromTensorFinsupp_concat_finsupp (c : Int) (cs : List Int) :
     (R.fromTensorFinsupp q (cs ++ [c])) =
-      (R.fromTensorFinsupp q cs) + ⟨Finsupp.single cs.length (Int.cast c : (ZMod q))⟩ := by
+      (R.fromTensorFinsupp q cs) + ⟨.ofCoeff (Finsupp.single cs.length (Int.cast c : (ZMod q)))⟩ := by
     simp only [fromTensorFinsupp]
     simp only [← Polynomial.ofFinsupp_add]
     simp only [List.map_append, List.map]
     simp only [List.toFinsupp_concat_eq_toFinsupp_add_single]
-    simp only [List.length_map]
+    simp only [List.length_map, AddMonoidAlgebra.ofCoeff_add]
 
 /-- concatenating into a `fromTensorFinsupp` is the same as adding a monomial. -/
 theorem R.fromTensorFinsupp_concat_monomial (c : Int) (cs : List Int) :
@@ -589,6 +582,7 @@ theorem R.fromTensorFinsupp_concat_monomial (c : Int) (cs : List Int) :
     simp only [List.toFinsupp_concat_eq_toFinsupp_add_single]
     simp only [← Polynomial.ofFinsupp_add]
     rw [List.length_map]
+    rfl
 
 /-- show that `fromTensor` is the same as `fromPoly ∘ fromTensorFinsupp`. -/
 theorem R.fromTensor_eq_fromTensorFinsupp_fromPoly {coeffs : List Int} :

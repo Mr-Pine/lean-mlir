@@ -142,19 +142,19 @@ theorem R.trimTensor_append_not_zero (tensor : List Int) (x : Int) (hX : x ≠ 0
 
 theorem R.trimTensor_eq_append_zeros (tensor : List Int) : ∃ (n : Nat),
 tensor = trimTensor tensor ++ List.replicate n 0 := by
-induction tensor using List.reverseRecOn with
-   | nil => exists 0
-   | append_singleton xs x ih =>
-     have ⟨n,hxs⟩ := ih
-     by_cases (x = 0)
-     case pos h =>
-       exists (n + 1)
-       rw [h]
-       simp only [trimTensor_append_zero_eq, List.replicate]
-       rw [← List.replicate_succ, List.replicate_succ', ← List.append_assoc, ← hxs]
-     case neg h =>
-       exists 0
-       rw [R.trimTensor_append_not_zero _ _ h] ; simp
+  induction tensor using List.reverseRecOn with
+     | nil => exists 0
+     | append_singleton xs x ih =>
+       have ⟨n,hxs⟩ := ih
+       by_cases (x = 0)
+       case pos h =>
+         exists (n + 1)
+         rw [h]
+         simp only [trimTensor_append_zero_eq, List.replicate]
+         rw [← List.replicate_succ, List.replicate_succ', ← List.append_assoc, ← hxs]
+       case neg h =>
+         exists 0
+         rw [R.trimTensor_append_not_zero _ _ h] ; simp
 
 theorem R.trimTensor_getD_0 (tensor: List Int) :
   tensor.getD i 0 = (trimTensor tensor).getD i 0 := by
@@ -245,22 +245,7 @@ theorem toTensor_fromTensor [hqgt1 : Fact (q > 1)] (tensor : List Int) (i : Nat)
   simp only [R.toTensor_getD]
   simp only [ZMod.toInt]
   rw [R.coeff_fromTensor (htensorlen := htensorlen)]
-  norm_cast
-  simp only [Int.cast, ZMod.cast]
-  cases q;
-  case zero =>
-    exfalso
-    simp only [gt_iff_lt, not_lt_zero'] at hqgt1
-    exact (Fact.elim hqgt1)
-  case succ q' =>
-    simp only
-    norm_cast
-    simp only [IntCast.intCast, Nat.succ_eq_add_one, ZMod.natCast_val, Nat.cast_add, Nat.cast_one]
-    norm_cast
-    ring_nf
-    rw [ZMod.cast_eq_val]
-    rw [ZMod.val_intCast]
-    ring_nf
+  exact ZMod.coe_intCast _
 
 /- TODO: this should be a theorem that we prove, that the length of anything
 that comes from `R.toTensor` will be < 2^n -/
@@ -279,8 +264,7 @@ theorem fromTensor_toTensor [hqgt1 : Fact (q > 1)] (a : R q n)
         apply (eq_iff_coeff_eq _ _).2
         have hCoeff := R.toTensor_getD' (q := q) (n := n)
         unfold R.coeff at hCoeff
-        apply funext
-        intro i
+        ext i
         rw [← hCoeff, ← hCoeff]
         rw [toTensor_fromTensor]
         rw [← ZMod.coe_intCast]

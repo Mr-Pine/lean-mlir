@@ -66,6 +66,7 @@ noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike, .polynomialLi
         (Com.ret { val := 0, property := ex1.proof_3 }))) =
       Com.denote (Com.ret { val := 0, property := _ })
       -/
+      set_option backward.isDefEq.respectTransparency false in
       simp_peephole
       /- ⊢ ∀ (a b : R 2 3), b + a = a + b -/
       intros a b
@@ -139,9 +140,12 @@ noncomputable def p1 : PeepholeRewrite (FHE q n) [.polynomialLike] [.polynomialL
           Γv =
         Com.denote (Com.ret { val := 0, property := rhs.proof_2 }) Γv
        -/
+      set_option backward.isDefEq.respectTransparency false in
       simp_peephole
       /- ⊢ ∀ (a : ⟦Ty.polynomialLike⟧), a + (R.monomial q n 1 (2**n) + 1) = a -/
-      simp only [R.monomial, R.fromPoly, Int.toNat_natCast, Int.cast_one, ROfZComputable_def]
+      show ∀ a : R q n,
+        a + (R.monomial ((1 : ℤ) : ZMod q) (2**n) + ROfZComputable_stuck_term q n 1) = a
+      simp only [R.monomial, R.fromPoly, Int.cast_one, ROfZComputable_def]
       /- ⊢ a + ((Ideal.Quotient.mk (Ideal.span {f q n})) ((Polynomial.monomial
       (2**n)) 1) + 1) = a -/
       intros a
