@@ -30,6 +30,10 @@ the two sign branches share, and is where the `x = 0` case -- RFC 8032 admits
 -/
 
 namespace Firedancer.Ref
+
+-- v4.34: the literal blocks a walk enters are indexed by `Γout` unfolded
+set_option allowUnsafeReducibility true in
+attribute [local implicit_reducible] fd_ed25519_point_frombytes
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519
@@ -394,6 +398,14 @@ theorem stepV (hf : State s₀ r pd pone vx vy vt vu vv w)
 
 end State
 
+/-- Four stores through `r` miss every other block. -/
+theorem live?_splice4_ne {m : MemoryState} {r : Pointer} {o₁ o₂ o₃ : BitVec 64} {w : Nat}
+    {x₀ x₁ x₂ x₃ : BitVec w} {b : BlockId} (h : b ≠ r.id) :
+    ((((m.splice r x₀).splice (r.withOffset o₁) x₁).splice (r.withOffset o₂) x₂).splice
+      (r.withOffset o₃) x₃).live? b = m.live? b := by
+  rw [live?_splice_ne, live?_splice_ne, live?_splice_ne, live?_splice_ne (Ne.symm h)] <;>
+    rw [withOffset_id] <;> exact Ne.symm h
+
 theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
     (hs : s.WF)
     (hr : IsPointPtr s.mem r) (hbuf : IsByteBufPtr s.mem buf)
@@ -488,8 +500,9 @@ theorem bb3_run {s : GlobalState} {r buf pd pone : Pointer} {ret : SLLVM.Ptr}
     refine popFrame_equiv_block (o := r.id) hs hnr (fun b hb hbo => ?_) (fun b hbo => ?_)
       ((heq₂.live r.id).symm.trans hrlive)
     · rw [← heq₂.live b]
-      simpa [Ne.symm hbo] using state₁.live b hb
-    · simp [Ne.symm hbo]
+      simp only [live?_splice4_ne hbo]
+      exact state₁.live b hb
+    · rw [live?_splice4_ne hbo]
 
   have hpt : IsPointPtr (pointOutMem s.mem r (fun i => oX.extractLsb' (64 * i.toNat) 64)
       (fun i => oY.extractLsb' (64 * i.toNat) 64) (fun i => oZ.extractLsb' (64 * i.toNat) 64)
@@ -818,6 +831,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
     simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
       simp_denote, simp_sllvm]
     denote_enter_block
+    reduce_list_lits
     iterate 5 peel_lifetime
     simp_return
     simp [hv5, hreturnValue]
@@ -831,6 +845,7 @@ theorem fd_ed25519_point_frombytes_conforms (r buf : Pointer) (s : GlobalState)
   simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value,
     simp_denote, simp_sllvm]
   denote_enter_block
+  reduce_list_lits
 
   have isSquare : IsSquare (u / v) :=
     (isSquare_div_iff (denom_ne_zero y)).mpr squareness

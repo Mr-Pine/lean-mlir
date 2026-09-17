@@ -296,8 +296,11 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   denote_step_reduce v 13 [hv6, ptricmp, Ptr.null]
   have hbuf₄ : readBuf hS₄ = readBuf hS :=
     readBuf_of_live?_eq (fb₄ _ (lt_nextFreeBlock_of_fits hm.wf hS.1))
+  -- v4.34: `simp` no longer matches `readBuf` across the step's `BitVec.ofNat 64 32` offset
+  rw [hbuf₄] at hv13
   by_cases hS₁₂ : (readBuf hS).toNat < groupOrder <;>
-    simp [hbuf₄, hS₁₂, Pointer.withOffset, hsignull] at hv13 <;> simp [hv13] <;> denote_enter_block
+    simp only [hS₁₂, true_implies, false_implies] at hv13 <;>
+    simp [Pointer.withOffset, hsignull] at hv13 <;> simp [hv13] <;> denote_enter_block
 
   pick_goal 2
   simp_return
@@ -400,6 +403,11 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
       (live?_of_equiv_mem hs₆ b).trans ((live?_pointOutMem_ne (hne Ap b hApge hb)).trans (fb₅ b hb))
     refine ⟨rfl, fun b _ => hpop.live b, hpop.symm, ?_⟩
     simp [hS₁₂]
+    -- v4.34: `rw` rejects `hs`'s spec-internal proof of `sig`'s buffer, so restate it
+    have hsig₆ : IsByteBufPtr (pointOutMem s₅.mem Ap oX oY oZ oT) sig :=
+      isByteBufPtr_splice (isByteBufPtr_splice (isByteBufPtr_splice (isByteBufPtr_splice hsig₅)))
+    replace hs : ¬IsSquare ((decodeBytes (readBuf hsig₆) ^ 2 - 1)
+        / (d * decodeBytes (readBuf hsig₆) ^ 2 + 1)) := hs
     rw [readBuf_of_live?_eq (hp := hr) ((live?_pointOutMem_ne (hne Ap sig.id hApge (hlt hr.1))).trans
       (fb₅ _ (hlt hr.1)))] at hs
     exact ⟨⟨_, encodes_toAffine (b := readBuf ha) (by rw [← hbufa₅]; exact decodes)⟩,
@@ -407,6 +415,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
 
   simp only [hv20, BlockCom.denote_term, Terminator.denote_condBr, simp_denote, simp_sllvm, hret, hS₁₂, hbuf₄]
   denote_enter_block
+  reduce_list_lits
 
   -- `^bb3`: both decoded, `s₆` holding `A` at `Aprime` and `R` at `R`
   have hRpAp : Rp.id ≠ Ap.id := by rw [hRpdef, hApdef]; simp [hctr₁]
@@ -457,7 +466,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     simp [hlowA] at hv19 <;>
     simp only [hv19, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote,
       simp_sllvm] <;>
-    denote_enter_block
+    denote_enter_block <;> reduce_list_lits
   · -- `^bb6(-2)`: `A` has small order
     iterate 2 peel_lifetime
     simp_return
@@ -500,7 +509,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     simp [hlowR] at hv21 <;>
     simp only [hv21, BlockCom.denote_term, Terminator.denote_condBr_value, simp_denote,
       simp_sllvm] <;>
-    denote_enter_block
+    denote_enter_block <;> reduce_list_lits
   · -- `^bb6(-1)`: `R` has small order
     iterate 2 peel_lifetime
     simp_return

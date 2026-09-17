@@ -26,6 +26,10 @@ lemmas chain them into `Runs`, looping by induction, from `^bb2(1)` to the retur
 -/
 
 namespace Firedancer.Ref
+
+-- v4.34: the literal blocks a walk enters are indexed by `Γout` unfolded
+set_option allowUnsafeReducibility true in
+attribute [local implicit_reducible] fd_ed25519_double_scalar_mul_base
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
@@ -602,6 +606,8 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
       P ⟨1, rfl, [v64 (k + 1)]ₕ⟩ u') :
     StepThen s r L W Xf V P ⟨1, rfl, [v64 k]ₕ⟩ u := by
   simp only [StepThen]
+  -- v4.34: the block and its valuation's index are separate `Blocks.get`s; reduce both
+  repeat denote_reduce_get
   have hoff := hu.aifits.2
   obtain ⟨Q, hQ, hQv⟩ := htb (k - 1) (by omega)
   -- `ai[k - 1]`, `k == 1`
@@ -707,7 +713,7 @@ theorem step_bb2 (hV : EntryEnv V r L) {u : GlobalState}
   rw [hV.c7, Common.Wnaf.icmp_eq_ofNat (show k + 1 < 2 ^ 64 by omega) (show 8 < 2 ^ 64 by omega)]
     at hv9
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv9]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   by_cases hk7 : k + 1 = 8
   · rw [if_pos (Common.Wnaf.ofBool_eq_one.mpr hk7)]
@@ -727,6 +733,7 @@ theorem step_bb3 (hV : EntryEnv V r L) {u : GlobalState}
     (knz : Common.Wnaf.slot W.w₁ i ≠ 0#16 → P ⟨5, rfl, [v32 i]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨2, rfl, [v32 i]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 1 [LLVM.zext, LLVM.zext?]
   rw [setWidth_ofNat (by omega)] at hv1
   denote_step_reduce v 2 [LLVM.const?] fold
@@ -735,7 +742,7 @@ theorem step_bb3 (hV : EntryEnv V r L) {u : GlobalState}
   denote_step_reduce v 4 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv4
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv4]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   split <;> rename_i hz
   · simp only [Target.denote_mk, HVector.map, simp_spine, hv1]
@@ -752,13 +759,14 @@ theorem step_bb4 (hV : EntryEnv V r L) {u : GlobalState}
     (knz : Common.Wnaf.slot W.w₂ i ≠ 0#16 → P ⟨5, rfl, [v32 i]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨3, rfl, [v32 i, v64 i]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 2 [LLVM.const?] fold
   simp only [simp_spine, hV.n2slide, Common.Wnaf.gep_slot] at hv2
   peel_load_slides hu.n2slide, (show i < 256 by omega), hv2
   denote_step_reduce v 4 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv4
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv4]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   split <;> rename_i hz
   · simp only [Target.denote_mk, HVector.map, simp_spine]
@@ -772,12 +780,13 @@ theorem step_bb5 (hV : EntryEnv V r L) {u : GlobalState} (i : Nat) (hi : i ≤ 2
     (k19 : i = 0 → P ⟨18, rfl, .nil⟩ u) (k3 : 1 ≤ i → P ⟨2, rfl, [v32 (i - 1)]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨4, rfl, [v32 i]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 2 [LLVM.const?] fold
   rw [hV.c10] at hv1
   simp only [hV.c0, Common.Wnaf.icmp_eq_ofNat (show i < 2 ^ 32 by omega) (show 0 < 2 ^ 32 by omega)]
     at hv2
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv2]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   by_cases hi0 : i = 0
   · rw [if_pos (Common.Wnaf.ofBool_eq_one.mpr hi0)]
@@ -839,6 +848,7 @@ theorem step_bb6 (hV : EntryEnv V r L) {u : GlobalState} (i : Nat) (hi : i ≤ 2
     (k7 : P ⟨6, rfl, [v32 i]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨5, rfl, [v32 i]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 1 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hV.c10]
   simp [slt_neg_one32 hi, hv1, BlockCom.denote_term, Target.denote]
   exact k7
@@ -849,6 +859,7 @@ theorem step_bb7 (_hV : EntryEnv V r L) {u : GlobalState} (i : Nat) (hi : i ≤ 
     (k8 : P ⟨7, rfl, [v64 i]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨6, rfl, [v32 i]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 1 [LLVM.zext, LLVM.zext?]
   simp_return
   simp only [hv1, setWidth_ofNat (show i < 2 ^ 32 by omega)]
@@ -905,7 +916,7 @@ theorem step_bb8 (hV : EntryEnv V r L) {u : GlobalState}
   denote_step_reduce v 4 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv4
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv4]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   split <;> rename_i hb
   · simp only [Target.denote_mk, HVector.map, simp_spine]
@@ -957,6 +968,7 @@ theorem step_bb10 (hV : EntryEnv V r L) {u : GlobalState}
     (kzero : AtLadder s r L W P (addDigit W.A R (Common.Wnaf.slot W.w₁ j)) ⟨11, rfl, [v64 j]ₕ⟩) :
     StepThen s r L W Xf V P ⟨9, rfl, [v64 j, vd (Common.Wnaf.slot W.w₁ j)]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   generalize Common.Wnaf.slot W.w₁ j = d at hb kneg kzero ⊢
   denote_step_reduce v 2 [LLVM.icmp, LLVM.icmp?, LLVM.icmp', hV.c9]
   by_cases h : d.slt 0#16 <;> simp [h, hv2, BlockCom.denote_term, Target.denote]
@@ -1029,13 +1041,14 @@ theorem step_bb12 (hV : EntryEnv V r L) {u : GlobalState}
       P ⟨13, rfl, [v64 j, vd (Common.Wnaf.slot W.w₂ j)]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨11, rfl, [v64 j]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 1 [LLVM.const?] fold
   simp only [simp_spine, hV.n2slide, Common.Wnaf.gep_slot] at hv1
   peel_load_slides hu.n2slide, (show j < 256 by omega), hv1
   denote_step_reduce v 3 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv3
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv3]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   split <;> rename_i hb
   · simp only [Target.denote_mk, HVector.map, simp_spine]
@@ -1091,11 +1104,12 @@ theorem step_bb14 (hV : EntryEnv V r L) {u : GlobalState}
       ⟨15, rfl, [v64 j]ₕ⟩) :
     StepThen s r L W Xf V P ⟨13, rfl, [v64 j, vd (Common.Wnaf.slot W.w₂ j)]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   generalize Common.Wnaf.slot W.w₂ j = d at hb kneg kzero ⊢
   denote_step_reduce v 2 [LLVM.const?] fold
   simp only [simp_spine, hV.c9] at hv2
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv2]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   split <;> rename_i hneg
   · simp only [Target.denote_mk, HVector.map, simp_spine]
@@ -1165,11 +1179,12 @@ theorem step_bb16 (hV : EntryEnv V r L) {u : GlobalState} (j : Nat) (hj : j ≤ 
     (kzero : j = 0 → P ⟨16, rfl, .nil⟩ u) (knz : j ≠ 0 → P ⟨17, rfl, [v64 j]ₕ⟩ u) :
     StepThen s r L W Xf V P ⟨15, rfl, [v64 j]ₕ⟩ u := by
   simp only [StepThen]
+  repeat denote_reduce_get
   denote_step_reduce v 1 [LLVM.const?] fold
   simp only [hV.c6, Common.Wnaf.icmp_eq_ofNat (show j < 2 ^ 64 by omega) (show 0 < 2 ^ 64 by omega)]
     at hv1
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv1]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   by_cases hj0 : j = 0
   · rw [if_pos (Common.Wnaf.ofBool_eq_one.mpr hj0)]
@@ -1239,7 +1254,7 @@ theorem step_bb18 (hV : EntryEnv V r L) {u : GlobalState}
   rw [hV.c5, add_neg_one64 hj1 (by omega)] at hv2
   simp only [hV.c6, icmp_sgt_zero64 hj1 (show j < 2 ^ 63 by omega)] at hv3
   refine Common.Wnaf.term_condBr (by simp only [simp_spine, hv3]; rfl)
-    ⟨fun _ h => Sum.noConfusion h, fun t htgt => ?_⟩
+    ⟨fun _ h => (nomatch h), fun t htgt => ?_⟩
   obtain rfl := Sum.inr.inj htgt
   rw [if_pos (by decide)]
   simp only [Target.denote_mk, HVector.map, simp_spine, hv2]
