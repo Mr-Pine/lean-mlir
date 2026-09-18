@@ -10,7 +10,7 @@ inductive Regs (Γ : Ctx) : List Ty → Type
   | nil : Regs Γ []
   | cons (r : Reg Γ t) (rs : Regs Γ ts) : Regs Γ (t :: ts)
 
-inductive BinOp : Ty → Ty → Ty → Type
+inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
 
 inductive Instr (Γ : Ctx)
