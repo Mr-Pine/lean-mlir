@@ -3,9 +3,10 @@ Released under Apache 2.0 license as described in the file LICENSE.
 -/
 import SSA.Projects.Firedancer.Common.Spec.Scalar.fd_curve25519_scalar_validate
 import SSA.Projects.Firedancer.Common.Spec.SHA
+import SSA.Projects.Firedancer.Common.Spec.Group
 
 /-!
-# The return codes and digest of `fd_ed25519_verify` (common)
+# The return codes, encodings and digest of `fd_ed25519_verify` (common)
 
 The digest in `k` is a function of `sha`'s block, `R`, `A` and the message, and of nothing else:
 it chains the four functions `Common/Spec/SHA` assumes decide the SHA-512 calls.
@@ -42,5 +43,10 @@ def ed25519Digest
     (fApp b₀ off (bytesOf (n := 32) r)).bind fun b₁ =>
       (fApp b₁ off (bytesOf (n := 32) a)).bind fun b₂ =>
         (fApp b₂ off msg).bind fun b₃ => fFini b₃ off (some { length := 64, bytes := 0#_ }) 0
+
+/-- `V` is a point `bytes` names: `y` its low 255 bits reduced, the sign bit `x`'s parity. -/
+def Encodes (bytes : BitVec 256) (V : Edwards.Point Ed25519.curve) : Prop :=
+  V.y = ((bytes.extractLsb' 0 255).toNat : ZMod p) ∧
+    (V.x ≠ 0 → (V.x.val % 2 = 0 ↔ bytes[255] = false))
 
 end Firedancer.Common

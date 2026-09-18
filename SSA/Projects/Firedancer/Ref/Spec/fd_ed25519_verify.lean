@@ -31,10 +31,6 @@ open LeanMLIR SLLVM
 open InstCombine (LLVM)
 open Ed25519 Common
 
-/-- `V` is a point `bytes` names, as `IsDecoding` reads it. -/
-def Encodes (bytes : BitVec 256) (V : Edwards.Point curve) : Prop :=
-  V.y = decodeBytes bytes ∧ (V.x ≠ 0 → (V.x.val % 2 = 0 ↔ bytes[255] = false))
-
 abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
