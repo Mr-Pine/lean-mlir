@@ -51,6 +51,12 @@ abbrev Decodes (u : Vector (BitVec 64) 4) (q : Quad) : Prop :=
     ∧ point.T / point.Z = point.x * point.y
     ∧ (point.X ≠ 0 → (point.X.val % 2 = 0 ↔ wvSign u = false))
 
+/-- ... and the limbs it is held in, as `FD_R43X6_QUAD_FOLD_UNSIGNED` leaves them: at most `2^29`
+over `2^43` (`2^21` over `2^40` for limb 5), with `Y`'s the 255-bit unpack of the encoding. -/
+abbrev Quad.DecodeBounds (q : Quad) : Prop :=
+  (∀ j k, q.vectorFunc j k < if k = 5 then 2 ^ 40 + 2 ^ 21 else 2 ^ 43 + 2 ^ 29)
+    ∧ ∀ k, q.vectorFunc 1 k < if k = 5 then 2 ^ 40 else 2 ^ 43
+
 abbrev fd_r43x6_ge_decode2_spec (a03 a14 a25 sa b03 b14 b25 sb : Pointer) (s : GlobalState)
     (ha03 : IsVecPtr s.mem a03) (ha14 : IsVecPtr s.mem a14) (ha25 : IsVecPtr s.mem a25)
     (hb03 : IsVecPtr s.mem b03) (hb14 : IsVecPtr s.mem b14) (hb25 : IsVecPtr s.mem b25)
@@ -72,7 +78,8 @@ abbrev fd_r43x6_ge_decode2_spec (a03 a14 a25 sa b03 b14 b25 sb : Pointer) (s : G
     s' ≈ ({ s with mem := outMem } : GlobalState)
     ∧ (Decodable ua → Decodable ub →
         ret = .value 0#32
-        ∧ Decodes ua ⟨va03, va14, va25⟩ ∧ Decodes ub ⟨vb03, vb14, vb25⟩)
+        ∧ Decodes ua ⟨va03, va14, va25⟩ ∧ Decodes ub ⟨vb03, vb14, vb25⟩
+        ∧ Quad.DecodeBounds ⟨va03, va14, va25⟩ ∧ Quad.DecodeBounds ⟨vb03, vb14, vb25⟩)
     ∧ (¬ Decodable ua →
         ret = .value (-1#32)
         ∧ va03 = zeroVec ∧ va14 = zeroVec ∧ va25 = zeroVec

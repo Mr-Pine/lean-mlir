@@ -347,6 +347,16 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
     have := x.isLt
     simp only [BitVec.toNat_setWidth]
     omega
+  have hyaLt : wvNat yaPacked < 2 ^ 255 := by
+    have hnat : wvNat yaPacked = wvNat (readWv hvsa) % 2 ^ 255 := by
+      rw [hyaPacked]
+      simp only [wvNat, hlo 0 (by omega), hlo 1 (by omega), hlo 2 (by omega), hhi, hmask]
+      have b0 := (readWv hvsa)[0].isLt
+      have b1 := (readWv hvsa)[1].isLt
+      have b2 := (readWv hvsa)[2].isLt
+      have b3 := (readWv hvsa)[3].isLt
+      omega
+    rw [hnat]; exact Nat.mod_lt _ (by norm_num)
   replace hyaPacked : wvNat yaPacked = wvY (readWv hvsa) := by
     have hnat : wvNat yaPacked = wvNat (readWv hvsa) % 2 ^ 255 := by
       rw [hyaPacked]
@@ -361,9 +371,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   refine name_of (u₅.popFrame u₅.mem) fun u₆ hu₆ => ?_
   refine unpack_step yaPacked u₅ u₆ hu₆ fun yaVec hrun₆ hunpA hdecA h6A h7A hnrA hredA => ?_
   peel_call hrun₆
+  have hya255 : R43x6.decode' yaVec < 2 ^ 255 := by rw [hdecA]; exact_mod_cast hyaLt
   replace hdecA : (R43x6.decode' yaVec : ZMod p) = wvY (readWv hvsa) := by
     simp [← hyaPacked, hdecA]
-  clear hyaPacked
+  clear hyaPacked hyaLt
 
   -- %61: `wv_ld( _sb )`, the `a` load's argument at the state the unpack left
   have hwf₅ : u₅.WF := hwf₄.of_equiv hequ₅
@@ -406,6 +417,16 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
       simpa [LiveBlock.lengthInBits] using hfitB
     simp only [hreadB, Vector.getElem_ofFn]
     rw [← hoffPb, extractLsb'_spliceBits _ _ _ hlen]
+  have hybLt : wvNat ybPacked < 2 ^ 255 := by
+    have hnat : wvNat ybPacked = wvNat (readWv hvsb) % 2 ^ 255 := by
+      rw [hybPacked]
+      simp only [wvNat, hloB 0 (by omega), hloB 1 (by omega), hloB 2 (by omega), hhiB, hmask]
+      have b0 := (readWv hvsb)[0].isLt
+      have b1 := (readWv hvsb)[1].isLt
+      have b2 := (readWv hvsb)[2].isLt
+      have b3 := (readWv hvsb)[3].isLt
+      omega
+    rw [hnat]; exact Nat.mod_lt _ (by norm_num)
   replace hybPacked : wvNat ybPacked = wvY (readWv hvsb) := by
     have hnat : wvNat ybPacked = wvNat (readWv hvsb) % 2 ^ 255 := by
       rw [hybPacked]
@@ -421,9 +442,10 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
   refine name_of (u₇.popFrame u₇.mem) fun u₈ hu₈ => ?_
   refine unpack_step ybPacked u₇ u₈ hu₈ fun ybVec hrun₈ hunpB hdecB h6B h7B hnrB hredB => ?_
   peel_call hrun₈
+  have hyb255 : R43x6.decode' ybVec < 2 ^ 255 := by rw [hdecB]; exact_mod_cast hybLt
   replace hdecB : (R43x6.decode' ybVec : ZMod p) = wvY (readWv hvsb) := by
     simp [← hybPacked, hdecB]
-  clear hybPacked
+  clear hybPacked hybLt
 
 
 
@@ -1263,7 +1285,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
           then 0 else 1)
         (ua := readWv hvsa) (ub := readWv hvsb) (s := u₃₂.popFrame u₃₂.mem)
         (env := ?env2) (inp := ?inp2)
-        (hya := hdecA) (hyb := hdecB) (hsgnA := hbit _) (hsgnB := hbit _)
+        (hya := hdecA) (hyb := hdecB) (hya255 := hya255) (hyb255 := hyb255) (hsgnA := hbit _) (hsgnB := hbit _)
         (h190 := ?h190) (h191 := ?h191) (hrootA := ?hrootA) (hrootB := ?hrootB)
         (ht1nza := by split <;> simp) (ht1nzb := by split <;> simp)
         (hxaU := hmulxa.u44) (hxa6 := hmulxa.z6) (hxa7 := hmulxa.z7)
@@ -1277,7 +1299,7 @@ theorem fd_r43x6_ge_decode2_conforms (a03 a14 a25 vsa b03 b14 b25 vsb : Pointer)
         refine ⟨s₂, ?_, va03, va14, va25, vb03, vb14, vb25, ?_, ?_, ?_, ?_⟩
         · rw [if_pos hda, if_pos hdb]; exact hrun2
         · exact GeDecode2.outMem_popFrame_equiv hs hbelow hc₃₃ hmem2
-        · exact fun _ _ => ⟨by rw [if_pos hda, if_pos hdb], hDa, hDb⟩
+        · exact fun _ _ => ⟨by rw [if_pos hda, if_pos hdb], hDa.1, hDb.1, hDa.2, hDb.2⟩
         · exact fun h => absurd hda h
         · exact fun _ h => absurd hdb h
       case env2 => exact ⟨hv32, hv33, hv34, hv27, hv25, hv24, hv23, hv22, hv21, hv19, hv18, hv17,

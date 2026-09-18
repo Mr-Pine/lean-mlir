@@ -54,7 +54,7 @@ abbrev fd_ed25519_point_frombytes_2x_spec (r₁ buf₁ r₂ buf₂ : Pointer) (s
     result = .value ([ret]ₕ, s')
     ∧ s' ≈ ({ s with mem := (s.mem.writeQuad r₁ q₁).writeQuad r₂ q₂ } : GlobalState)
     ∧ (Decodable u₁ → Decodable u₂ →
-        ret = .value 0#32 ∧ Decodes u₁ q₁ ∧ Decodes u₂ q₂)
+        ret = .value 0#32 ∧ Decodes u₁ q₁ ∧ Decodes u₂ q₂ ∧ q₁.DecodeBounds ∧ q₂.DecodeBounds)
     ∧ (¬ Decodable u₁ →
         ret = .value (-1#32) ∧ q₁ = zeroQuad ∧ q₂ = zeroQuad)
     ∧ (Decodable u₁ → ¬ Decodable u₂ →

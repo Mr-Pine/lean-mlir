@@ -22,10 +22,9 @@ reaches it. `fd_ed25519_point_to` is the only callee that writes, and only to th
 four allocas, so `frameBelow_splice4` carries the argument and both globals from
 entry to return; the locals ride each callee's own equivalence.
 
-Reducedness is per slot, as the specification states it: `point_to` writes `x` as
-`widenVec` of the QUAD's `X` vector, so `Reduced (widenVec …)` is what the
-`fd_f25519_is_zero` and `fd_f25519_eq` calls consume, and the two high lanes are
-clear by construction.
+The bounds are per slot, as the specification states them: `point_to` writes `x` as
+`widenVec` of the QUAD's `X` vector, so the two high lanes are clear by construction.
+Each callee is reached through its primed theorem, handed the pattern test's exactness.
 -/
 
 namespace Firedancer.Avx512
@@ -35,6 +34,63 @@ open Ed25519
 
 -- the callees are reached only through their conformance theorems
 attribute [local irreducible] fd_ed25519_point_to fd_f25519_is_zero fd_f25519_eq
+
+theorem R43x6.Bits255.folded {v : Vector (BitVec 64) 8} (h : R43x6.Bits255 v) : R43x6.Folded v :=
+  ⟨fun i hi => by have := h.1 i hi; omega, by have := h.2; omega⟩
+
+theorem R43x6.Bits255.limbs43 {v : Vector (BitVec 64) 8} (h : R43x6.Bits255 v) : Limbs43 v :=
+  fun k => by
+    rcases Nat.lt_or_ge (k : ℕ) 5 with hk | hk
+    · exact h.1 k hk
+    · have hk5 : k = (5 : Fin R43x6.limbCount) := by
+        refine Fin.eq_of_val_eq ?_
+        have hlt := k.isLt
+        show (k : ℕ) = 5
+        simp only [R43x6.limbCount] at hlt
+        omega
+      rw [hk5]; exact ⟨h.2.1, by have := h.2.2; omega⟩
+
+theorem R43x6.Bits255.decode'_lt {v : Vector (BitVec 64) 8} (h : R43x6.Bits255 v) :
+    R43x6.decode' v < 2 ^ 255 := by
+  have b0 := h.1 0 (by decide)
+  have b1 := h.1 1 (by decide)
+  have b2 := h.1 2 (by decide)
+  have b3 := h.1 3 (by decide)
+  have b4 := h.1 4 (by decide)
+  have b5 := h.2
+  rw [← R43x6.decodeLimbs_extractLimbs, R43x6.decodeLimbs_eq]
+  omega
+
+/-- **`fd_f25519_eq( y, g )` is exact** for a 255-bit `y` and a reduced `g` of value at least `19`:
+a `y` of `p` or more is below `p + 19`, so it cannot meet `g` mod `p` without equalling it. -/
+theorem subFoldVec_pattern_iff_of_bits255 {y g : Vector (BitVec 64) 8} {c : ZMod p}
+    (hy : R43x6.Bits255 y) (hg : R43x6.Reduced g) (hgv : vecValue g = c) (hc : 19 ≤ c.val) :
+    (subFoldVec y g = zeroVec ∨ subFoldVec y g = pVec) ↔ vecValue y = vecValue g := by
+  have hbg := reduced_decode'_bounds hg
+  have hgval : R43x6.decode' g = c.val := by
+    have e := decode'_cast_reduced hg
+    rw [hgv] at e
+    have hn : R43x6.decode' g = ((R43x6.decode' g).toNat : ℤ) := (Int.toNat_of_nonneg hbg.1).symm
+    rw [hn] at e ⊢
+    have hlt : (R43x6.decode' g).toNat < p := by have := hbg.2; omega
+    rw [← e]; push_cast; rw [ZMod.val_natCast, Nat.mod_eq_of_lt hlt]
+  have hyb := hy.decode'_lt
+  have hy0 : 0 ≤ R43x6.decode' y := by
+    have := hy.limbs43
+    have b0 := this 0; have b1 := this 1; have b2 := this 2
+    have b3 := this 3; have b4 := this 4; have b5 := this 5
+    rw [← R43x6.decodeLimbs_extractLimbs, R43x6.decodeLimbs_eq]; omega
+  refine subFoldVec_pattern_iff' hy.limbs43 (reduced_limb_bounds hg) ?_ ?_
+  · rw [hgval, p_int]; omega
+  · rw [p_int]; rw [p_int] at hbg; omega
+
+theorem order8_y0_val : Ed25519.order8_y0.val =
+    2707385501144840649318225287225658788936804267575313519463743609750303402022 := by
+  decide +kernel
+
+theorem order8_y1_val : Ed25519.order8_y1.val =
+    55188659117513257062467267217118295137698188065244968500265048394206261417927 := by
+  decide +kernel
 
 set_option maxHeartbeats 400000 in
 set_option maxRecDepth 40000 in
@@ -108,8 +164,8 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
         | exact id
 
   -- the argument's reducedness, at the state the copy runs in
-  have hredX4 : R43x6.Reduced (widenVec (readQuad ha4).PointVecs.X) := by rw [hq4]; exact hredX
-  have hredY4 : R43x6.Reduced (widenVec (readQuad ha4).PointVecs.Y) := by rw [hq4]; exact hredY
+  have hredX4 : R43x6.Folded (widenVec (readQuad ha4).PointVecs.X) := by rw [hq4]; exact hredX
+  have hredY4 : R43x6.Bits255 (widenVec (readQuad ha4).PointVecs.Y) := by rw [hq4]; exact hredY
 
   -- The walk starts here; each callee's state is obtained where it is reached.
   refine run_runFunction' (s ≈ ·) ?_
@@ -173,9 +229,8 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
 
   -- `fd_f25519_is_zero( x )`
   obtain ⟨izXstate, hizX, hizX_eq⟩ :=
-    fd_f25519_is_zero_conforms xa ptstate hptWF hxPt
-      (by rw [hxPtRead]; exact hredX4.nearlyReduced)
-      (by rw [hxPtRead]; rfl) (by rw [hxPtRead]; rfl)
+    fd_f25519_is_zero_conforms' xa ptstate hptWF hxPt
+      (by rw [hxPtRead]; exact eq_zeroVec_or_eq_pVec_iff_of_folded hredX4 rfl rfl)
   peel_call hizX
 
   have hizXWF : izXstate.WF := hptWF.of_equiv hizX_eq
@@ -188,9 +243,8 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
 
   -- `fd_f25519_is_zero( y )`
   obtain ⟨izYstate, hizY, hizY_eq⟩ :=
-    fd_f25519_is_zero_conforms ya izXstate hizXWF hyIzX
-      (by rw [hyIzXRead]; exact hredY4.nearlyReduced)
-      (by rw [hyIzXRead]; rfl) (by rw [hyIzXRead]; rfl)
+    fd_f25519_is_zero_conforms' ya izXstate hizXWF hyIzX
+      (by rw [hyIzXRead]; exact eq_zeroVec_or_eq_pVec_iff_of_folded hredY4.folded rfl rfl)
   peel_call hizY
 
   have hizYWF : izYstate.WF := hizXWF.of_equiv hizY_eq
@@ -213,8 +267,9 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
 
   -- `fd_f25519_eq( y, y0 )`
   obtain ⟨eq0state, heq0, heq0_eq⟩ :=
-    fd_f25519_eq_conforms ya g0 izYstate hizYWF hyIzY hg0IzY
-      (by rw [hyIzYRead]; exact hredY4) (by rw [hg0IzYRead]; exact hgred0)
+    fd_f25519_eq_conforms' ya g0 izYstate hizYWF hyIzY hg0IzY
+      (by rw [hyIzYRead, hg0IzYRead]
+          exact subFoldVec_pattern_iff_of_bits255 hredY4 hgred0 hgval0 (by rw [order8_y0_val]; norm_num))
   peel_call heq0
 
   have heq0WF : eq0state.WF := hizYWF.of_equiv heq0_eq
@@ -235,8 +290,9 @@ theorem fd_ed25519_affine_is_small_order_conforms (a g0 g1 : Pointer) (s : Globa
 
   -- `fd_f25519_eq( y, y1 )`
   obtain ⟨eq1state, heq1, heq1_eq⟩ :=
-    fd_f25519_eq_conforms ya g1 eq0state heq0WF hyEq0 hg1Eq0
-      (by rw [hyEq0Read]; exact hredY4) (by rw [hg1Eq0Read]; exact hgred1)
+    fd_f25519_eq_conforms' ya g1 eq0state heq0WF hyEq0 hg1Eq0
+      (by rw [hyEq0Read, hg1Eq0Read]
+          exact subFoldVec_pattern_iff_of_bits255 hredY4 hgred1 hgval1 (by rw [order8_y1_val]; norm_num))
   peel_call heq1
 
   have fbEq1 : FrameBelow s.alloc.nextFreeBlock s eq1state := FrameBelow.of_equiv heq1_eq fbEq0

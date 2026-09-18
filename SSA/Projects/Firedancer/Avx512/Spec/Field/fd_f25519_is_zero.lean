@@ -10,6 +10,20 @@ namespace Firedancer.Avx512
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
 
+/-- The limbs `fd_r43x6_fold_unsigned` leaves: up to `2^29` over `2^43`, and `2^21` over `2^40`
+for limb 5. The value is then below `2p`. -/
+def R43x6.Folded (v : Vector (BitVec 64) 8) : Prop :=
+  (∀ i : Fin R43x6.limbCount, (i : ℕ) < 5 →
+      0 ≤ R43x6.extractLimbs v i ∧ R43x6.extractLimbs v i < 2 ^ 43 + 2 ^ 29) ∧
+    (0 ≤ R43x6.extractLimbs v 5 ∧ R43x6.extractLimbs v 5 < 2 ^ 40 + 2 ^ 21)
+
+/-- A 255-bit integer, limbs as `fd_r43x6_unpack` leaves them: `unpacked` with limb 5 below
+`2^40`. Unlike `reduced`, the value may be `p` or more. -/
+def R43x6.Bits255 (v : Vector (BitVec 64) 8) : Prop :=
+  (∀ i : Fin R43x6.limbCount, (i : ℕ) < 5 →
+      0 ≤ R43x6.extractLimbs v i ∧ R43x6.extractLimbs v i < 2 ^ 43) ∧
+    (0 ≤ R43x6.extractLimbs v 5 ∧ R43x6.extractLimbs v 5 < 2 ^ 40)
+
 abbrev fd_f25519_is_zero_spec (q : Pointer) (s : GlobalState) (hq : IsVecPtr s.mem q) : Prop :=
   let invocation := runFunction (fd_f25519_is_zero.denote (Ctxt.Valuation.singleton (.value q)))
   let result := StateT.run invocation s

@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 import SSA.Projects.Firedancer.Avx512.Mlir.Point.fd_ed25519_affine_is_small_order
 import SSA.Projects.Firedancer.Avx512.Spec.Point.fd_ed25519_point_to
 import SSA.Projects.Firedancer.Avx512.Spec.Vec
+import SSA.Projects.Firedancer.Avx512.Spec.Field.fd_f25519_is_zero
 import SSA.Projects.Firedancer.Common.Spec.fd_ed25519_affine_is_small_order
 import SSA.Projects.Firedancer.Proof.Globals
 
@@ -26,12 +27,14 @@ they are part of `RefWF`. There is no AVX-512 counterpart to `RefWF` yet, so
 what the module loads is said pointer by pointer; if one appears, these four
 hypotheses are what it should absorb.
 
-Reducedness is per-slot rather than for the whole QUAD. `fd_f25519_is_zero`
-needs its argument nearly reduced with the two high lanes clear, and
-`fd_f25519_eq` needs both operands reduced; `fd_ed25519_point_to` writes the
-slot `x` as `widenVec` of the QUAD's `X` vector, zeroing lanes 6 and 7, so the
-hypothesis is stated in exactly that form. `Z` and `T` are written and never
-read back, so no bound on them is needed.
+The bounds are per slot, and as loose as the two tests allow: `X` as a fold
+leaves it, `Y` a 255-bit unpack that may be `p` or more -- what
+`fd_r43x6_ge_decode2` hands back. Both make the only zeros `fd_f25519_is_zero`
+can see its two bit patterns; `Y`'s 255 bits and the globals' reducedness make
+`fd_f25519_eq`'s pattern test exact, as neither order-8 `y` is below `19`.
+`fd_ed25519_point_to` writes each slot as `widenVec` of the QUAD's vector,
+zeroing lanes 6 and 7. `Z` and `T` are written and never read back, so no bound
+on them is needed.
 -/
 
 namespace Firedancer.Avx512
@@ -55,7 +58,7 @@ abbrev fd_ed25519_affine_is_small_order_spec (a g0 g1 : Pointer) (s : GlobalStat
   vecValue (readVec hg0) = order8_y0 →
   vecValue (readVec hg1) = order8_y1 →
   R43x6.Reduced (readVec hg0) → R43x6.Reduced (readVec hg1) →
-  R43x6.Reduced (widenVec q.PointVecs.X) → R43x6.Reduced (widenVec q.PointVecs.Y) →
+  R43x6.Folded (widenVec q.PointVecs.X) → R43x6.Bits255 (widenVec q.PointVecs.Y) →
     ∃ s' : GlobalState, result = .value ([output_value]ₕ, s') ∧ s ≈ s'
 
 end Firedancer.Avx512

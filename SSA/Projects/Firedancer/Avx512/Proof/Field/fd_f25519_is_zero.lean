@@ -78,13 +78,17 @@ with lanes 6 and 7 clear, the bit-pattern test the region runs decides
 `= 0` in `GF(2^255 - 19)`: `nearly reduced` bounds the value below `2p` and
 the limbs tightly enough to make the radix-`2^43` representation unique, so
 the only vectors congruent to zero are `fd_r43x6_zero()` and `fd_r43x6_p()`. -/
-theorem eq_zeroVec_or_eq_pVec_iff {v : Vector (BitVec 64) 8}
-    (hnr : R43x6.NearlyReduced v) (h6 : v[6] = 0) (h7 : v[7] = 0) :
+theorem eq_zeroVec_or_eq_pVec_iff' {v : Vector (BitVec 64) 8}
+    (hnr : (∀ i : Fin R43x6.limbCount, (i : ℕ) < 5 →
+        0 ≤ R43x6.extractLimbs v i ∧ R43x6.extractLimbs v i < 2 ^ 43 + 2 ^ 29) ∧
+      (0 ≤ R43x6.extractLimbs v 5 ∧ R43x6.extractLimbs v 5 < 2 ^ 41) ∧
+      R43x6.decode' v < 2 * (p : ℤ))
+    (h6 : v[6] = 0) (h7 : v[7] = 0) :
     (v = zeroVec ∨ v = pVec) ↔ vecValue v = 0 := by
   constructor
   · rintro (rfl | rfl) <;> decide
   intro hz
-  -- `nearly reduced` at `2^44`, which is what the `ℤ`/`ℕ` bridge asks for
+  -- the limbs at `2^44`, which is what the `ℤ`/`ℕ` bridge asks for
   have hbnd : ∀ k : Fin R43x6.limbCount,
       0 ≤ R43x6.extractLimbs v k ∧ R43x6.extractLimbs v k < 2 ^ 44 := by
     intro k
@@ -158,12 +162,33 @@ theorem eq_zeroVec_or_eq_pVec_iff {v : Vector (BitVec 64) 8}
         | exact BitVec.toInt_inj.mp (by simpa [pVec] using ‹_›)
         | simpa [pVec] using ‹_›
 
+theorem eq_zeroVec_or_eq_pVec_iff {v : Vector (BitVec 64) 8}
+    (hnr : R43x6.NearlyReduced v) (h6 : v[6] = 0) (h7 : v[7] = 0) :
+    (v = zeroVec ∨ v = pVec) ↔ vecValue v = 0 :=
+  eq_zeroVec_or_eq_pVec_iff' ⟨fun i hi => by have := hnr.1 i hi; omega, hnr.2⟩ h6 h7
+
+theorem eq_zeroVec_or_eq_pVec_iff_of_folded {v : Vector (BitVec 64) 8} (hf : R43x6.Folded v)
+    (h6 : v[6] = 0) (h7 : v[7] = 0) : (v = zeroVec ∨ v = pVec) ↔ vecValue v = 0 := by
+  obtain ⟨h04, h5⟩ := hf
+  refine eq_zeroVec_or_eq_pVec_iff' ⟨h04, by omega, ?_⟩ h6 h7
+  have b0 := h04 0 (by decide)
+  have b1 := h04 1 (by decide)
+  have b2 := h04 2 (by decide)
+  have b3 := h04 3 (by decide)
+  have b4 := h04 4 (by decide)
+  rw [← R43x6.decodeLimbs_extractLimbs, R43x6.decodeLimbs_eq, p_int]
+  omega
+
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 20000 in
-theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
-    (hq : IsVecPtr s.mem q) : fd_f25519_is_zero_spec q s hq := by
-  simp only [fd_f25519_is_zero_spec, fd_f25519_is_zero, Cfg.denote]
-  intro hnr h6 h7
+/-- `fd_f25519_is_zero_conforms` for any vector whose two bit patterns are its zeros. -/
+theorem fd_f25519_is_zero_conforms' (q : Pointer) (s : GlobalState) (hs : s.WF)
+    (hq : IsVecPtr s.mem q) (hiff : (readVec hq = zeroVec ∨ readVec hq = pVec) ↔ vecValue (readVec hq) = 0) :
+    ∃ s' : GlobalState,
+      StateT.run (runFunction (fd_f25519_is_zero.denote (Ctxt.Valuation.singleton (.value q)))) s
+        = .value ([(.value (if vecValue (readVec hq) = 0 then 1#32 else 0#32) : LLVM.IntW 32)]ₕ, s')
+      ∧ s ≈ s' := by
+  simp only [fd_f25519_is_zero, Cfg.denote]
   refine Firedancer.run_runFunction' _ ?_
   refine ⟨s, ?_, hs.popFrame_equiv⟩
   obtain ⟨blk, hblk, hlen⟩ := hq.1
@@ -190,7 +215,6 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
   denote_step_reduce v 12 [hd0, hdp, hc0, hc1, LLVM.icmp, LLVM.icmp?, LLVM.icmp', LLVM.select, LLVM.zext, LLVM.zext?] fold
   denote_clear v 5 11
   rw [hv12]
-  have hiff := eq_zeroVec_or_eq_pVec_iff hnr h6 h7
   by_cases hzero : vecValue (readVec hq) = 0
   · -- one of the two compares hits, so the `select` returns `true` either way
     rw [if_pos hzero]
@@ -204,5 +228,9 @@ theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
     have hn1 : (c1 == 0#8) = false := by
       simpa using fun h => hzero (hiff.mp (Or.inr (hc1z.mp h)))
     simp [hn0, hn1]
+
+theorem fd_f25519_is_zero_conforms (q : Pointer) (s : GlobalState) (hs : s.WF)
+    (hq : IsVecPtr s.mem q) : fd_f25519_is_zero_spec q s hq := fun hnr h6 h7 =>
+  fd_f25519_is_zero_conforms' q s hs hq (eq_zeroVec_or_eq_pVec_iff hnr h6 h7)
 
 end Firedancer.Avx512

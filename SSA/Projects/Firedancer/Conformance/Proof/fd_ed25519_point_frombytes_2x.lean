@@ -468,7 +468,7 @@ theorem fd_ed25519_point_frombytes_2x : fd_ed25519_point_frombytes_2x_equivalent
     refine eq_of_decodesAs hrefDecodes ?_
     rw [hreadB, decodeBytes_eq_wvY hbBuf hbBuf' hbBufs,
       ← wvSign_eq_getElem_readBuf hbBuf hbBuf' hbBufs]
-    exact hs'₂State.right.right
+    exact hs'₂State.right.right.left
 
   case state' =>
     simp [avxAfterState, avxMem, hs'₂]

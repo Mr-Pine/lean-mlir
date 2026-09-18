@@ -57,36 +57,44 @@ theorem decode'_cast_reduced {x : Vector (BitVec 64) 8} (h : R43x6.Reduced x) :
   decode'_cast_eq_vecValue x fun k => by
     have := reduced_limb_bounds h k; omega
 
-/-- **A reduced representation is unique.** Two reduced vectors holding the
-same element agree limb for limb -- the fact that makes the `a = b` branch a
-statement about bit patterns. -/
-theorem extractLimbs_eq_of_value_eq {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (h : vecValue x = vecValue y)
+/-- Every limb, the top one included, in `[0, 2^43)`: what `sub_fast` and digit uniqueness need. -/
+abbrev Limbs43 (x : Vector (BitVec 64) 8) : Prop :=
+  ∀ k : Fin R43x6.limbCount, 0 ≤ R43x6.extractLimbs x k ∧ R43x6.extractLimbs x k < 2 ^ 43
+
+/-- **Close representations are unique.** Two vectors of `[0, 2^43)` limbs holding the same element,
+whose values differ by less than `p`, agree limb for limb -- the fact that makes the `a = b` branch
+a statement about bit patterns. -/
+theorem extractLimbs_eq_of_value_eq' {x y : Vector (BitVec 64) 8}
+    (hx : Limbs43 x) (hy : Limbs43 y) (hxy : R43x6.decode' x < R43x6.decode' y + p)
+    (hyx : R43x6.decode' y < R43x6.decode' x + p) (h : vecValue x = vecValue y)
     (k : Fin R43x6.limbCount) : R43x6.extractLimbs x k = R43x6.extractLimbs y k := by
-  -- the two values agree in `ZMod p`, and both are in `[0, p)`
   have hcast : ((R43x6.decode' x : ℤ) : ZMod p) = ((R43x6.decode' y : ℤ) : ZMod p) := by
-    rw [decode'_cast_reduced hx, decode'_cast_reduced hy, h]
-  have hbx := reduced_decode'_bounds hx
-  have hby := reduced_decode'_bounds hy
+    rw [decode'_cast_eq_vecValue x fun k => by have := hx k; omega,
+      decode'_cast_eq_vecValue y fun k => by have := hy k; omega, h]
   have hdec : R43x6.decode' x = R43x6.decode' y := by
-    have hmod : R43x6.decode' x % (p : ℤ) = R43x6.decode' y % (p : ℤ) :=
-      (ZMod.intCast_eq_intCast_iff' _ _ _).mp hcast
-    rwa [Int.emod_eq_of_lt hbx.1 hbx.2, Int.emod_eq_of_lt hby.1 hby.2] at hmod
+    obtain ⟨c, hc⟩ := (ZMod.intCast_eq_intCast_iff_dvd_sub _ _ _).mp hcast
+    have hc0 : c = 0 := by
+      rcases lt_trichotomy c 0 with hc' | hc' | hc'
+      · nlinarith
+      · exact hc'
+      · nlinarith
+    rw [hc0, mul_zero] at hc
+    omega
   -- ... so the limbs, each inside its own digit, agree
   rw [← R43x6.decodeLimbs_extractLimbs, ← R43x6.decodeLimbs_extractLimbs,
     R43x6.decodeLimbs_eq, R43x6.decodeLimbs_eq] at hdec
-  have hx0 := reduced_limb_bounds hx 0
-  have hx1 := reduced_limb_bounds hx 1
-  have hx2 := reduced_limb_bounds hx 2
-  have hx3 := reduced_limb_bounds hx 3
-  have hx4 := reduced_limb_bounds hx 4
-  have hx5 := reduced_limb_bounds hx 5
-  have hy0 := reduced_limb_bounds hy 0
-  have hy1 := reduced_limb_bounds hy 1
-  have hy2 := reduced_limb_bounds hy 2
-  have hy3 := reduced_limb_bounds hy 3
-  have hy4 := reduced_limb_bounds hy 4
-  have hy5 := reduced_limb_bounds hy 5
+  have hx0 := hx 0
+  have hx1 := hx 1
+  have hx2 := hx 2
+  have hx3 := hx 3
+  have hx4 := hx 4
+  have hx5 := hx 5
+  have hy0 := hy 0
+  have hy1 := hy 1
+  have hy2 := hy 2
+  have hy3 := hy 3
+  have hy4 := hy 4
+  have hy5 := hy 5
   have e0 : R43x6.extractLimbs x 0 = R43x6.extractLimbs y 0 := by omega
   have e1 : R43x6.extractLimbs x 1 = R43x6.extractLimbs y 1 := by omega
   have e2 : R43x6.extractLimbs x 2 = R43x6.extractLimbs y 2 := by omega
@@ -94,6 +102,15 @@ theorem extractLimbs_eq_of_value_eq {x y : Vector (BitVec 64) 8}
   have e4 : R43x6.extractLimbs x 4 = R43x6.extractLimbs y 4 := by omega
   have e5 : R43x6.extractLimbs x 5 = R43x6.extractLimbs y 5 := by omega
   fin_cases k <;> first | exact e0 | exact e1 | exact e2 | exact e3 | exact e4 | exact e5
+
+/-- **A reduced representation is unique.** -/
+theorem extractLimbs_eq_of_value_eq {x y : Vector (BitVec 64) 8}
+    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (h : vecValue x = vecValue y)
+    (k : Fin R43x6.limbCount) : R43x6.extractLimbs x k = R43x6.extractLimbs y k :=
+  have hbx := reduced_decode'_bounds hx
+  have hby := reduced_decode'_bounds hy
+  extractLimbs_eq_of_value_eq' (reduced_limb_bounds hx) (reduced_limb_bounds hy) (by omega)
+    (by omega) h k
 
 /-! ## The difference `fd_f25519_sub` leaves
 
@@ -103,36 +120,36 @@ every intermediate far inside a `long`, which is what the limb lemmas of
 `Proof/Sub.lean` ask for. -/
 
 private theorem subFast_fits1 {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
+    (hx : Limbs43 x) (hy : Limbs43 y) (k : Fin R43x6.limbCount) :
     R43x6.FitsLong (R43x6.extractLimbs x k - R43x6.extractLimbs y k) := by
-  have h1 := reduced_limb_bounds hx k
-  have h2 := reduced_limb_bounds hy k
+  have h1 := hx k
+  have h2 := hy k
   simp only [R43x6.FitsLong]
   omega
 
 private theorem subFast_fits2 {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
+    (hx : Limbs43 x) (hy : Limbs43 y) (k : Fin R43x6.limbCount) :
     R43x6.FitsLong (R43x6.extractLimbs x k - R43x6.extractLimbs y k + subFastLimb k) := by
-  have h1 := reduced_limb_bounds hx k
-  have h2 := reduced_limb_bounds hy k
+  have h1 := hx k
+  have h2 := hy k
   have h3 := subFastLimb_bounds k
   simp only [R43x6.FitsLong]
   omega
 
 /-- `sub_fast`'s limbs, on reduced operands. -/
 theorem extractLimbs_subFastVec_reduced {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
+    (hx : Limbs43 x) (hy : Limbs43 y) (k : Fin R43x6.limbCount) :
     R43x6.extractLimbs (subFastVec x y) k
       = R43x6.extractLimbs x k - R43x6.extractLimbs y k + subFastLimb k :=
   extractLimbs_subFastVec (subFast_fits1 hx hy) (subFast_fits2 hx hy) k
 
 /-- ... and their range, the input contract of the fold. -/
 theorem subFastVec_reduced_bounds {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
+    (hx : Limbs43 x) (hy : Limbs43 y) (k : Fin R43x6.limbCount) :
     -(2 ^ 45) < R43x6.extractLimbs (subFastVec x y) k
       ∧ R43x6.extractLimbs (subFastVec x y) k < 2 ^ 45 := by
-  have h1 := reduced_limb_bounds hx k
-  have h2 := reduced_limb_bounds hy k
+  have h1 := hx k
+  have h2 := hy k
   have h3 := subFastLimb_bounds k
   rw [extractLimbs_subFastVec_reduced hx hy k]
   omega
@@ -140,7 +157,7 @@ theorem subFastVec_reduced_bounds {x y : Vector (BitVec 64) 8}
 /-- The limbs the fold hands back are `u44`, which is what reads the result as
 a `ℕ`-limbed vector again. -/
 theorem subFoldVec_bounds_reduced {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) (k : Fin R43x6.limbCount) :
+    (hx : Limbs43 x) (hy : Limbs43 y) (k : Fin R43x6.limbCount) :
     0 ≤ R43x6.extractLimbs (subFoldVec x y) k
       ∧ R43x6.extractLimbs (subFoldVec x y) k < 2 ^ 44 :=
   extractLimbs_acpBiasVec_bounds (subFastVec_reduced_bounds hx hy) k
@@ -148,7 +165,7 @@ theorem subFoldVec_bounds_reduced {x y : Vector (BitVec 64) 8}
 /-- **The element the difference holds**: `a - b`, the bias and the `p` of
 `sub_fast` both having cancelled. -/
 theorem vecValue_subFoldVec_reduced {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) :
+    (hx : Limbs43 x) (hy : Limbs43 y) :
     vecValue (subFoldVec x y) = vecValue x - vecValue y := by
   -- the limbs the fold saw, decoded: `a - b + p`
   have hsplit : (fun k => R43x6.extractLimbs (subFastVec x y) k + biasLimb k)
@@ -168,7 +185,8 @@ theorem vecValue_subFoldVec_reduced {x y : Vector (BitVec 64) 8}
   rw [← hcast]
   show ((R43x6.decode' (acpBiasVec (subFastVec x y)) : ℤ) : ZMod p) = _
   rw [decode'_acpBiasVec (subFastVec_reduced_bounds hx hy), hz,
-    ← decode'_cast_reduced hx, ← decode'_cast_reduced hy]
+    ← decode'_cast_eq_vecValue x fun k => by have := hx k; omega,
+    ← decode'_cast_eq_vecValue y fun k => by have := hy k; omega]
   push_cast
   simp
 
@@ -189,7 +207,7 @@ every `sub_fast` limb the constant's own -- `p`'s, with the bias taken out --
 and each is inside its mask, so the carry propagate is the identity and the
 bias goes straight back on. -/
 theorem subFoldVec_of_extractLimbs_eq {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y)
+    (hx : Limbs43 x) (hy : Limbs43 y)
     (h : ∀ k, R43x6.extractLimbs x k = R43x6.extractLimbs y k) :
     subFoldVec x y = pVec := by
   have harg : R43x6.extractLimbs (subFastVec x y) = subFastLimb := by
@@ -447,8 +465,9 @@ theorem sub_writes (o a b : Pointer) (s : GlobalState) (hs : s.WF)
 tests exactly when the two operands are the same element: `pVec` when they are
 (reduced representations being unique), and neither when they are not (both
 patterns decode to `0`). -/
-theorem subFoldVec_pattern_iff {x y : Vector (BitVec 64) 8}
-    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) :
+theorem subFoldVec_pattern_iff' {x y : Vector (BitVec 64) 8}
+    (hx : Limbs43 x) (hy : Limbs43 y) (hxy : R43x6.decode' x < R43x6.decode' y + p)
+    (hyx : R43x6.decode' y < R43x6.decode' x + p) :
     (subFoldVec x y = zeroVec ∨ subFoldVec x y = pVec) ↔ vecValue x = vecValue y := by
   constructor
   · rintro (h | h)
@@ -459,15 +478,28 @@ theorem subFoldVec_pattern_iff {x y : Vector (BitVec 64) 8}
       rw [h, vecValue_pVec] at hv
       exact sub_eq_zero.mp hv.symm
   · intro h
-    exact Or.inr (subFoldVec_of_extractLimbs_eq hx hy (extractLimbs_eq_of_value_eq hx hy h))
+    exact Or.inr (subFoldVec_of_extractLimbs_eq hx hy (extractLimbs_eq_of_value_eq' hx hy hxy hyx h))
+
+theorem subFoldVec_pattern_iff {x y : Vector (BitVec 64) 8}
+    (hx : R43x6.Reduced x) (hy : R43x6.Reduced y) :
+    (subFoldVec x y = zeroVec ∨ subFoldVec x y = pVec) ↔ vecValue x = vecValue y :=
+  have hbx := reduced_decode'_bounds hx
+  have hby := reduced_decode'_bounds hy
+  subFoldVec_pattern_iff' (reduced_limb_bounds hx) (reduced_limb_bounds hy) (by omega) (by omega)
 
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 20000 in
-theorem fd_f25519_eq_conforms (p q : Pointer) (s : GlobalState) (hs : s.WF)
-    (hp : IsVecPtr s.mem p) (hq : IsVecPtr s.mem q) :
-    fd_f25519_eq_spec p q s hp hq := by
-  simp only [fd_f25519_eq_spec, Cfg.denote]
-  intro hpRed hqRed
+/-- `fd_f25519_eq_conforms` for any operands the difference's pattern test decides. -/
+theorem fd_f25519_eq_conforms' (p q : Pointer) (s : GlobalState) (hs : s.WF)
+    (hp : IsVecPtr s.mem p) (hq : IsVecPtr s.mem q)
+    (hpat : (subFoldVec (readVec hp) (readVec hq) = zeroVec ∨
+      subFoldVec (readVec hp) (readVec hq) = pVec) ↔ vecValue (readVec hp) = vecValue (readVec hq)) :
+    ∃ s' : GlobalState,
+      StateT.run (runFunction (fd_f25519_eq.denote
+          (Ctxt.Valuation.ofPair (.value q) (.value p)))) s
+        = .value ([(.value (if vecValue (readVec hp) = vecValue (readVec hq) then 1#32 else 0#32)
+            : LLVM.IntW 32)]ₕ, s') ∧ s ≈ s' := by
+  simp only [Cfg.denote]
   -- `fd_f25519_t r[1]`
   obtain ⟨r, sAlloc, hrdef, hsAlloc, hsAllocWF, hrfits, hrid, hroff, -, -⟩ :=
     GlobalState.exists_afterAlloca_facts s hs (8 * 64)
@@ -510,7 +542,12 @@ theorem fd_f25519_eq_conforms (p q : Pointer) (s : GlobalState) (hs : s.WF)
   peel_lifetime
   simp_return
   rw [hrval]
-  simp only [subFoldVec_pattern_iff hpRed hqRed]
+  simp only [hpat]
+
+theorem fd_f25519_eq_conforms (p q : Pointer) (s : GlobalState) (hs : s.WF)
+    (hp : IsVecPtr s.mem p) (hq : IsVecPtr s.mem q) :
+    fd_f25519_eq_spec p q s hp hq := fun hpRed hqRed =>
+  fd_f25519_eq_conforms' p q s hs hp hq (subFoldVec_pattern_iff hpRed hqRed)
 
 
 end Firedancer.Avx512

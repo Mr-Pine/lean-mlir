@@ -773,10 +773,49 @@ theorem extractLimbs_of_unpacked {y : Vector (BitVec 64) 8} (h : R43x6.Unpacked 
   · have hk5 : k = 5 := Fin.ext (by have := k.isLt; simp only [R43x6.limbCount] at *; omega)
     rw [hk5]; omega
 
+private theorem toNat_eq_of_toInt_nonneg {b : BitVec 64} (h0 : 0 ≤ b.toInt) :
+    (b.toNat : ℤ) = b.toInt := by
+  have := BitVec.toInt_eq_toNat_cond b
+  split at this <;> omega
+
+/-- **The limbs a decoded QUAD is held in**: whatever was packed, the fold leaves `DecodeBounds`
+once `Y` is a 255-bit unpack. -/
+theorem decodeBounds_foldQuad_packQuad {x y z t : Vector (BitVec 64) 8}
+    (hyU : R43x6.Unpacked y) (hy : R43x6.decode' y < 2 ^ 255) :
+    (foldQuad (packQuad x y z t)).DecodeBounds := by
+  refine ⟨fun j k => ?_, fun k => ?_⟩
+  · rw [laneFunc_foldQuad]
+    have hlt : ∀ k, (packQuad x y z t).vectorFunc j k < 2 ^ 64 := fun k => by
+      simp only [Quad.vectorFunc, Function.comp_apply, laneFunc]; exact BitVec.isLt _
+    have h0 := hlt 0; have h1 := hlt 1; have h2 := hlt 2
+    have h3 := hlt 3; have h4 := hlt 4; have h5 := hlt 5
+    fin_cases k <;> simp [foldLimb] <;> omega
+  · rw [laneFunc_foldQuad]
+    have hv : (packQuad x y z t).vectorFunc 1 = limbNat y := by
+      funext k; fin_cases k <;> rfl
+    rw [hv]
+    obtain ⟨h04, h50, h51⟩ := hyU
+    have b0 := h04 0 (by decide); have b1 := h04 1 (by decide); have b2 := h04 2 (by decide)
+    have b3 := h04 3 (by decide); have b4 := h04 4 (by decide)
+    have e0 : R43x6.extractLimbs y 0 = y[0].toInt := rfl
+    have e1 : R43x6.extractLimbs y 1 = y[1].toInt := rfl
+    have e2 : R43x6.extractLimbs y 2 = y[2].toInt := rfl
+    have e3 : R43x6.extractLimbs y 3 = y[3].toInt := rfl
+    have e4 : R43x6.extractLimbs y 4 = y[4].toInt := rfl
+    have e5 : R43x6.extractLimbs y 5 = y[5].toInt := rfl
+    rw [e0] at b0; rw [e1] at b1; rw [e2] at b2; rw [e3] at b3; rw [e4] at b4
+    rw [e5] at h50 h51
+    have n0 := toNat_eq_of_toInt_nonneg b0.1; have n1 := toNat_eq_of_toInt_nonneg b1.1
+    have n2 := toNat_eq_of_toInt_nonneg b2.1; have n3 := toNat_eq_of_toInt_nonneg b3.1
+    have n4 := toNat_eq_of_toInt_nonneg b4.1; have n5 := toNat_eq_of_toInt_nonneg h50
+    have hdec := R43x6.decode'_eq y
+    fin_cases k <;> simp [foldLimb, limbNat] <;> omega
+
 /-- **What one side of `^bb2` computes, in the field.** -/
 theorem decodes_side {ua : Vector (BitVec 64) 4}
     {x y t3 x' : Vector (BitVec 64) 8} {sgn t1nz : BitVec 32}
     (hy : ((R43x6.decode' y : ℤ) : ZMod p) = wvY ua) (hyU : R43x6.Unpacked y)
+    (hy255 : R43x6.decode' y < 2 ^ 255)
     (hsgn : sgn = if wvSign ua then 1 else 0)
     (ht3 : t3 = if t1nz = 0 then oneVec else sqrtM1Vec)
     (h190 : t1nz = 0 ↔ vecValue x ^ 2 * (d * wvY ua ^ 2 + 1) = wvY ua ^ 2 - 1)
@@ -787,7 +826,9 @@ theorem decodes_side {ua : Vector (BitVec 64) 4}
     (hx' : x' = if diagnose (R43x6.extractLimbs (foldVec (mulVec x t3))) = sgn
             then foldVec (mulVec x t3) else negVec (foldVec (mulVec x t3)))
     (hxy : MulInl x' y (foldVec (mulVec x' y))) :
-    Decodes ua (foldQuad (packQuad x' y oneVec (foldVec (mulVec x' y)))) := by
+    Decodes ua (foldQuad (packQuad x' y oneVec (foldVec (mulVec x' y))))
+      ∧ (foldQuad (packQuad x' y oneVec (foldVec (mulVec x' y)))).DecodeBounds := by
+  refine ⟨?_, decodeBounds_foldQuad_packQuad hyU hy255⟩
   have hyB := extractLimbs_of_unpacked hyU
   have hvy : vecValue y = wvY ua := by rw [← decode'_cast_eq_vecValue y hyB]; exact hy
   -- the candidate root, corrected by `sqrt(-1)` when the direct one failed
@@ -867,6 +908,7 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
     {ua ub : Vector (BitVec 64) 4}
     (hya : (R43x6.decode' ya : ZMod p) = wvY ua)
     (hyb : (R43x6.decode' yb : ZMod p) = wvY ub)
+    (hya255 : R43x6.decode' ya < 2 ^ 255) (hyb255 : R43x6.decode' yb < 2 ^ 255)
     (hsgnA : sgnA = if wvSign ua then 1 else 0)
     (hsgnB : sgnB = if wvSign ub then 1 else 0)
     (h190 : t1nza = 0 ↔ vecValue xa ^ 2 * (d * wvY ua ^ 2 + 1) = wvY ua ^ 2 - 1)
@@ -900,8 +942,8 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
               a25 (vecBV va25)).splice b03 (vecBV vb03)).splice
               b14 (vecBV vb14)).splice b25 (vecBV vpre) }
           : GlobalState)
-      ∧ Decodes ua ⟨va03, va14, va25⟩
-      ∧ Decodes ub ⟨vb03, vb14, vb25⟩
+      ∧ (Decodes ua ⟨va03, va14, va25⟩ ∧ Quad.DecodeBounds ⟨va03, va14, va25⟩)
+      ∧ (Decodes ub ⟨vb03, vb14, vb25⟩ ∧ Quad.DecodeBounds ⟨vb03, vb14, vb25⟩)
       -- what `^bb5` needs to store through `%arg6`, carried out rather than
       -- re-derived: rebuilding it from the six splices costs minutes
       ∧ Fits s'.mem b25 512 := by
@@ -1376,13 +1418,13 @@ theorem bb2_run {V : fd_r43x6_ge_decode2.Γout.Valuation}
         then foldVec (mulVec xa t3a) else negVec (foldVec (mulVec xa t3a)) := by
       rw [hxa', hnxa]
     rw [hqa, hxya]
-    exact decodes_side hya hyaU hsgnA ht3a h190 hrootA hmulA hfA hxa'' hxyA
+    exact decodes_side hya hyaU hya255 hsgnA ht3a h190 hrootA hmulA hfA hxa'' hxyA
   · -- ... and its `b` twin
     have hxb'' : xb' = if diagnose (R43x6.extractLimbs (foldVec (mulVec xb t3b))) = sgnB
         then foldVec (mulVec xb t3b) else negVec (foldVec (mulVec xb t3b)) := by
       rw [hxb', hnxb]
     rw [hqb, hxyb]
-    exact decodes_side hyb hybU hsgnB ht3b h191 hrootB hmulB hfB hxb'' hxyB
+    exact decodes_side hyb hybU hyb255 hsgnB ht3b h191 hrootB hmulB hfB hxb'' hxyB
 
 /-- **`^bb5`'s store, folded into `^bb2`'s six splices.** The last of the six
 is written twice -- once by the transpose, once by the reduce that `^bb5`
@@ -1428,6 +1470,7 @@ theorem bb2_full {V : fd_r43x6_ge_decode2.Γout.Valuation}
     {ua ub : Vector (BitVec 64) 4}
     (hya : (R43x6.decode' ya : ZMod p) = wvY ua)
     (hyb : (R43x6.decode' yb : ZMod p) = wvY ub)
+    (hya255 : R43x6.decode' ya < 2 ^ 255) (hyb255 : R43x6.decode' yb < 2 ^ 255)
     (hsgnA : sgnA = if wvSign ua then 1 else 0)
     (hsgnB : sgnB = if wvSign ub then 1 else 0)
     (h190 : t1nza = 0 ↔ vecValue xa ^ 2 * (d * wvY ua ^ 2 + 1) = wvY ua ^ 2 - 1)
@@ -1458,9 +1501,10 @@ theorem bb2_full {V : fd_r43x6_ge_decode2.Γout.Valuation}
               a25 (vecBV va25)).splice b03 (vecBV vb03)).splice
               b14 (vecBV vb14)).splice b25 (vecBV vb25)) }
           : GlobalState) →
-      Decodes ua ⟨va03, va14, va25⟩ → Decodes ub ⟨vb03, vb14, vb25⟩ → P) : P := by
+      Decodes ua ⟨va03, va14, va25⟩ ∧ Quad.DecodeBounds ⟨va03, va14, va25⟩ →
+      Decodes ub ⟨vb03, vb14, vb25⟩ ∧ Quad.DecodeBounds ⟨vb03, vb14, vb25⟩ → P) : P := by
   obtain ⟨va03, va14, va25, vb03, vb14, vb25, vpre, s', hrun, hmem, hda, hdb, hb25'⟩ :=
-    bb2_run env inp hya hyb hsgnA hsgnB h190 h191 hrootA hrootB ht1nza ht1nzb
+    bb2_run env inp hya hyb hya255 hyb255 hsgnA hsgnB h190 h191 hrootA hrootB ht1nza ht1nzb
       hxaU hxa6 hxa7 hxbU hxb6 hxb7 hyaU hya6 hya7 hybU hyb6 hyb7 hs
       pa03 pa14 pa25 pb03 pb14 pb25 hne
   refine k va03 va14 va25 vb03 vb14 vb25
