@@ -9,7 +9,7 @@ namespace Firedancer
 
 open LeanMLIR SLLVM
 open InstCombine (LLVM)
-open Ed25519
+open Ed25519 Common
 
 /-!
 # `fd_ed25519_verify`'s globals, across the two builds
@@ -60,14 +60,74 @@ abbrev Avx512.VerifyGlobals (s : GlobalState) (sha : Pointer) (Bt : ℕ → Prec
         R43x6.Reduced (Avx512.readVec h0) ∧ R43x6.Reduced (Avx512.readVec h1)) ∧
     Avx512.BaseTableHolds s sha Bt
 
-/-- **What conformance buys the AVX-512 caller.** A ref state that the module can run in fixes the
-three addresses and keeps the table apart from `sha`; the AVX-512 state need only agree with it on
-the symbol table and hold the right vectors there. `Ref.BaseTableHolds s Bt` is what makes the `Bt`
-the AVX-512 table is assumed to hold the ref table's own. -/
+/-- **`RefWF` supplies the AVX-512 globals.** A ref state fixes the three addresses and keeps the
+table apart from `sha`; what is left is the layout at those addresses, which only the build itself
+can state. -/
 abbrev fd_ed25519_verify_globals_equivalent : Prop :=
   ∀ (s s' : GlobalState) (sha : Pointer) (Bt : ℕ → PrecomputedPoint),
     s.RefWF [sha] →
       Ref.BaseTableHolds s Bt →
       s'.globals = s.globals → Avx512Globals s' Bt → Avx512.VerifyGlobals s' sha Bt
+
+/-- **The two regions agree.** On one state, on the same signature, public key and message: both
+return, both return the same code, and both leave every block but `sha` as it was.
+
+The state is a module state for `ref` -- `RefWF` and its base table -- and holds the AVX-512 build's
+vectors at those same symbols. The digest and the reduced scalar are the caller's `fInit`/`fApp`/
+`fFini`/`f`, so both regions hash and reduce the same way; what is compared is the rest. -/
+abbrev fd_ed25519_verify_equivalent : Prop :=
+  ∀ (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer) (s : GlobalState)
+    (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
+    (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk),
+    sig.id ≠ SLLVM.nullBlock →
+      ∀ (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
+        (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
+        (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
+        (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+        (Bt : ℕ → PrecomputedPoint) (dig : BitVec 512) (w : Fin 4 → BitVec 64),
+        -- the module's state, and the AVX-512 build's contents at its symbols
+        s.RefWF [sha] →
+          Ref.BaseTableHolds s Bt →
+          Avx512Globals s Bt →
+          BaseVals Bt basePoint wellFormed_basePoint →
+          -- the caller's objects
+          sig.offset.toNat + 64 ≤ 2 ^ 64 →
+          msg.offset.toNat + sz.toNat ≤ 2 ^ 64 →
+          IsSha512Ptr s.mem sha →
+          sha.offset.toNat + 256 ≤ 2 ^ 64 →
+          Sha512KHolds s sha kbits →
+          sha.id ≠ sig.id →
+          sha.id ≠ pk.id →
+          sha.id ≠ msg.id →
+          -- the hash and the reduction, as both regions call them
+          ScalarReduceBy f →
+          Sha512InitBy fInit →
+          Sha512AppendBy kbits fApp →
+          Sha512FiniBy kbits fFini →
+          ed25519Digest fInit fApp fFini (s.mem.live? sha.id) sha.offset (readBuf hr) (readBuf ha)
+              (bytesOf (readWord hmsg)) =
+            some dig →
+          f dig = some w →
+          ∃ (sRef sAvx : GlobalState) (ret : BitVec 32),
+            StateT.run
+                  (runFunction
+                    (Ref.fd_ed25519_verify.denote
+                      (Ctxt.Valuation.ofHVector
+                        [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ)))
+                  s =
+                .value ([.value ret]ₕ, sRef) ∧
+              StateT.run
+                  (runFunction
+                    (Avx512.fd_ed25519_verify.denote
+                      (Ctxt.Valuation.ofHVector
+                        [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ)))
+                  s =
+                .value ([.value ret]ₕ, sAvx) ∧
+              sRef.alloc = s.alloc ∧
+              sAvx.alloc = s.alloc ∧
+              sRef.globals = s.globals ∧
+              sAvx.globals = s.globals ∧
+              (∀ b : BlockId, b ≠ sha.id → sRef.mem.live? b = s.mem.live? b) ∧
+              (∀ b : BlockId, b ≠ sha.id → sAvx.mem.live? b = s.mem.live? b)
 
 end Firedancer
