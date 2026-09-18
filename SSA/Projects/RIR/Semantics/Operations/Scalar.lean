@@ -1,6 +1,6 @@
 module
 
-public import SSA.Projects.RIR.Semantics.Operations.SimpSet
+public import SSA.Projects.RIR.SimpSets
 public import SSA.Projects.RIR.Ty
 
 namespace LeanMLIR.RIR.Operation
