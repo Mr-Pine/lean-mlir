@@ -37,9 +37,16 @@ theorem fd_ed25519_verify_globals_equivalent_proof : fd_ed25519_verify_globals_e
       hAvx.tbl g (ptr _ _ hgtbl.addr) k hk⟩
 
 set_option maxHeartbeats 1000000 in
-theorem fd_ed25519_verify_equivalent_proof : fd_ed25519_verify_equivalent := by
-  intro msg sz sig pk sha s hmsg hr hS ha hsignull f kbits fInit fApp fFini Bt dig w hRef hTbl hAvx
-    hB hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hf hInit hApp hFini hdig hw
+theorem fd_ed25519_verify_equivalent_proof (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
+    (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
+    (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
+    (hsignull : sig.id ≠ SLLVM.nullBlock) (hsigoff : sig.offset.toNat + 64 ≤ 2 ^ 64)
+    (hmsgoff : msg.offset.toNat + sz.toNat ≤ 2 ^ 64) (hsha : IsSha512Ptr s.mem sha)
+    (hshaoff : sha.offset.toNat + 256 ≤ 2 ^ 64) (hshasig : sha.id ≠ sig.id)
+    (hshapk : sha.id ≠ pk.id) (hshamsg : sha.id ≠ msg.id) (hRef : s.RefWF [sha]) :
+    fd_ed25519_verify_equivalent msg sz sig pk sha s hmsg hr hS ha hsignull hsigoff hmsgoff hsha
+      hshaoff hshasig hshapk hshamsg hRef := by
+  intro f kbits fInit fApp fFini Bt dig w hTbl hAvx hB hK hf hInit hApp hFini hdig hw
   obtain ⟨⟨g0, g1, hg0, hg1, hgp0, hgp1, hgv0, hgv1, hgr0, hgr1⟩, hTbl'⟩ :=
     fd_ed25519_verify_globals_equivalent_proof s s sha Bt hRef hTbl rfl hAvx
   obtain ⟨sRef, retRef, hrunRef, haRef, hglRef, hlRef, -, -, hsigRef, hpkRef, hrRef, hlowRef⟩ :=
