@@ -22,6 +22,16 @@ def and {w : Nat} (x y : IntW w) : IntW w := do
   let b ← y
   return (a &&& b)
 
+@[mlir_operation]
+def smin {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  let result := if a.slt b then
+    a
+  else
+    b
+  return result
+
 end BVBinOp
 
 @[simp, mlir_operation]

@@ -10,3 +10,6 @@ register_simp_attr mlir_env
 
 /-- Reduces the `EffectM` monad and its operations -/
 register_simp_attr mlir_effect
+
+/-- Reductions for running single instructions -/
+register_simp_attr mlir_instr
