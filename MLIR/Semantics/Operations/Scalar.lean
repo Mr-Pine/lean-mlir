@@ -1,6 +1,6 @@
 module
 
-public import MLIR.Semantics.Operations.SimpSet
+public import MLIR.SimpSets
 public import MLIR.Ty
 
 namespace MLIR.Operation

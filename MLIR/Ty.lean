@@ -21,6 +21,9 @@ def denote : Ty → Type
   | bv w => PoisonOr (BitVec w)
   | ptr => PoisonOr Pointer
 
+/-- `⟦t⟧` is the `Type` of values of (MLIR) type `t` --/
+notation "⟦" t "⟧" => MLIR.Ty.denote t
+
 end
 
 public section
@@ -29,7 +32,7 @@ def width : Ty → Nat
   | bv w => w
   | ptr => 64
 
-def poisoned : (t : Ty) → t.denote
+def poisoned : (t : Ty) → ⟦t⟧
   | bv _ => .poison
   | ptr => .poison
 
