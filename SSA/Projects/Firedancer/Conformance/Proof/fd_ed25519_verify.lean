@@ -38,33 +38,33 @@ theorem fd_ed25519_verify_globals_equivalent_proof : fd_ed25519_verify_globals_e
 
 set_option maxHeartbeats 1000000 in
 theorem fd_ed25519_verify_equivalent_proof (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
-    (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
-    (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
-    (hsignull : sig.id ≠ SLLVM.nullBlock) (hsigoff : sig.offset.toNat + 64 ≤ 2 ^ 64)
-    (hmsgoff : msg.offset.toNat + sz.toNat ≤ 2 ^ 64) (hsha : IsSha512Ptr s.mem sha)
-    (hshaoff : sha.offset.toNat + 256 ≤ 2 ^ 64) (hshasig : sha.id ≠ sig.id)
-    (hshapk : sha.id ≠ pk.id) (hshamsg : sha.id ≠ msg.id) (hRef : s.RefWF [sha]) :
-    fd_ed25519_verify_equivalent msg sz sig pk sha s hmsg hr hS ha hsignull hsigoff hmsgoff hsha
-      hshaoff hshasig hshapk hshamsg hRef := by
-  intro f kbits fInit fApp fFini Bt dig w hTbl hAvx hB hK hf hInit hApp hFini hdig hw
+    (s : GlobalState) (hargs : VerifyArgs s msg sz sig pk sha) (hRef : s.RefWF [sha]) :
+    fd_ed25519_verify_equivalent msg sz sig pk sha s hargs hRef := by
+  intro f kbits fInit fApp fFini fFiniBlk Bt dig w hTbl hAvx hB hK hf hInit hApp hFini hdig hw
   obtain ⟨⟨g0, g1, hg0, hg1, hgp0, hgp1, hgv0, hgv1, hgr0, hgr1⟩, hTbl'⟩ :=
     fd_ed25519_verify_globals_equivalent_proof s s sha Bt hRef hTbl rfl hAvx
-  obtain ⟨sRef, retRef, hrunRef, haRef, hglRef, hlRef, -, -, hsigRef, hpkRef, hrRef, hlowRef⟩ :=
-    Ref.fd_ed25519_verify_conforms msg sz sig pk sha s hmsg hr hS ha hsignull f kbits fInit fApp
-      fFini hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hRef hf hInit hApp hFini Bt hTbl
-      hB dig hdig w hw
-  obtain ⟨sAvx, retAvx, hrunAvx, haAvx, hglAvx, hlAvx, -, -, hsigAvx, hpkAvx, hrAvx, hlowAvx⟩ :=
-    Avx512.fd_ed25519_verify_conforms msg sz sig pk sha s hmsg hr hS ha hsignull f kbits fInit fApp
-      fFini hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hRef.wf hf hInit hApp hFini g0 g1
-      hg0 hg1 hgp0 hgp1 hgv0 hgv1 hgr0 hgr1 Bt hTbl' hB dig hdig w hw
+  obtain
+    ⟨sRef, retRef, hrunRef, haRef, hglRef, hlRef, hretList, hearlyRef, hshaRef, hsigRef, hpkRef,
+      hrRef, hlowRef⟩ :=
+    Ref.fd_ed25519_verify_conforms msg sz sig pk sha s hargs.msgFits hargs.sigBuf hargs.sBuf
+      hargs.pkBuf hargs.sigNull f kbits fInit fApp fFini fFiniBlk hargs.sigOff hargs.msgOff
+      hargs.shaPtr hargs.shaOff hK hargs.shaSig hargs.shaPk hargs.shaMsg hRef hf hInit hApp hFini Bt
+      hTbl hB dig hdig w hw
+  obtain
+    ⟨sAvx, retAvx, hrunAvx, haAvx, hglAvx, hlAvx, -, hearlyAvx, hshaAvx, hsigAvx, hpkAvx, hrAvx,
+      hlowAvx⟩ :=
+    Avx512.fd_ed25519_verify_conforms msg sz sig pk sha s hargs.msgFits hargs.sigBuf hargs.sBuf
+      hargs.pkBuf hargs.sigNull f kbits fInit fApp fFini fFiniBlk hargs.sigOff hargs.msgOff
+      hargs.shaPtr hargs.shaOff hK hargs.shaSig hargs.shaPk hargs.shaMsg hRef.wf hf hInit hApp hFini
+      g0 g1 hg0 hg1 hgp0 hgp1 hgv0 hgv1 hgr0 hgr1 Bt hTbl' hB dig hdig w hw
   -- the checks that decide the code, in the order the regions make them
   have hret : retRef = retAvx := by
-    by_cases hℓ : groupOrder ≤ (readBuf hS).toNat
+    by_cases hℓ : groupOrder ≤ (readBuf hargs.sBuf).toNat
     · rw [hsigRef hℓ, hsigAvx hℓ]
-    push_neg at hℓ
-    by_cases hA : ∃ A, Encodes (readBuf ha) A
+    push Not at hℓ
+    by_cases hA : ∃ A, Encodes (readBuf hargs.pkBuf) A
     case neg => rw [hpkRef hℓ hA, hpkAvx hℓ hA]
-    by_cases hRenc : ∃ R, Encodes (readBuf hr) R
+    by_cases hRenc : ∃ R, Encodes (readBuf hargs.sigBuf) R
     case neg => rw [hrRef hℓ hA hRenc, hrAvx hℓ hA hRenc]
     obtain ⟨A, hAe⟩ := hA
     obtain ⟨R, hRe⟩ := hRenc
@@ -78,12 +78,33 @@ theorem fd_ed25519_verify_equivalent_proof (msg : Pointer) (sz : BitVec 64) (sig
     obtain ⟨hiffAvx, horAvx⟩ := heqAvx hAlow hRlow
     by_cases heq :
       ((packWords w).toNat % 2 ^ 255) • -A +
-          (readBuf hS).toNat • basePoint.toAffine wellFormed_basePoint =
+          (readBuf hargs.sBuf).toNat • basePoint.toAffine wellFormed_basePoint =
         R
     · rw [hiffRef.mpr heq, hiffAvx.mpr heq]
     · rw [horRef.resolve_left fun h => heq (hiffRef.mp h),
         horAvx.resolve_left fun h => heq (hiffAvx.mp h)]
   subst hret
-  exact ⟨sRef, sAvx, retRef, hrunRef, hrunAvx, haRef, haAvx, hglRef, hglAvx, hlRef, hlAvx⟩
+  -- the two states: `s` off `sha`, and what `fini` left at `sha` on both sides
+  obtain ⟨shaBlk, hshaBlk⟩ :=
+    Option.isSome_iff_exists.mp (ed25519ShaBlock_isSome (fFiniBlk := fFiniBlk) hdig)
+  have hsha : sRef.mem.live? sha.id = sAvx.mem.live? sha.id := by
+    by_cases hhashed : retRef = FD_ED25519_SUCCESS ∨ retRef = FD_ED25519_ERR_MSG
+    · rw [hshaRef hhashed shaBlk hshaBlk, hshaAvx hhashed shaBlk hshaBlk]
+    · have hearly : retRef = FD_ED25519_ERR_SIG ∨ retRef = FD_ED25519_ERR_PUBKEY := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hretList
+        push Not at hhashed
+        rcases hretList with h | h | h | h
+        · exact absurd h hhashed.1
+        · exact Or.inl h
+        · exact Or.inr h
+        · exact absurd h hhashed.2
+      rw [← (hearlyRef hearly).live sha.id, ← (hearlyAvx hearly).live sha.id]
+  refine
+    ⟨sRef, sAvx, retRef, hrunRef, hrunAvx, ⟨haRef.trans haAvx.symm, ?_, fun b => ?_⟩, haRef, hglRef,
+      hlRef⟩
+  · rw [hglRef, hglAvx]
+  · by_cases hb : b = sha.id
+    · subst hb; exact hsha
+    · rw [hlRef b hb, ← hlAvx b hb]
 
 end Firedancer

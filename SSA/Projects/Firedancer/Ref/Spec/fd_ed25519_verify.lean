@@ -37,7 +37,8 @@ abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Poi
     (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
     (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
     (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
-    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
+    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+    (fFiniBlk : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option LiveBlock) :
     Prop :=
   let invocation :=
     runFunction
@@ -62,7 +63,7 @@ abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Poi
     ScalarReduceBy f →
     Sha512InitBy fInit →
     Sha512AppendBy kbits fApp →
-    Sha512FiniBy kbits fFini →
+    Sha512FiniBy kbits fFini fFiniBlk →
     ∀ Bt,
       BaseTableHolds s Bt →
         BaseVals Bt basePoint wellFormed_basePoint →
@@ -79,6 +80,13 @@ abbrev fd_ed25519_verify_spec (msg : Pointer) (sz : BitVec 64) (sig pk sha : Poi
                       [FD_ED25519_SUCCESS, FD_ED25519_ERR_SIG, FD_ED25519_ERR_PUBKEY,
                         FD_ED25519_ERR_MSG] ∧
                     (ret = FD_ED25519_ERR_SIG ∨ ret = FD_ED25519_ERR_PUBKEY → s ≈ s') ∧
+                    -- a run that hashed leaves `sha` as `fini` does; the others never write it
+                    (ret = FD_ED25519_SUCCESS ∨ ret = FD_ED25519_ERR_MSG →
+                      ∀ shaBlk,
+                        ed25519ShaBlock fInit fApp fFiniBlk (s.mem.live? sha.id) sha.offset r a
+                              (bytesOf (readWord hmsg)) =
+                            some shaBlk →
+                          s'.mem.live? sha.id = shaBlk) ∧
                     (groupOrder ≤ S → ret = FD_ED25519_ERR_SIG) ∧
                     (S < groupOrder → (¬∃ A, Encodes a A) → ret = FD_ED25519_ERR_PUBKEY) ∧
                     (S < groupOrder →

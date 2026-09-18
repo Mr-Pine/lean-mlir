@@ -170,8 +170,9 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
     (hsignull : sig.id ≠ SLLVM.nullBlock) (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
     (kbits : BitVec (80 * 64)) (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
     (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
-    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
-    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f kbits fInit fApp fFini := by
+    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+    (fFiniBlk : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option LiveBlock) :
+    fd_ed25519_verify_spec msg sz sig pk sha s hmsg hr hS ha f kbits fInit fApp fFini fFiniBlk := by
   simp only [fd_ed25519_verify_spec, Cfg.denote]
   intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hwf hf hInit hApp hFini g0 g1 hg0 hg1
     hgp0 hgp1 hgv0 hgv1 hgr0 hgr1 Bt hTbl hB dig hdig w hw
@@ -614,7 +615,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
         rw [hkpoff]; simp)
       hkpsha hK₁₂
   rw [hblk₁₂, hkpblk₁₂, hkpoff] at hret₂₆
-  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hk⟩ := hret₂₆ dig hfin
+  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hshaBlk₁₃, hk⟩ := hret₂₆ dig hfin
   peel_call hrun₂₆
   -- `k` holds the digest
   obtain ⟨hk₁₃, hkval⟩ := hk
@@ -867,6 +868,22 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
   have hexR : ∃ R, Encodes (readBuf hr) R :=
     ⟨_, by
       rw [← hbufr₅]; exact encodes_of_decodes hsig₅ decR⟩
+  -- `sha`, the one block the hash wrote: nothing since `fini` has touched it
+  have hRcsha : Rc.id ≠ sha.id := hne Rc sha.id hRcge (hlt hsha)
+  have hsha₁₇ : (s.popFrame s₁₇.mem).mem.live? sha.id = s₁₃.mem.live? sha.id := by
+    show (s₁₇.mem.killFrom s.alloc.nextFreeBlock).live? sha.id = _
+    rw [live?_killFrom_of_lt (hlt hsha), ← heq₃₀.live sha.id,
+      Firedancer.live?_of_equiv_mem' heq₂₉.symm sha.id, Ge.live?_writeQuad_ne hRcsha,
+      fr₁₅ _ hshaAp.symm, fr₁₄ _ hkpsha.symm]
+  have hshaChain :
+    ∀ shaBlk,
+      ed25519ShaBlock fInit fApp fFiniBlk (s.mem.live? sha.id) sha.offset (readBuf hr) (readBuf ha)
+            (bytesOf (readWord hmsg)) =
+          some shaBlk →
+        (s.popFrame s₁₇.mem).mem.live? sha.id = shaBlk :=
+    fun shaBlk hblk => by
+    rw [hsha₁₇, hshaBlk₁₃]
+    simpa [ed25519ShaBlock, hb₀, hb₁, hb₂, hb₃] using hblk
   by_cases hsame : (readQuad hRc₁₆).toPoint.SamePoint (readQuad hRp₁₆).toPoint
   on_goal 1 =>
     simp only [hsame, ite_true] at hbE; subst hbE; simp at hv30
@@ -889,7 +906,7 @@ theorem fd_ed25519_verify_conforms (msg : Pointer) (sz : BitVec 64) (sig pk sha 
             | rfl),
         rfl, hlive₁₇, ?_⟩
     simp [FD_ED25519_SUCCESS, FD_ED25519_ERR_SIG, FD_ED25519_ERR_PUBKEY, FD_ED25519_ERR_MSG, hS₁₂]
-    refine ⟨hexA, fun _ _ => hexR, fun A R hA' hR' => ?_⟩
+    refine ⟨hshaChain, hexA, fun _ _ => hexR, fun A R hA' hR' => ?_⟩
     obtain ⟨hlA', hlR', rfl, rfl⟩ := hconds A R hA' hR'
     refine ⟨hlA', fun _ => hlR', fun _ _ => ?_⟩
   · exact heqn.mp hsame

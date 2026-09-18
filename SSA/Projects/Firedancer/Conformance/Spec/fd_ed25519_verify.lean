@@ -76,16 +76,9 @@ The state is a module state for `ref` -- `RefWF` and its base table -- and holds
 vectors at those same symbols. The digest and the reduced scalar are the caller's `fInit`/`fApp`/
 `fFini`/`f`, so both regions hash and reduce the same way; what is compared is the rest. -/
 abbrev fd_ed25519_verify_equivalent (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
-    (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
-    (_hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
-    (_hsignull : sig.id ≠ SLLVM.nullBlock) (_hsigoff : sig.offset.toNat + 64 ≤ 2 ^ 64)
-    (_hmsgoff : msg.offset.toNat + sz.toNat ≤ 2 ^ 64) (_hsha : IsSha512Ptr s.mem sha)
-    (_hshaoff : sha.offset.toNat + 256 ≤ 2 ^ 64) (_hshasig : sha.id ≠ sig.id)
-    (_hshapk : sha.id ≠ pk.id) (_hshamsg : sha.id ≠ msg.id) (_hRef : s.RefWF [sha]) : Prop :=
+    (s : GlobalState) (hargs : VerifyArgs s msg sz sig pk sha) (_hRef : s.RefWF [sha]) : Prop :=
   ∀ (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
-    (fInit : Option LiveBlock → BitVec 64 → Option (Option LiveBlock))
-    (fApp : Option LiveBlock → BitVec 64 → List (BitVec 8) → Option (Option LiveBlock))
-    (fFini : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+    fInit fApp fFini fFiniBlk
     (Bt : ℕ → PrecomputedPoint) (dig : BitVec 512) (w : Fin 4 → BitVec 64),
     -- the module's tables, and the AVX-512 build's contents at its symbols
     Ref.BaseTableHolds s Bt →
@@ -96,9 +89,9 @@ abbrev fd_ed25519_verify_equivalent (msg : Pointer) (sz : BitVec 64) (sig pk sha
       ScalarReduceBy f →
       Sha512InitBy fInit →
       Sha512AppendBy kbits fApp →
-      Sha512FiniBy kbits fFini →
-      ed25519Digest fInit fApp fFini (s.mem.live? sha.id) sha.offset (readBuf hr) (readBuf ha)
-          (bytesOf (readWord hmsg)) =
+      Sha512FiniBy kbits fFini fFiniBlk →
+      ed25519Digest fInit fApp fFini (s.mem.live? sha.id) sha.offset (readBuf hargs.sigBuf)
+          (readBuf hargs.pkBuf) (bytesOf (readWord hargs.msgFits)) =
         some dig →
       f dig = some w →
       ∃ (sRef sAvx : GlobalState) (ret : BitVec 32),
@@ -116,11 +109,9 @@ abbrev fd_ed25519_verify_equivalent (msg : Pointer) (sz : BitVec 64) (sig pk sha
                     [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ)))
               s =
             .value ([.value ret]ₕ, sAvx) ∧
+          -- one code, one final state, and `s` itself off `sha`
+          sRef ≈ sAvx ∧
           sRef.alloc = s.alloc ∧
-          sAvx.alloc = s.alloc ∧
-          sRef.globals = s.globals ∧
-          sAvx.globals = s.globals ∧
-          (∀ b : BlockId, b ≠ sha.id → sRef.mem.live? b = s.mem.live? b) ∧
-          (∀ b : BlockId, b ≠ sha.id → sAvx.mem.live? b = s.mem.live? b)
+          sRef.globals = s.globals ∧ ∀ b : BlockId, b ≠ sha.id → sRef.mem.live? b = s.mem.live? b
 
 end Firedancer

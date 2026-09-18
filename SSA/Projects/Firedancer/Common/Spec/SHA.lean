@@ -26,12 +26,11 @@ open LeanMLIR SLLVM
 axiom fd_sha512_init : Cfg (Ctxt.ofList [SLLVM.Ty.ptr]) [SLLVM.Ty.ptr]
 
 /-- `fd_sha512_core_ref(state, block, block_cnt)`. -/
-axiom fd_sha512_core_ref :
-  Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) []
+axiom fd_sha512_core_ref : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) []
 
 /-- `fd_sha512_append(sha, data, sz)`. -/
 axiom fd_sha512_append :
-  Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr]
+    Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 64, SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr]
 
 /-- `fd_sha512_fini(sha, hash)`. -/
 axiom fd_sha512_fini : Cfg (Ctxt.ofList [SLLVM.Ty.ptr, SLLVM.Ty.ptr]) [SLLVM.Ty.ptr]
@@ -56,7 +55,8 @@ def Sha512InitBy (f : Option LiveBlock → BitVec 64 → Option (Option LiveBloc
   ∀ (sha : Pointer) (s : GlobalState),
     s.WF →
       IsSha512Ptr s.mem sha →
-        let invocation := runFunction (fd_sha512_init.denote (Ctxt.Valuation.singleton (.value sha)))
+        let invocation :=
+          runFunction (fd_sha512_init.denote (Ctxt.Valuation.singleton (.value sha)))
         (∀ blk,
             f (s.mem.live? sha.id) sha.offset = some blk →
               ∃ s' : GlobalState,
@@ -77,24 +77,24 @@ def Sha512CoreRefBy (k : BitVec (80 * 64))
     s.WF →
       -- the loop is a `do … while (--block_cnt)`: at 0 it would read past the stated bytes
       cnt ≠ 0 →
-      blk.offset.toNat + cnt.toNat * 128 ≤ 2 ^ 64 →
-        Sha512KHolds s st k →
-          ∀ hblk : Fits s.mem blk (cnt.toNat * 128 * 8),
-            let invocation :=
-              runFunction
-                (fd_sha512_core_ref.denote
-                  (Ctxt.Valuation.ofHVector [.value cnt, .value blk, .value st]ₕ))
-            (∀ b',
-                f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = some b' →
-                  ∃ s' : GlobalState,
-                    StateT.run invocation s = .value (.nil, s') ∧
-                      s'.WF ∧
-                      s'.alloc = s.alloc ∧
-                      s'.globals = s.globals ∧
-                      (∀ b : BlockId, b ≠ st.id → s'.mem.live? b = s.mem.live? b) ∧
-                      s'.mem.live? st.id = b') ∧
-              (f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = none →
-                StateT.run invocation s = .poison)
+        blk.offset.toNat + cnt.toNat * 128 ≤ 2 ^ 64 →
+          Sha512KHolds s st k →
+            ∀ hblk : Fits s.mem blk (cnt.toNat * 128 * 8),
+              let invocation :=
+                runFunction
+                  (fd_sha512_core_ref.denote
+                    (Ctxt.Valuation.ofHVector [.value cnt, .value blk, .value st]ₕ))
+              (∀ b',
+                  f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = some b' →
+                    ∃ s' : GlobalState,
+                      StateT.run invocation s = .value (.nil, s') ∧
+                        s'.WF ∧
+                        s'.alloc = s.alloc ∧
+                        s'.globals = s.globals ∧
+                        (∀ b : BlockId, b ≠ st.id → s'.mem.live? b = s.mem.live? b) ∧
+                        s'.mem.live? st.id = b') ∧
+                (f (s.mem.live? st.id) st.offset (bytesOf (readWord hblk)) = none →
+                  StateT.run invocation s = .poison)
 
 /-- **`fd_sha512_append` is decided by what it reads.** `f` gives the block the call leaves at
 `sha` -- `none` if it does not return -- from the block that was there, `sha`'s offset and the
@@ -124,9 +124,11 @@ def Sha512AppendBy (k : BitVec (80 * 64))
                   StateT.run invocation s = .poison)
 
 /-- **`fd_sha512_fini` is decided by what it reads.** `f` gives the 64 bytes it writes at `hash`
-from the two blocks and offsets, `none` if it does not return. -/
+from the two blocks and offsets, `none` if it does not return; `fBlk` gives the state it leaves at
+`sha`, as `init`, `append` and `core_ref` give theirs. -/
 def Sha512FiniBy (k : BitVec (80 * 64))
-    (f : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512)) :
+    (f : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option (BitVec 512))
+    (fBlk : Option LiveBlock → BitVec 64 → Option LiveBlock → BitVec 64 → Option LiveBlock) :
     Prop :=
   ∀ (sha hash : Pointer) (s : GlobalState),
     s.WF →
@@ -146,6 +148,8 @@ def Sha512FiniBy (k : BitVec (80 * 64))
                         s'.globals = s.globals ∧
                         (∀ b : BlockId,
                           ¬(b = sha.id ∨ b = hash.id) → s'.mem.live? b = s.mem.live? b) ∧
+                        s'.mem.live? sha.id =
+                          fBlk (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset ∧
                         ∃ h : Fits s'.mem hash (64 * 8), readWord h = d) ∧
                 (f (s.mem.live? sha.id) sha.offset (s.mem.live? hash.id) hash.offset = none →
                   StateT.run invocation s = .poison)
@@ -160,6 +164,6 @@ axiom sha512CoreRef_determined : ∀ k, ∃ f, Sha512CoreRefBy k f
 axiom sha512Append_determined : ∀ k, ∃ f, Sha512AppendBy k f
 
 /-- Assumed: `fd_sha512_fini` reads nothing else. -/
-axiom sha512Fini_determined : ∀ k, ∃ f, Sha512FiniBy k f
+axiom sha512Fini_determined : ∀ k, ∃ f fBlk, Sha512FiniBy k f fBlk
 
 end Firedancer.Common
