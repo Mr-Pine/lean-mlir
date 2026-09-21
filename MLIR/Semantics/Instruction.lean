@@ -2,9 +2,11 @@ module
 
 public import MLIR.Instruction
 public import MLIR.Semantics.Effectful.EffectM
+public import MLIR.Semantics.Effectful.Memory.Operations
 public import MLIR.Semantics.Env
 public import MLIR.Semantics.Vals
 public import MLIR.Semantics.Operations.Scalar
+public import MLIR.Semantics.Operations.Memory
 public import MLIR.SimpSets
 
 namespace MLIR
@@ -26,6 +28,8 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | const v dst => pure (env.write dst (.value v))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
+  | load dst p => Operation.load dst (env.read p) env
+  | store p reg => Operation.store (env.read p) (env.read reg) env
 
 @[mlir_instr]
 def Exit.run (env : ⟪Γ⟫) : Exit Γ tRets blockParams → EffectM (Vals tRets ⊕ Fin n)

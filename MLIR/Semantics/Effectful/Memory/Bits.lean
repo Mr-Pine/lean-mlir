@@ -1,0 +1,51 @@
+module
+
+namespace MLIR.Memory
+
+public def spliceBits {n w} (bytes : BitVec n) (off : Nat) (x : BitVec w) : BitVec n :=
+  let mask := ((BitVec.allOnes w).setWidth n) <<< off
+  (bytes &&& ~~~mask) ||| ((x.setWidth n) <<< off)
+
+theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) (i : Nat) :
+    (spliceBits bytes off x).getLsbD i =
+      if off ≤ i ∧ i < off + w ∧ i < n then x.getLsbD (i - off) else bytes.getLsbD i := by
+  simp only [spliceBits, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
+    BitVec.getLsbD_shiftLeft, BitVec.getLsbD_setWidth, BitVec.getLsbD_allOnes]
+  grind
+
+public section
+
+theorem extractLsb'_spliceBits_of_subrange {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
+    (x : BitVec w) (hoff : off ≤ off') (hw : (off' - off) + w' ≤ w) (hn : off + w ≤ n) :
+    (spliceBits bytes off x).extractLsb' off' w' = x.extractLsb' (off' - off) w' := by
+  apply BitVec.eq_of_getLsbD_eq
+  grind [getLsbD_spliceBits]
+
+/-- Read back a spliced value exactly -/
+theorem extractLsb'_spliceBits_self {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w)
+    (h : off + w ≤ n) : (spliceBits bytes off x).extractLsb' off w = x := by
+  grind [extractLsb'_spliceBits_of_subrange]
+
+/-- After a splice, reading from a disjoint region returns the original bits -/
+theorem extractLsb'_spliceBits_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
+    (x : BitVec w) (h : off' + w' ≤ off ∨ off + w ≤ off') :
+    (spliceBits bytes off x).extractLsb' off' w' = bytes.extractLsb' off' w' := by
+  apply BitVec.eq_of_getLsbD_eq
+  grind [getLsbD_spliceBits]
+
+/-- An overwriting splice determines the returned value -/
+theorem spliceBits_spliceBits_self {n w : Nat} (bytes : BitVec n) (off : Nat) (x y : BitVec w) :
+    spliceBits (spliceBits bytes off x) off y = spliceBits bytes off y := by
+  apply BitVec.eq_of_getLsbD_eq
+  grind [getLsbD_spliceBits]
+
+/-- If two splices are disjoint, they are commutative -/
+theorem spliceBits_comm_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
+    (x : BitVec w) (y : BitVec w') (h : off' + w' ≤ off ∨ off + w ≤ off') :
+    spliceBits (spliceBits bytes off x) off' y = spliceBits (spliceBits bytes off' y) off x := by
+  apply BitVec.eq_of_getLsbD_eq
+  grind [getLsbD_spliceBits]
+
+end
+
+end MLIR.Memory

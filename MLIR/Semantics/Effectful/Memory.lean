@@ -15,15 +15,10 @@ We don't support storing poison, only fully-defined values!
 
 @[expose] public section
 
-structure LiveBlock where
+/-- `length` counts the length of the block in `bytes`  -/
+structure MemoryBlock where
   (length : Nat)
   (bytes : BitVec (8 * length))
-
-inductive Block where
-  /-- A block of memory which was allocated and then freed. -/
-  | dead
-  /-- A live piece of memory (i.e., has been allocated and not yet freed). -/
-  | live (b : LiveBlock)
 
 /--
 `AllocState` keeps a counter of available blockIds
@@ -36,7 +31,7 @@ structure AllocState where
 `MemoryState` tracks the *content* of memory blocks
 -/
 structure MemoryState where
-  mem : Std.HashMap BlockId Block
+  mem : Std.HashMap BlockId MemoryBlock
   deriving Inhabited
 
 structure GlobalState where
@@ -45,15 +40,15 @@ structure GlobalState where
 
 /-! ## Basic Definitions -/
 
-instance : GetElem? MemoryState BlockId Block (fun m i => i ∈ m.mem) where
+instance : GetElem? MemoryState BlockId MemoryBlock (fun m i => i ∈ m.mem) where
   getElem mem id h := mem.mem[id]
   getElem? mem id := mem.mem[id]?
 
 @[implicit_reducible]
-def LiveBlock.lengthInBits (b : LiveBlock) : Nat :=
+def MemoryBlock.lengthInBits (b : MemoryBlock) : Nat :=
   8 * b.length
 
-def Pointer.offsetInBits (p : Pointer) : Nat :=
-  8 * p.offset.toNat
+theorem MemoryState.getElem?_eq (m : MemoryState) (q : BlockId) : m[q]? = m.mem[q]? :=
+  rfl
 
 end

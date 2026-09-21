@@ -13,7 +13,7 @@ namespace MLIR
 @[expose] public section
 
 /--
-`EffectM` is the monad of side-effects for the SLLVM dialect
+`EffectM` is the monad of side-effects
 -/
 -- v4.34: reducible, or the `EffectM.run_*` lemmas no longer match.
 @[implicit_reducible]
@@ -21,7 +21,7 @@ def EffectM :=
   StateT GlobalState PoisonOr
 
 /--
-`MemorySSAM` is the monad of just the subset of side-effects of SLLVM
+`MemorySSAM` is the monad of just the subset of side-effects
 which can be purified by expressing them in the SSA def-use chain.
 -/
 def MemorySSAM :=
@@ -97,6 +97,15 @@ theorem run_bind (x : EffectM α) :
 theorem run_map (x : EffectM α) :
     StateT.run (f <$> x : EffectM β) s = (fun p => (f p.1, p.2)) <$> StateT.run x s :=
   rfl
+
+@[simp, mlir_effect]
+theorem get_eq (s : GlobalState) : (get : EffectM GlobalState) s = .value (s, s) := rfl
+
+@[simp, mlir_effect]
+theorem set_eq (s s' : GlobalState) : (set s' : EffectM PUnit) s = .value (⟨⟩, s') := rfl
+
+@[simp, mlir_effect]
+theorem map_eq (f : α → β) (x : EffectM α) (s) : (f <$> x) s = (fun p => (f p.1, p.2)) <$> x s := rfl
 
 end EffectM
 
