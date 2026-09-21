@@ -21,14 +21,14 @@ theorem BasicBlock.runBodyFrom_step (block : BasicBlock Γ tRets bp) (env : ⟪�
   rw [runBodyFrom, List.drop_eq_getElem_cons hpos, List.foldlM_cons]
   rfl
 
-theorem BasicBlock.runBodyFrom_step_pure (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫)
+theorem BasicBlock.runBodyFrom_step_pure {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
     (hpos : pos < block.body.length := by decide)
     (h : Instr.run env (block.body[pos]'hpos) = pure E') :
     block.runBodyFrom env pos = block.runBodyFrom E' (pos + 1) := by
   rw [runBodyFrom_step _ _ hpos, h]
   rfl
 
-theorem BasicBlock.runBodyFrom_done (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫)
+theorem BasicBlock.runBodyFrom_done {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
     (hpos : pos ≥ block.body.length := by decide) : block.runBodyFrom env pos = pure env := by
   rw [runBodyFrom, List.drop_eq_nil_of_le hpos, List.foldlM_nil]
 
@@ -36,6 +36,13 @@ theorem BasicBlock.run_eq (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) :
     block.run env = block.runBodyFrom env 0 >>= fun E => (E, ·) <$> block.exit.run E := by
   rw [runBodyFrom_zero, run]
   rfl
+
+theorem BasicBlock.runBodyFrom_step_of_run {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
+    (hpos : pos < block.body.length := by decide)
+    (h : Instr.run env (block.body[pos]'hpos) s = .value (E', s')) :
+    block.runBodyFrom env pos s = block.runBodyFrom E' (pos + 1) s' := by
+  rw [runBodyFrom_step _ _ hpos]
+  simp [h]
 
 end
 

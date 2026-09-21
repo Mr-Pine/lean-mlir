@@ -2,9 +2,11 @@ module
 
 public import SSA.Projects.RIR.Instruction
 public import SSA.Projects.RIR.Semantics.Effectful.EffectM
+public import SSA.Projects.RIR.Semantics.Effectful.Memory.Operations
 public import SSA.Projects.RIR.Semantics.Env
 public import SSA.Projects.RIR.Semantics.Vals
 public import SSA.Projects.RIR.Semantics.Operations.Scalar
+public import SSA.Projects.RIR.Semantics.Operations.Memory
 public import SSA.Projects.RIR.SimpSets
 
 namespace LeanMLIR.RIR
@@ -26,6 +28,8 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | const v dst => pure (env.write dst (.value v))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
+  | load dst p => Operation.load dst (env.read p) env
+  | store p reg => Operation.store (env.read p) (env.read reg) env
 
 @[mlir_instr]
 def Exit.run (env : ⟪Γ⟫) : Exit Γ tRets blockParams → EffectM (Vals tRets ⊕ Fin n)

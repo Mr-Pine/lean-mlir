@@ -23,6 +23,8 @@ inductive Instr (Γ : Ctx)
   | const (v : BitVec w) (dst : Dst Γ (Ty.bv w))
   | binop (op : BinOp t₁ t₂ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
+  | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
+  | store (p : Reg Γ .ptr) (v : Reg Γ τ)
 
 -- call, etc...
 

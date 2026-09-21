@@ -14,6 +14,9 @@ structure Pointer where
   offset : BitVec 64
   deriving Inhabited, DecidableEq
 
+def Pointer.offsetInBits (p : Pointer) : Nat :=
+  8 * p.offset.toNat
+
 end
 
 end LeanMLIR.RIR
