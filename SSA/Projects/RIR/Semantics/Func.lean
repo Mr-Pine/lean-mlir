@@ -225,15 +225,6 @@ theorem Func.run_init (func : Func) (args : _) :
       | inl vals => simp [hb, Fuel.observe, Fuel.limit]
       | inr next => simp [hb, Fuel.observe, Func.runFrom]
 
-theorem BasicBlock.runBody_init (block : BasicBlock Γ tRets blockParams) : List.foldlM Instr.run env block.body = List.foldlM Instr.run env (block.body.drop 0) := by
-  rw [List.drop_zero]
-
-theorem BasicBlock.runBody_once (block : BasicBlock Γ tRets blockParams) (hn : n < block.body.length := by decide) : List.foldlM Instr.run env (block.body.drop n) = (do
-  let insnRes ← Instr.run env (block.body[n]'hn)
-  List.foldlM Instr.run insnRes (block.body.drop (n + 1))
-) := by
-  rw [List.drop_eq_getElem_cons hn, List.foldlM_cons]
-
 end RunTheorems
 
 end LeanMLIR.RIR
