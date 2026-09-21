@@ -54,6 +54,33 @@ theorem set_comm (env : ⟪Γ⟫) (h : i ≠ j) : (env.set i v).set j w = (env.s
   rename_i hkj
   simp [h.symm, hkj]
 
+@[mlir_env]
+theorem read_write_self (env : ⟪Γ⟫) (dst : Dst Γ t) : (env.write dst v).read (.val dst.i dst.h) = dst.h ▸ v := by
+  unfold Env.write
+  apply read_set_self
+
+@[mlir_env]
+theorem read_write_self' (env : ⟪Γ⟫) : (env.write ⟨i, h⟩ v).read (.val i h) = h ▸ v := by
+  apply read_write_self
+
+@[mlir_env]
+theorem read_write_ne (env : ⟪Γ⟫) (dst : Dst Γ t) (h : i ≠ dst.i := by decide) : (env.write dst v).read (.val (t := t') i ht') = env.read (.val i ht') := by
+  unfold Env.write
+  apply read_set_ne env h.symm
+
+@[mlir_env]
+theorem read_write_ne' (env : ⟪Γ⟫) (hij : i ≠ j := by decide) : (env.write ⟨i, h⟩ v).read (.val (t := t') j ht') = env.read (.val j ht') := by
+  apply read_write_ne
+  apply hij.symm
+
+@[mlir_env]
+theorem read_write_arg (env : ⟪Γ⟫) (dst : Dst Γ t) : (env.write dst v).read (.arg i h) = env.read (.arg i h) := by
+  rfl
+
+@[mlir_env]
+theorem read_init_arg (args : _) : (Env.init args).read (.arg i h) = args i := by
+  rfl
+
 end Lemmas
 
 end Env
