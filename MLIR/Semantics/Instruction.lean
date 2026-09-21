@@ -15,11 +15,17 @@ namespace MLIR
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | and => Operation.and
   | smin => Operation.smin
+  | icmp p => Operation.icmp p
+
+@[mlir_instr]
+def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
+  | select => Operation.select
 
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | const v dst => pure (env.write dst (.value v))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
+  | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
 
 @[mlir_instr]
 def Exit.run (env : ⟪Γ⟫) : Exit Γ tRets blockParams → EffectM (Vals tRets ⊕ Fin n)

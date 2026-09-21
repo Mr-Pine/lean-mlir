@@ -17,9 +17,11 @@ namespace Ty
 deriving instance DecidableEq, Lean.ToExpr, Repr for Ty
 
 @[reducible]
-def denote : Ty → Type
-  | bv w => PoisonOr (BitVec w)
-  | ptr => PoisonOr Pointer
+def denote τ :=
+  PoisonOr
+    (match τ with
+    | bv w => BitVec w
+    | ptr => Pointer)
 
 /-- `⟦t⟧` is the `Type` of values of (MLIR) type `t` --/
 notation "⟦" t "⟧" => MLIR.Ty.denote t
@@ -32,9 +34,7 @@ def width : Ty → Nat
   | bv w => w
   | ptr => 64
 
-def poisoned : (t : Ty) → ⟦t⟧
-  | bv _ => .poison
-  | ptr => .poison
+def poisoned : (t : Ty) → ⟦t⟧ := fun _ => PoisonOr.poison
 
 @[simp]
 theorem width_bv : (bv w).width = w := by rfl

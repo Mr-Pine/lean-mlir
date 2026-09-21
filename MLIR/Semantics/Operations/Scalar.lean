@@ -2,6 +2,7 @@ module
 
 public import MLIR.SimpSets
 public import MLIR.Ty
+public import MLIR.IntPred
 
 namespace MLIR.Operation
 
@@ -26,13 +27,28 @@ def and {w : Nat} (x y : IntW w) : IntW w := do
 def smin {w : Nat} (x y : IntW w) : IntW w := do
   let a ← x
   let b ← y
-  let result := if a.slt b then
-    a
-  else
-    b
+  let result := if a.slt b then a else b
   return result
 
+@[mlir_operation]
+def icmp {w : Nat} (pred : IntPred) (x y : IntW w) : IntW 1 := do
+  let a ← x
+  let b ← y
+  let result :=
+    match pred with
+    | .eq => a == b
+    | .ne => a != b
+  return BitVec.ofBool result
+
 end BVBinOp
+
+@[mlir_operation]
+def select {τ : Ty} (cond : IntW 1) (x y : ⟦τ⟧) : ⟦τ⟧ := do
+  let cond ← cond
+  if cond == 1#1 then
+    x
+  else
+    y
 
 @[simp, mlir_operation]
 def constant {w} (x : BitVec w) : IntW w :=
