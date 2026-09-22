@@ -17,8 +17,7 @@ def BasicBlock.run (env : ⟪Γ⟫) {blockParams : Fin n → _} (block : BasicBl
   let exitResult ← block.exit.run bodyResult
   return (bodyResult, exitResult)
 
-def Func.evalFrom (func : Func) (args : (i : Fin func.Γ.args.length) → ⟦func.Γ.args[i]⟧) :
-    Nat → ⟪func.Γ⟫ → Fin func.n → EffectM (Option (Vals func.tRets))
+def Func.evalFrom (func : Func) : Nat → ⟪func.Γ⟫ → Fin func.n → EffectM (Option (Vals func.tRets))
   | 0, _, _ => pure .none
   | fuel + 1, E, blockIndex => do
     let block := func.blocks blockIndex
@@ -27,11 +26,11 @@ def Func.evalFrom (func : Func) (args : (i : Fin func.Γ.args.length) → ⟦fun
     | .inl returnValues =>
       return returnValues
     | .inr nextBlock =>
-      Func.evalFrom func args fuel E' nextBlock
+      Func.evalFrom func fuel E' nextBlock
 
 def Func.eval (func : Func) (fuel : Nat) (args : (i : Fin func.Γ.args.length) → ⟦func.Γ.args[i]⟧) :
     EffectM (Option (Vals func.tRets)) :=
-  func.evalFrom args fuel startEnv ⟨0, func.hhasBlock⟩
+  func.evalFrom fuel startEnv ⟨0, func.hhasBlock⟩
 where startEnv := Env.init args
 
 end
@@ -55,10 +54,9 @@ private def Fuel.observe : PoisonOr (Option α × β) → Option (PoisonOr (α �
   | .value (.none, _) => none
   | .value (.some r, s') => .some (.value (r, s'))
 
-public noncomputable def Func.runFrom (func : Func)
-    (args : (i : Fin func.Γ.args.length) → ⟦func.Γ.args[i]⟧) (env : ⟪func.Γ⟫) (i : Fin func.n) :
+public noncomputable def Func.runFrom (func : Func) (env : ⟪func.Γ⟫) (i : Fin func.n) :
     EffectM (Vals func.tRets) := fun s =>
-  let f n := Fuel.observe (func.evalFrom args n env i s)
+  let f n := Fuel.observe (func.evalFrom n env i s)
   let determined := Fuel.limit f
   match determined with
   | some x => x >>= PoisonOr.value
@@ -81,10 +79,10 @@ theorem mono_of_succ {f : Nat → Option α} (h : ∀ n r, f n = some r → f (n
   | refl => exact hm
   | step _ ih => exact h _ _ ih
 
-theorem Func.observe_evalFrom_succ (f : Func) (args : _) :
+theorem Func.observe_evalFrom_succ (f : Func) :
     ∀ (fuel : Nat) (E : ⟪f.Γ⟫) (i : Fin f.n) (s : GlobalState) (r),
-      Fuel.observe (f.evalFrom args fuel E i s) = some r →
-        Fuel.observe (f.evalFrom args (fuel + 1) E i s) = some r := by
+      Fuel.observe (f.evalFrom fuel E i s) = some r →
+        Fuel.observe (f.evalFrom (fuel + 1) E i s) = some r := by
   intro fuel
   induction fuel with
   | zero => simp [Func.evalFrom, Fuel.observe]
@@ -103,12 +101,12 @@ theorem Func.observe_evalFrom_succ (f : Func) (args : _) :
 theorem Func.eval_mono (f : Func) (args) (s) :
     FuelMono (fun n => Fuel.observe (f.eval n args s)) := by
   refine mono_of_succ fun n r h => ?_
-  exact Func.observe_evalFrom_succ _ _ _ _ _ _ _ h
+  exact Func.observe_evalFrom_succ _ _ _ _ _ _ h
 
-theorem Func.evalFrom_mono (f : Func) (args) (env) (i) (s) :
-    FuelMono (fun n => Fuel.observe (f.evalFrom args n env i s)) := by
+theorem Func.evalFrom_mono (f : Func) (env) (i) (s) :
+    FuelMono (fun n => Fuel.observe (f.evalFrom n env i s)) := by
   refine mono_of_succ fun n r h => ?_
-  exact Func.observe_evalFrom_succ _ _ _ _ _ _ _ h
+  exact Func.observe_evalFrom_succ _ _ _ _ _ _ h
 
 theorem Func.eval_based (f : Func) (args) (s) :
     FuelBased (fun n => Fuel.observe (f.eval n args s)) := by rfl
@@ -193,14 +191,13 @@ theorem Func.run_eq_of_eval (f : Func) (args) (s) {fuel v s'}
     simp [Fuel.observe, h]
   simp [Fuel.limit_eq_of (Func.eval_mono f args s) h']
 
-theorem Func.runFrom_eq_of_eval (f : Func) (args) (s) (env) (i) {fuel v s'}
-    (h : f.evalFrom args fuel env i s = .value (some v, s')) :
-    f.runFrom args env i s = .value (v, s') := by
+theorem Func.runFrom_eq_of_eval (f : Func) (s) (env) (i) {fuel v s'}
+    (h : f.evalFrom fuel env i s = .value (some v, s')) : f.runFrom env i s = .value (v, s') := by
   unfold Func.runFrom
   dsimp only
-  replace h' : Fuel.observe (f.evalFrom args fuel env i s) = some (.value (v, s')) := by
+  replace h' : Fuel.observe (f.evalFrom fuel env i s) = some (.value (v, s')) := by
     simp [Fuel.observe, h]
-  simp [Fuel.limit_eq_of (Func.evalFrom_mono f args env i s) h']
+  simp [Fuel.limit_eq_of (Func.evalFrom_mono f env i s) h']
 
 end Lemmas
 
@@ -216,28 +213,13 @@ private theorem Func.eval_init (func : Func) (fuel : Nat) (args : _) :
         | .inl vals =>
           return (some vals)
         | .inr next =>
-          func.evalFrom args fuel E' next) :=
+          func.evalFrom fuel E' next) :=
   rfl
 
-theorem Func.run_init (func : Func) (args : _) :
-    func.run args =
-      (do
-        let (E', res) ← (func.blocks ⟨0, func.hhasBlock⟩).run (Env.init args)
-        match res with
-        | .inl vals =>
-          return vals
-        | .inr next =>
-          func.runFrom args E' next) := by
-  funext s
-  rw [Func.run]; dsimp only
-  rw [← Fuel.limit_shift (Func.eval_mono func args s) (Func.eval_based func args s)]
-  simp only [Func.eval_init]
-  rcases hb : BasicBlock.run (Env.init args) (func.blocks ⟨0, func.hhasBlock⟩) s with _ |
-    ⟨⟨E', res⟩, s'⟩
-  · simp [hb, Fuel.observe, Fuel.limit]
-  · cases res with
-    | inl vals => simp [hb, Fuel.observe, Fuel.limit]
-    | inr next => simp [hb, Fuel.observe, Func.runFrom]
+theorem Func.run_runFrom_eq (func : Func) (args : _) :
+    func.run args = func.runFrom (Env.init args) ⟨0, func.hhasBlock⟩ := by
+  unfold Func.run Func.runFrom Func.eval
+  rfl
 
 end RunTheorems
 
