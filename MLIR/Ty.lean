@@ -26,6 +26,10 @@ def denote τ :=
 /-- `⟦t⟧` is the `Type` of values of (MLIR) type `t` --/
 notation "⟦" t "⟧" => MLIR.Ty.denote t
 
+instance instDecidableEqDenote : {t : Ty} → DecidableEq ⟦t⟧
+  | .bv _ => inferInstanceAs (DecidableEq (PoisonOr (BitVec _)))
+  | .ptr => inferInstanceAs (DecidableEq (PoisonOr Pointer))
+
 end
 
 public section

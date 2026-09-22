@@ -44,27 +44,21 @@ example (x : BitVec 8) (v : ⟦Ty.bv 8⟧) :
     ((((E0 x).write ⟨0, rfl⟩ v).write ⟨1, rfl⟩ v).write ⟨2, rfl⟩ v).read (.val 0 rfl) = v := by
   simp (disch := decide) only [mlir_env]
 
-/-! ## Evaluation
+/-! ## Evaluation -/
 
-`G.args[i]`/`G.vals[i]` do not reduce during instance search, so a read's type has to be forced
-before `==` can find its `BEq`; `bv8` does that. -/
-
-private def bv8 (x : ⟦Ty.bv 8⟧) : PoisonOr (BitVec 8) :=
-  x
-
-#guard bv8 ((E0 7#8).read (.arg 0 rfl)) == PoisonOr.value 7#8
+#guard ((E0 7#8).read (.arg 0 rfl)) == PoisonOr.value 7#8
 
 -- an unwritten register is poison
 #guard ((E0 7#8).read (.val 0 rfl)).isPoison
 
 -- a write is visible, and only at its own index
-#guard bv8 (((E0 7#8).write ⟨1, rfl⟩ (.value 3#8)).read (.val 1 rfl)) == PoisonOr.value 3#8
+#guard (((E0 7#8).write ⟨1, rfl⟩ (.value 3#8)).read (.val 1 rfl)) == PoisonOr.value 3#8
 
 #guard (((E0 7#8).write ⟨1, rfl⟩ (.value 3#8)).read (.val 0 rfl)).isPoison
 
 -- the later write to the same register wins
 #guard
-  bv8 ((((E0 7#8).write ⟨1, rfl⟩ (.value 3#8)).write ⟨1, rfl⟩ (.value 4#8)).read (.val 1 rfl)) ==
+  ((((E0 7#8).write ⟨1, rfl⟩ (.value 3#8)).write ⟨1, rfl⟩ (.value 4#8)).read (.val 1 rfl)) ==
     PoisonOr.value 4#8
 
 -- writing poison is fine; it just reads back as poison
