@@ -44,6 +44,15 @@ theorem BasicBlock.runBodyFrom_step_of_run {block : BasicBlock Γ tRets bp} {env
   rw [runBodyFrom_step _ _ hpos]
   simp [h]
 
+open Lean Meta in
+/-- Reduce `b.body[i]` when both the block and the index are concrete. -/
+dsimproc [simp, mlir_instr]reduceBodyGetElem ((BasicBlock.body _)[_]) := fun e => do
+  let e' ← withTransparency .default (whnf e)
+  if e' == e then
+    return .continue
+  else
+    return .visit e'
+
 end
 
 end LeanMLIR.RIR
