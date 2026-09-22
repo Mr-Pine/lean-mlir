@@ -9,7 +9,7 @@ public section
 def BasicBlock.runBodyFrom (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) (n : Nat) : EffectM ⟪Γ⟫ :=
   List.foldlM Instr.run env (block.body.drop n)
 
-theorem BasicBlock.runBodyFrom_zero (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) :
+private theorem BasicBlock.runBodyFrom_zero (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) :
     block.runBodyFrom env 0 = List.foldlM Instr.run env block.body := by rfl
 
 theorem BasicBlock.runBodyFrom_step (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫)

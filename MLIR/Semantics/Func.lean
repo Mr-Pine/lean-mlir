@@ -10,9 +10,11 @@ namespace MLIR
 
 public section
 
+abbrev ExitResult (tRets) (n) := Vals tRets ⊕ Fin n
+
 @[expose]
 def BasicBlock.run (env : ⟪Γ⟫) {blockParams : Fin n → _} (block : BasicBlock Γ tRets blockParams) :
-    EffectM (⟪Γ⟫ × (Vals tRets ⊕ Fin n)) := do
+    EffectM (⟪Γ⟫ × ExitResult tRets n) := do
   let bodyResult ← List.foldlM Instr.run env block.body
   let exitResult ← block.exit.run bodyResult
   return (bodyResult, exitResult)
@@ -111,8 +113,8 @@ theorem Func.evalFrom_mono (f : Func) (env) (i) (s) :
 theorem Func.eval_based (f : Func) (args) (s) :
     FuelBased (fun n => Fuel.observe (f.eval n args s)) := by rfl
 
-theorem Func.evalFrom_based (f : Func) (args) (s) :
-    FuelBased (fun n => Fuel.observe (f.eval n args s)) := by rfl
+theorem Func.evalFrom_based (f : Func) (env) (i) (s) :
+    FuelBased (fun n => Fuel.observe (f.evalFrom n env i s)) := by rfl
 
 theorem Fuel.limit_eq_of {f : Nat → Option α} (hf : FuelMono f) {n : Nat} {r : α}
     (h : f n = some r) : Fuel.limit f = some r := by
@@ -220,6 +222,24 @@ theorem Func.run_runFrom_eq (func : Func) (args : _) :
     func.run args = func.runFrom (Env.init args) ⟨0, func.hhasBlock⟩ := by
   unfold Func.run Func.runFrom Func.eval
   rfl
+
+noncomputable def Func.continue {func : Func} (env : ⟪func.Γ⟫) (bbRes : ExitResult func.tRets func.n) := do match bbRes with
+  | .inl vals => return vals
+  | .inr nextIdx => func.runFrom env nextIdx
+
+theorem Func.runFrom_eq {func : Func} {E} {i} {s} :
+    func.runFrom E i s =
+      (do
+        let ((E', res), s') ← (func.blocks i).run E s
+        func.continue E' res s') := by
+  unfold Func.continue Func.runFrom
+  dsimp
+  rw [← Fuel.limit_shift (Func.evalFrom_mono func E i s) (Func.evalFrom_based func E i s)]
+  simp [Func.evalFrom, Fuel.observe]
+  rcases hb : BasicBlock.run E (func.blocks i) s with _ |
+    ⟨⟨E', res⟩, s'⟩
+    <;> simp [Fuel.limit]
+  cases res <;> simp
 
 end RunTheorems
 

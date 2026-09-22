@@ -1,6 +1,7 @@
 module
 
 public import MLIR.Semantics.Func
+public meta import MLIR.Run.BasicBlock
 public meta import MLIR.Run.Tactic.Goal
 public meta import MLIR.Run.Tactic.Util
 public meta import Lean.Elab.Tactic
@@ -9,6 +10,8 @@ public import MLIR.Run.Tactic.Trace
 namespace MLIR
 
 open Lean Elab Tactic Meta
+
+section FuncInit
 
 elab "extract_state" : tactic => do
   let (g, goal) ← getGoalType
@@ -55,5 +58,18 @@ elab "func_init" : tactic =>
     replaceMainGoal ((← g.replaceTargetEq r.eNew r.eqProof) :: r.mvarIds)
     evalTactic (← `(tactic | extract_state))
     evalTactic (← `(tactic | extract_env))
+
+end FuncInit
+
+section BlockInit
+
+macro "block_init" : tactic =>
+  `(tactic | (
+    rw [Func.runFrom_eq]
+    rw [BasicBlock.run_eq]
+    simp only [EffectM.bind_eq, EffectM.map_eq, bind_assoc, bind_map_left]
+  ))
+
+end BlockInit
 
 end MLIR
