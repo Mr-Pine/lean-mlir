@@ -76,9 +76,16 @@ theorem read_write_ne' (env : ⟪Γ⟫) (hij : i ≠ j := by decide) :
   apply read_write_ne
   apply hij.symm
 
+@[simp, mlir_env]
+theorem write_args (env : ⟪Γ⟫) (dst : Dst Γ t) :
+    (env.write dst v).args = env.args := by rfl
+
 @[mlir_env]
 theorem read_write_arg (env : ⟪Γ⟫) (dst : Dst Γ t) :
-    (env.write dst v).read (.arg i h) = env.read (.arg i h) := by rfl
+    (env.write dst v).read (.arg i h) = env.read (.arg i h) := by simp [read]
+
+@[mlir_env]
+theorem read_arg (env : ⟪Γ⟫) : env.read (.arg i h) = h ▸ env.args i := by rfl
 
 @[mlir_env]
 theorem read_init_arg (args : _) : (Env.init args).read (.arg i h) = args i := by rfl

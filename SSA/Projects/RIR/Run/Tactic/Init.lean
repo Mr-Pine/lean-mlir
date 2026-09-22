@@ -2,7 +2,7 @@ module
 
 public import SSA.Projects.RIR.Semantics.Func
 public meta import SSA.Projects.RIR.Run.BasicBlock
-public meta import SSA.Projects.RIR.Run.Tactic.Goal
+public meta import SSA.Projects.RIR.Run.Tactic.Parse
 public meta import SSA.Projects.RIR.Run.Tactic.Util
 public meta import Lean.Elab.Tactic
 public import SSA.Projects.RIR.Run.Tactic.Trace

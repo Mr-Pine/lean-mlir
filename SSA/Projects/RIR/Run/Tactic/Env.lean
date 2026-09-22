@@ -1,0 +1,115 @@
+module
+
+public import SSA.Projects.RIR.Semantics.Func
+public import SSA.Projects.RIR.Run.Tactic.Parse
+public import SSA.Projects.RIR.Run.Tactic.Util
+public meta import Lean.Elab.Tactic
+
+namespace LeanMLIR.RIR.Tactic
+
+open Lean Elab Tactic Meta
+
+public meta section
+
+section SealEnv
+
+def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
+  (← getLCtx).foldlM (init := #[]) (fun acc d => do
+    if d.isImplementationDetail then return acc
+    let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
+    return if l == lhs then acc.push d.fvarId else acc
+  )
+
+/-- The unique hypothesis `_ : lhs = _`. -/
+def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
+  match ← findEqsWithLhs lhs with
+  | #[h] => return h
+  | #[]  => throwError "no hypothesis {what}"
+  | hs   => throwError "ambiguous: {hs.size} hypotheses {what}"
+
+elab "seal_env" : tactic => withMainContext do
+  let (g, goal) ← getGoalType
+  let runBodyFrom ← getRunBodyFrom goal
+  let envWrite ← getEnvWrite runBodyFrom.env
+
+  let E := envWrite.base
+  let hE ← findEqWithLhs E m!"of the form `{E} = _`"
+  let hEargs ← findEqWithLhs (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
+
+  let some (_, _, E₀chain)  := (← instantiateMVars (← hE.getType)).eq? | throwError "expected an equation"
+  let some (_, _, args)  := (← instantiateMVars (← hEargs.getType)).eq? | throwError "expected an equation"
+
+  if (← hE.getType).eq?.get!.2.1 != envWrite.base then throwError m!"env base {envWrite.base} from goal is different from the one in {← hE.getType} differ"
+
+
+  let abstractWrite := Expr.lam `e (← inferType E) (← kabstract runBodyFrom.env E) .default
+  let stmtEq := (mkEq · (abstractWrite.beta #[E₀chain]))
+  let stmtArgs (e) : MetaM _ := do mkEq (← mkAppM ``Env.args #[e]) args
+
+  let (_, g) ← g.withContext do
+    generalizeOpaque g runBodyFrom.env `E
+      #[⟨`hE, stmtEq, ← mkCongrArg abstractWrite (mkFVar hE)⟩,
+        ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs runBodyFrom.env)⟩]
+
+  let g ← g.clear hE
+  let g ← g.clear hEargs
+  let g ← g.clear E.fvarId!
+
+  replaceMainGoal [g]
+
+end SealEnv
+
+section ResolveReads
+
+/-- Reduce `args i` access by unfolding -/
+def reduceArgsApp : Simp.DSimproc := fun app => do
+  let index := app.appArg!
+  let some finBound := (← whnf (← inferType index)).app1? ``Fin | return .continue
+  let literal? ← (Meta.evalNat (← mkAppM ``Fin.val #[index])).run
+  let literal? := if literal?.isSome then literal? else
+    if index.isAppOfArity ``OfNat.ofNat 3 then (index.getArg! 1).rawNatLit? else none
+  let some literal := literal? | return .continue
+
+  let inBounds ← mkDecideProof (← mkAppM ``LT.lt #[mkNatLit literal, finBound])
+  let litIndex ← mkAppOptM ``Fin.mk #[finBound, mkNatLit literal, inBounds]
+  let some unfolded ← withDefault (unfoldDefinition? (mkApp app.appFn! litIndex)) | return .continue
+  let reduced ← whnfCore unfolded
+  return if reduced == app then .continue else .done reduced
+
+/-- For a fact `h : _.args = argsFn`, this keys `reduceArgsApp` on applications of `argsFn` -/
+def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
+  let simprocs ← Simp.getSimprocs
+  let some (_, _, argsFn) := (← instantiateMVars (← fact.getType)).eq? | return simprocs -- Find
+  let .forallE _ indexType _ _ := ← whnf (← inferType argsFn) | return simprocs
+  let keys ← DiscrTree.mkPath (mkApp argsFn (← mkFreshExprMVar indexType))
+
+  return simprocs.addCore keys ``reduceArgsApp false (.inr reduceArgsApp)
+
+-- Currently, this could also be acheived by `Simp.mkContext (config := { decide := true })`
+def decideDischarge : Simp.Discharge := fun prop => do
+  let .some inst ← trySynthInstance (← mkAppM ``Decidable #[prop]) | return none
+  let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
+  if value.isConstOf ``Bool.true then return (← mkDecideProof prop) else return none
+
+/-- One `mlir_env` pass over `e`, with `fact` as an extra rewrite rule -/
+def readPass (e : Expr) (fact : FVarId) : MetaM Simp.Result := do
+  let some ext ← getSimpExtension? `mlir_env | throwError "no `mlir_env` simp set"
+  let thms ← (← ext.getTheorems).add (.fvar fact) #[] (mkFVar fact)
+  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
+  let simprocs ← argsSimprocs fact
+
+  return (← simp e ctx (simprocs := #[simprocs]) (discharge? := decideDischarge)).1
+
+/-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
+then values, unfolding the write chain with `chainFact : E = _`.
+Unfolding first would send the argument reads past `E` down to the root env. -/
+def resolveReads (e : Expr) (argsFact chainFact : FVarId) : MetaM Simp.Result := do
+  let args ← readPass e argsFact
+  let vals ← readPass args.expr chainFact
+
+  args.mkEqTrans vals
+
+end ResolveReads
+
+end
+end LeanMLIR.RIR.Tactic
