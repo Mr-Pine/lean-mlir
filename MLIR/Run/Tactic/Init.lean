@@ -2,7 +2,7 @@ module
 
 public import MLIR.Semantics.Func
 public meta import MLIR.Run.BasicBlock
-public meta import MLIR.Run.Tactic.Goal
+public meta import MLIR.Run.Tactic.Parse
 public meta import MLIR.Run.Tactic.Util
 public meta import Lean.Elab.Tactic
 public import MLIR.Run.Tactic.Trace

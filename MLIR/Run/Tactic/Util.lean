@@ -1,6 +1,7 @@
 module
 
 public import MLIR.Semantics.Func
+public import MLIR.Run.Tactic.Parse
 public meta import Lean.Elab.Tactic
 
 namespace MLIR.Tactic
@@ -50,6 +51,22 @@ def generalizeOpaque (g : MVarId) (e : Expr) (xName : Name) (facts : Array Gener
               (GeneralizeFact.proof))) -- Close the old goal by the new goal closed with the abstracted expression and the fact proof
     gNew.mvarId!.introNP (1 + facts.size) -- Intro the new variable and facts
 
-end
+/-- The `Nat` behind a `Dst`'s index, when it is a literal. -/
+def dstIndex? (d : Expr) : MetaM (Option Nat) := do
+  let i ← whnf (← mkAppM ``Dst.i #[d])
+  (Meta.evalNat (← whnf (← mkAppM ``Fin.val #[i]))).run
 
+/-- Replace the body index by its `Nat` literal: `0 + 1 + 1` becomes `2`. -/
+def reduceIndex (g : MVarId) : MetaM MVarId := g.withContext do
+  let goal ← instantiateMVars (← g.getType)
+  let idx := (← getRunBodyFrom goal).idx
+  let some literal ← (Meta.evalNat idx).run | return g
+  let lit := mkNatLit literal
+  if lit == idx then return g
+  let body ← kabstract goal idx
+  let motive := Expr.lam `pos (mkConst ``Nat) body .default
+  let proof := mkExpectedPropHint (← mkEqRefl idx) (← mkEq idx lit)
+  g.replaceTargetEq (body.instantiate1 lit) (← mkCongrArg motive proof)
+
+end
 end MLIR.Tactic

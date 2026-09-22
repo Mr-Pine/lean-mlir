@@ -1,6 +1,7 @@
 module
 
 public import MLIR.Semantics.Func
+public import MLIR.Run.BasicBlock
 public meta import Lean.Elab.Tactic
 
 namespace MLIR.Tactic
@@ -92,6 +93,62 @@ def getFuncRunFromGoal (goal : Expr) : MetaM FuncRunFromGoal := do
     throwError "{e}"
 
 end FuncRunFromGoal
+
+section RunBodyFromGoal
+
+structure RunBodyFrom where
+  app : Expr
+  block : Expr
+  env : Expr
+  idx : Expr
+  state : Expr
+
+inductive RunBodyFromError where
+  | noRunBodyFromApp (goal : Expr)
+  | notEnoughArgs (runApp : Expr) (got expected : Nat)
+
+instance : ToMessageData RunBodyFromError where
+  toMessageData
+    | .noRunBodyFromApp goal =>
+      m!"Did not find application of {``BasicBlock.runBodyFrom} in the goal {indentExpr goal}"
+    | .notEnoughArgs runApp got expected =>
+      m!"Expected {expected} args, got {got} in {indentExpr runApp}"
+
+def getRunBodyFrom? (goal : Expr) : ParseM RunBodyFromError RunBodyFrom := do
+  let some runApp := goal.find? (·.isAppOf ``BasicBlock.runBodyFrom)
+    | fail (.noRunBodyFromApp goal)
+  let args := runApp.getAppArgs
+  if args.size < 8 then
+    fail (.notEnoughArgs runApp args.size 8)
+  return ⟨runApp, args[4]!, args[5]!, args[6]!, args[7]!⟩
+
+def getRunBodyFrom (goal : Expr) : MetaM RunBodyFrom := do
+  match ← getRunBodyFrom? goal with
+  | .ok g =>
+    return g
+  | .error e =>
+    throwError "{e}"
+
+end RunBodyFromGoal
+
+@[inline] def _root_.Lean.Expr.app5? (e : Expr) (fName : Name) : Option (Expr × Expr × Expr × Expr × Expr) :=
+  if e.isAppOfArity fName 5 then
+    some (e.appFn!.appFn!.appFn!.appArg!.appArg!, e.appFn!.appFn!.appFn!.appArg!, e.appFn!.appFn!.appArg!, e.appFn!.appArg!, e.appArg!)
+  else
+    none
+
+section RunBodyFromGoal
+
+structure EnvWrite where
+  base : Expr
+  dst : Expr
+  value : Expr
+
+def getEnvWrite (e : Expr) : MetaM EnvWrite := do
+  let some (_, _, base, dst, value) := e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
+  return ⟨base, dst, value⟩
+
+end RunBodyFromGoal
 
 end
 
