@@ -99,13 +99,16 @@ theorem run_map (x : EffectM α) :
   rfl
 
 @[simp, mlir_effect]
-theorem get_eq (s : GlobalState) : (get : EffectM GlobalState) s = .value (s, s) := rfl
+theorem get_eq (s : GlobalState) : (get : EffectM GlobalState) s = .value (s, s) :=
+  rfl
 
 @[simp, mlir_effect]
-theorem set_eq (s s' : GlobalState) : (set s' : EffectM PUnit) s = .value (⟨⟩, s') := rfl
+theorem set_eq (s s' : GlobalState) : (set s' : EffectM PUnit) s = .value (⟨⟩, s') :=
+  rfl
 
 @[simp, mlir_effect]
-theorem map_eq (f : α → β) (x : EffectM α) (s) : (f <$> x) s = (fun p => (f p.1, p.2)) <$> x s := rfl
+theorem map_eq (f : α → β) (x : EffectM α) (s) : (f <$> x) s = (fun p => (f p.1, p.2)) <$> x s :=
+  rfl
 
 end EffectM
 
