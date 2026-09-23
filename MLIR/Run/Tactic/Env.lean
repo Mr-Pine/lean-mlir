@@ -13,28 +13,12 @@ public meta section
 
 section SealEnv
 
-def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
-  (← getLCtx).foldlM (init := #[])
-      (fun acc d => do
-        if d.isImplementationDetail then
-          return acc
-        let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
-        return if l == lhs then acc.push d.fvarId else acc)
-
-/-- The unique hypothesis `_ : lhs = _`. -/
-def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
-  match ← findEqsWithLhs lhs with
-  | #[h] =>
-    return h
-  | #[] =>
-    throwError "no hypothesis {what}"
-  | hs =>
-    throwError "ambiguous: {hs.size} hypotheses {what}"
-
-elab "seal_env" : tactic =>
+def sealEnv : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal
+    if runBodyFrom.env.isFVar then
+      return
     let envWrite ← getEnvWrite runBodyFrom.env
     let E := envWrite.base
     let hE ← findEqWithLhs E m!"of the form `{E} = _`"
@@ -60,6 +44,8 @@ elab "seal_env" : tactic =>
     let g ← g.clear hEargs
     let g ← g.clear E.fvarId!
     replaceMainGoal [g]
+
+elab "seal_env" : tactic => sealEnv
 
 end SealEnv
 

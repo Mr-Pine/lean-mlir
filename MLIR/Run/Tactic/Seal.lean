@@ -129,7 +129,7 @@ def runSeal : TacticM Unit :=
     let g ← r.mvarId.clear hE
     replaceMainGoal [g]
     let (_, g) ← generalizeOpaque g (hyps := #[r.fvarId]) E₀' `E₀ #[]
-    let g ← (← g.clear r.fvarId).clear E₀.fvarId!
+    let g ← g.clear E₀.fvarId!
     replaceMainGoal [g]
 
 elab "seal" : tactic => runSeal

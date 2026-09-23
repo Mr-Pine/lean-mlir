@@ -29,6 +29,11 @@ simproc reduceFuncContinue (Func.continue _ _ _) := fun e => do
   let some (_, _, rhs) := (← inferType proof).eq? | return .continue
   return .visit { expr := rhs, proof? := proof }
 
+/-- Reduce `b.exit` when the block is concrete. -/
+dsimproc [simp, mlir_instr]reduceBlockExit (BasicBlock.exit _) := fun e => do
+  let e' ← withTransparency .default (whnf e)
+  return if e' == e then .continue else .visit e'
+
 @[tactic finishBlock]
 def evalFinishBlock : Tactic := fun stx =>
   withMainContext do
@@ -36,7 +41,8 @@ def evalFinishBlock : Tactic := fun stx =>
         (←
           `(tactic|
               ( rw [BasicBlock.runBodyFrom_done]
-                simp only [EffectM.pure_eq, PoisonOr.value_bind, reduceFuncContinue, Exit.run])))
+                simp only [EffectM.pure_eq, PoisonOr.value_bind, reduceBlockExit,
+                  reduceFuncContinue, Exit.run])))
     let (g, goal) ← getGoalType
     let some ret :=
       goal.find?
@@ -44,10 +50,7 @@ def evalFinishBlock : Tactic := fun stx =>
       | throwError "no {``Regs.read} in the goal{indentExpr goal}"
     let env := ret.getArg! 2
     let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env
-    let body ← kabstract goal ret
-    let motive := Expr.lam `ret (← inferType ret) body .default
-    replaceMainGoal
-        [← g.replaceTargetEq (body.instantiate1 r.expr) (← mkCongrArg motive (← r.getProof' ret))]
+    replaceMainGoal [← replaceBySimp g ret r]
 
 end
 
