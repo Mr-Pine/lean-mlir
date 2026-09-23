@@ -18,13 +18,18 @@ elab "extract_state" : tactic => do
   let runFrom ← getFuncRunFromGoal goal
   let (fvs, g) ←
     g.withContext do
-        generalizeOpaque g (hyps := #[]) runFrom.state `S₀
+        generalizeOpaque g (hyps := ← hypsMentioning runFrom.state) runFrom.state `S₀
             #[⟨`hS₀, (mkEq · runFrom.state), ← mkEqRefl runFrom.state⟩]
+  let S₀ := mkFVar fvs[0]!
+  let hS₀ := fvs[1]!
   let (_, g) ←
     g.withContext do
-        let S₀ := mkFVar fvs[0]!
-        generalizeOpaque g (hyps := #[]) S₀ `S #[⟨`hS, (mkEq · S₀), ← mkEqRefl S₀⟩]
+        generalizeOpaque g (hyps := ← hypsMentioning S₀ (except := #[hS₀])) S₀ `S
+            #[⟨`hS, (mkEq · S₀), ← mkEqRefl S₀⟩]
+  let g ← g.clear hS₀
   replaceMainGoal [g]
+  if let some fs := runFrom.state.fvarId? then
+    replaceMainGoal [← g.clear fs]
 
 elab "extract_env" : tactic => do
   let (g, goal) ← getGoalType

@@ -4,6 +4,7 @@ public import SSA.Projects.RIR.Semantics.Effectful.Memory
 public import SSA.Projects.RIR.Memory.Range
 public import SSA.Projects.RIR.Semantics.Effectful.Memory.Bits
 public import SSA.Projects.RIR.Semantics.Effectful.Memory.Fits
+public import SSA.Projects.RIR.SimpSets
 import Std.Data.HashMap.Lemmas
 
 namespace LeanMLIR.RIR
@@ -29,11 +30,13 @@ def MemoryState.readAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :=
 section Theorems
 
 /-- The an existing block is overwritten with `storeAt` -/
+@[mlir_mem]
 theorem MemoryState.getElem?_storeAt_self {m : MemoryState} (h : m[p.id]? = some blk) :
     (m.storeAt p x)[p.id]? = some { blk with bytes := spliceBits blk.bytes p.offsetInBits x } := by
   simp [storeAt, h, MemoryState.getElem?_eq]
 
 /-- Other blocks are not modified by `storeAt` -/
+@[mlir_mem]
 theorem MemoryState.getElem?_storeAt_ne {m : MemoryState} {p q : Pointer} (hptr : q.id ≠ p.id) :
     (m.storeAt p x)[q.id]? = m[q.id]? := by
   simp [storeAt]
@@ -44,6 +47,7 @@ theorem MemoryState.getElem?_storeAt_ne {m : MemoryState} {p q : Pointer} (hptr 
     simp [Std.HashMap.getElem?_insert, hptr.symm]
 
 /-- `storeAt` does not change whether an id is allocated or not. -/
+@[mlir_mem]
 theorem MemoryState.getElem?_storeAt_isSome {m : MemoryState} {i : BlockId} :
     ((m.storeAt p x)[i]?).isSome = (m[i]?).isSome := by
   by_cases h : p.id = i
@@ -55,12 +59,14 @@ theorem MemoryState.getElem?_storeAt_isSome {m : MemoryState} {i : BlockId} :
     | none => simp [storeAt, h']
     | some blk => simp [storeAt, h', getElem?_eq, h]
 
+@[mlir_mem]
 theorem MemoryState.readAt_storeAt_self (hfits : Fits m p w) (x : BitVec w) :
     (m.storeAt p x).readAt p w = x := by
   obtain ⟨blk, hblk, hsz⟩ := hfits
   unfold MemoryBlock.lengthInBits at hsz
   simp [readAt, getElem?_storeAt_self hblk, extractLsb'_spliceBits_self, hsz]
 
+@[mlir_mem]
 theorem MemoryState.readAt_storeAt_disjoint {v w : Nat} {m : MemoryState}
     (h : (Range.of p v).Disjoint (Range.of q w)) (x : BitVec v) :
     (m.storeAt p x).readAt q w = m.readAt q w := by
@@ -77,6 +83,7 @@ theorem MemoryState.readAt_storeAt_disjoint {v w : Nat} {m : MemoryState}
       omega
   · cases h' : m[q.id]? <;> grind [getElem?_storeAt_isSome, getElem?_storeAt_ne]
 
+@[mlir_mem]
 theorem MemoryState.readAt_storeAt_subrange (hfits : Fits m p v) (hid : q.id = p.id)
     (hle : p.offsetInBits ≤ q.offsetInBits) (hw : (q.offsetInBits - p.offsetInBits) + w' ≤ v)
     (x : BitVec v) :
@@ -85,6 +92,7 @@ theorem MemoryState.readAt_storeAt_subrange (hfits : Fits m p v) (hid : q.id = p
   simp [readAt, hid, getElem?_storeAt_self hblk]
   exact extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) hw hsz
 
+@[mlir_mem]
 theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
   unfold Fits
   obtain ⟨blk, hblk, hsz⟩ := hq

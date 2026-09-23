@@ -6,22 +6,16 @@ namespace LeanMLIR.RIR
 
 public section
 
-theorem run_store {p : Reg Γ .ptr} {ptr : Pointer} {t : Ty} {v : ⟦t⟧} {b : BitVec t.width}
-    {reg : Reg Γ t} (hptr : env.read p = .value ptr) (hfits : Fits s.mem ptr t.width)
-    (hreg : env.read reg = v) (hv : t.flatten v = .value b) :
-    (Instr.run env (.store p reg)) s = .value (env, { s with mem := s.mem.storeAt ptr b }) := by
-  simp [mlir_instr, Operation.store, throwUBIf, hptr, hfits, hreg, hv, mlir_effect]
+theorem run_store {ptr : Pointer} {t : Ty} {v} {b : BitVec t.width} (hfits : Fits s.mem ptr t.width)
+    (hv : t.flatten (.value v) = .value b) :
+    (Operation.store (.value ptr) (.value v)) env s =
+      .value (env, { s with mem := s.mem.storeAt ptr b }) := by
+  simp [mlir_instr, Operation.store, -Ty.width, hfits, throwUBIf, hv, mlir_effect]
 
-theorem run_load {p : Reg Γ .ptr} {ptr : Pointer} {t : Ty}
-    {v :
-      match t with
-      | Ty.bv w => BitVec w
-      | Ty.ptr => Pointer}
-    {b : BitVec t.width} {dst : Dst Γ t} {env env' : ⟪Γ⟫} (hptr : env.read p = .value ptr)
-    (hfits : Fits s.mem ptr t.width) (hb : b = s.mem.readAt ptr t.width)
-    (hv : t.unflatten b = .value v) (henv : env' = env.write dst (.value v)) :
-    (Instr.run env (.load dst p)) s = .value (env', s) := by
-  simp [mlir_instr, mlir_effect, Operation.load, throwUBIf, hptr, hfits, ← hb, hv, henv]
+theorem run_load {ptr : Pointer} {t : Ty} {v} {dst : Dst Γ t} (hfits : Fits s.mem ptr t.width)
+    (hv : t.unflatten (s.mem.readAt ptr t.width) = .value v) :
+    (Operation.load dst (.value ptr)) env s = .value (env[dst := (.value v)], s) := by
+  simp [mlir_instr, Operation.load, -Ty.width, hfits, throwUBIf, hv, mlir_effect]
 
 end
 

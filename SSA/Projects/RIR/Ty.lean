@@ -34,7 +34,7 @@ end
 
 public section
 
-@[expose]
+@[expose, simp]
 def width : Ty → Nat
   | bv w => w
   | ptr => 64
@@ -75,7 +75,7 @@ theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatt
     unflatten t b = v := by
   cases t with
   | bv w =>
-    cases v; simp_all [flatten, unflatten]; rfl
+    cases v; simp_all [flatten, unflatten]
   | ptr => exact absurd h (PoisonOr.poison_ne_value b)
 
 end FlattenUnflatten
