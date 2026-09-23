@@ -61,11 +61,8 @@ def runStepPure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synt
     let (g, goal) ← getGoalType
     let envWrite ← getEnvWrite (← getRunBodyFrom goal).env
     let env := envWrite.base
-    let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
-    let chainFact ← findEqWithLhs env m!"`{env} = _`"
     let resultValue ←
-      simpValue only simpArgs envWrite.value argsFact
-          chainFact -- Let simp work on the newly written value
+      simpValue only simpArgs envWrite.value env -- Let simp work on the newly written value
     let body ← kabstract goal envWrite.value -- Abstract the written value in the goal
     let motive := Expr.lam `val (← inferType envWrite.value) body .default -- As a lambda
     replaceMainGoal

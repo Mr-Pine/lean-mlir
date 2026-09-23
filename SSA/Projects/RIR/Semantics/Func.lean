@@ -244,6 +244,9 @@ theorem Func.runFrom_eq {func : Func} {E} {i} {s} :
   rcases hb : BasicBlock.run E (func.blocks i) s with _ | ⟨⟨E', res⟩, s'⟩ <;> simp [Fuel.limit]
   cases res <;> simp
 
+theorem Func.exit {E} : Func.continue E (Sum.inl vals) S = .value (vals, S) := by
+  rfl
+
 end RunTheorems
 
 end LeanMLIR.RIR
