@@ -131,11 +131,13 @@ def getRunBodyFrom (goal : Expr) : MetaM RunBodyFrom := do
 
 end RunBodyFromGoal
 
-@[inline] def _root_.Lean.Expr.app5? (e : Expr) (fName : Name) : Option (Expr × Expr × Expr × Expr × Expr) :=
+@[inline]
+def _root_.Lean.Expr.app5? (e : Expr) (fName : Name) : Option (Expr × Expr × Expr × Expr × Expr) :=
   if e.isAppOfArity fName 5 then
-    some (e.appFn!.appFn!.appFn!.appArg!.appArg!, e.appFn!.appFn!.appFn!.appArg!, e.appFn!.appFn!.appArg!, e.appFn!.appArg!, e.appArg!)
-  else
-    none
+    some
+      (e.appFn!.appFn!.appFn!.appArg!.appArg!, e.appFn!.appFn!.appFn!.appArg!,
+        e.appFn!.appFn!.appArg!, e.appFn!.appArg!, e.appArg!)
+  else none
 
 section RunBodyFromGoal
 
@@ -145,7 +147,8 @@ structure EnvWrite where
   value : Expr
 
 def getEnvWrite (e : Expr) : MetaM EnvWrite := do
-  let some (_, _, base, dst, value) := e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
+  let some (_, _, base, dst, value) :=
+    e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
   return ⟨base, dst, value⟩
 
 end RunBodyFromGoal
