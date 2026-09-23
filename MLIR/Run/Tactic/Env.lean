@@ -53,7 +53,7 @@ elab "seal_env" : tactic =>
       mkEq (← mkAppM ``Env.args #[e]) args
     let (_, g) ←
       g.withContext do
-          generalizeOpaque g runBodyFrom.env `E
+          generalizeOpaque g (hyps := #[]) runBodyFrom.env `E
               #[⟨`hE, stmtEq, ← mkCongrArg abstractWrite (mkFVar hE)⟩,
                 ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs runBodyFrom.env)⟩]
     let g ← g.clear hE
@@ -69,11 +69,7 @@ section ResolveReads
 def reduceArgsApp : Simp.DSimproc := fun app => do
   let index := app.appArg!
   let some finBound := (← whnf (← inferType index)).app1? ``Fin | return .continue
-  let literal? ← (Meta.evalNat (← mkAppM ``Fin.val #[index])).run
-  let literal? :=
-    if literal?.isSome then literal?
-    else if index.isAppOfArity ``OfNat.ofNat 3 then (index.getArg! 1).rawNatLit? else none
-  let some literal := literal? | return .continue
+  let some literal ← finNLit? index | return .continue
   let inBounds ← mkDecideProof (← mkAppM ``LT.lt #[mkNatLit literal, finBound])
   let litIndex ← mkAppOptM ``Fin.mk #[finBound, mkNatLit literal, inBounds]
   let some unfolded ← withDefault (unfoldDefinition? (mkApp app.appFn! litIndex)) | return .continue
@@ -118,8 +114,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (fact : FVarId) : Tact
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
-def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) :
-    TacticM Simp.Result := do
+def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) : TacticM Simp.Result := do
   let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
   let chainFact ← findEqWithLhs env m!"`{env} = _`"
   let args ← simpPass only simpArgs e argsFact

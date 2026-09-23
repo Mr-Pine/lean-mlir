@@ -55,6 +55,12 @@ theorem set_comm (env : ⟪Γ⟫) (h : i ≠ j) : (env.set i v).set j w = (env.s
   rename_i hkj
   simp [h.symm, hkj]
 
+theorem write_comm (env : ⟪Γ⟫) (h : dst.i ≠ dst'.i) :
+    (env.write dst v).write dst' w = (env.write dst' w).write dst v := by
+  unfold write
+  apply set_comm
+  exact h
+
 @[mlir_env]
 theorem read_write_self (env : ⟪Γ⟫) (dst : Dst Γ t) :
     (env.write dst v).read (.val dst.i dst.h) = dst.h ▸ v := by

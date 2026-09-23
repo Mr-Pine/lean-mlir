@@ -18,12 +18,12 @@ elab "extract_state" : tactic => do
   let runFrom ← getFuncRunFromGoal goal
   let (fvs, g) ←
     g.withContext do
-        generalizeOpaque g runFrom.state `S₀
+        generalizeOpaque g (hyps := #[]) runFrom.state `S₀
             #[⟨`hS₀, (mkEq · runFrom.state), ← mkEqRefl runFrom.state⟩]
   let (_, g) ←
     g.withContext do
         let S₀ := mkFVar fvs[0]!
-        generalizeOpaque g S₀ `S #[⟨`hS, (mkEq · S₀), ← mkEqRefl S₀⟩]
+        generalizeOpaque g (hyps := #[]) S₀ `S #[⟨`hS, (mkEq · S₀), ← mkEqRefl S₀⟩]
   replaceMainGoal [g]
 
 elab "extract_env" : tactic => do
@@ -41,13 +41,14 @@ elab "extract_env" : tactic => do
               m!"Expected env {runFrom.env} to be an application of {``Env.init}"
         let proof := mkExpectedPropHint (← mkEqRefl rhs) (← stmt runFrom.env)
         let fact := ⟨`hE₀args, stmt, proof⟩
-        generalizeOpaque g runFrom.env `E₀ #[fact]
+        generalizeOpaque g (hyps := #[]) runFrom.env `E₀ #[fact]
   let E₀ := mkFVar fvs[0]!
   let hE₀args' := fvs[1]!
   let hE₀args := mkFVar hE₀args'
   let (_, g) ←
     g.withContext do
-        generalizeOpaque g E₀ `E #[⟨`hE, (mkEq · E₀), ← mkEqRefl E₀⟩, ⟨`hEargs, stmt, hE₀args⟩]
+        generalizeOpaque g (hyps := #[]) E₀ `E
+            #[⟨`hE, (mkEq · E₀), ← mkEqRefl E₀⟩, ⟨`hEargs, stmt, hE₀args⟩]
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
