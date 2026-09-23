@@ -2,6 +2,7 @@ module
 
 public import MLIR.SimpSets
 public import MLIR.Context
+public meta import Lean.Elab.Term
 
 namespace MLIR
 
@@ -90,6 +91,67 @@ theorem read_arg (env : ⟪Γ⟫) : env.read (.arg i h) = h ▸ env.args i := by
 theorem read_init_arg (args : _) : (Env.init args).read (.arg i h) = args i := by rfl
 
 end Lemmas
+
+meta section Syntax
+
+open Lean Elab Term Meta
+
+syntax :max term noWs "[" withoutPosition(term " := " term),+ "]" : term
+
+macro_rules
+  | `($E[$d := $v]) => `(Env.write $E $d $v)
+  | `($E[$d := $v, $[$ds := $vs],*]) => `((Env.write $E $d $v)[$[$ds := $vs],*])
+
+@[app_unexpander Env.write] def unexpandWrite : PrettyPrinter.Unexpander
+  | `($_ $E[$[$ds := $vs],*] $d $v) => `($E[$[$ds := $vs],*, $d := $v])
+  | `($_ $E $d $v) => `($E[$d := $v])
+  | _ => throw ()
+
+/-- `%k` is value register `k`: a `Dst` or a `Reg`, by the expected type. -/
+syntax :lead (name := valReg) "%" noWs num : term
+
+/-- `%argk` is argument register `k`. -/
+syntax :lead (name := argReg) "%arg" noWs num : term
+
+def expectedHead (ty? : Option Expr) (what : String) : TermElabM Expr := do
+  tryPostponeIfNoneOrMVar ty?
+  let some ty := ty? | throwError "{what} needs an expected type"
+  let ty ← instantiateMVars ty
+  if ty.getAppFn.isMVar then
+    throwError "`{what}` needs an expected type, got{indentExpr ty}"
+  return ty
+
+@[term_elab valReg]
+def elabValReg : TermElab := fun stx ty? => do
+  let k : TSyntax `num := ⟨stx.getArg 1⟩
+  let ty ← whnfR (← expectedHead ty? "%k")
+  if ty.isAppOf ``Dst then
+    elabTerm (← `(⟨$k, rfl⟩)) ty
+  else
+    elabTerm (← `(Reg.val $k rfl)) ty
+
+@[term_elab argReg]
+def elabArgReg : TermElab := fun stx ty? => do
+  let k : TSyntax `num := ⟨stx.getArg 1⟩
+  let ty ← whnfR (← expectedHead ty? "%k")
+  elabTerm (← `(Reg.arg $k rfl)) ty
+
+@[app_unexpander Dst.mk]
+def unexpandDst : PrettyPrinter.Unexpander
+  | `($_ $k:num $_) => pure (mkNode ``valReg #[mkAtom "%", k])
+  | _ => throw ()
+
+@[app_unexpander Reg.val]
+def unexpandRegVal : PrettyPrinter.Unexpander
+  | `($_ $k:num $_) => pure (mkNode ``valReg #[mkAtom "%", k])
+  | _ => throw ()
+
+@[app_unexpander Reg.arg]
+def unexpandRegArg : PrettyPrinter.Unexpander
+  | `($_ $k:num $_) => pure (mkNode ``argReg #[mkAtom "%arg", k])
+  | _ => throw ()
+
+end Syntax
 
 end Env
 
