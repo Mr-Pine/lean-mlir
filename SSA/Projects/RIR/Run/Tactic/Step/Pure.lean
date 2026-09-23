@@ -3,6 +3,7 @@ module
 public import SSA.Projects.RIR.Semantics.Func
 public meta import SSA.Projects.RIR.Run.BasicBlock
 public meta import SSA.Projects.RIR.Run.Tactic.Env
+public meta import SSA.Projects.RIR.Run.Tactic.Seal
 public meta import Lean.Elab.Tactic
 public import SSA.Projects.RIR.Run.Tactic.Trace
 
@@ -103,12 +104,13 @@ def runStepPure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synt
             pure (var_name.appendBefore "h")
         let (_, g) ←
           g.withContext do
-              generalizeOpaque g envWrite.value var_name
+              generalizeOpaque g (hyps := #[]) envWrite.value var_name
                   #[⟨hyp_name, (mkEq · envWrite.value), ← mkEqRefl envWrite.value⟩]
         replaceMainGoal [g]
     -- Extract new `E`
     evalTactic (← `(tactic| seal_env))
     replaceMainGoal [← reduceIndex (← getMainGoal)]
+    runSeal
 
 @[tactic stepPure]
 def evalStepPure : Tactic := fun stx => do

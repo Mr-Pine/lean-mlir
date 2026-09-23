@@ -18,12 +18,14 @@ structure GeneralizeFact where
   /-- Proof of `mkType (generalized expression)` -/
   proof : Expr
 
-/-- Generalize `e` in the goal `g` to a fresh opaque local `xName`.
+/-- Generalize `e` in the goal `g` and hyps `hyps` to a fresh opaque local `xName`.
 `facts` specifies the hypotheses to generate from the generalization.
 `occs` specifies what occurences to generalize. -/
-def generalizeOpaque (g : MVarId) (e : Expr) (xName : Name) (facts : Array GeneralizeFact)
-    (occs : Occurrences := Occurrences.all) : MetaM (Array FVarId × MVarId) :=
+def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName : Name)
+    (facts : Array GeneralizeFact) (occs : Occurrences := Occurrences.all) :
+    MetaM (Array FVarId × MVarId) :=
   g.withContext do
+    let (reverted, g) ← g.revert (preserveOrder := true) hyps
     let ty ← inferType e -- Type of the expression to generalize
     let tgtAbstract ←
       kabstract (← instantiateMVars (← g.getType)) e occs -- e abstracted as a loose bound variable
@@ -49,7 +51,9 @@ def generalizeOpaque (g : MVarId) (e : Expr) (xName : Name) (facts : Array Gener
           (#[e] ++
             facts.map
               (GeneralizeFact.proof))) -- Close the old goal by the new goal closed with the abstracted expression and the fact proof
-    gNew.mvarId!.introNP (1 + facts.size) -- Intro the new variable and facts
+    let (fvs, g) ← gNew.mvarId!.introNP (1 + facts.size) -- Intro the new variable and facts
+    let (_, g) ← g.introNP reverted.size -- Revert reverting
+    return (fvs, g)
 
 /-- The `Nat` behind a `Dst`'s index, when it is a literal. -/
 def dstIndex? (d : Expr) : MetaM (Option Nat) := do
@@ -69,6 +73,12 @@ def reduceIndex (g : MVarId) : MetaM MVarId :=
     let motive := Expr.lam `pos (mkConst ``Nat) body .default
     let proof := mkExpectedPropHint (← mkEqRefl idx) (← mkEq idx lit)
     g.replaceTargetEq (body.instantiate1 lit) (← mkCongrArg motive proof)
+
+def finNLit? (n : Expr) : MetaM (Option Nat) := do
+  if let some k← (Meta.evalNat (← mkAppM ``Fin.val #[n])).run then
+    return k
+  let_expr OfNat.ofNat _ n _ := n | return none
+  return n.rawNatLit?
 
 end
 
