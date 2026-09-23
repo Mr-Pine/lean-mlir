@@ -12,8 +12,8 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-syntax (name := stepPure)       "step_pure" (" with " ident (colGt ident)?)? : tactic
-syntax (name := stepPureInline) "step_pure" &" inline" : tactic
+syntax (name := stepPure)       "step_pure" (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")? (" with " ident (colGt ident)?)? : tactic
+syntax (name := stepPureInline) "step_pure" (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")? &" inline" : tactic
 
 inductive EnvName
   | inline
@@ -30,7 +30,7 @@ def dsimpPureInstr (m : MVarId) : MetaM Unit := do
   | none => return ()
 
 /-- Step a pure instruction, extending the env with the new value -/
-def runStepPure (value : EnvName) (hyp : EnvName) : TacticM Unit := withMainContext do
+def runStepPure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) : TacticM Unit := withMainContext do
   let g ← getMainGoal
   let lem ← mkConstWithFreshMVarLevels ``BasicBlock.runBodyFrom_step_pure
   let r ← g.rewrite (← g.getType) lem -- Rewrite
@@ -54,7 +54,7 @@ def runStepPure (value : EnvName) (hyp : EnvName) : TacticM Unit := withMainCont
   let env := envWrite.base
   let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
   let chainFact ← findEqWithLhs env m!"`{env} = _`"
-  let resultValue ← resolveReads envWrite.value argsFact chainFact -- Let simp work on the newly written value
+  let resultValue ← simpValue only simpArgs envWrite.value argsFact chainFact -- Let simp work on the newly written value
   let body ← kabstract goal envWrite.value -- Abstract the written value in the goal
   let motive := Expr.lam `val (← inferType envWrite.value) body .default -- As a lambda
   replaceMainGoal [← g.replaceTargetEq (body.instantiate1 resultValue.expr) (← mkCongrArg motive (← resultValue.getProof' envWrite.value))] -- Using congruence, get proof over goal
@@ -90,11 +90,17 @@ def runStepPure (value : EnvName) (hyp : EnvName) : TacticM Unit := withMainCont
 
   replaceMainGoal [← reduceIndex (← getMainGoal)]
 
-elab_rules : tactic
-  | `(tactic| step_pure)            => runStepPure .auto .auto
-  | `(tactic| step_pure with $v)    => runStepPure (.named v) .auto
-  | `(tactic| step_pure with $v $h) => runStepPure (.named v) (.named h)
-  | `(tactic| step_pure inline)     => runStepPure .inline .inline
+  @[tactic stepPure] def evalStepPure : Tactic := fun stx => do
+    let withStx := stx[3]
+    let (value, hyp) : EnvName × EnvName :=
+      if withStx.isNone then (.auto, .auto)
+      else
+        let hypStx := withStx[2]
+        (.named ⟨withStx[1]⟩, if hypStx.isNone then .auto else .named ⟨hypStx[0]⟩)
+    runStepPure value hyp (only := !stx[1].isNone) (simpArgs := stx[2])
+
+  @[tactic stepPureInline] def evalStepPureInline : Tactic := fun stx =>
+    runStepPure .inline .inline (only := !stx[1].isNone) (simpArgs := stx[2])
 
 end
 
