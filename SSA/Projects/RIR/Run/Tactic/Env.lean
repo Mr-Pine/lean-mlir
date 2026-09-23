@@ -92,20 +92,24 @@ def decideDischarge : Simp.Discharge := fun prop => do
   if value.isConstOf ``Bool.true then return (← mkDecideProof prop) else return none
 
 /-- One `mlir_env` pass over `e`, with `fact` as an extra rewrite rule -/
-def readPass (e : Expr) (fact : FVarId) : MetaM Simp.Result := do
+def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (fact : FVarId) : TacticM Simp.Result := do
   let some ext ← getSimpExtension? `mlir_env | throwError "no `mlir_env` simp set"
-  let thms ← (← ext.getTheorems).add (.fvar fact) #[] (mkFVar fact)
-  let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
-  let simprocs ← argsSimprocs fact
 
-  return (← simp e ctx (simprocs := #[simprocs]) (discharge? := decideDischarge)).1
+  let mut thms ← if only then pure {} else getSimpTheorems
+  thms ← thms.add (.fvar fact) #[] (mkFVar fact)
+
+  let ctx ← Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems)]) (congrTheorems := ← getSimpCongrTheorems)
+
+  let elaborated ← elabSimpArgs simpArgs ctx #[← argsSimprocs fact] (eraseLocal := false) (kind := .simp)
+
+  return (← simp e elaborated.ctx (simprocs := elaborated.simprocs) (discharge? := decideDischarge)).1
 
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
-def resolveReads (e : Expr) (argsFact chainFact : FVarId) : MetaM Simp.Result := do
-  let args ← readPass e argsFact
-  let vals ← readPass args.expr chainFact
+def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (argsFact chainFact : FVarId) : TacticM Simp.Result := do
+  let args ← simpPass only simpArgs e argsFact
+  let vals ← simpPass only simpArgs args.expr chainFact
 
   args.mkEqTrans vals
 
