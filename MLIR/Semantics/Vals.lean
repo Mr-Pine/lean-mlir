@@ -12,12 +12,16 @@ inductive Vals : List Ty → Type
   | nil : Vals []
   | cons (v : ⟦t⟧) (vs : Vals ts) : Vals (t :: ts)
 
-@[mlir_env]
 def Regs.read (env : ⟪Γ⟫) : (Regs Γ tys) → Vals tys
   | nil => Vals.nil
   | cons r rs => Vals.cons (env.read r) (rs.read env)
 
+@[simp, mlir_env]
 theorem Regs.read_cons : (Regs.cons r rs).read env = Vals.cons (env.read r) (rs.read env) :=
+  rfl
+
+@[simp, mlir_env]
+theorem Regs.read_nil : (Regs.nil).read env = Vals.nil :=
   rfl
 
 end

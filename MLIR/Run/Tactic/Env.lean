@@ -118,8 +118,10 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (fact : FVarId) : Tact
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
-def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (argsFact chainFact : FVarId) :
+def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) :
     TacticM Simp.Result := do
+  let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
+  let chainFact ← findEqWithLhs env m!"`{env} = _`"
   let args ← simpPass only simpArgs e argsFact
   let vals ← simpPass only simpArgs args.expr chainFact
   args.mkEqTrans vals
