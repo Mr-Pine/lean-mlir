@@ -18,6 +18,10 @@ structure SealedState where
   hS' : FVarId
   hS : FVarId
 
+/-- The new state with its projections reduced -/
+def dsimpState (e : Expr) : MetaM Expr := do
+  return (← dsimp e (← Simp.mkContext)).1
+
 def sealState (S : Expr) : TacticM SealedState :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -30,7 +34,8 @@ def sealState (S : Expr) : TacticM SealedState :=
     let abstract := Expr.lam `s (← inferType S) (← kabstract S' S) .default
     let (fvs, g) ←
       generalizeOpaque g (hyps := #[]) S' `S'
-          #[⟨`hS', (mkEq · (abstract.beta #[S₀chain])), ← mkCongrArg abstract (.fvar hS)⟩]
+          #[⟨`hS', (mkEq · (← dsimpState (abstract.beta #[S₀chain]))),
+              ← mkCongrArg abstract (.fvar hS)⟩]
     replaceMainGoal [g]
     return ⟨fvs[0]!, fvs[1]!, hS⟩
 

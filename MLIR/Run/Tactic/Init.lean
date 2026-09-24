@@ -22,10 +22,26 @@ elab "extract_state" : tactic => do
             #[⟨`hS₀, (mkEq · runFrom.state), ← mkEqRefl runFrom.state⟩]
   let S₀ := mkFVar fvs[0]!
   let hS₀ := fvs[1]!
-  let (_, g) ←
+  let stateHyps ←
     g.withContext do
-        generalizeOpaque g (hyps := ← hypsMentioning S₀ (except := #[hS₀])) S₀ `S
-            #[⟨`hS, (mkEq · S₀), ← mkEqRefl S₀⟩]
+        hypsMentioning S₀ (except := #[hS₀])
+  let (reverted, g) ← g.revert stateHyps (preserveOrder := true)
+  let g ←
+    g.withContext do
+        let goalType ← instantiateMVars (← g.getType)
+        let target := (← getFuncRunFromGoal goalType).app
+        let tyNew ←
+          withLocalDeclD `S (← inferType S₀) fun S => do
+              let rec go : Nat → Expr → Expr
+                | n + 1, .forallE nm d b i => .forallE nm (d.replaceFVar S₀ S) (go n b) i
+                | _, e =>
+                  e.replace (fun t => if t == target then some (mkApp target.appFn! S) else none)
+              withLocalDeclD `hS (← mkEq S S₀) fun hS =>
+                  mkForallFVars #[S, hS] (go reverted.size goalType)
+        let gNew ← mkFreshExprSyntheticOpaqueMVar tyNew (tag := ← g.getTag)
+        g.assign (mkAppN gNew #[S₀, ← mkEqRefl S₀])
+        let (_, g) ← gNew.mvarId!.introNP (2 + reverted.size)
+        pure g
   let g ← g.clear hS₀
   replaceMainGoal [g]
   if let some fs := runFrom.state.fvarId? then

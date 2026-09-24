@@ -5,6 +5,7 @@ public meta import MLIR.Run.BasicBlock
 public meta import MLIR.Run.Tactic.Env
 public meta import MLIR.Run.Tactic.Seal
 public meta import MLIR.Run.Tactic.Step.Common
+public meta import MLIR.Run.Tactic.Step.Syntax
 public meta import Lean.Elab.Tactic
 public import MLIR.Run.Tactic.Trace
 
@@ -14,13 +15,7 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-syntax (name :=
-  stepPure) "step_pure" (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")? (" with " ident (colGt ident)?)? :
-  tactic
-
-syntax (name :=
-  stepPureInline) "step_pure" (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")? &" inline" :
-  tactic
+syntax (name := stepPure) "step_pure" stepSimpArgs (stepNames)? : tactic
 
 /-- dsimp [mlir_instr]; rfl -/
 def dsimpPureInstr (m : MVarId) : MetaM Unit := do
@@ -41,18 +36,9 @@ def runStepPure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synt
     finishStep value hyp only simpArgs
 
 @[tactic stepPure]
-def evalStepPure : Tactic := fun stx => do
-  let withStx := stx[3]
-  let (value, hyp) : EnvName × EnvName :=
-    if withStx.isNone then (.auto, .auto)
-    else
-        let hypStx := withStx[2]
-        (.named ⟨withStx[1]⟩, if hypStx.isNone then .auto else .named ⟨hypStx[0]⟩)
-  runStepPure value hyp (only := !stx[1].isNone) (simpArgs := stx[2])
-
-@[tactic stepPureInline]
-def evalStepPureInline : Tactic := fun stx =>
-  runStepPure .inline .inline (only := !stx[1].isNone) (simpArgs := stx[2])
+def evalStepPure : Tactic := fun stx =>
+  let args := StepArgs.parse stx[1] stx[2] mkNullNode
+  runStepPure args.value args.hyp args.only args.simpArgs
 
 end
 

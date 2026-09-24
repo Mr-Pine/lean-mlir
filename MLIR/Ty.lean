@@ -34,7 +34,7 @@ end
 
 public section
 
-@[expose, simp]
+@[expose]
 def width : Ty → Nat
   | bv w => w
   | ptr => 64
@@ -42,7 +42,8 @@ def width : Ty → Nat
 def poisoned : (t : Ty) → ⟦t⟧ := fun _ => PoisonOr.poison
 
 @[simp]
-theorem width_bv : (bv w).width = w := by rfl
+theorem width_bv : (bv w).width = w :=
+  rfl
 
 @[simp]
 theorem poisoned_bv : poisoned (bv w) = (.poison : PoisonOr (BitVec w)) := by rfl

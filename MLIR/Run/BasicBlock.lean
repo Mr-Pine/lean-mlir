@@ -53,6 +53,18 @@ dsimproc [simp, mlir_instr]reduceBodyGetElem ((BasicBlock.body _)[_]) := fun e =
   else
     return .visit e'
 
+open Lean Meta in
+/-- Reduce `tys[i]` to a type when the list and the index are concrete. -/
+dsimproc [simp, mlir_instr]reduceTyGetElem ((_ : List Ty)[_]) := fun e => do
+  let e' ← withTransparency .default (whnf e)
+  match_expr e' with
+  | Ty.bv _ =>
+    return .visit e'
+  | Ty.ptr =>
+    return .visit e'
+  | _ =>
+    return .continue
+
 end
 
 end MLIR

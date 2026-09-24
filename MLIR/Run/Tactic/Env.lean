@@ -2,6 +2,7 @@ module
 
 public import MLIR.Semantics.Func
 public import MLIR.Run.Tactic.Parse
+public import MLIR.Run.Tactic.Memory
 public import MLIR.Run.Tactic.Util
 public meta import Lean.Elab.Tactic
 
@@ -79,23 +80,35 @@ def decideDischarge : Simp.Discharge := fun prop => do
   else
     return none
 
-/-- One `mlir_env` pass over `e`, with `fact` as an extra rewrite rule -/
-def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (fact : FVarId) : TacticM Simp.Result :=
-  do
+/-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and `readThroughStore`.
+The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
+def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) :
+    TacticM Simp.Result := do
   let some ext ← getSimpExtension? `mlir_env | throwError "no `mlir_env` simp set"
   let mut thms ←
     if only then
       pure {}
     else
       getSimpTheorems
-  thms ← thms.add (.fvar fact) #[] (mkFVar fact)
+  for fact in facts do
+    thms ← thms.add (.fvar fact) #[] (mkFVar fact)
   let ctx ←
     Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems)]) (congrTheorems :=
         ← getSimpCongrTheorems)
-  let elaborated ←
-    elabSimpArgs simpArgs ctx #[← argsSimprocs fact] (eraseLocal := false) (kind := .simp)
+  let procs :=
+    #[← argsSimprocs facts[0]!, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
+      ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
+  let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   return (←
         simp e elaborated.ctx (simprocs := elaborated.simprocs) (discharge? := decideDischarge)).1
+
+/-- The state equations `S = …` in context -/
+def stateFacts : MetaM (Array FVarId) := do
+  (← getLCtx).foldlM (init := #[]) fun acc d => do
+      if d.isImplementationDetail then
+        return acc
+      let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
+      return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
 
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
@@ -103,9 +116,13 @@ Unfolding first would send the argument reads past `E` down to the root env. -/
 def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) : TacticM Simp.Result := do
   let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
   let chainFact ← findEqWithLhs env m!"`{env} = _`"
-  let args ← simpPass only simpArgs e argsFact
-  let vals ← simpPass only simpArgs args.expr chainFact
-  args.mkEqTrans vals
+  let args ← simpPass only simpArgs e #[argsFact]
+  let vals ← simpPass only simpArgs args.expr #[chainFact]
+  let r ← args.mkEqTrans vals
+  let sf ← stateFacts
+  if sf.isEmpty then
+    return r
+  r.mkEqTrans (← simpPass only simpArgs r.expr (#[argsFact] ++ sf))
 
 end ResolveReads
 
