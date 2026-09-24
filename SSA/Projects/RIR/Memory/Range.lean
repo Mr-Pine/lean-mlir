@@ -32,6 +32,9 @@ theorem Range.Disjoint.comm : (Range.Disjoint r r') ↔ (Range.Disjoint r' r) :=
 theorem Range.Disjoint.symm : (Range.Disjoint r r') → (Range.Disjoint r' r) :=
   comm.mp
 
+theorem Range.disjoint_of_id_ne {p q : Pointer} {v w : Nat} (h : p.id ≠ q.id) :
+    (Range.of p v).Disjoint (Range.of q w) := by simp [Disjoint, of, h]
+
 end
 
 end LeanMLIR.RIR

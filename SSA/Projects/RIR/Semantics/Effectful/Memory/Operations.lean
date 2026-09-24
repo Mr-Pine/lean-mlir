@@ -99,6 +99,18 @@ theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
   grind [MemoryState.getElem?_storeAt_self, MemoryState.getElem?_storeAt_ne,
     MemoryBlock.lengthInBits]
 
+@[mlir_mem]
+theorem MemoryState.readAt_storeAt_disjoint_offset {m : MemoryState} {off} {x : BitVec w}
+    (hoff : ¬(p.offset.uaddOverflow off)) (hoff' : off < 2 ^ 64 := by decide)
+    (hdisj : off >= w := by decide) :
+    (m.storeAt p x).readAt (p.add off) w = m.readAt (p.add off) w := by
+  apply readAt_storeAt_disjoint
+  dsimp at hoff
+  simp [Range.of, Range.Disjoint, Pointer.add]
+  simp only [Pointer.offsetInBits, BitVec.toNat_add_of_not_uaddOverflow hoff, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hoff']
+  omega
+
 end Theorems
 
 end

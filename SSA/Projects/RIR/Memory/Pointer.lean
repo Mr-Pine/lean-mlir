@@ -17,6 +17,9 @@ structure Pointer where
 def Pointer.offsetInBits (p : Pointer) : Nat :=
   8 * p.offset.toNat
 
+def Pointer.add (p : Pointer) (off : BitVec 64) :=
+  { p with offset := p.offset + off }
+
 end
 
 end LeanMLIR.RIR
