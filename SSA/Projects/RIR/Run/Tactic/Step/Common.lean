@@ -91,10 +91,15 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
             pure s.getId
           | .auto =>
             pure (var_name.appendBefore "h")
+        -- Abstract only the inner `x` of `.value x`. Helps for not carrying the `PoisonOr` Monad.
+        let abstractionTarget := if envWrite.value.isAppOfArity ``PoisonOr.value 2 then
+          envWrite.value.appArg!
+        else
+          envWrite.value
         let (_, g) ←
           g.withContext do
-              generalizeOpaque g (hyps := #[]) envWrite.value var_name
-                  #[⟨hyp_name, (mkEq · envWrite.value), ← mkEqRefl envWrite.value⟩]
+              generalizeOpaque g (hyps := #[]) abstractionTarget var_name
+                  #[⟨hyp_name, (mkEq · abstractionTarget), ← mkEqRefl abstractionTarget⟩]
         replaceMainGoal [g]
     -- Extract new `E`
     sealEnv

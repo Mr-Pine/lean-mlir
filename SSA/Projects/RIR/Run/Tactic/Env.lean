@@ -102,13 +102,14 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
   return (←
         simp e elaborated.ctx (simprocs := elaborated.simprocs) (discharge? := decideDischarge)).1
 
-/-- The state equations `S = …` in context -/
-def stateFacts : MetaM (Array FVarId) := do
+/-- The equations `x = _` of the locals in `e`: the state `S = …` and the step values `v = …`
+it reads. -/
+private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
+  let xs := (collectFVars {} e).fvarSet
   (← getLCtx).foldlM (init := #[]) fun acc d => do
-      if d.isImplementationDetail then
-        return acc
-      let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
-      return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
+    if d.isImplementationDetail then return acc
+    let some (_, .fvar x, _) := (← instantiateMVars d.type).eq? | return acc
+    return if xs.contains x then acc.push d.fvarId else acc
 
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
@@ -119,10 +120,10 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) : Tactic
   let args ← simpPass only simpArgs e #[argsFact]
   let vals ← simpPass only simpArgs args.expr #[chainFact]
   let r ← args.mkEqTrans vals
-  let sf ← stateFacts
-  if sf.isEmpty then
+  let facts ← valueStateFacts r.expr
+  if facts.isEmpty then
     return r
-  r.mkEqTrans (← simpPass only simpArgs r.expr (#[argsFact] ++ sf))
+  r.mkEqTrans (← simpPass only simpArgs r.expr (#[argsFact] ++ facts))
 
 end ResolveReads
 

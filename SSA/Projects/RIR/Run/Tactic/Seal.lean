@@ -113,6 +113,20 @@ private def partitionProof' (env : Expr) (live : Std.HashSet Nat) (liveCount : N
 private def partitionProof (live : Std.HashSet Nat) (env : Expr) (writes : Array ChainWrite) :=
   partitionProof' env live 0 [] writes.toList
 
+/-- Clear a value `x` and its hyp `hx : x = _` if possible -/
+def tryClearValue (g : MVarId) (v : FVarId) : TacticM MVarId :=
+  g.withContext do
+    try
+      do
+        let hyp ←
+          findEqWithLhs (.fvar v)
+              m!"Var `{Expr.fvar v} without defining hypothesis" -- If we have more than one or none, don't clear
+        let g ← g.clear hyp
+        let g ← g.clear v
+        return g
+    catch _ =>
+      return g
+
 def runSeal : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -123,13 +137,22 @@ def runSeal : TacticM Unit :=
     let liveRegs ← liveRegs runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
     let partitionProof ← partitionProof liveRegs E₀ chain
-    let E₀' := (← chainFn (chain.filter (·.idx ∉ liveRegs)).toList E₀).beta #[E₀]
+    let deadWrites := chain.filter (·.idx ∉ liveRegs)
+    let E₀' := (← chainFn deadWrites.toList E₀).beta #[E₀]
     let hE' ← mkEqTrans (.fvar hE) partitionProof
     let r ← g.assertAfter hE `hE (← inferType hE') hE'
     let g ← r.mvarId.clear hE
     replaceMainGoal [g]
     let (_, g) ← generalizeOpaque g (hyps := #[r.fvarId]) E₀' `E₀ #[]
     let g ← g.clear E₀.fvarId!
+    replaceMainGoal [g]
+    -- Clear away unused values in the local state
+    let mut g := g
+    for write in deadWrites do
+      let valueVar? :=
+        if write.val.isAppOfArity ``PoisonOr.value 2 then write.val.appArg!.fvarId? else none
+      if let some valueVar := valueVar? then
+        g ← tryClearValue g valueVar
     replaceMainGoal [g]
 
 elab "seal" : tactic => runSeal
