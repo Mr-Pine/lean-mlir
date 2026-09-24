@@ -14,6 +14,10 @@ namespace LeanMLIR.RIR
 @[expose] public section
 
 @[mlir_instr]
+def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
+  | gepConst byteOff => Operation.gep (.value byteOff)
+
+@[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | and => Operation.and
   | smin => Operation.smin
@@ -26,6 +30,7 @@ def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → �
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | const v dst => pure (env.write dst (.value v))
+  | unop op dst a => pure (env.write dst (op.compute (env.read a)))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
   | load dst p => Operation.load dst (env.read p) env
