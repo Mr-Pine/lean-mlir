@@ -48,6 +48,13 @@ def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪
   _ ← set updated
   return env
 
+def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
+  let ptr ← ptr
+  let off ← byteOff
+  if ptr.offset.uaddOverflow off then
+    .poison
+  return ptr.add off
+
 end
 
 end MLIR.Operation
