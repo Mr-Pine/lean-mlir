@@ -1,6 +1,7 @@
 module
 
 public import SSA.Projects.RIR.Context
+public import SSA.Projects.RIR.OverflowFlags
 public import SSA.Projects.RIR.IntPred
 
 namespace LeanMLIR.RIR
@@ -16,6 +17,10 @@ inductive UnOp : Ty → (out : Ty) → Type
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | add (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | sub (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | mul (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | lshr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
 
