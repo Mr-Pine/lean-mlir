@@ -17,7 +17,8 @@ def valRegIndex? (r : Expr) : MetaM (Option Nat) := do
   let_expr Reg.val _ _ i _ := r | return none
   finNLit? i
 
-def liveRegs (block pos : Expr) : MetaM (Std.HashSet Nat) := do
+/-- Exit and instructions in `block` from `pos` on. -/
+def blockParts (block pos : Expr) : MetaM (Array Expr) := do
   let mut parts := #[← whnfD (← mkAppM ``BasicBlock.exit #[block])] -- Check all used in exit
   let mut rest :=
     ←
@@ -28,6 +29,28 @@ def liveRegs (block pos : Expr) : MetaM (Std.HashSet Nat) := do
   while rest.isAppOfArity ``List.cons 3 do
     parts := parts.push rest.appFn!.appArg! -- `x` of `List.cons α x xs` (`x::xs`)
     rest ← whnfD rest.appArg! -- `xs`
+  return parts
+
+/-- The target blocks of the jumps in `exit`. -/
+def jumpTargets (exit : Expr) : MetaM (Array Expr) := do
+  let targets ← IO.mkRef #[]
+  exit.forEachWhere (·.isAppOfArity ``Jump.mk 5) fun j => targets.modify (·.push (j.getArg! 3))
+  targets.get
+
+def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
+  let mut parts ← blockParts block pos
+  let mut todo ← jumpTargets parts[0]!
+  let mut seen : Std.HashSet Nat := {}
+  while !todo.isEmpty do
+    let t := todo.back!
+    todo := todo.pop
+    let some k ← finNLit? t | throwError "non-literal jump target {t}"
+    if seen.contains k then
+      continue
+    seen := seen.insert k
+    let bParts ← blockParts (mkApp2 (mkConst ``Func.blocks) func t) (mkNatLit 0)
+    parts := parts ++ bParts
+    todo := todo ++ (← jumpTargets bParts[0]!)
   -- We now collected all expressions
   let regs ← IO.mkRef ({} : Std.HashSet Nat)
   for part in parts do
@@ -134,7 +157,9 @@ def runSeal : TacticM Unit :=
     let hE ← findEqWithLhs runBodyFrom.env m!"`{runBodyFrom.env} = _`"
     let some (_, _, E₀chain) :=
       (← inferType (.fvar hE)).eq? | throwError "swap proof is not an equation"
-    let liveRegs ← liveRegs runBodyFrom.block runBodyFrom.idx
+    -- the function, for the blocks after this one: `Func.continue`'s first argument
+    let some cont := goal.find? (·.isAppOf ``Func.continue) | throwError "no `Func.continue`"
+    let liveRegs ← liveRegs (cont.getArg! 0) runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
     let partitionProof ← partitionProof liveRegs E₀ chain
     let deadWrites := chain.filter (·.idx ∉ liveRegs)

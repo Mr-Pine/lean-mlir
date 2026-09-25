@@ -29,76 +29,77 @@ syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 /-- Step a pure instruction, extending the env with the new value -/
 def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
     (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) : TacticM Unit :=
-  withMainContext do
-    let (g, goal) ← getGoalType
-    let inState := (← getRunBodyFrom goal).state
-    let ⟨runGoal, main⟩ ← rewriteStep g ``BasicBlock.runBodyFrom_step_of_run
-    let some runGoal ← dsimpMlirInstr? runGoal | throwError "Could not `dsimp` runGoal"
-    let_expr Eq _ op_run _ :=
-      ← instantiateMVars (← runGoal.getType) | throwError m!"{← runGoal.getType} not an equality"
-    unless op_run.getAppNumArgs >= 2 do
-      throwError m!"Run goal lhs {op_run} not application with env and state"
-    let operation := op_run.appFn!.appFn!
-    setGoals [runGoal] -- Makes the following simp work
-    let resultValue ←
-      simpValue only simpArgs operation (← getRunBodyFrom goal).env
-          expand -- Let simp work on the newly written value
-    let runGoal ← replaceBySimp runGoal operation resultValue
-    -- Apply runTactics to runGoal
-    setGoals [runGoal]
-    evalTactic runTactics
-    unless (← getUnsolvedGoals).isEmpty do
-      throwError "`step_impure =>` left `insn` unsolved"
-    setGoals [main]
-    let ⟨S', hS', hS⟩ ← sealState inState
-    -- Drop the consumed facts, where nothing else depends on them
+  focus <|
     withMainContext do
-        let mut g ← getMainGoal
-        for h in consumed do
-          let fvarId ← getFVarId h
-          g ← g.clear fvarId
-        replaceMainGoal [g]
-    -- Get facts to preserve
-    let goals ←
+      let (g, goal) ← getGoalType
+      let inState := (← getRunBodyFrom goal).state
+      let ⟨runGoal, main⟩ ← rewriteStep g ``BasicBlock.runBodyFrom_step_of_run
+      let some runGoal ← dsimpMlirInstr? runGoal | throwError "Could not `dsimp` runGoal"
+      let_expr Eq _ op_run _ :=
+        ← instantiateMVars (← runGoal.getType) | throwError m!"{← runGoal.getType} not an equality"
+      unless op_run.getAppNumArgs >= 2 do
+        throwError m!"Run goal lhs {op_run} not application with env and state"
+      let operation := op_run.appFn!.appFn!
+      setGoals [runGoal] -- Makes the following simp work
+      let resultValue ←
+        simpValue only simpArgs operation (← getRunBodyFrom goal).env
+            expand -- Let simp work on the newly written value
+      let runGoal ← replaceBySimp runGoal operation resultValue
+      -- Apply runTactics to runGoal
+      setGoals [runGoal]
+      evalTactic runTactics
+      unless (← getUnsolvedGoals).isEmpty do
+        throwError "`step_impure =>` left `insn` unsolved"
+      setGoals [main]
+      let ⟨S', hS', hS⟩ ← sealState inState
+      -- Drop the consumed facts, where nothing else depends on them
       withMainContext do
-          let preserveHyps ← hypsMentioning inState (except := #[hS', hS])
           let mut g ← getMainGoal
-          let mut goals := #[]
-          let hSId := mkIdent (← hS.getUserName)
-          let hS'Id := mkIdent (← hS'.getUserName)
-          let mlirMem := mkIdent `mlir_mem
-          for hyp in preserveHyps do
-            let decl ← hyp.getDecl
-            -- P S ↦ P S'
-            let newTy :=
-              (← kabstract (← instantiateMVars decl.type) inState).instantiate1 (.fvar S')
-            let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
-            let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
-            g ← g'.clear hyp
-            setGoals [pg.mvarId!]
-            let hId := mkIdent decl.userName
-            evalTactic
-                (←
-                  `(tactic|
-                      first
-                      | ( subst $hSId:ident
-                          try simp at $hId:ident
-                          simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
-                          done)
-                      | (subst $hSId:ident $hS'Id:ident; assumption)
-                      | skip))
-            unless ← pg.mvarId!.isAssigned do
-              goals := goals.push pg.mvarId!
-          let_expr Eq _ S _ :=
-            ← instantiateMVars (← hS.getType) | throwError m!"{← hS.getType} is no Equation"
-          g ← g.clear hS
-          g ← g.clear S.fvarId!
-          g ← g.rename S' `S
-          g ← g.rename hS' `hS
-          setGoals [g]
-          return goals
-    finishStep value hyp only simpArgs expand
-    setGoals (goals.toList ++ (← getGoals))
+          for h in consumed do
+            let fvarId ← getFVarId h
+            g ← g.clear fvarId
+          replaceMainGoal [g]
+      -- Get facts to preserve
+      let goals ←
+        withMainContext do
+            let preserveHyps ← hypsMentioning inState (except := #[hS', hS])
+            let mut g ← getMainGoal
+            let mut goals := #[]
+            let hSId := mkIdent (← hS.getUserName)
+            let hS'Id := mkIdent (← hS'.getUserName)
+            let mlirMem := mkIdent `mlir_mem
+            for hyp in preserveHyps do
+              let decl ← hyp.getDecl
+              -- P S ↦ P S'
+              let newTy :=
+                (← kabstract (← instantiateMVars decl.type) inState).instantiate1 (.fvar S')
+              let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
+              let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
+              g ← g'.clear hyp
+              setGoals [pg.mvarId!]
+              let hId := mkIdent decl.userName
+              evalTactic
+                  (←
+                    `(tactic|
+                        first
+                        | ( subst $hSId:ident
+                            try simp at $hId:ident
+                            simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
+                            done)
+                        | (subst $hSId:ident $hS'Id:ident; assumption)
+                        | skip))
+              unless ← pg.mvarId!.isAssigned do
+                goals := goals.push pg.mvarId!
+            let_expr Eq _ S _ :=
+              ← instantiateMVars (← hS.getType) | throwError m!"{← hS.getType} is no Equation"
+            g ← g.clear hS
+            g ← g.clear S.fvarId!
+            g ← g.rename S' `S
+            g ← g.rename hS' `hS
+            setGoals [g]
+            return goals
+      finishStep value hyp only simpArgs expand
+      setGoals (goals.toList ++ (← getGoals))
 
 /-- Step an effectful instruction, proving it with `tac`. -/
 def runStep (args : StepArgs) (tac : Syntax) : TacticM Unit :=

@@ -17,8 +17,7 @@ abbrev ExitResult (tRets) (n) :=
 def BasicBlock.run (env : ⟪Γ⟫) {blockParams : Fin n → _} (block : BasicBlock Γ tRets blockParams) :
     EffectM (⟪Γ⟫ × ExitResult tRets n) := do
   let bodyResult ← List.foldlM Instr.run env block.body
-  let exitResult ← block.exit.run bodyResult
-  return (bodyResult, exitResult)
+  block.exit.run bodyResult
 
 def Func.evalFrom (func : Func) : Nat → ⟪func.Γ⟫ → Fin func.n → EffectM (Option (Vals func.tRets))
   | 0, _, _ => pure .none
@@ -245,6 +244,9 @@ theorem Func.runFrom_eq {func : Func} {E} {i} {s} :
   cases res <;> simp
 
 theorem Func.exit {E} : Func.continue E (Sum.inl vals) S = .value (vals, S) := by rfl
+
+theorem Func.continue_next {E} :
+    Func.continue (func := func) E (Sum.inr idx) S = Func.runFrom func E idx S := by rfl
 
 end RunTheorems
 

@@ -37,8 +37,20 @@ inductive Instr (Γ : Ctx)
 
 -- call, etc...
 
+abbrev Ctx.types (Γ : Ctx) (idxs : List (Fin Γ.vals.length)) :=
+  idxs.map (Γ.vals.get)
+
+structure Jump (Γ : Ctx) (blockParams : Fin n → List (Fin Γ.vals.length)) where
+  target : Fin n
+  args : Regs Γ (Γ.types (blockParams target))
+
 inductive Exit (Γ : Ctx) (tRets : List Ty) (blockParams : Fin n → List (Fin Γ.vals.length))
   | ret (vs : Regs Γ tRets)
+  | br (target : Jump Γ blockParams)
+  | condBr (cond : Reg Γ (.bv 1)) (ttrue : Jump Γ blockParams) (tfalse : Jump Γ blockParams)
+  |
+  switch (val : Reg Γ t) (defaultTarget : Jump Γ blockParams)
+    (branches : List (⟦t⟧ᵣ × Jump Γ blockParams))
 
 end
 
