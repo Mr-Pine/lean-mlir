@@ -49,7 +49,7 @@ def evalFinishBlock : Tactic := fun stx =>
         (·.isAppOfArity ``Regs.read 4) -- If we don't exit, this will throw. Handle when relevant
       | throwError "no {``Regs.read} in the goal{indentExpr goal}"
     let env := ret.getArg! 2
-    let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env
+    let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env true
     replaceMainGoal [← replaceBySimp g ret r]
 
 end
