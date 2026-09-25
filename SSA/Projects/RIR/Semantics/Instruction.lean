@@ -40,31 +40,34 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | load dst p => Operation.load dst (env.read p) env
   | store p reg => Operation.store (env.read p) (env.read reg) env
 
-def Env.setMany (env : ⟪Γ⟫) :
-    (targets : List (Fin Γ.vals.length)) → Vals ts → Γ.types targets = ts → ⟪Γ⟫
-  | (t :: ts), (Vals.cons v vs), hts =>
-    env.write ⟨t, (List.cons.inj hts).left⟩ v |>.setMany ts vs (List.cons.inj hts).right
-  | [], _, _ => env
+/-- Write `vs` into `ds`, first to last. -/
+def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
+  | .nil, .nil => env
+  | .cons d ds, .cons v vs => (env.write d v).writeMany ds vs
 
-def Jump.run (env : ⟪Γ⟫) (jump : Jump (n := n) Γ blockParams) : ⟪Γ⟫ × (Vals tRets ⊕ Fin n) :=
-  (env.setMany (blockParams jump.target) (jump.args.read env) rfl, .inr jump.target)
+/-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
+parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/
+def Jump.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (blockTys k)) (env : ⟪Γ⟫)
+    (jump : Jump Γ blockTys) : ⟪Γ⟫ × (Vals tRets ⊕ Fin n) :=
+  (env.writeMany (params jump.target) (jump.args.read env), .inr jump.target)
 
 /-- The target of the first case whose value is `x`, else `default`. -/
-def switchTarget {bp : Fin n → List (Fin Γ.vals.length)} (x : ⟦t⟧ᵣ) (default : Jump Γ bp) :
-    List (⟦t⟧ᵣ × Jump Γ bp) → Jump Γ bp
+def switchTarget {bt : Fin n → List Ty} (x : ⟦t⟧ᵣ) (default : Jump Γ bt) :
+    List (⟦t⟧ᵣ × Jump Γ bt) → Jump Γ bt
   | [] => default
   | (v, j) :: cases => if x = v then j else switchTarget x default cases
 
 @[mlir_instr]
-def Exit.run (env : ⟪Γ⟫) : Exit (n := n) Γ tRets blockParams → EffectM (⟪Γ⟫ × (Vals tRets ⊕ Fin n))
+def Exit.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (blockTys k)) (env : ⟪Γ⟫) :
+    Exit Γ tRets blockTys → EffectM (⟪Γ⟫ × (Vals tRets ⊕ Fin n))
   | ret regs => pure (env, .inl (regs.read env))
-  | br target => pure (target.run env)
+  | br target => pure (target.run params env)
   | condBr cond ttrue tfalse => do
     let .value cond := env.read cond | throwUB
-    return if cond == 1#1 then ttrue.run env else tfalse.run env
+    return if cond == 1#1 then ttrue.run params env else tfalse.run params env
   | switch cond default branches => do
     let .value cond := env.read cond | throwUB
-    return (switchTarget (cond) default branches).run env
+    return (switchTarget (cond) default branches).run params env
 
 end
 

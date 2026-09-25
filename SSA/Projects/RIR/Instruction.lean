@@ -12,6 +12,11 @@ inductive Regs (Γ : Ctx) : List Ty → Type
   | nil : Regs Γ []
   | cons (r : Reg Γ t) (rs : Regs Γ ts) : Regs Γ (t :: ts)
 
+/-- Registers written together, typed by their list of types: a block's parameters. -/
+inductive Dsts (Γ : Ctx) : List Ty → Type
+  | nil : Dsts Γ []
+  | cons (d : Dst Γ t) (ds : Dsts Γ ts) : Dsts Γ (t :: ts)
+
 inductive UnOp : Ty → (out : Ty) → Type
   | gepConst (byteOff : Nat) : UnOp .ptr .ptr
 
@@ -37,20 +42,18 @@ inductive Instr (Γ : Ctx)
 
 -- call, etc...
 
-abbrev Ctx.types (Γ : Ctx) (idxs : List (Fin Γ.vals.length)) :=
-  idxs.map (Γ.vals.get)
-
-structure Jump (Γ : Ctx) (blockParams : Fin n → List (Fin Γ.vals.length)) where
+/-- A jump to block `target`, with one argument per parameter of the target (`blockTys target`). -/
+structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where
   target : Fin n
-  args : Regs Γ (Γ.types (blockParams target))
+  args : Regs Γ (blockTys target)
 
-inductive Exit (Γ : Ctx) (tRets : List Ty) (blockParams : Fin n → List (Fin Γ.vals.length))
+inductive Exit (Γ : Ctx) (tRets : List Ty) (blockTys : Fin n → List Ty)
   | ret (vs : Regs Γ tRets)
-  | br (target : Jump Γ blockParams)
-  | condBr (cond : Reg Γ (.bv 1)) (ttrue : Jump Γ blockParams) (tfalse : Jump Γ blockParams)
+  | br (target : Jump Γ blockTys)
+  | condBr (cond : Reg Γ (.bv 1)) (ttrue : Jump Γ blockTys) (tfalse : Jump Γ blockTys)
   |
-  switch (val : Reg Γ t) (defaultTarget : Jump Γ blockParams)
-    (branches : List (⟦t⟧ᵣ × Jump Γ blockParams))
+  switch (val : Reg Γ t) (defaultTarget : Jump Γ blockTys)
+    (branches : List (⟦t⟧ᵣ × Jump Γ blockTys))
 
 end
 
