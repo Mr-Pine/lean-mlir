@@ -3,6 +3,11 @@ defaultTargets = ["MLIR"]
 moreLeanArgs = ["--tstack=400000"]
 moreServerArgs = ["--tstack=400000"]
 
+[[require]]
+name = "proofwidgets"
+scope = "leanprover-community"
+rev = "nightly-testing"
+
 [[lean_lib]]
 name = "MLIR"
 globs = ["MLIR.+"]
