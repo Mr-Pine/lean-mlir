@@ -102,7 +102,8 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
             all_goals
               try
                 dsimp only [Jump.run, Fin.isValue, Regs.read_nil, EffectM.pure_eq,
-                  PoisonOr.value_bind, reduceSetMany]))
+                  PoisonOr.value_bind, Regs.read_cons, reduceWriteManyDsts, Env.writeMany_nil,
+                  Env.writeMany_cons]))
   evalTactic (← `(tactic| all_goals rw [Func.continue_next]))
   let mut goals := []
   for g in ← getGoals do

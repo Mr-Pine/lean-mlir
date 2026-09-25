@@ -8,20 +8,22 @@ namespace MLIR
 @[expose] public section
 
 /-- One `mlir` basic block -/
-structure BasicBlock (Γ : Ctx) (tRets : List Ty)
-    (blockParams : Fin n → List (Fin Γ.vals.length)) where
+structure BasicBlock (Γ : Ctx) (tRets : List Ty) (blockTys : Fin n → List Ty) where
   body : List (Instr Γ)
-  exit : Exit Γ tRets blockParams
+  exit : Exit Γ tRets blockTys
 
 /-- Represents an entire function in `mlir` -/
 structure Func where
   Γ : Ctx
   tRets : List Ty
   n : Nat
-  blockParams : Fin n → List (Fin Γ.vals.length)
+  /-- The types of each block's parameters -/
+  blockTys : Fin n → List Ty
+  /-- Each block's parameters: the registers a jump to it writes its arguments to -/
+  blockParams : (k : Fin n) → Dsts Γ (blockTys k)
   hhasBlock : n > 0
-  hentry : blockParams ⟨0, hhasBlock⟩ = [] -- Block 0 is the entry block and has no parameters
-  blocks : Fin n → BasicBlock Γ tRets blockParams
+  hentry : blockTys ⟨0, hhasBlock⟩ = [] -- Block 0 is the entry block and has no parameters
+  blocks : Fin n → BasicBlock Γ tRets blockTys
 
 end
 

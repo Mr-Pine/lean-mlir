@@ -14,16 +14,16 @@ abbrev ExitResult (tRets) (n) :=
   Vals tRets ⊕ Fin n
 
 @[expose]
-def BasicBlock.run (env : ⟪Γ⟫) {blockParams : Fin n → _} (block : BasicBlock Γ tRets blockParams) :
-    EffectM (⟪Γ⟫ × ExitResult tRets n) := do
+def BasicBlock.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (blockTys k))
+    (env : ⟪Γ⟫) (block : BasicBlock Γ tRets blockTys) : EffectM (⟪Γ⟫ × ExitResult tRets n) := do
   let bodyResult ← List.foldlM Instr.run env block.body
-  block.exit.run bodyResult
+  block.exit.run params bodyResult
 
 def Func.evalFrom (func : Func) : Nat → ⟪func.Γ⟫ → Fin func.n → EffectM (Option (Vals func.tRets))
   | 0, _, _ => pure .none
   | fuel + 1, E, blockIndex => do
     let block := func.blocks blockIndex
-    let (E', blockRes) ← BasicBlock.run E block
+    let (E', blockRes) ← BasicBlock.run func.blockParams E block
     match blockRes with
     | .inl returnValues =>
       return returnValues
@@ -91,7 +91,8 @@ theorem Func.observe_evalFrom_succ (f : Func) :
   | succ fuel ih =>
     intro E i s r h
     simp [Fuel.observe, Func.evalFrom] at h ⊢
-    rcases hb : BasicBlock.run E (f.blocks i) s with _ | ⟨⟨E, res⟩, s'⟩ <;> simp [hb] at *
+    rcases hb : BasicBlock.run f.blockParams E (f.blocks i) s with _ | ⟨⟨E, res⟩, s'⟩ <;>
+      simp [hb] at *
     · exact h
     · cases res <;> simp at h ⊢ <;> try exact h
       rename_i val
@@ -210,7 +211,7 @@ public section RunTheorems
 private theorem Func.eval_init (func : Func) (fuel : Nat) (args : _) :
     func.eval (fuel + 1) args =
       (do
-        let (E', res) ← (func.blocks ⟨0, func.hhasBlock⟩).run (Env.init args)
+        let (E', res) ← (func.blocks ⟨0, func.hhasBlock⟩).run func.blockParams (Env.init args)
         match res with
         | .inl vals =>
           return (some vals)
@@ -234,13 +235,14 @@ noncomputable def Func.continue {func : Func} (env : ⟪func.Γ⟫)
 theorem Func.runFrom_eq {func : Func} {E} {i} {s} :
     func.runFrom E i s =
       (do
-        let ((E', res), s') ← (func.blocks i).run E s
+        let ((E', res), s') ← (func.blocks i).run func.blockParams E s
         func.continue E' res s') := by
   unfold Func.continue Func.runFrom
   dsimp
   rw [← Fuel.limit_shift (Func.evalFrom_mono func E i s) (Func.evalFrom_based func E i s)]
   simp [Func.evalFrom, Fuel.observe]
-  rcases hb : BasicBlock.run E (func.blocks i) s with _ | ⟨⟨E', res⟩, s'⟩ <;> simp [Fuel.limit]
+  rcases hb : BasicBlock.run func.blockParams E (func.blocks i) s with _ | ⟨⟨E', res⟩, s'⟩ <;>
+    simp [Fuel.limit]
   cases res <;> simp
 
 theorem Func.exit {E} : Func.continue E (Sum.inl vals) S = .value (vals, S) := by rfl
