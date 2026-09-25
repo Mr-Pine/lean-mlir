@@ -20,6 +20,10 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | and => Operation.and
+  | add flags => Operation.add flags
+  | sub flags => Operation.sub flags
+  | mul flags => Operation.mul flags
+  | lshr exact => Operation.lshr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p
 
