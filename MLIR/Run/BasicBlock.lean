@@ -33,9 +33,7 @@ theorem BasicBlock.runBodyFrom_done {block : BasicBlock Γ tRets bp} {env : ⟪�
   rw [runBodyFrom, List.drop_eq_nil_of_le hpos, List.foldlM_nil]
 
 theorem BasicBlock.run_eq (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) :
-    block.run env = block.runBodyFrom env 0 >>= fun E => (E, ·) <$> block.exit.run E := by
-  rw [runBodyFrom_zero, run]
-  rfl
+    block.run env = block.runBodyFrom env 0 >>= block.exit.run := by rw [runBodyFrom_zero, run]
 
 theorem BasicBlock.runBodyFrom_step_of_run {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
     (hpos : pos < block.body.length := by decide)
@@ -64,6 +62,43 @@ dsimproc [simp, mlir_instr]reduceTyGetElem ((_ : List Ty)[_]) := fun e => do
     return .visit e'
   | _ =>
     return .continue
+
+section ControlFlow
+
+/-- Running a jump chosen by an `if` runs the chosen jump. -/
+theorem Jump.run_ite {c : Prop} [Decidable c] {bp : Fin n → List (Fin Γ.vals.length)} (env : ⟪Γ⟫)
+    (j j' : Jump Γ bp) :
+    Jump.run (tRets := tRets) env (if c then j else j') =
+      if c then Jump.run env j else Jump.run env j' := by
+  split <;> rfl
+
+@[simp]
+theorem Env.setMany_nil (E : ⟪Γ⟫) : E.setMany [] Vals.nil h = E :=
+  rfl
+
+@[simp]
+theorem Env.setMany_cons (E : ⟪Γ⟫) :
+    E.setMany (t :: ts) (Vals.cons v vs) h =
+      E[⟨t, (List.cons.inj h).left⟩ := v].setMany ts vs (List.cons.inj h).right :=
+  rfl
+
+open Lean Meta in
+/-- `setMany_nil`/`setMany_cons` at default transparency: a jump's `setMany` has the targets
+  `blockParams k` and the index `Γ.types (blockParams k)`, which only reduce to lists past reducible
+  transparency. -/
+dsimproc [mlir_instr]reduceSetMany (Env.setMany _ _ _ _) := fun e =>
+  withTransparency .default do
+    for lem in [``Env.setMany_cons, ``Env.setMany_nil] do
+      let c ← mkConstWithFreshMVarLevels lem
+      let (_, _, ty) ← forallMetaTelescopeReducing (← inferType c)
+      let some (_, lhs, rhs) := ty.eq? | continue
+      if ← isDefEq lhs e then
+        let rhs ← instantiateMVars rhs
+        unless rhs.hasExprMVar do
+          return .visit rhs
+    return .continue
+
+end ControlFlow
 
 end
 

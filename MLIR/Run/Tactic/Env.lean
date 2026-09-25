@@ -14,13 +14,12 @@ public meta section
 
 section SealEnv
 
-def sealEnv : TacticM Unit :=
+def sealEnvAt (env : Expr) : TacticM Unit :=
   withMainContext do
-    let (g, goal) ← getGoalType
-    let runBodyFrom ← getRunBodyFrom goal
-    if runBodyFrom.env.isFVar then
+    let g ← getMainGoal
+    if env.isFVar then
       return
-    let envWrite ← getEnvWrite runBodyFrom.env
+    let envWrite ← getEnvWrite env
     let E := envWrite.base
     let hE ← findEqWithLhs E m!"of the form `{E} = _`"
     let hEargs ←
@@ -32,19 +31,24 @@ def sealEnv : TacticM Unit :=
     if (← hE.getType).eq?.get!.2.1 != envWrite.base then
       throwError
           m!"env base {envWrite.base} from goal is different from the one in {← hE.getType} differ"
-    let abstractWrite := Expr.lam `e (← inferType E) (← kabstract runBodyFrom.env E) .default
+    let abstractWrite := Expr.lam `e (← inferType E) (← kabstract env E) .default
     let stmtEq := (mkEq · (abstractWrite.beta #[E₀chain]))
     let stmtArgs (e) : MetaM _ := do
       mkEq (← mkAppM ``Env.args #[e]) args
     let (_, g) ←
       g.withContext do
-          generalizeOpaque g (hyps := #[]) runBodyFrom.env `E
+          generalizeOpaque g (hyps := #[]) env `E
               #[⟨`hE, stmtEq, ← mkCongrArg abstractWrite (mkFVar hE)⟩,
-                ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs runBodyFrom.env)⟩]
+                ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs env)⟩]
     let g ← g.clear hE
     let g ← g.clear hEargs
     let g ← g.clear E.fvarId!
     replaceMainGoal [g]
+
+def sealEnv : TacticM Unit := do
+  let (g, goal) ← getGoalType
+  let runBodyFrom ← getRunBodyFrom goal
+  sealEnvAt runBodyFrom.env
 
 elab "seal_env" : tactic => sealEnv
 
