@@ -28,7 +28,7 @@ syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- Step a pure instruction, extending the env with the new value -/
 def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
-    (runTactics : Syntax) (consumed : Array Ident) : TacticM Unit :=
+    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let inState := (← getRunBodyFrom goal).state
@@ -41,8 +41,8 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
     let operation := op_run.appFn!.appFn!
     setGoals [runGoal] -- Makes the following simp work
     let resultValue ←
-      simpValue only simpArgs operation
-          (← getRunBodyFrom goal).env -- Let simp work on the newly written value
+      simpValue only simpArgs operation (← getRunBodyFrom goal).env
+          expand -- Let simp work on the newly written value
     let runGoal ← replaceBySimp runGoal operation resultValue
     -- Apply runTactics to runGoal
     setGoals [runGoal]
@@ -97,27 +97,39 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
           g ← g.rename hS' `hS
           setGoals [g]
           return goals
-    finishStep value hyp only simpArgs
+    finishStep value hyp only simpArgs expand
     setGoals (goals.toList ++ (← getGoals))
 
 /-- Step an effectful instruction, proving it with `tac`. -/
 def runStep (args : StepArgs) (tac : Syntax) : TacticM Unit :=
-  runStepImpure args.value args.hyp args.only args.simpArgs tac args.consumed
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand tac args.consumed
 
 @[tactic stepImpure]
-def evalStepImpure : Tactic := fun stx => runStep (StepArgs.parse stx[1] stx[2] stx[3]) stx[5]
+def evalStepImpure : Tactic := fun stx =>
+  runStep (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode) stx[5]
 
 section InstructionSpecific
 
+/-- Fail unless every `PoisonOr` operand of the instruction's operation is `.value _`: the
+`run_load`/`run_store` lemmas need known values, and `simp_all` cannot find a missing one. -/
+elab "expect_values" : tactic =>
+  withMainContext do
+    let_expr Eq _ lhs _ := ← instantiateMVars (← getMainTarget)
+      | throwError "expected an equation, got{indentExpr (← getMainTarget)}"
+    -- `op E S`: the operation, applied to the env and the state
+    for a in lhs.appFn!.appFn!.getAppArgs do
+      if (← whnf (← inferType a)).isAppOf ``PoisonOr && !a.isAppOfArity ``PoisonOr.value 2 then
+        throwError "operand{indentExpr a}\nis not known to be `.value _`; it may be poison"
+
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
-  runStep (StepArgs.parse stx[1] stx[2] stx[3])
-      (← `(tacticSeq| exact run_load (by simp_all) (by dsimp; try simp; rfl)))
+  runStep (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode)
+      (← `(tacticSeq| expect_values; exact run_load (by simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
-  runStep (StepArgs.parse stx[1] mkNullNode stx[2])
-      (← `(tacticSeq| exact run_store (by simp_all) (by dsimp; try simp; rfl)))
+  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
+      (← `(tacticSeq| expect_values; exact run_store (by simp_all) (by dsimp; try simp; rfl)))
 
 end InstructionSpecific
 

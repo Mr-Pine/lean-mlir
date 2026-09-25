@@ -49,7 +49,8 @@ def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
   let (m?, _) ← dsimpGoal m ctx (simprocs := #[← Simp.getSimprocs])
   return m?
 
-def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) : TacticM Unit :=
+def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool) :
+    TacticM Unit :=
   withMainContext do
     -- Resolve any env reads
     let (g, goal) ← getGoalType
@@ -61,7 +62,7 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
     let envWrite ← getEnvWrite runBodyFrom.env
     let env := envWrite.base
     let resultValue ←
-      simpValue only simpArgs envWrite.value env -- Let simp work on the newly written value
+      simpValue only simpArgs envWrite.value env expand -- Let simp work on the newly written value
     replaceMainGoal [← replaceBySimp g envWrite.value resultValue]
     -- If not `inline`, extract the value into a local variable with a hypothesis
     match value with
@@ -92,10 +93,9 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
           | .auto =>
             pure (var_name.appendBefore "h")
         -- Abstract only the inner `x` of `.value x`. Helps for not carrying the `PoisonOr` Monad.
-        let abstractionTarget := if envWrite.value.isAppOfArity ``PoisonOr.value 2 then
-          envWrite.value.appArg!
-        else
-          envWrite.value
+        let abstractionTarget :=
+          if envWrite.value.isAppOfArity ``PoisonOr.value 2 then envWrite.value.appArg!
+          else envWrite.value
         let (_, g) ←
           g.withContext do
               generalizeOpaque g (hyps := #[]) abstractionTarget var_name

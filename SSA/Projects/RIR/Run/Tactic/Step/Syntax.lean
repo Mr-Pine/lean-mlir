@@ -21,6 +21,9 @@ syntax stepNames := (" with " ident (colGt ident)?) <|> &" inline"
 /-- Facts about the old state that are not carried over to the new one. -/
 syntax stepConsuming := &" consuming" (ppSpace colGt ident)+
 
+/-- `opaque`: do not unfold the values the instruction reads into their definitions. -/
+syntax stepOpaque := colGt &" opaque"
+
 /-- The arguments shared by the stepping tactics. -/
 structure StepArgs where
   value : EnvName := .auto
@@ -28,9 +31,10 @@ structure StepArgs where
   only : Bool := false
   simpArgs : Syntax := mkNullNode
   consumed : Array Ident := #[]
+  expand : Bool := true
 
 /-- Read a `stepSimpArgs` node, and the optional `stepNames` and `stepConsuming` groups. -/
-def StepArgs.parse (simp names consuming : Syntax) : StepArgs :=
+def StepArgs.parse (simp names consuming sopaque : Syntax) : StepArgs :=
   let (value, hyp) : EnvName × EnvName :=
     if names.isNone then (.auto, .auto)
     else
@@ -39,8 +43,14 @@ def StepArgs.parse (simp names consuming : Syntax) : StepArgs :=
       if alt.isOfKind groupKind then
         (.named ⟨alt[1]⟩, if alt[2].isNone then .auto else .named ⟨alt[2][0]⟩)
       else (.inline, .inline)
-  { value, hyp, only := !simp[0].isNone, simpArgs := simp[1],
-    consumed := if consuming.isNone then #[] else consuming[0][1].getArgs.map (⟨·⟩) }
+  {
+    value,
+    hyp,
+    only := !simp[0].isNone,
+    simpArgs := simp[1],
+    consumed := if consuming.isNone then #[] else consuming[0][1].getArgs.map (⟨·⟩),
+    expand := sopaque.isNone,
+  }
 
 end
 
