@@ -21,12 +21,15 @@ inductive Dsts (Γ : Ctx) : List Ty → Type
 
 inductive UnOp : Ty → (out : Ty) → Type
   | gepConst (byteOff : Nat) : UnOp .ptr .ptr
+  | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
+  | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | add (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | sub (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | mul (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | shl (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | lshr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
