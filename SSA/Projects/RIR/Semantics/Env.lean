@@ -96,6 +96,17 @@ theorem read_arg (env : ⟪Γ⟫) : env.read (.arg i h) = h ▸ env.args i := by
 @[mlir_env]
 theorem read_init_arg (args : _) : (Env.init args).read (.arg i h) = args i := by rfl
 
+/-- Writing the value a register holds already changes nothing. -/
+theorem write_eq_of {E₀ E : ⟪Γ⟫} (h₀ : E₀ = E) (hr : E.read (.val i h) = v) :
+    E₀.write ⟨i, h⟩ v = E := by
+  subst h₀ h hr
+  cases E₀
+  simp only [write, set, read, mk.injEq, true_and]
+  funext j
+  split
+  · subst_vars; rfl
+  · rfl
+
 end Lemmas
 
 meta section Syntax

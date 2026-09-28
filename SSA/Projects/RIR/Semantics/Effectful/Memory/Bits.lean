@@ -6,14 +6,15 @@ public def spliceBits {n w} (bytes : BitVec n) (off : Nat) (x : BitVec w) : BitV
   let mask := ((BitVec.allOnes w).setWidth n) <<< off
   (bytes &&& ~~~mask) ||| ((x.setWidth n) <<< off)
 
+public section
+
+/-- Bit `i` of a splice: from `x` inside the spliced range, else from `bytes`. -/
 theorem getLsbD_spliceBits {n w : Nat} (bytes : BitVec n) (off : Nat) (x : BitVec w) (i : Nat) :
     (spliceBits bytes off x).getLsbD i =
       if off ≤ i ∧ i < off + w ∧ i < n then x.getLsbD (i - off) else bytes.getLsbD i := by
   simp only [spliceBits, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
     BitVec.getLsbD_shiftLeft, BitVec.getLsbD_setWidth, BitVec.getLsbD_allOnes]
   grind
-
-public section
 
 theorem extractLsb'_spliceBits_of_subrange {n w w' : Nat} (bytes : BitVec n) (off off' : Nat)
     (x : BitVec w) (hoff : off ≤ off') (hw : (off' - off) + w' ≤ w) (hn : off + w ≤ n) :

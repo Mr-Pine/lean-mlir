@@ -19,34 +19,45 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     let g ← getMainGoal
     if env.isFVar then
       return
-    let envWrite ← getEnvWrite env
-    let E := envWrite.base
-    let hE ← findEqWithLhs E m!"of the form `{E} = _`"
-    let hEargs ←
-      findEqWithLhs (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
-    let some (_, _, E₀chain) :=
-      (← instantiateMVars (← hE.getType)).eq? | throwError "expected an equation"
-    let some (_, _, args) :=
-      (← instantiateMVars (← hEargs.getType)).eq? | throwError "expected an equation"
-    if (← hE.getType).eq?.get!.2.1 != envWrite.base then
-      throwError
-          m!"env base {envWrite.base} from goal is different from the one in {← hE.getType} differ"
+    -- the chain's root: a jump writes several parameters
+    let mut E := (← getEnvWrite env).base
+    while E.isAppOfArity ``Env.write 5 do
+      E := E.getArg! 2
+    -- without `hE`, `E` is a root (a loop's env, or a continuation's): it stays
+    let hE? ← findEqWithLhs? E m!"of the form `{E} = _`"
+    let hEargs? ←
+      findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
     let abstractWrite := Expr.lam `e (← inferType E) (← kabstract env E) .default
+    let (E₀chain, hEpf) ←
+      match hE? with
+      | some hE =>
+        do
+          let some (_, _, c) :=
+            (← instantiateMVars (← hE.getType)).eq? | throwError "expected an equation"
+          pure (c, ← mkCongrArg abstractWrite (mkFVar hE))
+      | none =>
+        pure (E, ← mkEqRefl env)
     let stmtEq := (mkEq · (abstractWrite.beta #[E₀chain]))
-    let stmtArgs (e) : MetaM _ := do
-      mkEq (← mkAppM ``Env.args #[e]) args
+    let mut facts := #[⟨`hE, stmtEq, hEpf⟩]
+    if let some hEargs := hEargs? then
+      let some (_, _, args) :=
+        (← instantiateMVars (← hEargs.getType)).eq? | throwError "expected an equation"
+      let stmtArgs (e) : MetaM _ := do
+        mkEq (← mkAppM ``Env.args #[e]) args
+      facts := facts.push ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs env)⟩
     let (_, g) ←
       g.withContext do
-          generalizeOpaque g (hyps := #[]) env `E
-              #[⟨`hE, stmtEq, ← mkCongrArg abstractWrite (mkFVar hE)⟩,
-                ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs env)⟩]
-    let g ← g.clear hE
-    let g ← g.clear hEargs
-    let g ← g.clear E.fvarId!
+          generalizeOpaque g (hyps := #[]) env `E facts
+    let mut g := g
+    if let some hEargs := hEargs? then
+      g ← g.clear hEargs
+    if let some hE := hE? then
+      g ← g.clear hE
+      g ← g.clear E.fvarId!
     replaceMainGoal [g]
 
 def sealEnv : TacticM Unit := do
-  let (g, goal) ← getGoalType
+  let (_, goal) ← getGoalType
   let runBodyFrom ← getRunBodyFrom goal
   sealEnvAt runBodyFrom.env
 
@@ -100,7 +111,12 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
     Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems)]) (congrTheorems :=
         ← getSimpCongrTheorems)
   let procs :=
-    #[← argsSimprocs facts[0]!, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
+    #[←
+        if h : 0 < facts.size then
+          argsSimprocs facts[0]
+        else
+          Simp.getSimprocs,
+      ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   return (←
@@ -129,10 +145,10 @@ then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
 def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool) :
     TacticM Simp.Result := do
-  let argsFact ← findEqWithLhs (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`"
-  let chainFact ← findEqWithLhs env m!"`{env} = _`"
-  let args ← simpPass only simpArgs e #[argsFact]
-  let vals ← simpPass only simpArgs args.expr #[chainFact]
+  let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
+  let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
+  let args ← simpPass only simpArgs e argsFact
+  let vals ← simpPass only simpArgs args.expr chainFact
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then
@@ -141,7 +157,7 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
       stateFacts
   if facts.isEmpty then
     return r
-  r.mkEqTrans (← simpPass only simpArgs r.expr (#[argsFact] ++ facts))
+  r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts))
 
 end ResolveReads
 

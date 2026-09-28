@@ -106,15 +106,21 @@ private def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
         let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
         return if l == lhs then acc.push d.fvarId else acc)
 
-/-- The unique hypothesis `_ : lhs = _`. -/
-def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
+/-- The unique hypothesis `_ : lhs = _`, if there is one. -/
+def findEqWithLhs? (lhs : Expr) (what : MessageData) : MetaM (Option FVarId) := do
   match ← findEqsWithLhs lhs with
-  | #[h] =>
-    return h
   | #[] =>
-    throwError "no hypothesis {what}"
+    return none
+  | #[h] =>
+    return some h
   | hs =>
     throwError "ambiguous: {hs.size} hypotheses {what}"
+
+/-- The unique hypothesis `_ : lhs = _`. -/
+def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
+  let h ← findEqWithLhs? lhs what
+  let some (h) := h | throwError "no hypothesis {what}"
+  return h
 
 end
 

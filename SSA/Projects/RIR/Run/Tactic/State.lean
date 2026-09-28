@@ -39,6 +39,17 @@ def sealState (S : Expr) : TacticM SealedState :=
     replaceMainGoal [g]
     return ⟨fvs[0]!, fvs[1]!, hS⟩
 
+/-- Name the goal's state `S`, with `hS : S = s`, unless it has an equation already: a loop's
+proof starts from a bare state `s`, whose facts should stay about `s`. -/
+def ensureStateEq : TacticM Unit :=
+  withMainContext do
+    let (g, goal) ← getGoalType
+    let s := (← getRunBodyFrom goal).state
+    if (← findEqWithLhs? s m!"`{s} = _`").isSome then
+      return
+    let (_, g) ← generalizeOpaque g (hyps := #[]) s `S #[⟨`hS, (mkEq · s), ← mkEqRefl s⟩]
+    replaceMainGoal [g]
+
 end SealState
 
 end
