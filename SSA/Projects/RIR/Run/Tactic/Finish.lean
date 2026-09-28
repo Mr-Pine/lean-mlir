@@ -120,10 +120,26 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
 @[tactic finishBlock]
 def evalFinishBlock : Tactic := fun stx =>
   withMainContext do
+    -- a long body's length hits `maxRecDepth` in the elaborator's `decide`, uncatchably;
+    -- `decide +kernel` only then, as its kernel check is slow
+    let long ←
+      do
+        let (_, goal) ← getGoalType
+        let mut rest ← whnfD (← mkAppM ``BasicBlock.body #[(← getRunBodyFrom goal).block])
+        let mut n := 0
+        while rest.isAppOfArity ``List.cons 3 && n < 64 do
+          rest ← whnfD rest.appArg!
+          n := n + 1
+        pure (decide (n ≥ 64))
+    let hpos ←
+      if long then
+        `(term| by decide +kernel)
+      else
+        `(term| by decide)
     evalTactic
         (←
           `(tactic|
-              ( rw [BasicBlock.runBodyFrom_done]
+              ( rw [BasicBlock.runBodyFrom_done $hpos]
                 simp only [EffectM.pure_eq, PoisonOr.value_bind, reduceBlockExit,
                   reduceFuncContinue, Exit.run])))
     let (g, goal) ← getGoalType

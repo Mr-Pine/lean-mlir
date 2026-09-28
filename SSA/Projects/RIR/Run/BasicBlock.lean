@@ -11,6 +11,12 @@ theorem Func.runFrom_of_env_eq {f : Func} {E E' : ⟪f.Γ⟫} {k s K} (he : E' =
     (h : f.runFrom E' k s = K) : f.runFrom E k s = K :=
   he ▸ h
 
+/-- `runFrom_of_env_eq` under a bind: a framed function's run, before its frame erase. -/
+theorem Func.runFrom_bind_of_env_eq {f : Func} {E E' : ⟪f.Γ⟫} {k s}
+    {g : Vals f.tRets × GlobalState → PoisonOr β} {K} (he : E' = E)
+    (h : (f.runFrom E' k s >>= g) = K) : (f.runFrom E k s >>= g) = K :=
+  he ▸ h
+
 def BasicBlock.runBodyFrom (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) (n : Nat) : EffectM ⟪Γ⟫ :=
   List.foldlM Instr.run env (block.body.drop n)
 

@@ -37,10 +37,26 @@ def jumpTargets (exit : Expr) : MetaM (Array Expr) := do
   exit.forEachWhere (·.isAppOfArity ``Jump.mk 5) fun j => targets.modify (·.push (j.getArg! 3))
   targets.get
 
+/-- The value registers some instruction or exit in `parts` reads. -/
+def usedRegs (parts : Array Expr) : MetaM (Std.HashSet Nat) := do
+  let regs ← IO.mkRef ({} : Std.HashSet Nat)
+  for part in parts do
+    part.forEachWhere (·.isAppOfArity ``Reg.val 4) fun reg => do
+        if let some k← valRegIndex? reg then
+          regs.modify (·.insert k)
+  regs.get
+
+/-- A function's block `k`: its registers read and its jump targets. Each step asks again for the
+same reachable blocks. -/
+initialize blockUseCache : IO.Ref (Std.HashMap (Expr × Nat) (Std.HashSet Nat × Array Expr)) ←
+  IO.mkRef {}
+
 def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
-  let mut parts ← blockParts block pos
+  let parts ← blockParts block pos
+  let mut live ← usedRegs parts
   let mut todo ← jumpTargets parts[0]!
   let mut seen : Std.HashSet Nat := {}
+  let func ← instantiateMVars func
   while !todo.isEmpty do
     let t := todo.back!
     todo := todo.pop
@@ -48,16 +64,19 @@ def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
     if seen.contains k then
       continue
     seen := seen.insert k
-    let bParts ← blockParts (mkApp2 (mkConst ``Func.blocks) func t) (mkNatLit 0)
-    parts := parts ++ bParts
-    todo := todo ++ (← jumpTargets bParts[0]!)
-  -- We now collected all expressions
-  let regs ← IO.mkRef ({} : Std.HashSet Nat)
-  for part in parts do
-    part.forEachWhere (·.isAppOfArity ``Reg.val 4) fun reg => do
-        if let some k← valRegIndex? reg then
-          regs.modify (·.insert k)
-  return (← regs.get)
+    let (regs, targets) ←
+      match (← blockUseCache.get)[(func, k)]? with
+      | some r =>
+        pure r
+      | none =>
+        do
+          let ps ← blockParts (mkApp2 (mkConst ``Func.blocks) func t) (mkNatLit 0)
+          let r := (← usedRegs ps, ← jumpTargets ps[0]!)
+          blockUseCache.modify (·.insert (func, k) r)
+          pure r
+    live := live.union regs
+    todo := todo ++ targets
+  return live
 
 /-- One `Env.write` of a chain. -/
 structure ChainWrite where
@@ -95,7 +114,7 @@ private def writeComm (e : Expr) : MetaM Expr := do
   let lem ← mkConstWithFreshMVarLevels ``Env.write_comm
   let (args, _, ty) ← forallMetaTelescopeReducing (← inferType lem)
   let some (_, lhs, _) := ty.eq? | throwError "`write_comm` is not an equation"
-  unless ← isDefEq lhs e do
+  unless ← withReducible (isDefEq lhs e) do
     throwError "not two writes:{indentExpr e}"
   let h := args.back!
   h.mvarId!.assign (← mkDecideProof (← instantiateMVars (← inferType h)))
@@ -150,6 +169,37 @@ def tryClearValue (g : MVarId) (v : FVarId) : TacticM MVarId :=
     catch _ =>
       return g
 
+/-- Clear each `v` with `hv : v = _` that nothing but `hv` mentions, until nothing changes. -/
+def clearUnusedValues (g : MVarId) : MetaM MVarId :=
+  g.withContext do
+    let decls := (← getLCtx).decls.toList.filterMap id |>.filter (!·.isImplementationDetail)
+    -- per local: how many other locals, or the goal, mention it; and its defining `hv`
+    let mut uses : Std.HashMap FVarId Nat := {}
+    let mut defs : Array (FVarId × FVarId × Array FVarId) := #[]
+    for d in decls do
+      let ty ← instantiateMVars d.type
+      let xs := (collectFVars {} ty).fvarIds
+      for x in xs do
+        uses := uses.alter x (some <| ·.getD 0 + 1)
+      if let some (_, .fvar v, _) := ty.eq? then
+        unless ← isProp (← v.getType) do
+          defs := defs.push (v, d.fvarId, xs)
+    for x in (collectFVars {} (← instantiateMVars (← g.getType))).fvarIds do
+      uses := uses.alter x (some <| ·.getD 0 + 1)
+    -- later values first: clearing `hv21` can drop `v20` to its `hv20` alone
+    let mut g := g
+    for (v, hv, xs) in defs.reverse do
+      unless uses.getD v 0 == 1 do
+        continue
+      let some g' ←
+        observing?
+            (do
+              (← g.clear hv).clear v) | continue
+      g := g'
+      for x in xs do
+        uses := uses.modify x (· - 1)
+    return g
+
 def runSeal : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -177,14 +227,14 @@ def runSeal : TacticM Unit :=
     let (_, g) ← generalizeOpaque g (hyps := #[r.fvarId]) E₀' `E₀ #[]
     let g ← g.clear E₀.fvarId!
     replaceMainGoal [g]
-    -- Clear away unused values in the local state
+    -- Clear away unused values: the dead writes', then, until nothing changes, those only their
+    -- own `hv` mentions (clearing `v21` frees the `v20` that `hv21` used)
     let mut g := g
     for write in deadWrites do
-      let valueVar? :=
-        if write.val.isAppOfArity ``PoisonOr.value 2 then write.val.appArg!.fvarId? else none
-      if let some valueVar := valueVar? then
-        g ← tryClearValue g valueVar
-    replaceMainGoal [g]
+      let v := if write.val.isAppOfArity ``PoisonOr.value 2 then write.val.appArg! else write.val
+      if let some x := v.fvarId? then
+        g ← tryClearValue g x
+    replaceMainGoal [← clearUnusedValues g]
 
 elab "seal" : tactic => runSeal
 
