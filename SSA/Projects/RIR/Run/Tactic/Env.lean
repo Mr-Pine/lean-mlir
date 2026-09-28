@@ -27,7 +27,8 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     let hE? ← findEqWithLhs? E m!"of the form `{E} = _`"
     let hEargs? ←
       findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
-    let abstractWrite := Expr.lam `e (← inferType E) (← kabstract env E) .default
+    let abstractWrite :=
+      Expr.lam `e (← inferType E) (← withReducible <| kabstract env E) .default
     let (E₀chain, hEpf) ←
       match hE? with
       | some hE =>
