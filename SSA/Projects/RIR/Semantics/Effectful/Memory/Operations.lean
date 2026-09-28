@@ -139,7 +139,7 @@ theorem GlobalState.WF_storeAt {s : GlobalState} :
       · exact h k hk
   · exact Iff.rfl
 
-@[mlir_mem]
+@[mlir_mem, mlir_transport]
 theorem GlobalState.WF.storeAt {s : GlobalState} (h : s.WF) :
     { s with mem := s.mem.storeAt p x }.WF := by
   unfold GlobalState.WF

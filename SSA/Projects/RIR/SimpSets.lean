@@ -1,6 +1,7 @@
 module
 
 public meta import Lean.Meta.Tactic.Simp.RegisterCommand
+public meta import Lean.LabelAttribute
 
 /-- Unfolds the definitions and `do` blocks of the mlir operations -/
 register_simp_attr mlir_operation
@@ -16,3 +17,11 @@ register_simp_attr mlir_mem
 
 /-- Reductions for running single instructions -/
 register_simp_attr mlir_instr
+
+public meta section
+
+/-- Transports a fact about a state to the state after a store or call (`h : P s → P s'`), for
+the step tactics' fast path -/
+register_label_attr mlir_transport
+
+end
