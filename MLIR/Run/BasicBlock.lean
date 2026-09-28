@@ -6,6 +6,11 @@ namespace MLIR
 
 public section
 
+/-- Run from `E'` instead of the equal `E`: `step_loop` matches `E` to a lemma's env. -/
+theorem Func.runFrom_of_env_eq {f : Func} {E E' : ⟪f.Γ⟫} {k s K} (he : E' = E)
+    (h : f.runFrom E' k s = K) : f.runFrom E k s = K :=
+  he ▸ h
+
 def BasicBlock.runBodyFrom (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) (n : Nat) : EffectM ⟪Γ⟫ :=
   List.foldlM Instr.run env (block.body.drop n)
 

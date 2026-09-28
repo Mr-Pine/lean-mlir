@@ -142,9 +142,11 @@ def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Opti
   let overflow ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off]
   let g ← mkFreshExprMVar (mkNot (← mkEq overflow (mkConst ``Bool.true)))
   try
-    let ctx ←
-      Simp.mkContext (simpTheorems :=
-          #[← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow])
+    -- `Pointer.add` too, so `omega` sees a moved pointer's offset through its base's
+    let thms ← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow
+    let thms ← thms.addDeclToUnfold ``Pointer.add
+    let thms ← thms.addConst ``BitVec.toNat_add
+    let ctx ← Simp.mkContext (simpTheorems := #[← thms.addConst ``BitVec.toNat_ofNat])
     let (r, _) ← simpGoal g.mvarId! ctx (simprocs := #[← Simp.getSimprocs])
     if let some (_, g') := r then
       omegaFromFacts facts g'

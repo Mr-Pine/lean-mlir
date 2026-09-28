@@ -154,13 +154,19 @@ def runSeal : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal
-    let hE ← findEqWithLhs runBodyFrom.env m!"`{runBodyFrom.env} = _`"
+    let some hE ← findEqWithLhs? runBodyFrom.env m!"`{runBodyFrom.env} = _`" | return
     let some (_, _, E₀chain) :=
       (← inferType (.fvar hE)).eq? | throwError "swap proof is not an equation"
     -- the function, for the blocks after this one: `Func.continue`'s first argument
     let some cont := goal.find? (·.isAppOf ``Func.continue) | throwError "no `Func.continue`"
     let liveRegs ← liveRegs (cont.getArg! 0) runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
+    -- a loop's root env is mentioned by its continuation, so it cannot be replaced
+    if
+        E₀.isFVar &&
+          (← getLCtx).any fun d =>
+            !d.isImplementationDetail && d.fvarId != hE && d.type.containsFVar E₀.fvarId! then
+      return
     let partitionProof ← partitionProof liveRegs E₀ chain
     let deadWrites := chain.filter (·.idx ∉ liveRegs)
     let E₀' := (← chainFn deadWrites.toList E₀).beta #[E₀]
