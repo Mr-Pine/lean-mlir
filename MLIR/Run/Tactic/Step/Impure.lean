@@ -129,15 +129,33 @@ elab "expect_values" : tactic =>
       if (← whnf (← inferType a)).isAppOf ``PoisonOr && !a.isAppOfArity ``PoisonOr.value 2 then
         throwError "operand{indentExpr a}\nis not known to be `.value _`; it may be poison"
 
+/-- Close `Fits m p w` by a fact, or a conjunct of one, with the same `m` and `p`. -/
+elab "fits_fact" : tactic =>
+  withMainContext do
+    let g ← getMainGoal
+    let_expr Fits m p w := ← instantiateMVars (← g.getType) | throwError "goal is not `Fits`"
+    for (pf, ty) in ← Tactic.splitConjunctedFacts do
+      let_expr Fits m' p' w' := ty | continue
+      -- `isDefEq` for `w`: the goal's is `(Ty.bv 64).width`
+      if m' == m && p' == p && (← withNewMCtxDepth (isDefEq w' w)) then
+        g.assign pf
+        replaceMainGoal []
+        return
+    throwError "no fact `{← g.getType}`"
+
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
   runStep (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode)
-      (← `(tacticSeq| expect_values; exact run_load (by simp_all) (by dsimp; try simp; rfl)))
+      (← `(tacticSeq|
+        expect_values
+        exact run_load (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
   runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
-      (← `(tacticSeq| expect_values; exact run_store (by simp_all) (by dsimp; try simp; rfl)))
+      (← `(tacticSeq|
+        expect_values
+        exact run_store (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
 
 end InstructionSpecific
 

@@ -27,8 +27,9 @@ def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName
   let (reverted, g) ← g.revert (preserveOrder := true) hyps
   g.withContext do
       let ty ← inferType e -- Type of the expression to generalize
+      -- reducible: `e` occurs verbatim, and default transparency unfolds every `Env.write`
       let tgtAbstract ←
-        kabstract (← instantiateMVars (← g.getType)) e
+        withReducible <| kabstract (← instantiateMVars (← g.getType)) e
             occs -- e abstracted as a loose bound variable
       let tyNew ←
         withLocalDeclD xName ty
