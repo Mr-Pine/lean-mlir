@@ -18,7 +18,7 @@ def evalStepCall : Tactic := fun stx => do
   let args := StepArgs.parse stx[3] stx[4] stx[5] mkNullNode
   let innerDischarge ←
     `(tacticSeq| exact run_call (by
-        apply $thm <;> first | assumption | simp [$(mkIdent `mlir_mem):ident, *]))
+        apply $thm <;> first | with_reducible assumption | simp [$(mkIdent `mlir_mem):ident, *]))
   runStep args innerDischarge
 
 end

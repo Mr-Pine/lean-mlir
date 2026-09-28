@@ -82,6 +82,10 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
                   (←
                     `(tactic|
                         first
+                        -- fast path: the old fact and one transport lemma
+                        | ( subst $hS'Id:ident $hSId:ident
+                            solve_by_elim (transparency := .reducible) only [$hId:ident]
+                              using $(mkIdent `mlir_transport):ident)
                         | ( subst $hSId:ident
                             try simp at $hId:ident
                             simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
