@@ -3,6 +3,8 @@ module
 public import SSA.Projects.RIR.Context
 public import SSA.Projects.RIR.OverflowFlags
 public import SSA.Projects.RIR.IntPred
+public import SSA.Projects.RIR.Semantics.Vals
+public import SSA.Projects.RIR.Semantics.Effectful.EffectM
 
 namespace LeanMLIR.RIR
 
@@ -39,8 +41,8 @@ inductive Instr (Γ : Ctx)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
-
--- call, etc...
+  /-- The semantics of the calle `f` should generally be `Func.call` -/
+  | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
 
 /-- A jump to block `target`, with one argument per parameter of the target (`blockTys target`). -/
 structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where
