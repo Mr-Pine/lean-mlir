@@ -4,7 +4,7 @@ public import SSA.Projects.RIR.Instruction
 public import SSA.Projects.RIR.Semantics.Effectful.EffectM
 public import SSA.Projects.RIR.Semantics.Effectful.Memory.Operations
 public import SSA.Projects.RIR.Semantics.Env
-public import SSA.Projects.RIR.Semantics.Vals
+public import SSA.Projects.RIR.Semantics.Regs
 public import SSA.Projects.RIR.Semantics.Operations.Scalar
 public import SSA.Projects.RIR.Semantics.Operations.Memory
 public import SSA.Projects.RIR.SimpSets
