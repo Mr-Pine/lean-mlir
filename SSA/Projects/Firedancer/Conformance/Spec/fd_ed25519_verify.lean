@@ -21,9 +21,10 @@ five limbs in `ref` and a `wwl_t` in AVX-512, and a table entry is 160 bytes aga
 
 So `RefWF` gives the AVX-512 spec everything except the layout: the addresses, and the table's
 apartness from `sha`. What is left is `Avx512Globals`, which only the AVX-512 build can state.
-The same split applies to `Bt`: `Ref.BaseTableHolds s Bt` says the ref table holds it, and
+The same split applies to `Bt`: `Ref.BaseTableHolds` says the ref table holds it, and
 `Avx512Globals`' `tbl` says the AVX-512 table holds it, so assuming both is what says the two
-builds tabulate the same points.
+builds tabulate the same points. They are assumed of two states: one state cannot carry both
+layouts at the same symbols.
 -/
 
 /-- What the AVX-512 build holds at the symbols `RefWF` names: the two order-8 constants as
@@ -69,28 +70,40 @@ abbrev fd_ed25519_verify_globals_equivalent : Prop :=
       Ref.BaseTableHolds s Bt →
       s'.globals = s.globals → Avx512Globals s' Bt → Avx512.VerifyGlobals s' sha Bt
 
-/-- **The two regions agree.** On one state, on the same signature, public key and message: both
-return, both return the same code, and both leave every block but `sha` as it was.
+/-- A ref state and an AVX-512 state that differ only in their globals: the same counter, the
+same symbol table, and the same blocks under the four arguments. One state cannot be both --
+`not_refWF_avx512Globals` -- since each build lays out its constants its own way. -/
+structure VerifyStates (sR sA : GlobalState) (msg sig pk sha : Pointer) : Prop where
+  alloc : sR.alloc = sA.alloc
+  globals : sR.globals = sA.globals
+  live : ∀ b ∈ [msg.id, sig.id, pk.id, sha.id], sR.mem.live? b = sA.mem.live? b
 
-The state is a module state for `ref` -- `RefWF` and its base table -- and holds the AVX-512 build's
-vectors at those same symbols. The digest and the reduced scalar are the caller's `fInit`/`fApp`/
-`fFini`/`f`, so both regions hash and reduce the same way; what is compared is the rest. -/
+/-- **The two regions agree.** From a ref state `sR` and an AVX-512 state `sA` that differ only in
+their globals, on the same signature, public key and message: both return, both return the same
+code, the two final states agree wherever `sR` and `sA` did, and each leaves every block but `sha`
+as it was.
+
+`sR` is a module state for `ref` -- `RefWF` and its base table -- and `sA` holds the AVX-512
+build's vectors at the same symbols. The digest and the reduced scalar are the caller's `fInit`/
+`fApp`/`fFini`/`f`, so both regions hash and reduce the same way; what is compared is the rest. -/
 abbrev fd_ed25519_verify_equivalent (msg : Pointer) (sz : BitVec 64) (sig pk sha : Pointer)
-    (s : GlobalState) (hargs : VerifyArgs s msg sz sig pk sha) (_hRef : s.RefWF [sha]) : Prop :=
+    (sR sA : GlobalState) (hargs : VerifyArgs sR msg sz sig pk sha) (_hRef : sR.RefWF [sha])
+    (_hA : sA.WF) (_hst : VerifyStates sR sA msg sig pk sha) : Prop :=
   ∀ (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64)) (kbits : BitVec (80 * 64))
     fInit fApp fFini fFiniBlk
     (Bt : ℕ → PrecomputedPoint) (dig : BitVec 512) (w : Fin 4 → BitVec 64),
-    -- the module's tables, and the AVX-512 build's contents at its symbols
-    Ref.BaseTableHolds s Bt →
-      Avx512Globals s Bt →
+    -- each build's tables, at its own state
+    Ref.BaseTableHolds sR Bt →
+      Avx512Globals sA Bt →
       BaseVals Bt basePoint wellFormed_basePoint →
       -- the hash and the reduction, as both regions call them
-      Sha512KHolds s sha kbits →
+      Sha512KHolds sR sha kbits →
+      Sha512KHolds sA sha kbits →
       ScalarReduceBy f →
       Sha512InitBy fInit →
       Sha512AppendBy kbits fApp →
       Sha512FiniBy kbits fFini fFiniBlk →
-      ed25519Digest fInit fApp fFini (s.mem.live? sha.id) sha.offset (readBuf hargs.sigBuf)
+      ed25519Digest fInit fApp fFini (sR.mem.live? sha.id) sha.offset (readBuf hargs.sigBuf)
           (readBuf hargs.pkBuf) (bytesOf (readWord hargs.msgFits)) =
         some dig →
       f dig = some w →
@@ -100,18 +113,23 @@ abbrev fd_ed25519_verify_equivalent (msg : Pointer) (sz : BitVec 64) (sig pk sha
                 (Ref.fd_ed25519_verify.denote
                   (Ctxt.Valuation.ofHVector
                     [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ)))
-              s =
+              sR =
             .value ([.value ret]ₕ, sRef) ∧
           StateT.run
               (runFunction
                 (Avx512.fd_ed25519_verify.denote
                   (Ctxt.Valuation.ofHVector
                     [.value sha, .value pk, .value sig, .value sz, .value msg]ₕ)))
-              s =
+              sA =
             .value ([.value ret]ₕ, sAvx) ∧
-          -- one code, one final state, and `s` itself off `sha`
-          sRef ≈ sAvx ∧
-          sRef.alloc = s.alloc ∧
-          sRef.globals = s.globals ∧ ∀ b : BlockId, b ≠ sha.id → sRef.mem.live? b = s.mem.live? b
+          -- one code, and the final states agree where the initial ones did
+          sRef.alloc = sAvx.alloc ∧
+          sRef.globals = sAvx.globals ∧
+          (∀ b : BlockId, sR.mem.live? b = sA.mem.live? b → sRef.mem.live? b = sAvx.mem.live? b) ∧
+          -- each run leaves its own state off `sha`
+          sRef.alloc = sR.alloc ∧
+          sRef.globals = sR.globals ∧
+          (∀ b : BlockId, b ≠ sha.id → sRef.mem.live? b = sR.mem.live? b) ∧
+          ∀ b : BlockId, b ≠ sha.id → sAvx.mem.live? b = sA.mem.live? b
 
 end Firedancer
