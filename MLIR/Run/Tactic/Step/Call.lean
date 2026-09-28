@@ -9,8 +9,8 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-syntax (name := stepCall) "step_call" " using " term:max stepSimpArgs (stepNames)? (stepConsuming)? :
-  tactic
+syntax (name :=
+  stepCall) "step_call" " using " term:max stepSimpArgs (stepNames)? (stepConsuming)? : tactic
 
 @[tactic stepCall]
 def evalStepCall : Tactic := fun stx => do

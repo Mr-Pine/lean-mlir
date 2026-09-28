@@ -27,6 +27,15 @@ def MemoryState.readAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :=
   | some block => block.bytes.extractLsb' p.offsetInBits _
   | _ => 0
 
+/-- The pointer the next `alloca` returns: offset 0 in the next free block. -/
+def GlobalState.allocaPtr (s : GlobalState) : Pointer :=
+  ⟨⟨s.alloc.nextFreeBlock⟩, 0⟩
+
+/-- Allocate a zeroed block of `bytes` bytes at `allocaPtr`, and bump the counter. -/
+def GlobalState.alloca (s : GlobalState) (bytes : Nat) : GlobalState :=
+  { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
+    mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0⟩⟩ }
+
 /-- Remove every block with id `n` or above: a returning callee's frame. -/
 def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
   { mem := m.mem.filter fun id _ => id.id < n }
@@ -171,6 +180,180 @@ theorem GlobalState.eraseFrom_self {s : GlobalState} (hs : s.WF) :
   intro k hk
   simp
   exact hs k hk
+
+/-! ### `alloca` and frames -/
+
+/-- A block in memory has an id below the counter. -/
+theorem GlobalState.WF.lt {s : GlobalState} (h : s.WF) (hq : q ∈ s.mem.mem) :
+    q.id < s.alloc.nextFreeBlock :=
+  h q hq
+
+theorem Fits.mem (h : Fits m p w) : p.id ∈ m.mem := by
+  obtain ⟨b, hb, _⟩ := h
+  rw [MemoryState.getElem?_eq] at hb
+  exact
+    Std.ExtHashMap.mem_iff_isSome_getElem?.2
+      (by
+        rw [hb]; rfl)
+
+/-- A pointer into memory is not the next `alloca`'s. -/
+theorem GlobalState.ne_allocaPtr_of_fits {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
+    q.id ≠ s.allocaPtr.id := by
+  intro heq
+  have := hwf.lt h.mem
+  simp [heq, GlobalState.allocaPtr] at this
+
+@[mlir_mem]
+theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n).WF := by
+  intro k hk
+  simp only [GlobalState.alloca, Std.ExtHashMap.mem_insert] at hk ⊢
+  rcases hk with hk | hk
+  · have : (⟨s.alloc.nextFreeBlock⟩ : BlockId) = k := by simpa using hk
+    subst this; simp
+  · have := h k hk; omega
+
+/-- `alloca` adds a block under a fresh id: the others are unchanged. -/
+theorem GlobalState.getElem?_alloca {s : GlobalState} (hq : q ≠ s.allocaPtr.id) :
+    (s.alloca n).mem[q]? = s.mem[q]? := by
+  simp only [GlobalState.alloca, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
+  split
+  · rename_i h
+    exact absurd (show s.allocaPtr.id = q by simpa [GlobalState.allocaPtr] using h) (Ne.symm hq)
+  · rfl
+
+theorem Fits.alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
+    Fits (s.alloca n).mem q w := by
+  obtain ⟨b, hb, hs⟩ := h
+  refine ⟨b, ?_, hs⟩
+  rw [GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_fits hwf ⟨b, hb, hs⟩)]
+  exact hb
+
+theorem Fits.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
+    Fits (s.alloca n).mem s.allocaPtr w := by
+  refine ⟨⟨n, 0⟩, ?_, ?_⟩
+  · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
+  · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
+
+theorem MemoryState.readAt_alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w') :
+    (s.alloca n).mem.readAt q w = s.mem.readAt q w := by
+  simp only [MemoryState.readAt,
+    GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_fits hwf h)]
+
+/-- Erasing a frame commutes with a store: a store into the frame is lost either way. -/
+@[mlir_frame]
+theorem MemoryState.eraseFrom_storeAt {m : MemoryState} {p : Pointer} {x : BitVec w} :
+    (m.storeAt p x).eraseFrom n = (m.eraseFrom n).storeAt p x := by
+  have hg : (m.eraseFrom n)[p.id]? = m[p.id]?.filter (fun _ => decide (p.id.id < n)) := by
+    simp [MemoryState.eraseFrom, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_filter']
+  unfold MemoryState.storeAt
+  rw [hg]
+  cases hm : m[p.id]? with
+  | none => simp
+  | some blk =>
+    simp only [Option.filter_some]
+    by_cases hlt : p.id.id < n
+    · simp only [hlt, decide_true, ite_true, MemoryState.eraseFrom, MemoryState.mk.injEq]
+      apply Std.ExtHashMap.ext_getElem?
+      intro k
+      simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
+      split <;> simp_all
+    · simp only [hlt, decide_false, Bool.false_eq_true, ite_false, MemoryState.eraseFrom,
+        MemoryState.mk.injEq]
+      apply Std.ExtHashMap.ext_getElem?
+      intro k
+      simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
+      split
+      · rename_i h; simp at h; subst h; simp [hlt, MemoryState.getElem?_eq] at hm ⊢
+      · rfl
+
+@[mlir_frame]
+theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
+    (s.alloca b).mem.eraseFrom s.alloc.nextFreeBlock = s.mem.eraseFrom s.alloc.nextFreeBlock := by
+  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  apply Std.ExtHashMap.ext_getElem?
+  intro k
+  simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
+  split
+  · rename_i h; simp at h; subst h; simp
+  · rfl
+
+/-- A store into an erased block does nothing. -/
+@[mlir_frame]
+theorem MemoryState.storeAt_eraseFrom_of_le {m : MemoryState} {p : Pointer} {x : BitVec w}
+    (h : n ≤ p.id.id) : (m.eraseFrom n).storeAt p x = m.eraseFrom n := by
+  have : (m.eraseFrom n)[p.id]? = none := by
+    simp [MemoryState.eraseFrom, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_filter']
+    intro _ _; omega
+  simp [MemoryState.storeAt, this]
+
+/-- In a `WF` state nothing sits at or above the counter: erasing from it changes nothing. -/
+@[mlir_frame]
+theorem GlobalState.WF.eraseFrom {s : GlobalState} (h : s.WF) :
+    s.mem.eraseFrom s.alloc.nextFreeBlock = s.mem := by
+  have := GlobalState.eraseFrom_self h
+  exact congrArg GlobalState.mem this
+
+/-- `WF.storeAt` for a state written as a constructor, which unifies first-order. -/
+@[mlir_transport]
+theorem GlobalState.WF.storeAt_mk {a : AllocState} {m : MemoryState}
+    (h : (⟨a, m⟩ : GlobalState).WF) : (⟨a, m.storeAt p x⟩ : GlobalState).WF :=
+  GlobalState.WF.storeAt (s := ⟨a, m⟩) h
+
+/-- In a `WF` state there is no block at `allocaPtr` yet: a store there does nothing. -/
+@[mlir_frame]
+theorem GlobalState.WF.storeAt_allocaPtr {s : GlobalState} (h : s.WF) (hp : p.id = s.allocaPtr.id) :
+    s.mem.storeAt p x = s.mem := by
+  have : s.mem[p.id]? = none := by
+    rw [MemoryState.getElem?_eq]
+    apply Std.ExtHashMap.getElem?_eq_none
+    intro hm
+    have := h _ hm
+    simp [hp, GlobalState.allocaPtr] at this
+  simp [MemoryState.storeAt, this]
+
+@[simp]
+theorem GlobalState.alloca_alloc {s : GlobalState} :
+    (s.alloca n).alloc = ⟨s.alloc.nextFreeBlock + 1⟩ :=
+  rfl
+
+@[simp]
+theorem GlobalState.allocaPtr_id_id {s : GlobalState} : s.allocaPtr.id.id = s.alloc.nextFreeBlock :=
+  rfl
+
+@[simp]
+theorem GlobalState.allocaPtr_offset {s : GlobalState} : s.allocaPtr.offset = 0 :=
+  rfl
+
+/-- A store keeps every block and its length. -/
+@[simp]
+theorem Fits.storeAt_iff {m : MemoryState} {x : BitVec v} :
+    Fits (m.storeAt q x) p w ↔ Fits m p w := by
+  unfold Fits MemoryState.storeAt
+  split
+  · rename_i blk hblk
+    simp only [MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
+    split
+    · rename_i h
+      have : q.id = p.id := by simpa using h
+      rw [MemoryState.getElem?_eq] at hblk
+      rw [← this, hblk]
+      simp [MemoryBlock.lengthInBits]
+    · rfl
+  · rfl
+
+/-- The new block holds `8 * n` bits from its start. -/
+@[simp]
+theorem Fits.alloca_allocaPtr_add {s : GlobalState} :
+    Fits (s.alloca n).mem (s.allocaPtr.add off) w ↔ off.toNat * 8 + w ≤ 8 * n := by
+  simp [Fits, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq, Pointer.add,
+    Pointer.offsetInBits, MemoryBlock.lengthInBits]
+  omega
+
+@[simp]
+theorem Fits.alloca_allocaPtr {s : GlobalState} :
+    Fits (s.alloca n).mem s.allocaPtr w ↔ w ≤ 8 * n := by
+  simp [Fits, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq,
+    Pointer.offsetInBits, MemoryBlock.lengthInBits]
 
 end Theorems
 

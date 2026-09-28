@@ -6,3 +6,4 @@ public import MLIR.Run.Tactic.Step.Pure
 public import MLIR.Run.Tactic.Step.Impure
 public import MLIR.Run.Tactic.Step.Call
 public import MLIR.Run.Tactic.Widget
+public import MLIR.Run.Tactic.Step.Alloca

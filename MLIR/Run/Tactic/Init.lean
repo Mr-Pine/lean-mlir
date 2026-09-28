@@ -74,22 +74,56 @@ elab "extract_env" : tactic => do
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
-/-- Start a proof of `f.call args s = .value (r, t)` for a frame-free `f`: reduce it to `f.run` by
-`Func.call_eq_of_run_eq` (`t.WF` by `simp [mlir_mem, *]`, `t.alloc = s.alloc` by `rfl`), then to
-the entry block's `runFrom`, and extract the state and env. -/
+/-- With the initial state `S₀` (`hS : S = S₀`) and `hwf : S.WF`, add `hwf₀ : S₀.WF`: the steps only
+carry `WF` of the current state, and removing the frame at the end needs the initial one. -/
+meta def addInitialWF : TacticM Unit :=
+  withMainContext do
+    let (g, goal) ← getGoalType
+    let S := (← getFuncRunFromGoal goal).state
+    let hS ← findEqWithLhs S m!"`{S} = _`"
+    let wfTy ← mkAppM ``GlobalState.WF #[S]
+    let some hwf ←
+      (← getLCtx).findDeclM? fun d => do
+          if !d.isImplementationDetail && (← withReducible (isDefEq d.type wfTy)) then
+            return some d
+          return none | return
+    let motive ←
+      withLocalDeclD `x (mkConst ``GlobalState) fun x => do
+          mkLambdaFVars #[x] (← mkAppM ``GlobalState.WF #[x])
+    let hwf₀ ← mkEqNDRec motive hwf.toExpr (mkFVar hS)
+    let (_, g) ←
+      g.assertHypotheses
+          #[{ userName := hwf.userName.appendAfter "₀", type := ← inferType hwf₀, value := hwf₀ }]
+    replaceMainGoal [g]
+
+/-- Start a proof of `f.call args s = .value (r, t)`: for a frame-free `f`, reduce it to `f.run` by
+`Func.call_eq_of_run_eq` (`t.WF` by `simp [mlir_mem, *]`, `t.alloc = s.alloc` by `rfl`), else to
+`f.run` followed by the frame erase (`Func.call_eq_run_bind`). Then go to the entry block's
+`runFrom`, and extract the state and env. -/
 elab "func_init" : tactic =>
   withMainContext do
     let (_, goal) ← getGoalType
     unless (goal.find? (·.isAppOf ``Func.call)).isSome do
       throwError "`func_init` expects a goal `f.call args s = _`, got{indentExpr goal}"
-    evalTactic
-        (←
-          `(tactic| refine Func.call_eq_of_run_eq ?_ (by simp [$(mkIdent `mlir_mem):ident, *]) rfl))
+    -- a frame-free function's `call` is its `run`; otherwise `run`, then the frame erase
+    let framed ←
+      (do
+            evalTactic
+                (←
+                  `(tactic|
+                      refine
+                        Func.call_eq_of_run_eq ?_ (by simp [$(mkIdent `mlir_mem):ident, *]) rfl))
+            pure false) <|>
+          (do
+            evalTactic (← `(tactic| rw [Func.call_eq_run_bind]));
+            pure true)
     let (g, goal) ← getGoalType
     let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``Func.run_runFrom_eq)
     replaceMainGoal ((← g.replaceTargetEq r.eNew r.eqProof) :: r.mvarIds)
     evalTactic (← `(tactic | extract_state))
     evalTactic (← `(tactic | extract_env))
+    if framed then
+      addInitialWF
 
 end FuncInit
 
