@@ -67,7 +67,8 @@ def addAllocaFreshness : TacticM Unit := do
 @[tactic stepAlloca]
 def evalStepAlloca : Tactic := fun stx => do
   addAllocaFreshness
-  runStep (StepArgs.parse mkNullNode stx[1] stx[2] mkNullNode) (← `(tacticSeq| exact run_alloca))
+  runStep (StepArgs.parse mkNullNode stx[1] stx[2] mkNullNode (named := true))
+      (← `(tacticSeq| exact run_alloca))
 
 end
 

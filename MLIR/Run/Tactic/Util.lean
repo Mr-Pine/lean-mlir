@@ -29,8 +29,9 @@ def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName
       let ty ← inferType e -- Type of the expression to generalize
       -- reducible: `e` occurs verbatim, and default transparency unfolds every `Env.write`
       let tgtAbstract ←
-        withReducible <| kabstract (← instantiateMVars (← g.getType)) e
-            occs -- e abstracted as a loose bound variable
+        withReducible <|
+            kabstract (← instantiateMVars (← g.getType)) e
+              occs -- e abstracted as a loose bound variable
       let tyNew ←
         withLocalDeclD xName ty
             (fun x => do
@@ -45,8 +46,8 @@ def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName
                         )
                 expr := abstracted
               mkForallFVars #[x] expr)
-      unless ← isTypeCorrect tyNew do
-        throwTacticEx `generalizeOpaque g m!"result is not type correct{indentExpr tyNew}"
+      -- no `isTypeCorrect`: it re-checks the whole goal each step (a third of a walk's time);
+      -- the kernel still checks the proof
       let gNew ← mkFreshExprSyntheticOpaqueMVar tyNew (tag := ← g.getTag)
       g.assign
           (mkAppN gNew

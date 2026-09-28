@@ -27,8 +27,7 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     let hE? ← findEqWithLhs? E m!"of the form `{E} = _`"
     let hEargs? ←
       findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
-    let abstractWrite :=
-      Expr.lam `e (← inferType E) (← withReducible <| kabstract env E) .default
+    let abstractWrite := Expr.lam `e (← inferType E) (← withReducible <| kabstract env E) .default
     let (E₀chain, hEpf) ←
       match hE? with
       | some hE =>
@@ -96,6 +95,40 @@ def decideDischarge : Simp.Discharge := fun prop => do
   else
     return none
 
+/-- `env.read reg` through `env`'s write chains: the value last written to `reg`, and the proof.
+Each run of writes is one definitional step (the kernel decides the index comparisons), each
+local's `hE` one rewrite. Unlike `simp`, it never walks the written values. -/
+partial def walkRead (env reg : Expr) : MetaM (Option (Expr × Expr)) := do
+  let_expr Reg.val _ _ ri _ := reg | return none
+  let some i ← finNLit? ri | return none
+  let lhs ← mkAppM ``Env.read #[env, reg]
+  -- down this run of writes: the value, or the run's base
+  let mut e := env
+  while e.isAppOfArity ``Env.write 5 do
+    let some j ← dstIndex? (e.getArg! 3) | return none
+    if i == j then
+      let v := e.getArg! 4
+      return some (v, mkExpectedPropHint (← mkEqRefl v) (← mkEq lhs v))
+    e := e.getArg! 2
+  unless e.isFVar do
+    return none
+  let some hE ← findEqWithLhs? e m!"" | return none
+  let some (_, _, chain) := (← instantiateMVars (← hE.getType)).eq? | return none
+  let some (v, pf) ← walkRead chain reg | return none
+  let baseRead ← mkAppM ``Env.read #[e, reg]
+  let readOf ←
+    withLocalDeclD `x (← inferType e) fun x => do
+        mkLambdaFVars #[x] (← mkAppM ``Env.read #[x, reg])
+  -- `env.read reg = e.read reg` (the run skipped), `= chain.read reg` (`hE`), `= v`
+  let skip := mkExpectedPropHint (← mkEqRefl baseRead) (← mkEq lhs baseRead)
+  return some (v, ← mkEqTrans skip (← mkEqTrans (← mkCongrArg readOf (.fvar hE)) pf))
+
+/-- `walkRead` as a simproc: a register read, resolved without walking the written values. -/
+simproc_decl readThroughWrites (Env.read _ _) := fun e => do
+  let_expr Env.read _ _ env reg := e | return .continue
+  let some (v, pf) ← walkRead env reg | return .continue
+  return .visit { expr := v, proof? := pf }
+
 /-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and `readThroughStore`.
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
 def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) :
@@ -108,8 +141,11 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
       getSimpTheorems
   for fact in facts do
     thms ← thms.add (.fvar fact) #[] (mkFVar fact)
+  -- operations unfold, even with `only`: the step machinery, like `mlir_env`
+  let some ops ← getSimpExtension? `mlir_operation | throwError "no `mlir_operation` simp set"
+  let opThms ← ops.getTheorems
   let ctx ←
-    Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems)]) (congrTheorems :=
+    Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems), opThms]) (congrTheorems :=
         ← getSimpCongrTheorems)
   let procs :=
     #[←
@@ -117,6 +153,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
           argsSimprocs facts[0]
         else
           Simp.getSimprocs,
+      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false),
       ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
@@ -149,7 +186,7 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
   let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
   let args ← simpPass only simpArgs e argsFact
-  let vals ← simpPass only simpArgs args.expr chainFact
+  let vals ← simpPass true simpArgs args.expr chainFact
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then

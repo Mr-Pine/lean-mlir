@@ -22,6 +22,10 @@ register_simp_attr mlir_instr
 through `alloca`s; to close a proof with `simp [mlir_frame, *]` -/
 register_simp_attr mlir_frame
 
+/-- Simplifies the state a step produces, as the step tactics seal it: reads through stores and
+`alloca`s -/
+register_simp_attr mlir_state
+
 public meta section
 
 /-- Transports a fact about a state to the state after a store or call (`h : P s → P s'`), for

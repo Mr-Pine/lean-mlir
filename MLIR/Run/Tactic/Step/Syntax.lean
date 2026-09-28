@@ -14,9 +14,9 @@ public meta section
 /-- `only` and `[simp args]`, as for `simp`: used to resolve the instruction's reads. -/
 syntax stepSimpArgs := (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")?
 
-/-- How to bind a written value: `with v hv` names it and its equation, `inline` keeps it in the
-env. -/
-syntax stepNames := (" with " ident (colGt ident)?) <|> &" inline"
+/-- How to bind a written value: `with v hv` names it and its equation, `named` names it `vN`,
+`inline` keeps it in the env. -/
+syntax stepNames := (" with " ident (colGt ident)?) <|> &" inline" <|> &" named"
 
 /-- Facts about the old state that are not carried over to the new one. -/
 syntax stepConsuming := &" consuming" (ppSpace colGt ident)+
@@ -33,16 +33,19 @@ structure StepArgs where
   consumed : Array Ident := #[]
   expand : Bool := true
 
-/-- Read a `stepSimpArgs` node, and the optional `stepNames` and `stepConsuming` groups. -/
-def StepArgs.parse (simp names consuming sopaque : Syntax) : StepArgs :=
+/-- Read a `stepSimpArgs` node, and the optional `stepNames` and `stepConsuming` groups. Without
+names, the value is inlined, or named `vN` if `named` (loads, `alloca`). -/
+def StepArgs.parse (simp names consuming sopaque : Syntax) (named := false) : StepArgs :=
   let (value, hyp) : EnvName × EnvName :=
-    if names.isNone then (.auto, .auto)
+    if names.isNone then if named then (.auto, .auto) else (.inline, .inline)
     else
-      -- `with v hv` parses as a `group`; `inline` is a (non-atom) token node
+      -- `with v hv` parses as a `group`; `inline`/`named` are (non-atom) token nodes
       let alt := names[0][0]
       if alt.isOfKind groupKind then
         (.named ⟨alt[1]⟩, if alt[2].isNone then .auto else .named ⟨alt[2][0]⟩)
-      else (.inline, .inline)
+      else
+        if alt.getAtomVal.endsWith "named" || alt[0].getAtomVal.endsWith "named" then (.auto, .auto)
+        else (.inline, .inline)
   {
     value,
     hyp,
