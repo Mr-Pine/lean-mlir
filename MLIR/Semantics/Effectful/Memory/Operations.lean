@@ -27,6 +27,10 @@ def MemoryState.readAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :=
   | some block => block.bytes.extractLsb' p.offsetInBits _
   | _ => 0
 
+/-- Remove every block with id `n` or above: a returning callee's frame. -/
+def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
+  { mem := m.mem.filter fun id _ => id.id < n }
+
 section Theorems
 
 /-- The an existing block is overwritten with `storeAt` -/

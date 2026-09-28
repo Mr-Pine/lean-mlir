@@ -3,6 +3,8 @@ module
 public import MLIR.Context
 public import MLIR.OverflowFlags
 public import MLIR.IntPred
+public import MLIR.Semantics.Vals
+public import MLIR.Semantics.Effectful.EffectM
 
 namespace MLIR
 
@@ -39,8 +41,8 @@ inductive Instr (Γ : Ctx)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
-
--- call, etc...
+  /-- The semantics of the calle `f` should generally be `Func.call` -/
+  | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
 
 /-- A jump to block `target`, with one argument per parameter of the target (`blockTys target`). -/
 structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where

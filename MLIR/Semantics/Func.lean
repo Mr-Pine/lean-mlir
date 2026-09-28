@@ -72,6 +72,23 @@ public noncomputable def Func.run (func : Func) (args : Vals func.Γ.args) :
   | some x => x >>= PoisonOr.value
   | none => .poison
 
+/-- `Func.call` with a fixed fuel of `1000` instead of the limit, for compiled code (`#guard`)
+only; running out of fuel is poison. -/
+public def Func.callImpl (g : Func) (args : Vals g.Γ.args) : EffectM (Vals g.tRets) := do
+  let entry := (← getThe AllocState).nextFreeBlock
+  let some r ← g.eval 1000 args | throwUB
+  modifyThe MemoryState (·.eraseFrom entry)
+  return r
+
+/-- Run `g` as a callee: when it returns, its frame (every block it allocated) is erased. The
+allocation counter is kept, so a block id is never reused. -/
+@[implemented_by Func.callImpl]
+public noncomputable def Func.call (g : Func) (args : Vals g.Γ.args) : EffectM (Vals g.tRets) := do
+  let entry := (← getThe AllocState).nextFreeBlock
+  let r ← g.run args
+  modifyThe MemoryState (·.eraseFrom entry)
+  return r
+
 section Lemmas
 
 theorem mono_of_succ {f : Nat → Option α} (h : ∀ n r, f n = some r → f (n + 1) = some r) :

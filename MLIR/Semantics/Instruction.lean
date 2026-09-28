@@ -31,6 +31,11 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
 def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
   | select => Operation.select
 
+/-- Write `vs` into `ds`, first to last. -/
+def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
+  | .nil, .nil => env
+  | .cons d ds, .cons v vs => (env.write d v).writeMany ds vs
+
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | const v dst => pure (env.write dst (.value v))
@@ -39,11 +44,9 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
   | load dst p => Operation.load dst (env.read p) env
   | store p reg => Operation.store (env.read p) (env.read reg) env
-
-/-- Write `vs` into `ds`, first to last. -/
-def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
-  | .nil, .nil => env
-  | .cons d ds, .cons v vs => (env.write d v).writeMany ds vs
+  | call f args rets => do
+    let vs ← f (args.read env)
+    pure (env.writeMany rets vs)
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/
