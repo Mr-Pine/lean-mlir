@@ -100,6 +100,17 @@ public theorem Func.call_of_run {g : Func} {args : Vals g.Γ.args} {r : Vals g.t
   unfold Func.call
   simp only [EffectM.bind_eq, hget, PoisonOr.value_bind, h, hmod, EffectM.pure_eq]
 
+/-- `call` is `run`, then the frame erase: every block from the entry counter up is removed. -/
+public theorem Func.call_eq_run_bind {g : Func} {args : Vals g.Γ.args} {s : GlobalState} :
+    g.call args s =
+      g.run args s >>= fun p =>
+        .value (p.1, { p.2 with mem := p.2.mem.eraseFrom s.alloc.nextFreeBlock }) := by
+  have hget : (getThe AllocState : EffectM AllocState) s = .value (s.alloc, s) := rfl
+  have hmod (f : MemoryState → MemoryState) (t : GlobalState) :
+    (modifyThe MemoryState f : EffectM PUnit) t = .value (⟨⟩, { t with mem := f t.mem }) := rfl
+  unfold Func.call
+  simp only [EffectM.bind_eq, hget, PoisonOr.value_bind, hmod, EffectM.pure_eq]
+
 section Lemmas
 
 theorem mono_of_succ {f : Nat → Option α} (h : ∀ n r, f n = some r → f (n + 1) = some r) :

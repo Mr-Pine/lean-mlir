@@ -84,8 +84,8 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
                         first
                         -- fast path: the old fact and one transport lemma
                         | ( subst $hS'Id:ident $hSId:ident
-                            solve_by_elim (transparency := .reducible) only [$hId:ident]
-                              using $(mkIdent `mlir_transport):ident)
+                            solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
+                              $(mkIdent `mlir_transport):ident)
                         | ( subst $hSId:ident
                             try simp at $hId:ident
                             simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
@@ -94,12 +94,12 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
                         | skip))
               unless ← pg.mvarId!.isAssigned do
                 goals := goals.push pg.mvarId!
-            let_expr Eq _ S _ :=
-              ← instantiateMVars (← hS.getType) | throwError m!"{← hS.getType} is no Equation"
-            g ← g.clear hS
-            g ← g.clear S.fvarId!
-            g ← g.rename S' `S
-            g ← g.rename hS' `hS
+            -- substitute, not clear: a written value may mention the old state (`alloca`).
+            -- `substCore` reverts and reintroduces what follows `S`, so `S'`/`hS'` get new ids
+            let (fs, g') ← substCore g hS (symm := false)
+            g := g'
+            g ← g.rename (fs.get S').fvarId! `S
+            g ← g.rename (fs.get hS').fvarId! `hS
             setGoals [g]
             return goals
       finishStep value hyp only simpArgs expand

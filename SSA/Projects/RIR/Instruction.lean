@@ -41,6 +41,8 @@ inductive Instr (Γ : Ctx)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
+  /-- A fresh, zeroed block of `bytes` bytes; `dst` points to its start. -/
+  | alloca (dst : Dst Γ .ptr) (bytes : Nat)
   /-- The semantics of the calle `f` should generally be `Func.call` -/
   | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
 

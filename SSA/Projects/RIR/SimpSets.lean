@@ -18,6 +18,10 @@ register_simp_attr mlir_mem
 /-- Reductions for running single instructions -/
 register_simp_attr mlir_instr
 
+/-- Removes a returning function's frame: `eraseFrom` through stores and `alloca`s, and reads
+through `alloca`s; to close a proof with `simp [mlir_frame, *]` -/
+register_simp_attr mlir_frame
+
 public meta section
 
 /-- Transports a fact about a state to the state after a store or call (`h : P s → P s'`), for

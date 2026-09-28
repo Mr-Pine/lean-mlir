@@ -103,11 +103,13 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
         let abstractionTarget :=
           if envWrite.value.isAppOfArity ``PoisonOr.value 2 then envWrite.value.appArg!
           else envWrite.value
-        let (_, g) ←
-          g.withContext do
-              generalizeOpaque g (hyps := #[]) abstractionTarget var_name
-                  #[⟨hyp_name, (mkEq · abstractionTarget), ← mkEqRefl abstractionTarget⟩]
-        replaceMainGoal [g]
+        -- a value that already is a local stays: naming it would capture that local everywhere
+        unless abstractionTarget.isFVar do
+          let (_, g) ←
+            g.withContext do
+                generalizeOpaque g (hyps := #[]) abstractionTarget var_name
+                    #[⟨hyp_name, (mkEq · abstractionTarget), ← mkEqRefl abstractionTarget⟩]
+          replaceMainGoal [g]
     -- Extract new `E`
     sealEnv
     runSeal
