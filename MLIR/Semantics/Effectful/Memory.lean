@@ -3,7 +3,7 @@ module
 -- public import LeanMLIR.Framework
 
 -- import SSA.Projects.SLLVM.Tactic.SimpSet
-public import Std.Data.HashMap.Basic
+public import Std.Data.ExtHashMap.Basic
 public import MLIR.Memory.Pointer
 
 namespace MLIR
@@ -30,10 +30,12 @@ structure AllocState where
 /--
 `MemoryState` tracks the *content* of memory blocks
 -/
+@[ext]
 structure MemoryState where
-  mem : Std.HashMap BlockId MemoryBlock
+  mem : Std.ExtHashMap BlockId MemoryBlock
   deriving Inhabited
 
+@[ext]
 structure GlobalState where
   alloc : AllocState
   mem : MemoryState
@@ -50,5 +52,8 @@ def MemoryBlock.lengthInBits (b : MemoryBlock) : Nat :=
 
 theorem MemoryState.getElem?_eq (m : MemoryState) (q : BlockId) : m[q]? = m.mem[q]? :=
   rfl
+
+def GlobalState.WF (s : GlobalState) : Prop :=
+  ∀ k ∈ s.mem.mem, k.id < s.alloc.nextFreeBlock
 
 end

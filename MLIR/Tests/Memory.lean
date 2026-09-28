@@ -18,7 +18,7 @@ private def env0 : ⟪Γ0⟫ :=
 
 /-- A state with one live 8-byte block (id `0`), zero-filled. -/
 private def s0 : GlobalState :=
-  ⟨⟨1⟩, ⟨Std.HashMap.ofList [(⟨0⟩, ⟨8, 0⟩)]⟩⟩
+  ⟨⟨1⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨8, 0⟩)]⟩⟩
 
 /-- Pointer into block `0` at byte offset `off`. -/
 private def p (off : Nat) : Pointer :=

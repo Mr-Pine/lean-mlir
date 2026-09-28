@@ -5,7 +5,7 @@ public import MLIR.Memory.Range
 public import MLIR.Semantics.Effectful.Memory.Bits
 public import MLIR.Semantics.Effectful.Memory.Fits
 public import MLIR.SimpSets
-import Std.Data.HashMap.Lemmas
+import Std.Data.ExtHashMap.Lemmas
 
 namespace MLIR
 
@@ -48,7 +48,7 @@ theorem MemoryState.getElem?_storeAt_ne {m : MemoryState} {p q : Pointer} (hptr 
   | none => simp
   | some _ =>
     simp [MemoryState.getElem?_eq] at ⊢
-    simp [Std.HashMap.getElem?_insert, hptr.symm]
+    simp [Std.ExtHashMap.getElem?_insert, hptr.symm]
 
 /-- `storeAt` does not change whether an id is allocated or not. -/
 @[mlir_mem]
@@ -114,6 +114,63 @@ theorem MemoryState.readAt_storeAt_disjoint_offset {m : MemoryState} {off} {x : 
   simp only [Pointer.offsetInBits, BitVec.toNat_add_of_not_uaddOverflow hoff, BitVec.toNat_ofNat,
     Nat.mod_eq_of_lt hoff']
   omega
+
+/-- A store keeps the set of blocks, so `WF` does not depend on it. -/
+@[simp, mlir_mem]
+theorem GlobalState.WF_storeAt {s : GlobalState} :
+    ({ s with mem := m.storeAt p x } : GlobalState).WF ↔
+      ({ s with mem := m } : GlobalState).WF := by
+  simp only [GlobalState.WF, MemoryState.storeAt]
+  split
+  · rename_i blk hblk
+    rw [MemoryState.getElem?_eq] at hblk
+    constructor
+    · intro h k hk
+      exact h k (Std.ExtHashMap.mem_insert.2 (.inr hk))
+    · intro h k hk
+      rcases Std.ExtHashMap.mem_insert.1 hk with hk | hk
+      · have : p.id = k := by simpa using hk
+        subst this
+        exact
+          h _
+            (Std.ExtHashMap.mem_iff_isSome_getElem?.2
+              (by
+                rw [hblk]; rfl))
+      · exact h k hk
+  · exact Iff.rfl
+
+@[mlir_mem]
+theorem GlobalState.WF.storeAt {s : GlobalState} (h : s.WF) :
+    { s with mem := s.mem.storeAt p x }.WF := by
+  unfold GlobalState.WF
+  intro k hk
+  dsimp at *
+  simp only [MemoryState.storeAt] at hk
+  split at hk
+  case h_1 blk hblk =>
+    dsimp at hk
+    rw [Std.ExtHashMap.mem_insert] at hk
+    rcases hk with hk | hk
+    · simp at hk
+      replace hk := hk.symm
+      subst hk
+      rw [MemoryState.getElem?_eq] at hblk
+      replace hblk := Option.isSome_of_eq_some hblk
+      simp at hblk
+      refine h p.id hblk
+    · exact h k hk
+  case h_2 => exact h k hk
+
+@[mlir_mem]
+theorem GlobalState.eraseFrom_self {s : GlobalState} (hs : s.WF) :
+    { s with mem := s.mem.eraseFrom s.alloc.nextFreeBlock } = s := by
+  ext : 2 <;> dsimp
+  rw [MemoryState.eraseFrom]
+  dsimp
+  rw [Std.ExtHashMap.filter_eq_self_iff]
+  intro k hk
+  simp
+  exact hs k hk
 
 end Theorems
 
