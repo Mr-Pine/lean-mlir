@@ -49,6 +49,9 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | call f args rets => do
     let vs ← f (args.read env)
     pure (env.writeMany rets vs)
+  -- more defined than LLVM, where a dead object's bytes are undefined: sound for programs
+  -- that only touch live objects
+  | lifetimeStart _ _ | lifetimeEnd _ _ => pure env
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/

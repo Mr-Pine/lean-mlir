@@ -43,6 +43,10 @@ inductive Instr (Γ : Ctx)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
   /-- A fresh, zeroed block of `bytes` bytes; `dst` points to its start. -/
   | alloca (dst : Dst Γ .ptr) (bytes : Nat)
+  /-- `llvm.intr.lifetime.start`: the `bytes` at `p` become live. A no-op. -/
+  | lifetimeStart (p : Reg Γ .ptr) (bytes : Nat)
+  /-- `llvm.intr.lifetime.end`: the `bytes` at `p` become dead. A no-op. -/
+  | lifetimeEnd (p : Reg Γ .ptr) (bytes : Nat)
   /-- The semantics of the calle `f` should generally be `Func.call` -/
   | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
 
