@@ -16,6 +16,8 @@ namespace MLIR
 @[mlir_instr]
 def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | gepConst byteOff => Operation.gep (.value byteOff)
+  | trunc flags => Operation.trunc flags
+  | zext nneg => Operation.zext nneg
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
@@ -23,6 +25,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | add flags => Operation.add flags
   | sub flags => Operation.sub flags
   | mul flags => Operation.mul flags
+  | shl flags => Operation.shl flags
   | lshr exact => Operation.lshr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p

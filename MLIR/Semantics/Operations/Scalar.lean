@@ -54,6 +54,21 @@ def mul (flags : OverflowFlags) {w : Nat} (x y : IntW w) : IntW w := do
     .poison
   return (a * b)
 
+/-- Poison for a shift by `w` or more; `nuw`/`nsw`: also when a shifted-out bit is set / differs
+from the result's sign. -/
+@[mlir_operation]
+def shl (flags : OverflowFlags) {w : Nat} (x amount : IntW w) : IntW w := do
+  let a : BitVec w ← x
+  let s := (← amount).toNat
+  if s ≥ w then
+    .poison
+  let r := a <<< s
+  if flags.nuw ∧ r >>> s ≠ a then
+    .poison
+  if flags.nsw ∧ r.sshiftRight s ≠ a then
+    .poison
+  return r
+
 @[mlir_operation]
 def lshr (isExact : Bool) {w : Nat} (val amount : IntW w) : IntW w := do
   let val : BitVec w ← val
@@ -81,6 +96,29 @@ def icmp {w : Nat} (pred : IntPred) (x y : IntW w) : IntW 1 := do
   return BitVec.ofBool result
 
 end BVBinOp
+
+section Cast
+
+/-- The low `w'` bits; `nuw`/`nsw`: poison unless they zero/sign-extend back to `x`. -/
+@[mlir_operation]
+def trunc (flags : OverflowFlags) {w w' : Nat} (x : IntW w) : IntW w' := do
+  let a : BitVec w ← x
+  let r := a.setWidth w'
+  if flags.nuw ∧ r.setWidth w ≠ a then
+    .poison
+  if flags.nsw ∧ r.signExtend w ≠ a then
+    .poison
+  return r
+
+/-- Zero-extended to `w'` bits; `nneg`: poison if `x` is negative. -/
+@[mlir_operation]
+def zext (nneg : Bool) {w w' : Nat} (x : IntW w) : IntW w' := do
+  let a : BitVec w ← x
+  if nneg ∧ a.msb then
+    .poison
+  return a.setWidth w'
+
+end Cast
 
 @[mlir_operation]
 def select {τ : Ty} (cond : IntW 1) (x y : ⟦τ⟧) : ⟦τ⟧ := do
