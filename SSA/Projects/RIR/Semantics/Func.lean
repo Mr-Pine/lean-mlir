@@ -89,6 +89,17 @@ public noncomputable def Func.call (g : Func) (args : Vals g.Γ.args) : EffectM 
   modifyThe MemoryState (·.eraseFrom entry)
   return r
 
+/-- A callee's `run` result is its `call` result, with its frame (every block from the entry
+counter up) erased. -/
+public theorem Func.call_of_run {g : Func} {args : Vals g.Γ.args} {r : Vals g.tRets}
+    {s s' : GlobalState} (h : g.run args s = .value (r, s')) :
+    g.call args s = .value (r, { s' with mem := s'.mem.eraseFrom s.alloc.nextFreeBlock }) := by
+  have hget : (getThe AllocState : EffectM AllocState) s = .value (s.alloc, s) := rfl
+  have hmod (f : MemoryState → MemoryState) (t : GlobalState) :
+    (modifyThe MemoryState f : EffectM PUnit) t = .value (⟨⟩, { t with mem := f t.mem }) := rfl
+  unfold Func.call
+  simp only [EffectM.bind_eq, hget, PoisonOr.value_bind, h, hmod, EffectM.pure_eq]
+
 section Lemmas
 
 theorem mono_of_succ {f : Nat → Option α} (h : ∀ n r, f n = some r → f (n + 1) = some r) :

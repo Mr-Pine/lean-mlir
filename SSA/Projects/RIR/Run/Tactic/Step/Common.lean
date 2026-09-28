@@ -52,6 +52,13 @@ def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
 def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool) :
     TacticM Unit :=
   withMainContext do
+    -- a call writes its results with `writeMany`: unfold it into single writes (none for `void`)
+    evalTactic
+        (←
+          `(tactic|
+              try
+                dsimp only [$(mkIdent ``Env.writeMany_nil):ident,
+                  $(mkIdent ``Env.writeMany_cons):ident]))
     -- Resolve any env reads
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal

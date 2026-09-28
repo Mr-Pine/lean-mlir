@@ -1,6 +1,7 @@
 module
 
 public import SSA.Projects.RIR.Semantics.Func
+public import SSA.Projects.RIR.Run.Call
 public meta import SSA.Projects.RIR.Run.BasicBlock
 public meta import SSA.Projects.RIR.Run.Tactic.Parse
 public meta import SSA.Projects.RIR.Run.Tactic.Util
@@ -73,8 +74,17 @@ elab "extract_env" : tactic => do
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
+/-- Start a proof of `f.call args s = .value (r, t)` for a frame-free `f`: reduce it to `f.run` by
+`Func.call_eq_of_run_eq` (`t.WF` by `simp [mlir_mem, *]`, `t.alloc = s.alloc` by `rfl`), then to
+the entry block's `runFrom`, and extract the state and env. -/
 elab "func_init" : tactic =>
   withMainContext do
+    let (_, goal) ← getGoalType
+    unless (goal.find? (·.isAppOf ``Func.call)).isSome do
+      throwError "`func_init` expects a goal `f.call args s = _`, got{indentExpr goal}"
+    evalTactic
+        (←
+          `(tactic| refine Func.call_eq_of_run_eq ?_ (by simp [$(mkIdent `mlir_mem):ident, *]) rfl))
     let (g, goal) ← getGoalType
     let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``Func.run_runFrom_eq)
     replaceMainGoal ((← g.replaceTargetEq r.eNew r.eqProof) :: r.mvarIds)
