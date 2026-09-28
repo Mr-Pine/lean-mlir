@@ -4,7 +4,7 @@ public import MLIR.Instruction
 public import MLIR.Semantics.Effectful.EffectM
 public import MLIR.Semantics.Effectful.Memory.Operations
 public import MLIR.Semantics.Env
-public import MLIR.Semantics.Vals
+public import MLIR.Semantics.Regs
 public import MLIR.Semantics.Operations.Scalar
 public import MLIR.Semantics.Operations.Memory
 public import MLIR.SimpSets

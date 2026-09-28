@@ -30,10 +30,10 @@ def Func.evalFrom (func : Func) : Nat → ⟪func.Γ⟫ → Fin func.n → Effec
     | .inr nextBlock =>
       Func.evalFrom func fuel E' nextBlock
 
-def Func.eval (func : Func) (fuel : Nat) (args : (i : Fin func.Γ.args.length) → ⟦func.Γ.args[i]⟧) :
+def Func.eval (func : Func) (fuel : Nat) (args : Vals func.Γ.args) :
     EffectM (Option (Vals func.tRets)) :=
   func.evalFrom fuel startEnv ⟨0, func.hhasBlock⟩
-where startEnv := Env.init args
+where startEnv := Env.init args.get
 
 end
 
@@ -64,8 +64,8 @@ public noncomputable def Func.runFrom (func : Func) (env : ⟪func.Γ⟫) (i : F
   | some x => x >>= PoisonOr.value
   | none => .poison
 
-public noncomputable def Func.run (func : Func)
-    (args : (i : Fin func.Γ.args.length) → ⟦func.Γ.args[i]⟧) : EffectM (Vals func.tRets) := fun s =>
+public noncomputable def Func.run (func : Func) (args : Vals func.Γ.args) :
+    EffectM (Vals func.tRets) := fun s =>
   let f n := Fuel.observe (func.eval n args s)
   let determined := Fuel.limit f
   match determined with
@@ -211,7 +211,7 @@ public section RunTheorems
 private theorem Func.eval_init (func : Func) (fuel : Nat) (args : _) :
     func.eval (fuel + 1) args =
       (do
-        let (E', res) ← (func.blocks ⟨0, func.hhasBlock⟩).run func.blockParams (Env.init args)
+        let (E', res) ← (func.blocks ⟨0, func.hhasBlock⟩).run func.blockParams (Env.init args.get)
         match res with
         | .inl vals =>
           return (some vals)
@@ -220,7 +220,7 @@ private theorem Func.eval_init (func : Func) (fuel : Nat) (args : _) :
   rfl
 
 theorem Func.run_runFrom_eq (func : Func) (args : _) :
-    func.run args = func.runFrom (Env.init args) ⟨0, func.hhasBlock⟩ := by
+    func.run args = func.runFrom (Env.init args.get) ⟨0, func.hhasBlock⟩ := by
   unfold Func.run Func.runFrom Func.eval
   rfl
 
