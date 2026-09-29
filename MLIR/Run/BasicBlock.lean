@@ -73,6 +73,8 @@ dsimproc [simp, mlir_instr]reduceTyGetElem ((_ : List Ty)[_]) := fun e => do
     return .visit e'
   | Ty.ptr =>
     return .visit e'
+  | Ty.vec _ _ =>
+    return .visit e'
   | _ =>
     return .continue
 

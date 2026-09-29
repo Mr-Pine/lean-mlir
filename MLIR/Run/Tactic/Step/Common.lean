@@ -102,7 +102,9 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
         -- Abstract only the inner `x` of `.value x`. Helps for not carrying the `PoisonOr` Monad.
         let abstractionTarget :=
           if envWrite.value.isAppOfArity ``PoisonOr.value 2 then envWrite.value.appArg!
-          else envWrite.value
+          else
+            if envWrite.value.isAppOfArity ``Ty.wrap 2 then envWrite.value.appArg!
+            else envWrite.value
         -- a value that already is a local stays: naming it would capture that local everywhere
         unless abstractionTarget.isFVar do
           let (_, g) ←

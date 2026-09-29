@@ -73,10 +73,23 @@ def shl (flags : OverflowFlags) {w : Nat} (x amount : IntW w) : IntW w := do
 def lshr (isExact : Bool) {w : Nat} (val amount : IntW w) : IntW w := do
   let val : BitVec w ← val
   let amount := (← amount).toNat
+  if amount ≥ w then
+    .poison
   if isExact then
     if val.extractLsb' 0 amount != 0 then
       .poison
   return (val.ushiftRight amount)
+
+@[mlir_operation]
+def ashr (isExact : Bool) {w : Nat} (val amount : IntW w) : IntW w := do
+  let val : BitVec w ← val
+  let amount := (← amount).toNat
+  if amount ≥ w then
+    .poison
+  if isExact then
+    if val.extractLsb' 0 amount != 0 then
+      .poison
+  return (val.sshiftRight amount)
 
 @[mlir_operation]
 def smin {w : Nat} (x y : IntW w) : IntW w := do
