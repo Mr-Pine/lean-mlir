@@ -24,12 +24,23 @@ structure RewriteStepResult where
 returning the remaining goals. -/
 def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
   let lem ← mkConstWithFreshMVarLevels lem
+  -- an abstract block's instructions come from a body fact `blk.body.drop pos = x :: xs`
+  let run ←
+    g.withContext do
+        getRunBodyFrom (← instantiateMVars (← g.getType))
+  let fact? ←
+    g.withContext do
+        bodyFact? run.block run.idx
   let r ← g.rewrite (← g.getType) lem -- Rewrite
   let mut stepGoal? := none
   for m in r.mvarIds do
     let ty := (← instantiateMVars (← m.getType)).consumeTypeAnnotations
     if ty.isAppOf ``LT.lt then -- hpos
-      m.assign (← mkDecideProof ty)
+      match fact? with
+      | some (h, _, _) =>
+        m.assign (← mkAppM ``List.lt_length_of_drop_eq_cons #[h])
+      | none =>
+        m.assign (← mkDecideProof ty)
     else if ty.isEq then -- h
       stepGoal? := some m
   let some stepGoal := stepGoal? | throwError "no run goal (hyp `h`)"
@@ -37,8 +48,36 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
   -- Resolve block.body[idx]
   let ty ← instantiateMVars (← stepGoal.getType)
   let some instr := ty.find? (·.isAppOf ``GetElem.getElem) | throwError "no body[pos]"
-  let stepGoal ← stepGoal.replaceTargetDefEq ((← kabstract ty instr).instantiate1 (← whnfD instr))
+  let stepGoal ←
+    match fact? with
+    | some (h, _, _) =>
+      stepGoal.withContext do
+          let eq ← mkAppM ``List.getElem_of_drop_eq_cons #[h]
+          let rw ← stepGoal.rewrite ty eq
+          unless rw.mvarIds.isEmpty do
+            throwError "body fact: unexpected side goals"
+          stepGoal.replaceTargetEq rw.eNew rw.eqProof
+    | none =>
+      stepGoal.replaceTargetDefEq ((← kabstract ty instr).instantiate1 (← whnfD instr))
   let main ← g.replaceTargetEq (← instantiateMVars r.eNew) r.eqProof
+  -- carry the body fact on to the next instruction
+  let main ←
+    match fact? with
+    | some (h, _, _) =>
+      main.withContext do
+          let h' ← mkAppM ``List.drop_succ_of_drop_eq_cons #[h]
+          -- `[…].append rest` from unfolding the pattern, back to `[…] ++ rest`
+          let some (_, l, xs) := (← inferType h').eq? | throwError "body fact: not an equation"
+          let xs ←
+            match_expr xs with
+            | List.append _ ys zs =>
+              mkAppM ``HAppend.hAppend #[ys, zs]
+            | _ =>
+              pure xs
+          let (_, main) ← (← main.assert `hbody (← mkEq l xs) h').intro1P
+          pure main
+    | none =>
+      pure main
   return ⟨stepGoal, ← reduceIndex main⟩
 
 /-- `dsimp [mlir_instr]` -/
@@ -49,9 +88,23 @@ def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
   let (m?, _) ← dsimpGoal m ctx (simprocs := #[← Simp.getSimprocs])
   return m?
 
+/-- Clear the body facts `block.body.drop i = _` behind the goal's position. -/
+def clearStaleBodyFacts : TacticM Unit :=
+  withMainContext do
+    let .ok run ← (getRunBodyFrom? (← getMainTarget)).run | return
+    let mut g ← getMainGoal
+    for d in ← getLCtx do
+      let some (_, lhs, _) := (← instantiateMVars d.type).eq? | continue
+      let_expr List.drop _ n body := lhs | continue
+      let_expr BasicBlock.body _ _ _ _ b := body | continue
+      if (← isDefEq b run.block) && !(← isDefEq n run.idx) then
+        g ← g.tryClear d.fvarId
+    replaceMainGoal [g]
+
 def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool) :
     TacticM Unit :=
   withMainContext do
+    clearStaleBodyFacts
     -- a call writes its results with `writeMany`: unfold it into single writes (none for `void`)
     evalTactic
         (←

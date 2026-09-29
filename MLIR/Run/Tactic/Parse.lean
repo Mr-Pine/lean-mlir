@@ -151,6 +151,30 @@ def getEnvWrite (e : Expr) : MetaM EnvWrite := do
     e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
   return ⟨base, dst, value⟩
 
+/-- A local `h : block.body.drop idx = x :: xs`, for a `block` whose body does not reduce: `h`
+(typed with the `cons` exposed), `x` and `xs`. -/
+def bodyFact? (block idx : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
+  for d in ← getLCtx do
+    if d.isImplementationDetail then
+      continue
+    let some (_, lhs, rhs) := (← instantiateMVars d.type).eq? | continue
+    let_expr List.drop _ n body := lhs | continue
+    let_expr BasicBlock.body _ _ _ _ b := body | continue
+    unless ← isDefEq b block <&&> isDefEq n idx do
+      continue
+    let rhs ← whnfD rhs
+    let_expr List.cons _ x xs := rhs | continue
+    return some (mkExpectedPropHint (.fvar d.fvarId) (← mkEq lhs rhs), x, xs)
+  return none
+
+/-- `block.body.drop idx`, reduced to its first `cons`, by unfolding or from a body fact. -/
+def bodyFrom (block idx : Expr) : MetaM Expr := do
+  let rest ← whnfD (← mkAppM ``List.drop #[idx, ← mkAppM ``BasicBlock.body #[block]])
+  if rest.isAppOfArity ``List.cons 3 || rest.isAppOfArity ``List.nil 1 then
+    return rest
+  let some (_, x, xs) ← bodyFact? block idx | return rest
+  mkAppM ``List.cons #[x, xs]
+
 end RunBodyFromGoal
 
 end

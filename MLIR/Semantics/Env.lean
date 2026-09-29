@@ -55,6 +55,15 @@ theorem set_comm (env : ⟪Γ⟫) (h : i ≠ j) : (env.set i v).set j w = (env.s
   rename_i hkj
   simp [h.symm, hkj]
 
+/-- A register read right after its write is the written value: the casts in and out cancel, even
+for a `dst` whose type proof is not `rfl`. -/
+@[simp, mlir_env]
+theorem read_write_dst (env : ⟪Γ⟫) (dst : Dst Γ t) (v : ⟦t⟧) :
+    (env.write dst v).read (.val dst.i dst.h) = v := by
+  obtain ⟨i, h⟩ := dst
+  subst h
+  simp [write, read, set]
+
 theorem write_comm (env : ⟪Γ⟫) (h : dst.i ≠ dst'.i) :
     (env.write dst v).write dst' w = (env.write dst' w).write dst v := by
   unfold write
