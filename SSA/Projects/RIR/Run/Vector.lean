@@ -35,6 +35,59 @@ dsimproc [mlir_operation]expandOfFn (Vector.ofFn _) := fun e => do
   let arr ← mkAppM ``List.toArray #[← mkListLit α elems.toList]
   return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel α]) α n arr (← mkEqRefl n))
 
+/-- `↑(k : Fin n)` of a literal: `simp` itself reduces it only for `k ≤ 2`. -/
+@[simp, mlir_operation]
+theorem Fin.val_ofNat_lit {n k : Nat} [NeZero n] :
+    ((no_index (OfNat.ofNat k : Fin n)) : Nat) = k % n :=
+  rfl
+
+open Lean Meta in
+/-- `xs[i]'_` for a vector `xs` and a literal `i`, the bound by `decide`. -/
+meta def mkVecGetElem (xs : Expr) (i : Nat) : MetaM (Option Expr) := do
+  let xsTy ← whnfR (← inferType xs)
+  let_expr Vector β m := xsTy | return none
+  let nat := mkConst ``Nat
+  let valid ←
+    withLocalDeclD `xs xsTy fun v =>
+        withLocalDeclD `i nat fun j => do
+          mkLambdaFVars #[v, j] (← mkAppM ``LT.lt #[j, m])
+  let inst ← synthInstance (← mkAppM ``GetElem #[xsTy, nat, β, valid])
+  let pf ← mkDecideProof (← mkAppM ``LT.lt #[mkNatLit i, m])
+  some <$> mkAppOptM ``GetElem.getElem #[xsTy, nat, β, valid, inst, xs, mkNatLit i, pf]
+
+open Lean Meta in
+/-- `shufflevector` with a literal mask, to its lanes: `a[k]`, `b[k - n]` or poison. Before the
+unfolded `Vector.ofFn` is simplified with a symbolic lane, which cannot decide the mask. -/
+dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _ _ _) := fun e => do
+  let_expr Operation.shufflevector l _ mask a b := e | return .continue
+  let some n ← (evalNat l).run | return .continue
+  let_expr Vector.mk _ _ arr _ := ← whnfR mask | return .continue
+  let_expr List.toArray _ lst := arr | return .continue
+  let some (_, entries) := lst.listLit? | return .continue
+  let_expr Vector β _ := ← whnfR (← inferType a) | return .continue
+  let_expr PoisonOr α := β | return .continue
+  let mut lanes := #[]
+  for entry in entries do
+    match_expr entry with
+    | Option.some fin k =>
+      let some j :=
+        (← whnfD (mkApp2 (mkConst ``Fin.val) (fin.appArg!) k)).rawNatLit? <|>
+          (← whnfD (mkApp2 (mkConst ``Fin.val) (fin.appArg!) k)).nat?
+        | return .continue
+      let some lane ←
+        if j < n then
+          mkVecGetElem a j
+        else
+          mkVecGetElem b (j - n) | return .continue
+      lanes := lanes.push lane
+    | Option.none _ =>
+      lanes := lanes.push (mkApp (mkConst ``PoisonOr.poison) α)
+    | _ =>
+      return .continue
+  let arr ← mkAppM ``List.toArray #[← mkListLit β lanes.toList]
+  let nE := mkNatLit n
+  return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel β]) β nE arr (← mkEqRefl nE))
+
 /-- `zipWith` as an `ofFn`, for `expandOfFn` to split into lanes. -/
 @[mlir_operation]
 theorem zipWith_eq_ofFn {f : α → β → γ} {as : Vector α n} {bs : Vector β n} :
@@ -121,7 +174,8 @@ open Lean Meta in
 simproc [simp]wrapGetElem (GetElem.getElem _ _ _) := fun e => do
   let_expr GetElem.getElem _ _ _ _ _ xs i h := e | return .continue
   let_expr Ty.wrap t vs := xs | return .continue
-  let_expr Ty.vec _ _ := t | return .continue
+  -- `t` may be an abbreviation, like a program's `V` for `.vec 8 64`
+  let_expr Ty.vec _ _ := ← whnfR t | return .continue
   let_expr Vector β _ := ← whnfR (← inferType vs) | return .continue
   let pf ←
     mkAppOptM ``Vector.getElem_map #[none, none, none, i, mkApp (mkConst ``PoisonOr.value) β, vs, h]

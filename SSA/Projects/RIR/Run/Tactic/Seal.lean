@@ -208,7 +208,8 @@ def runSeal : TacticM Unit :=
     let some (_, _, E₀chain) :=
       (← inferType (.fvar hE)).eq? | throwError "swap proof is not an equation"
     -- the function, for the blocks after this one: `Func.continue`'s first argument
-    let some cont := goal.find? (·.isAppOf ``Func.continue) | throwError "no `Func.continue`"
+    -- without `Func.continue` (a lemma about a bare `runBodyFrom`), liveness is unknown: keep all
+    let some cont := goal.find? (·.isAppOf ``Func.continue) | return
     let liveRegs ← liveRegs (cont.getArg! 0) runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
     -- a loop's root env is mentioned by its continuation, so it cannot be replaced

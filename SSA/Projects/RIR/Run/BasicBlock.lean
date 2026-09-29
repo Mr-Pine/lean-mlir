@@ -17,6 +17,25 @@ theorem Func.runFrom_bind_of_env_eq {f : Func} {E E' : ⟪f.Γ⟫} {k s}
     (h : (f.runFrom E' k s >>= g) = K) : (f.runFrom E k s >>= g) = K :=
   he ▸ h
 
+/-- A body fact `l.drop n = x :: xs` puts `n` inside `l`. -/
+theorem List.lt_length_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) : n < l.length := by
+  rcases Nat.lt_or_ge n l.length with h' | h'
+  · exact h'
+  · rw [List.drop_eq_nil_of_le h'] at h
+    cases h
+
+/-- A body fact `l.drop n = x :: xs`: the instruction at `n` is `x`. -/
+theorem List.getElem_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) :
+    l[n]'(List.lt_length_of_drop_eq_cons h) = x := by
+  rw [List.drop_eq_getElem_cons (List.lt_length_of_drop_eq_cons h)] at h
+  injection h
+
+/-- A body fact `l.drop n = x :: xs`, one instruction on. -/
+theorem List.drop_succ_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) :
+    l.drop (n + 1) = xs := by
+  rw [List.drop_eq_getElem_cons (List.lt_length_of_drop_eq_cons h)] at h
+  injection h
+
 def BasicBlock.runBodyFrom (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) (n : Nat) : EffectM ⟪Γ⟫ :=
   List.foldlM Instr.run env (block.body.drop n)
 

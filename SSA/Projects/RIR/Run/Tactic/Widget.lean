@@ -16,12 +16,12 @@ public meta section
 
 /-- Up to `n` instructions of `block` from `idx` on, and whether the exit comes within them. -/
 def upcomingInstrs (block idx : Expr) (n : Nat) : MetaM (Array Expr × Bool) := do
-  let mut rest ← whnfD (← mkAppM ``List.drop #[idx, ← mkAppM ``BasicBlock.body #[block]])
+  let mut rest ← bodyFrom block idx
   let mut out := #[]
   while out.size < n && rest.isAppOfArity ``List.cons 3 do
     out := out.push rest.appFn!.appArg!
     rest ← whnfD rest.appArg!
-  return (out, out.size < n)
+  return (out, rest.isAppOfArity ``List.nil 1)
 
 /-- The current and next instructions of the `runBodyFrom` in `goal`; nothing without one. -/
 def instrsHtml (goal : Expr) : MetaM Html := do

@@ -89,12 +89,26 @@ def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
 
 -- Currently, this could also be acheived by `Simp.mkContext (config := { decide := true })`
 def decideDischarge : Simp.Discharge := fun prop => do
-  let .some inst ← trySynthInstance (← mkAppM ``Decidable #[prop]) | return none
-  let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
-  if value.isConstOf ``Bool.true then
-    return (← mkDecideProof prop)
-  else
-    return none
+  if let .some inst← trySynthInstance (← mkAppM ``Decidable #[prop]) then
+    let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
+    if value.isConstOf ``Bool.true then
+      return (← mkDecideProof prop)
+  -- abstract registers (a pattern lemma's): a local `h : prop`, or `h : j ≠ i` for `i ≠ j`
+  let symm? ←
+    match prop.ne? with
+    | some (_, a, b) =>
+      some <$> mkAppM ``Ne #[b, a]
+    | none =>
+      pure none
+  for d in ← getLCtx do
+    if d.isImplementationDetail then
+      continue
+    if ← withReducible (isDefEq d.type prop) then
+      return some d.toExpr
+    if let some symm := symm? then
+      if ← withReducible (isDefEq d.type symm) then
+        return some (← mkAppM ``Ne.symm #[d.toExpr])
+  return none
 
 /-- `env.read reg` through `env`'s write chains: the value last written to `reg`, and the proof.
 Each run of writes is one definitional step (the kernel decides the index comparisons), each
@@ -179,6 +193,15 @@ private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
       let some (_, .fvar x, _) := (← instantiateMVars d.type).eq? | return acc
       return if xs.contains x then acc.push d.fvarId else acc
 
+/-- The local facts `E.read r = v` (a pattern lemma's inputs): read resolution goes through them as
+through `hE`. -/
+def readFacts : MetaM (Array FVarId) := do
+  (← getLCtx).foldlM (init := #[]) fun acc d => do
+      if d.isImplementationDetail then
+        return acc
+      let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
+      return if l.isAppOf ``Env.read then acc.push d.fvarId else acc
+
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
@@ -186,17 +209,20 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
     TacticM Simp.Result := do
   let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
   let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
+  let reads ← readFacts
   let args ← simpPass only simpArgs e argsFact
-  let vals ← simpPass true simpArgs args.expr chainFact
+  let vals ← simpPass true simpArgs args.expr (chainFact ++ reads)
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then
       valueStateFacts r.expr
     else
       stateFacts
-  if facts.isEmpty then
-    return r
-  let r ← r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts))
+  let r ←
+    if facts.isEmpty then
+      pure r
+    else
+      r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts ++ reads))
   -- last: `#v[.value x, …]` to `Ty.wrap #v[x, …]`, once every lane is final
   let ctx ← Simp.mkContext
   let (p, _) ← simp r.expr ctx (simprocs := #[← ({} : Simp.Simprocs).add ``pullWrap (post := true)])
