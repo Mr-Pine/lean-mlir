@@ -77,7 +77,7 @@ def Exit.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (b
     let .value cond := env.read cond | throwUB
     return if cond == 1#1 then ttrue.run params env else tfalse.run params env
   | switch cond default branches => do
-    let .value cond := env.read cond | throwUB
+    let .value cond := Ty.unwrap (env.read cond) | throwUB
     return (switchTarget (cond) default branches).run params env
 
 end

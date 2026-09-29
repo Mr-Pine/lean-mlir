@@ -105,13 +105,14 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
 -- a fresh block reads as zero
 #guard load? (.bv 64) (.value (p 0)) == some (.value 0#64)
 
--- load UB: poison pointer, dead block, out of bounds, and at `ptr` type
+-- load UB: poison pointer, dead block, out of bounds
 #guard load? (.bv 64) .poison == none
 
 #guard load? (.bv 64) (.value pDead) == none
 
 #guard load? (.bv 64) (.value (p 7)) == none
 
-#guard load? .ptr (.value (p 0)) == none
+-- a load at `ptr` type is poison
+#guard load? .ptr (.value (p 0)) == some .poison
 
 end MLIR.Tests
