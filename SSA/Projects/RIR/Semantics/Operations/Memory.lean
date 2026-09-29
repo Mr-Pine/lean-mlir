@@ -21,12 +21,7 @@ def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM �
   let state ← get
   throwUBIf (¬Fits state.mem ptr τ.width)
   let flattened := state.mem.readAt ptr τ.width
-  let value : ⟦τ⟧ ←
-    match τ.unflatten flattened with
-    | .poison =>
-      throwUB
-    | .value v =>
-      pure (.value v)
+  let value : ⟦τ⟧ := τ.unflatten flattened
   return env.write dst value
 
 def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do

@@ -90,7 +90,7 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
     let r ← simpValue only simpArgs read (read.getArg! 2) true
     replaceMainGoal [← replaceBySimp g read r]
     -- `dsimp` to get rid of the `match`
-    evalTactic (← `(tactic| dsimp only))
+    evalTactic (← `(tactic| dsimp only [Ty.unwrap_bv]))
   evalTactic
       (←
         `(tactic|

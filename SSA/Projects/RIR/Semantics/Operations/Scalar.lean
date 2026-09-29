@@ -121,12 +121,10 @@ def zext (nneg : Bool) {w w' : Nat} (x : IntW w) : IntW w' := do
 end Cast
 
 @[mlir_operation]
-def select {τ : Ty} (cond : IntW 1) (x y : ⟦τ⟧) : ⟦τ⟧ := do
-  let cond ← cond
-  if cond == 1#1 then
-    x
-  else
-    y
+def select {τ : Ty} (cond : IntW 1) (x y : ⟦τ⟧) : ⟦τ⟧ :=
+  match cond with
+  | .poison => τ.poisoned
+  | .value cond => if cond == 1#1 then x else y
 
 @[simp, mlir_operation]
 def constant {w} (x : BitVec w) : IntW w :=
