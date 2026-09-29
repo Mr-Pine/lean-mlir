@@ -7,6 +7,7 @@ public import SSA.Projects.RIR.Semantics.Env
 public import SSA.Projects.RIR.Semantics.Regs
 public import SSA.Projects.RIR.Semantics.Operations.Scalar
 public import SSA.Projects.RIR.Semantics.Operations.Memory
+public import SSA.Projects.RIR.Semantics.Operations.Vector
 public import SSA.Projects.RIR.SimpSets
 
 namespace LeanMLIR.RIR
@@ -27,12 +28,17 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | mul flags => Operation.mul flags
   | shl flags => Operation.shl flags
   | lshr exact => Operation.lshr exact
+  | ashr exact => Operation.ashr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p
+  | vector op => Vector.zipWith op.compute
+  | shufflevector perm => Operation.shufflevector perm
 
 @[mlir_instr]
 def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
   | select => Operation.select
+  | vpermi2var => Operation.vpermi2var
+  | vpmadd52l => Operation.vpmadd52l
 
 /-- Write `vs` into `ds`, first to last. -/
 def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
@@ -41,7 +47,8 @@ def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
 
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
-  | const v dst => pure (env.write dst (.value v))
+  | const v dst => pure (env.write dst (Ty.wrap v))
+  | poison dst => pure (env.write dst (Ty.poisoned _))
   | unop op dst a => pure (env.write dst (op.compute (env.read a)))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))

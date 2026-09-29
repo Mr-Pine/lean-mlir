@@ -1,6 +1,7 @@
 module
 
 public import SSA.Projects.RIR.Semantics.Func
+public import SSA.Projects.RIR.Run.Vector
 public import SSA.Projects.RIR.Run.Tactic.Parse
 public import SSA.Projects.RIR.Run.Tactic.Memory
 public import SSA.Projects.RIR.Run.Tactic.Util
@@ -195,7 +196,11 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
       stateFacts
   if facts.isEmpty then
     return r
-  r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts))
+  let r ← r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts))
+  -- last: `#v[.value x, …]` to `Ty.wrap #v[x, …]`, once every lane is final
+  let ctx ← Simp.mkContext
+  let (p, _) ← simp r.expr ctx (simprocs := #[← ({} : Simp.Simprocs).add ``pullWrap (post := true)])
+  r.mkEqTrans p
 
 end ResolveReads
 

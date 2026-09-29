@@ -1,5 +1,6 @@
 module
 
+public import SSA.Projects.RIR.SimpSets
 public import SSA.Projects.RIR.Poison
 public import SSA.Projects.RIR.Memory.Pointer
 public import Lean.ToExpr
@@ -44,6 +45,12 @@ instance instDecidableEqDenote : {t : Ty} → DecidableEq ⟦t⟧ᵣ
   | .ptr => inferInstanceAs (DecidableEq Pointer)
   | .vec _ _ => inferInstanceAs (DecidableEq (Vector (BitVec _) _))
 
+def wrap (v : ⟦t⟧ᵣ) : ⟦t⟧ :=
+  match t with
+  | bv _ => .value v
+  | ptr => .value v
+  | vec _ _ => Vector.map .value v
+
 def unwrap (v : ⟦t⟧) : PoisonOr ⟦t⟧ᵣ :=
   match t with
   | bv _ => v
@@ -52,6 +59,16 @@ def unwrap (v : ⟦t⟧) : PoisonOr ⟦t⟧ᵣ :=
 
 @[simp]
 theorem unwrap_bv {v : ⟦bv w⟧} : unwrap v = v :=
+  rfl
+
+@[simp, mlir_operation]
+theorem wrap_bv {v : ⟦bv w⟧ᵣ} : wrap v = .value v :=
+  rfl
+
+theorem wrap_vec (vs : ⟦vec l w⟧ᵣ) : wrap vs = vs.map .value := by simp [wrap]
+
+@[simp]
+theorem unwrap_wrap {v : ⟦bv w⟧ᵣ} : unwrap (wrap v) = .value v :=
   rfl
 
 end
@@ -127,16 +144,34 @@ def flatten : (t : Ty) → ⟦t⟧ → PoisonOr (BitVec t.width)
       .value (BitVec.packLanes (Vector.ofFn (n := l) fun i => v[i].getValue))
     else .poison
 
+def extractVecElem (l w : Nat) (i : Fin l) (x : BitVec (w * l)) :=
+  x.extractLsb' (i.val * w) w
+
+theorem extractVecElem_eq (x : BitVec (w * l)) :
+    extractVecElem l w i x = x.extractLsb' (i.val * w) w := by
+  unfold extractVecElem; rfl
+
 def unflatten : (t : Ty) → BitVec t.width → ⟦t⟧
   | bv _, x => .value x
   | ptr, _ => .poison
-  | vec _ w, x => Vector.ofFn (fun i => .value (x.extractLsb' (i.val * w) w))
+  | vec _ w, x => Vector.ofFn (fun i => .value (extractVecElem _ w i x))
 
 @[simp]
 theorem flatten_bv (x : ⟦bv w⟧) : flatten (bv w) x = x := by rfl
 
 @[simp]
 theorem unflatten_bv (b : BitVec w) : unflatten (bv w) b = .value b := by rfl
+
+@[simp]
+theorem unflatten_vec (b : BitVec (w * l)) :
+    unflatten (vec l w) b = wrap (Vector.ofFn (fun i => (extractVecElem _ w i b))) := by
+  ext
+  simp [unflatten, wrap_vec]
+
+@[simp]
+theorem flatten_wrap_vec (v : ⟦vec l w⟧ᵣ) :
+    flatten (vec l w) (wrap v) = .value (BitVec.packLanes v) := by
+  simp [flatten, wrap_vec, PoisonOr.value_ne_poison]
 
 @[simp]
 theorem flatten_ptr (x : ⟦ptr⟧) : flatten ptr x = .poison := by rfl
@@ -162,7 +197,7 @@ theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatt
       rw [← h]
       ext i hi
       simp
-      rw [BitVec.extractLsb'_packLanes (h := hi)]
+      rw [extractVecElem, BitVec.extractLsb'_packLanes (h := hi)]
       replace this := this ⟨i, hi⟩
       simp at this
       obtain ⟨x, hx⟩ : ∃ x, v[i] = .value x := by

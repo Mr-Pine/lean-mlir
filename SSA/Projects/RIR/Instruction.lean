@@ -31,14 +31,26 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | mul (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | shl (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | lshr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
+  |
+  vector {l w₁ w₂ w : Nat} (op : BinOp (.bv w₁) (.bv w₂) (.bv w)) :
+    BinOp (.vec l w₁) (.vec l w₂) (.vec l w)
+  |
+  shufflevector {l w : Nat} (indices : Vector (Option (Fin (2 * l))) l) :
+    BinOp (.vec l w) (.vec l w) (.vec l w)
 
 inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | select {τ : Ty} : TernOp (.bv 1) τ τ τ
+  | vpermi2var {l w : Nat} : TernOp (.vec l w) (.vec l w) (.vec l w) (.vec l w) -- (a, idx, b)
+  /-- `vpmadd52luq`: `a + (b * c)`, the multiplicands' and the product's low 52 bits. -/
+  | vpmadd52l {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
 
 inductive Instr (Γ : Ctx)
-  | const (v : BitVec w) (dst : Dst Γ (Ty.bv w))
+  | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
+  /-- `llvm.mlir.poison`. -/
+  | poison (dst : Dst Γ τ)
   | unop (op : UnOp t₁ t) (dst : Dst Γ t) (a : Reg Γ t₁)
   | binop (op : BinOp t₁ t₂ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
