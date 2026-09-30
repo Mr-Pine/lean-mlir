@@ -6,6 +6,21 @@ namespace MLIR.Operation
 
 @[expose] public section
 
+/-- `llvm.extractelement`: lane `idx` of `v`; poison if `idx` is poison or out of range. -/
+@[mlir_operation]
+def extractelement {l w wi : Nat} (v : ⟦.vec l w⟧) (idx : IntW wi) : IntW w :=
+  match idx with
+  | .value i => if h : i.toNat < l then v[i.toNat] else .poison
+  | .poison => .poison
+
+/-- `llvm.insertelement`: `v` with lane `idx` set to `x`; all poison if `idx` is poison or out of
+range. -/
+@[mlir_operation]
+def insertelement {l w wi : Nat} (v : ⟦.vec l w⟧) (x : IntW w) (idx : IntW wi) : ⟦.vec l w⟧ :=
+  match idx with
+  | .value i => if h : i.toNat < l then v.set i.toNat x h else (Ty.vec l w).poisoned
+  | .poison => (Ty.vec l w).poisoned
+
 @[mlir_operation]
 def shufflevector {l w : Nat} (indices : Vector (Option (Fin (2 * l))) l) (a b : ⟦.vec l w⟧) :
     ⟦.vec l w⟧ :=

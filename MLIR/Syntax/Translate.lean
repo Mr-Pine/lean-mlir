@@ -557,6 +557,21 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
         Vector.ofFn fun i =>
           (lanes[i]?.getD none).bind fun k => if h : k < 2 * l then some ⟨k, h⟩ else none
       return .binop (.shufflevector (w := w) idx) dst a b
+  | "llvm.insertelement" =>
+    do
+      let (dst, t) ← res
+      let [(v, .vec l w), (x, t₂), (i, .bv wi)] := args
+        | throw "expected a vector, a lane value and an integer index"
+      unless t₂ == .bv w && t == .vec l w do
+        throw "the lane and result types must match the vector's"
+      return .ternop (.insertelement (l := l) (w := w) (wi := wi)) dst v x i
+  | "llvm.extractelement" =>
+    do
+      let (dst, t) ← res
+      let [(v, .vec l w), (i, .bv wi)] := args | throw "expected a vector and an integer index"
+      unless t == .bv w do
+        throw "the result must be the vector's lane type"
+      return .binop (.extractelement (l := l) (w := w) (wi := wi)) dst v i
   | "x86vector.avx512.intr.vpermi2var.q.512" =>
     do
       let (dst, t) ← res
