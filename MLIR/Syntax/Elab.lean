@@ -319,7 +319,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       `(def $(blockName b) $bs* : BasicBlock $Γ $tRets $blockTys :=
           { body := [$body,*], exit := $(← exitStx nv b.exit) })
     let blocksVal ←
-      if let [b] := p.blocks then `(fun _ => $(blockName b))
+      if let [b] := p.blocks then `(fun _ => $(blockName b) $((blockBinders b).2)*)
       else
         let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
           let (_, args) := blockBinders b
