@@ -11,7 +11,7 @@ namespace MLIR
 
 structure Env (Γ : Ctx) where
   args : (i : Fin Γ.args.length) → ⟦Γ.args[i]⟧
-  vals : (i : Fin Γ.vals.length) → ⟦Γ.vals[i]⟧
+  vals : (i : Fin Γ.n) → ⟦Γ.ty i⟧
 
 /-- `⟪Γ⟫` is the `Env` of `Γ`, functions mapping the args
   and vals to a value of the correct type --/
@@ -20,14 +20,14 @@ notation "⟪" Γ "⟫" => MLIR.Env Γ
 namespace Env
 
 def init {Γ : Ctx} (args : (i : Fin Γ.args.length) → ⟦Γ.args[i]⟧) : ⟪Γ⟫ :=
-  { args := args, vals := fun i => Γ.vals[i].poisoned }
+  { args := args, vals := fun i => (Γ.ty i).poisoned }
 
 def read (env : ⟪Γ⟫) (reg : Reg Γ t) : ⟦t⟧ :=
   match reg with
   | .arg i h => h.symm ▸ env.args i
   | .val i h => h.symm ▸ env.vals i
 
-def set (env : ⟪Γ⟫) (i : Fin Γ.vals.length) (v : ⟦Γ.vals[i]⟧) : ⟪Γ⟫ :=
+def set (env : ⟪Γ⟫) (i : Fin Γ.n) (v : ⟦Γ.ty i⟧) : ⟪Γ⟫ :=
   { env with vals := fun j => if h : j = i then h ▸ v else env.vals j }
 
 def write (env : ⟪Γ⟫) (dst : Dst Γ t) (v : ⟦t⟧) : ⟪Γ⟫ :=

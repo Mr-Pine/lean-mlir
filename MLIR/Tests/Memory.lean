@@ -12,7 +12,7 @@ allocated, so it is the "dead pointer" case. `memcpy` adds block `2`, holding th
 namespace MLIR.Tests
 
 private abbrev Γ0 : Ctx :=
-  ⟨[], []⟩
+  ⟨0, [], [], rfl⟩
 
 private def env0 : ⟪Γ0⟫ :=
   Env.init (fun i => nomatch i)
@@ -43,7 +43,7 @@ private def storeThenRead? {τ : Ty} (ptr : ⟦Ty.ptr⟧) (v : ⟦τ⟧) (q : Po
 
 /-- A context with one value register of type `τ`, for `load`'s destination. -/
 private abbrev Γ1 (τ : Ty) : Ctx :=
-  ⟨[], [τ]⟩
+  ⟨1, [], [τ], rfl⟩
 
 /-- `load`'s result, or `none` for UB. -/
 private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Option ⟦τ⟧ :=

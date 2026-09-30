@@ -48,22 +48,13 @@ def tyStx : Ty → CommandElabM (TSyntax `term)
 def tysStx (ts : List Ty) : CommandElabM (TSyntax `term) := do
   `([$(← ts.toArray.mapM tyStx),*])
 
-/-- From this many values on, an index is written `(k : Fin n)`: a bare `k` unfolds
-`Γ.vals.length` and hits `maxRecDepth`. -/
-def finLitLimit : Nat :=
-  100
-
-/-- Value index `i` of `n`. -/
-def valIdx (n i : Nat) : CommandElabM (TSyntax `term) :=
-  if n < finLitLimit then pure (num i) else `(($(num i) : Fin $(num n)))
-
-def regStx (n : Nat) : RegRef → CommandElabM (TSyntax `term)
+def regStx : RegRef → CommandElabM (TSyntax `term)
   | .arg i => `((.arg $(num i) rfl))
   | .val i => do
-    `((.val $(← valIdx n i) rfl))
+    `((.val $(num i) rfl))
 
-def dstStx (n i : Nat) : CommandElabM (TSyntax `term) := do
-  `(⟨$(← valIdx n i), rfl⟩)
+def dstStx (i : Nat) : CommandElabM (TSyntax `term) := do
+  `(⟨$(num i), rfl⟩)
 
 /-- `.cons x₀ (.cons x₁ … .nil)`. -/
 def consStx (xs : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
@@ -152,46 +143,45 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .splat l w v => do
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
 
-/-- The instruction, calling `callee f` for `@f`; `nv` is the number of values. -/
-def instrStx (nv : Nat) (callee : String → TSyntax `term) : PInstr → CommandElabM (TSyntax `term)
+/-- The instruction, calling `callee f` for `@f`. -/
+def instrStx (callee : String → TSyntax `term) : PInstr → CommandElabM (TSyntax `term)
   | .const c d => do
-    `(.const $(← constStx c) $(← dstStx nv d))
+    `(.const $(← constStx c) $(← dstStx d))
   | .poison _ d => do
-    `(.poison $(← dstStx nv d))
+    `(.poison $(← dstStx d))
   | .unop op d a => do
-    `(.unop $(← unOpStx op) $(← dstStx nv d) $(← regStx nv a))
+    `(.unop $(← unOpStx op) $(← dstStx d) $(← regStx a))
   | .binop op d a b => do
-    `(.binop $(← binOpStx op) $(← dstStx nv d) $(← regStx nv a) $(← regStx nv b))
+    `(.binop $(← binOpStx op) $(← dstStx d) $(← regStx a) $(← regStx b))
   | .ternop op d a b c => do
-    `(.ternop $(← ternOpStx op) $(← dstStx nv d) $(← regStx nv a) $(← regStx nv b) $(← regStx nv c))
+    `(.ternop $(← ternOpStx op) $(← dstStx d) $(← regStx a) $(← regStx b) $(← regStx c))
   | .load _ d p => do
-    `(.load $(← dstStx nv d) $(← regStx nv p))
+    `(.load $(← dstStx d) $(← regStx p))
   | .store _ p v => do
-    `(.store $(← regStx nv p) $(← regStx nv v))
+    `(.store $(← regStx p) $(← regStx v))
   | .memset _ dst v l => do
-    `(.memset $(← regStx nv dst) $(← regStx nv v) $(← regStx nv l))
+    `(.memset $(← regStx dst) $(← regStx v) $(← regStx l))
   | .memcpy _ dst src l => do
-    `(.memcpy $(← regStx nv dst) $(← regStx nv src) $(← regStx nv l))
+    `(.memcpy $(← regStx dst) $(← regStx src) $(← regStx l))
   | .alloca d n => do
-    `(.alloca $(← dstStx nv d) $(num n))
+    `(.alloca $(← dstStx d) $(num n))
   | .lifetimeStart p n => do
-    `(.lifetimeStart $(← regStx nv p) $(num n))
+    `(.lifetimeStart $(← regStx p) $(num n))
   | .lifetimeEnd p n => do
-    `(.lifetimeEnd $(← regStx nv p) $(num n))
+    `(.lifetimeEnd $(← regStx p) $(num n))
   | .call f _ _ args rets => do
-    `(.call $(callee f) $(← consStx (← args.mapM (regStx nv)))
-          $(← consStx (← rets.mapM (dstStx nv))))
+    `(.call $(callee f) $(← consStx (← args.mapM (regStx))) $(← consStx (← rets.mapM (dstStx))))
 
-def jumpStx (nv : Nat) (j : PJump) : CommandElabM (TSyntax `term) := do
-  `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx nv)))⟩)
+def jumpStx (j : PJump) : CommandElabM (TSyntax `term) := do
+  `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx)))⟩)
 
-def exitStx (nv : Nat) : PExit → CommandElabM (TSyntax `term)
+def exitStx : PExit → CommandElabM (TSyntax `term)
   | .ret vs => do
-    `(.ret $(← consStx (← vs.mapM (regStx nv))))
+    `(.ret $(← consStx (← vs.mapM (regStx))))
   | .br j => do
-    `(.br $(← jumpStx nv j))
+    `(.br $(← jumpStx j))
   | .condBr c t f => do
-    `(.condBr $(← regStx nv c) $(← jumpStx nv t) $(← jumpStx nv f))
+    `(.condBr $(← regStx c) $(← jumpStx t) $(← jumpStx f))
   | .switch w v d cs => do
     let cs ←
       cs.toArray.mapM fun (c, j) => do
@@ -200,8 +190,8 @@ def exitStx (nv : Nat) : PExit → CommandElabM (TSyntax `term)
               `(BitVec.ofInt $(num w) $(← intLit c))
             else
               `(BitVec.ofNat $(num w) $(num c.toNat))
-          `(($c, $(← jumpStx nv j)))
-    `(.switch $(← regStx nv v) $(← jumpStx nv d) [$cs,*])
+          `(($c, $(← jumpStx j)))
+    `(.switch $(← regStx v) $(← jumpStx d) [$cs,*])
 
 /-! ## Callees and binders -/
 
@@ -289,12 +279,13 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
   let blockParams := name `blockParams
   let blockName (b : PBlock) : Ident := name (if n == 1 then `entry else .mkSimple b.name)
   let tRets ← tysStx p.tRets
-  let nv := p.Γ.vals.length
   let cmds ← do
     let paramTys (b : PBlock) := b.params.map fun i => (p.Γ.vals[i]?).getD (.bv 0)
     let fins := List.range n
     let Γdef ←
-      `(abbrev $Γ : Ctx := ⟨$(← tysStx p.Γ.args), $(← tysStx p.Γ.vals)⟩)
+      -- the kernel checks the count: the elaborator would recurse once per value
+      `(abbrev $Γ : Ctx :=
+          ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), $(← tysStx p.Γ.vals), by decide +kernel⟩)
     let tysDef ←
       if n == 1 then `(abbrev $blockTys : Fin 1 → List Ty := fun _ => [])
       else
@@ -309,15 +300,15 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
         `(abbrev $blockParams : (k : Fin 1) → Dsts $Γ ($blockTys k) := fun _ => .nil)
       else
         let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
-          let ds ← consStx (← b.params.mapM (dstStx nv))
+          let ds ← consStx (← b.params.mapM (dstStx))
           `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $ds)
         `(abbrev $blockParams : (k : Fin $(num n)) → Dsts $Γ ($blockTys k) :=
             fun $alts:matchAlt*)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
-      let body ← b.body.toArray.mapM (instrStx nv callee)
+      let body ← b.body.toArray.mapM (instrStx callee)
       `(def $(blockName b) $bs* : BasicBlock $Γ $tRets $blockTys :=
-          { body := [$body,*], exit := $(← exitStx nv b.exit) })
+          { body := [$body,*], exit := $(← exitStx b.exit) })
     let blocksVal ←
       if let [b] := p.blocks then `(fun _ => $(blockName b) $((blockBinders b).2)*)
       else

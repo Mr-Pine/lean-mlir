@@ -45,10 +45,10 @@ namespace Hand
 
 /-- `%arg0 = r`, `%arg1 = a`, `%arg2 = b`; `%0 … %19` all `<8 x i64>`. -/
 abbrev fd_f25519_sub.Γ : Ctx :=
-  ⟨[.ptr, .ptr, .ptr],
+  ⟨20, [.ptr, .ptr, .ptr],
     [.vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64,
       .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64,
-      .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64]⟩
+      .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64], rfl⟩
 
 /-- The lanes of an `<8 x i64>`. -/
 abbrev V8 := Vector (BitVec 64) 8

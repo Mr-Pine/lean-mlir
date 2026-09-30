@@ -21,7 +21,7 @@ mlir_def fd_int_min := {
 namespace Hand
 
 abbrev fd_int_min.Γ : Ctx :=
-  ⟨[.bv 32], [.bv 32, .bv 32]⟩
+  ⟨2, [.bv 32], [.bv 32, .bv 32], rfl⟩
 
 abbrev fd_int_min.blockTys : Fin 1 → List Ty := fun _ => []
 
