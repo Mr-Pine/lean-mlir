@@ -23,9 +23,13 @@ inductive UnOp : Ty → (out : Ty) → Type
   | gepConst (byteOff : Nat) : UnOp .ptr .ptr
   | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
+  | bswap {w : Nat} : UnOp (.bv w) (.bv w)
+  | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | or (disjoint : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | xor {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | add (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | sub (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | mul (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
@@ -46,6 +50,10 @@ inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | vpermi2var {l w : Nat} : TernOp (.vec l w) (.vec l w) (.vec l w) (.vec l w) -- (a, idx, b)
   /-- `vpmadd52luq`: `a + (b * c)`, the multiplicands' and the product's low 52 bits. -/
   | vpmadd52l {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
+  /-- `vpmadd52huq`: `a + (b * c)`'s high part, of the multiplicands' low 52 bits. -/
+  | vpmadd52h {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
+  | fshl {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
+  | fshr {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
 
 inductive Instr (Γ : Ctx)
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)

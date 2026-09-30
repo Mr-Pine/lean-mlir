@@ -43,6 +43,17 @@ def vpmadd52l {l : Nat} (a b c : ⟦.vec l 64⟧) : ⟦.vec l 64⟧ :=
     let m : BitVec 64 := 0xFFFFFFFFFFFFF
     return x + ((y &&& m) * (z &&& m) &&& m)
 
+/-- `vpmadd52huq`: lane `i` is `a[i]` plus the high 52 bits of the 104-bit product of `b[i]`'s and
+`c[i]`'s low 52 bits. -/
+@[mlir_operation]
+def vpmadd52h {l : Nat} (a b c : ⟦.vec l 64⟧) : ⟦.vec l 64⟧ :=
+  Vector.ofFn (n := l) fun i => do
+    let x ← a[i]
+    let y ← b[i]
+    let z ← c[i]
+    let m : BitVec 64 := 0xFFFFFFFFFFFFF
+    return x + (((y &&& m).setWidth 128 * (z &&& m).setWidth 128) >>> 52).setWidth 64
+
 end
 
 end LeanMLIR.RIR.Operation

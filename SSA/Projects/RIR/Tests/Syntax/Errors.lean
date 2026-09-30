@@ -75,11 +75,11 @@ mlir_def definedTwice := {
     "llvm.return"(%0) : (i32) -> ()
 }
 
-/-- error: ^bb0: %0 = "llvm.or"(%arg0, %arg1) : (i32, i32) -> i32: unsupported operation 'llvm.or' -/
+/-- error: ^bb0: %0 = "llvm.udiv"(%arg0, %arg1) : (i32, i32) -> i32: unsupported operation 'llvm.udiv' -/
 #guard_msgs in
 mlir_def unsupportedOp := {
   ^bb0(%arg0: i32, %arg1: i32):
-    %0 = "llvm.or"(%arg0, %arg1) : (i32, i32) -> i32
+    %0 = "llvm.udiv"(%arg0, %arg1) : (i32, i32) -> i32
     "llvm.return"(%0) : (i32) -> ()
 }
 
@@ -114,13 +114,11 @@ mlir_def atomic := {
     "llvm.return"(%0) : (i64) -> ()
 }
 
-/--
-error: ^bb0: %0 = "llvm.icmp"(%arg0, %arg1) : (i64, i64) -> i1: predicate ult is not supported (only eq and ne)
--/
+/-- error: ^bb0: %0 = "llvm.icmp"(%arg0, %arg1) : (i64, i64) -> i1: unknown predicate 10 -/
 #guard_msgs in
 mlir_def predicate := {
   ^bb0(%arg0: i64, %arg1: i64):
-    %0 = "llvm.icmp"(%arg0, %arg1) <{predicate = 6 : i64}> : (i64, i64) -> i1
+    %0 = "llvm.icmp"(%arg0, %arg1) <{predicate = 10 : i64}> : (i64, i64) -> i1
     "llvm.return"(%0) : (i1) -> ()
 }
 
@@ -203,7 +201,7 @@ mlir_def vectorSelect := {
     "llvm.return"(%0) : (vector<4xi32>) -> ()
 }
 
-/-- error: ^bb0: %0 = "llvm.mlir.undef"() : () -> i32: unsupported operation 'llvm.mlir.undef' -/
+-- `undef` translates, as poison
 #guard_msgs in
 mlir_def undef := {
   ^bb0(%arg0: i32):

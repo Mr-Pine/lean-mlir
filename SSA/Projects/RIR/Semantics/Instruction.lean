@@ -19,10 +19,14 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | gepConst byteOff => Operation.gep (.value byteOff)
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
+  | bswap => Operation.bswap
+  | bitcast h => Operation.bitcast h
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | and => Operation.and
+  | or disjoint => Operation.or disjoint
+  | xor => Operation.xor
   | add flags => Operation.add flags
   | sub flags => Operation.sub flags
   | mul flags => Operation.mul flags
@@ -39,6 +43,9 @@ def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → �
   | select => Operation.select
   | vpermi2var => Operation.vpermi2var
   | vpmadd52l => Operation.vpmadd52l
+  | vpmadd52h => Operation.vpmadd52h
+  | fshl => Operation.fshl
+  | fshr => Operation.fshr
 
 /-- Write `vs` into `ds`, first to last. -/
 def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫

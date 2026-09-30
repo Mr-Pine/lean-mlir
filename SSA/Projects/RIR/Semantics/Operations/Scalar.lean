@@ -24,6 +24,21 @@ def and {w : Nat} (x y : IntW w) : IntW w := do
   let b ← y
   return (a &&& b)
 
+/-- `disjoint`: poison if `x` and `y` share a set bit. -/
+@[mlir_operation]
+def or (disjoint : Bool) {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  if disjoint ∧ a &&& b ≠ 0 then
+    .poison
+  return (a ||| b)
+
+@[mlir_operation]
+def xor {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return (a ^^^ b)
+
 @[mlir_operation]
 def add (flags : OverflowFlags) {w : Nat} (x y : IntW w) : IntW w := do
   let a : BitVec w ← x
@@ -106,9 +121,44 @@ def icmp {w : Nat} (pred : IntPred) (x y : IntW w) : IntW 1 := do
     match pred with
     | .eq => a == b
     | .ne => a != b
+    | .slt => a.slt b
+    | .sle => a.sle b
+    | .sgt => b.slt a
+    | .sge => b.sle a
+    | .ult => a.ult b
+    | .ule => a.ule b
+    | .ugt => b.ult a
+    | .uge => b.ule a
   return BitVec.ofBool result
 
 end BVBinOp
+
+section Intrinsics
+
+/-- `llvm.intr.fshl`: the high `w` bits of `x ++ y` shifted left by `z mod w`. -/
+@[mlir_operation]
+def fshl {w : Nat} (x y z : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  let c ← z
+  return ((a ++ b) <<< (c.toNat % w)).extractLsb' w w
+
+/-- `llvm.intr.fshr`: the low `w` bits of `x ++ y` shifted right by `z mod w`. -/
+@[mlir_operation]
+def fshr {w : Nat} (x y z : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  let c ← z
+  return ((a ++ b) >>> (c.toNat % w)).setWidth w
+
+/-- `llvm.intr.bswap`: `x`'s bytes in reverse order (`w` a multiple of 8). -/
+@[mlir_operation]
+def bswap {w : Nat} (x : IntW w) : IntW w := do
+  let a ← x
+  return (List.range (w / 8)).foldl
+      (fun acc i => acc ||| ((a >>> (8 * i)) &&& 0xFF) <<< (w - 8 * (i + 1))) 0
+
+end Intrinsics
 
 section Cast
 
@@ -130,6 +180,14 @@ def zext (nneg : Bool) {w w' : Nat} (x : IntW w) : IntW w' := do
   if nneg ∧ a.msb then
     .poison
   return a.setWidth w'
+
+/-- The same bits at a type of the same width. Poison if any lane is: coarser than LLVM, which
+keeps the other lanes, but sound, as poison refines to any value. -/
+@[mlir_operation]
+def bitcast {t t' : Ty} (h : t.width = t'.width) (x : ⟦t⟧) : ⟦t'⟧ :=
+  match t.flatten x with
+  | .value b => t'.unflatten (b.cast h)
+  | .poison => t'.poisoned
 
 end Cast
 
