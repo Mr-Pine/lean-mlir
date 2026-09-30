@@ -1,0 +1,2 @@
+exclude = ["SSA/Projects/RIR/Tests/Syntax/**"]
+force-exclude = true
