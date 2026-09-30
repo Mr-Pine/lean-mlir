@@ -289,6 +289,16 @@ theorem Func.exit {E} : Func.continue E (Sum.inl vals) S = .value (vals, S) := b
 theorem Func.continue_next {E} :
     Func.continue (func := func) E (Sum.inr idx) S = Func.runFrom func E idx S := by rfl
 
+/-- Helper for continuation-form theorems.
+Given a `f : Func`, a basic block index `bb`, a base environment `E` (before the region the theorem talks about)
+and a function transforming an `E' : ⟪f.Γ⟫` (the effect of the region the theorem is about on the env) it states:
+
+If any env (with the same `args` as `E`) gets this transformation applied, then executing `f` from `bb` under this
+env and `GlobalState` `S`, then the result is `K`.
+-/
+abbrev Func.ContAt (f : Func) (bb : Fin f.n) (E : ⟪f.Γ⟫) (T : ⟪f.Γ⟫ → ⟪f.Γ⟫) S K :=
+  ∀ E', E'.args = E.args → f.runFrom (T E') bb S = K
+
 end RunTheorems
 
 end MLIR
