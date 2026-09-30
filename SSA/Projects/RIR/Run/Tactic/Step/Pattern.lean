@@ -79,6 +79,12 @@ def closeByDecide (g : MVarId) : MetaM Unit := do
     throwError "step_pattern: side condition does not hold{indentExpr ty}"
   g.assign (← mkDecideProof ty)
 
+/-- Close a side condition by a local hypothesis (a fact about the pattern's inputs, like a flag
+being `0` or `1`), else by `decide`. -/
+def closeSide (g : MVarId) : MetaM Unit := do
+  unless ← g.assumptionCore do
+    closeByDecide g
+
 @[tactic stepPattern]
 def evalStepPattern : Tactic := fun stx =>
   withMainContext do
@@ -128,9 +134,9 @@ def evalStepPattern : Tactic := fun stx =>
         else if lhs.isAppOfArity ``Env.read 4 then
           closePatternRead mv
         else
-          closeByDecide mv
+          closeSide mv
       | none =>
-        closeByDecide mv
+        closeSide mv
     -- a register's type proof: unification skips proofs, so none got assigned
     for h in typeProofs do
       unless ← h.isAssigned do
