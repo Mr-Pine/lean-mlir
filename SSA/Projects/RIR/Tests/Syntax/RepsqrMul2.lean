@@ -71,12 +71,12 @@ abbrev rot : Vector (Option (Fin (2 * 8))) 8 :=
 /-- `%arg0 = _za`, `%arg1 = xa`, `%arg2 = ya`, `%arg3 = _zb`, `%arg4 = xb`, `%arg5 = yb`, `%arg6 = n`;
 `%7 %8 %9` the loop's `xa xb n`, `%22 %23` the exit's `xb xa`. -/
 abbrev fd_r43x6_repsqr_mul2.Γ : Ctx :=
-  ⟨[.ptr, V, V, .ptr, V, V, .bv 64],
+  ⟨34, [.ptr, V, V, .ptr, V, V, .bv 64],
     [.bv 64, V, .bv 64, V, V, V, .bv 1,                   -- %0 … %6
       V, V, .bv 64,                                        -- ^bb1: %7 … %9
       V, V, V, V, V, V, V, V, V, V, .bv 64, .bv 1,         -- %10 … %21
       V, V,                                                -- ^bb2: %22 %23
-      V, V, V, V, V, V, V, V, V, V]⟩                       -- %24 … %33
+      V, V, V, V, V, V, V, V, V, V], rfl⟩                       -- %24 … %33
 
 abbrev fd_r43x6_repsqr_mul2.blockTys : Fin 3 → List Ty
   | ⟨1, _⟩ => [V, V, .bv 64]

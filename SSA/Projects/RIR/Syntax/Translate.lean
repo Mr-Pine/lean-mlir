@@ -725,7 +725,7 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
     vals.toList.zipIdx.mapM fun (t, i) => do
         let some t := t | throw s!"%{i} is not defined, but a higher value is"
         return t
-  let Γ : Ctx := ⟨args, valTys⟩
+  let Γ : Ctx := ⟨valTys.length, args, valTys, rfl⟩
   let names := rgn.blocks.map (·.name)
   unless names.eraseDups.length == names.length do
     throw "duplicate block name"
@@ -790,13 +790,13 @@ def mkReg (t : Ty) : RegRef → Except String (Reg Γ t)
       if h' : Γ.args[i] = t then return .arg ⟨i, h⟩ h' else throw s!"%arg{i}: type mismatch"
     else throw s!"%arg{i} out of range"
   | .val i =>
-    if h : i < Γ.vals.length then
-      if h' : Γ.vals[i] = t then return .val ⟨i, h⟩ h' else throw s!"%{i}: type mismatch"
+    if h : i < Γ.n then
+      if h' : Γ.ty ⟨i, h⟩ = t then return .val ⟨i, h⟩ h' else throw s!"%{i}: type mismatch"
     else throw s!"%{i} out of range"
 
 def mkDst (t : Ty) (i : Nat) : Except String (Dst Γ t) :=
-  if h : i < Γ.vals.length then
-    if h' : Γ.vals[i] = t then return ⟨⟨i, h⟩, h'⟩ else throw s!"%{i}: type mismatch"
+  if h : i < Γ.n then
+    if h' : Γ.ty ⟨i, h⟩ = t then return ⟨⟨i, h⟩, h'⟩ else throw s!"%{i}: type mismatch"
   else throw s!"%{i} out of range"
 
 def mkRegs : (ts : List Ty) → List RegRef → Except String (Regs Γ ts)
