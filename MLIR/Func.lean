@@ -27,4 +27,10 @@ structure Func where
 
 end
 
+/-- `^bbk` is block `k`, a `Fin n` whose bound checks by evaluation. -/
+syntax :max "^bb" noWs num : term
+
+macro_rules
+  | `(^bb$k) => `(⟨$k, Nat.le_of_ble_eq_true rfl⟩)
+
 end MLIR
