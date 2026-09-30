@@ -87,7 +87,28 @@ def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
   let keys ← DiscrTree.mkPath (mkApp argsFn (← mkFreshExprMVar indexType))
   return simprocs.addCore keys ``reduceArgsApp false (.inr reduceArgsApp)
 
--- Currently, this could also be acheived by `Simp.mkContext (config := { decide := true })`
+/-- `a ≠ b` from `h : [...].Nodup`, when `a` and `b` are among the list's elements. -/
+def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
+  let_expr List.Nodup _ l := ty | return none
+  let some xs := l.listLit? |>.map (·.2) | return none
+  let idx (e : Expr) : MetaM (Option Nat) := do
+    for x in xs, k in [0:xs.length] do
+      if ← withReducible (isDefEq e x) then
+        return some k
+    return none
+  let some i ← idx a | return none
+  let some j ← idx b | return none
+  let lt (m n : Expr) :=
+    mkDecideProof (mkApp4 (mkConst ``LT.lt [0]) (mkConst ``Nat) (mkConst ``instLTNat) m n)
+  let len ← mkAppM ``List.length #[l]
+  let ne (i j : Nat) := do
+    mkAppM ``List.Nodup.getElem_ne #[h, ← lt (mkNatLit i) (mkNatLit j), ← lt (mkNatLit j) len]
+  if i < j then
+    return some (← ne i j)
+  if j < i then
+    return some (← mkAppM ``Ne.symm #[← ne j i])
+  return none
+
 def decideDischarge : Simp.Discharge := fun prop => do
   if let .some inst← trySynthInstance (← mkAppM ``Decidable #[prop]) then
     let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
@@ -100,6 +121,12 @@ def decideDischarge : Simp.Discharge := fun prop => do
       some <$> mkAppM ``Ne #[b, a]
     | none =>
       pure none
+  -- `a ≠ b` (maybe an `autoParam`), or simp's `¬ a = b`
+  let ne := (← instantiateMVars prop).cleanupAnnotations
+  let sides? :=
+    match ne.ne? with
+    | some (_, a, b) => some (a, b)
+    | none => ne.not?.bind (·.eq?) |>.map fun (_, a, b) => (a, b)
   for d in ← getLCtx do
     if d.isImplementationDetail then
       continue
@@ -108,6 +135,9 @@ def decideDischarge : Simp.Discharge := fun prop => do
     if let some symm := symm? then
       if ← withReducible (isDefEq d.type symm) then
         return some (← mkAppM ``Ne.symm #[d.toExpr])
+    if let some (a, b) := sides? then
+      if let some h← nodupNe? d.toExpr (← instantiateMVars d.type) a b then
+        return some (← mkExpectedTypeHint h prop)
   return none
 
 /-- `env.read reg` through `env`'s write chains: the value last written to `reg`, and the proof.

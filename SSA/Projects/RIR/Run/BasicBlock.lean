@@ -30,6 +30,11 @@ theorem List.getElem_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) :
   rw [List.drop_eq_getElem_cons (List.lt_length_of_drop_eq_cons h)] at h
   injection h
 
+/-- A `Nodup` list's elements at positions `i < j` differ. -/
+theorem List.Nodup.getElem_ne {l : List α} (h : l.Nodup) (hij : i < j) (hj : j < l.length) :
+    l[i] ≠ l[j] :=
+  List.pairwise_iff_getElem.1 h i j (by omega) hj hij
+
 /-- A body fact `l.drop n = x :: xs`, one instruction on. -/
 theorem List.drop_succ_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) :
     l.drop (n + 1) = xs := by
