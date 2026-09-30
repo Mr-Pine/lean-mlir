@@ -82,6 +82,14 @@ def boolStx (b : Bool) : CommandElabM (TSyntax `term) :=
 def predStx : IntPred → CommandElabM (TSyntax `term)
   | .eq => `(.eq)
   | .ne => `(.ne)
+  | .slt => `(.slt)
+  | .sle => `(.sle)
+  | .sgt => `(.sgt)
+  | .sge => `(.sge)
+  | .ult => `(.ult)
+  | .ule => `(.ule)
+  | .ugt => `(.ugt)
+  | .uge => `(.uge)
 
 def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
   | .gepConst n => `((.gepConst $(num n)))
@@ -89,9 +97,15 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
     `((.trunc $(← flagsStx f)))
   | .zext nneg => do
     `((.zext $(← boolStx nneg)))
+  | .bswap => `(.bswap)
+  | .bitcast (t := t) (t' := t') _ => do
+    `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
 
 def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .and => `(.and)
+  | .or d => do
+    `((.or $(← boolStx d)))
+  | .xor => `(.xor)
   | .add f => do
     `((.add $(← flagsStx f)))
   | .sub f => do
@@ -120,6 +134,9 @@ def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .select => `(.select)
   | .vpermi2var => `(.vpermi2var)
   | .vpmadd52l => `(.vpmadd52l)
+  | .vpmadd52h => `(.vpmadd52h)
+  | .fshl => `(.fshl)
+  | .fshr => `(.fshr)
 
 def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .bv w v => do

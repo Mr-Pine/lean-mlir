@@ -326,9 +326,9 @@ end Tests
 
 #guard translate (mlir_region% {
   ^bb0(%arg0: i32, %arg1: i32):
-    %0 = "llvm.or"(%arg0, %arg1) : (i32, i32) -> i32
+    %0 = "llvm.udiv"(%arg0, %arg1) : (i32, i32) -> i32
     "llvm.return"(%0) : (i32) -> ()
-}) matches .error "^bb0: %0 = \"llvm.or\"(%arg0, %arg1) : (i32, i32) -> i32: unsupported operation 'llvm.or'"
+}) matches .error "^bb0: %0 = \"llvm.udiv\"(%arg0, %arg1) : (i32, i32) -> i32: unsupported operation 'llvm.udiv'"
 
 private def callsG : MLIR.Region := mlir_region% {
   ^bb0(%arg0: i64):

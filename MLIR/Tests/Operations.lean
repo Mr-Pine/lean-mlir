@@ -1,8 +1,10 @@
 module
 
 import MLIR.Semantics.Operations.Scalar
+import MLIR.Semantics.Operations.Vector
 import MLIR.Memory.Range
 meta import MLIR.Semantics.Operations.Scalar
+meta import MLIR.Semantics.Operations.Vector
 meta import MLIR.Memory.Range
 
 /-! # Scalar operations and range disjointness -/
@@ -43,6 +45,80 @@ open Operation
 #guard icmp .ne (.value 3#8) (.value 3#8) == PoisonOr.value 0#1
 
 #guard (icmp .eq (.value 3#8) .poison).isPoison
+
+/-! ## `or`, `xor` — `disjoint` makes shared bits poison -/
+
+#guard or false (.value 0b1100#4) (.value 0b1010#4) == PoisonOr.value 0b1110#4
+
+#guard (or true (.value 0b1100#4) (.value 0b1010#4)).isPoison
+
+#guard or true (.value 0b1100#4) (.value 0b0011#4) == PoisonOr.value 0b1111#4
+
+#guard xor (.value 0b1100#4) (.value 0b1010#4) == PoisonOr.value 0b0110#4
+
+/-! ## `icmp` orders: signed and unsigned read `-1` differently -/
+
+#guard icmp .slt (.value (-1 : BitVec 8)) (.value 0#8) == PoisonOr.value 1#1
+
+#guard icmp .ult (.value (-1 : BitVec 8)) (.value 0#8) == PoisonOr.value 0#1
+
+#guard icmp .sgt (.value 0#8) (.value (-1 : BitVec 8)) == PoisonOr.value 1#1
+
+#guard icmp .ugt (.value (-1 : BitVec 8)) (.value 0#8) == PoisonOr.value 1#1
+
+#guard icmp .sle (.value 5#8) (.value 5#8) == PoisonOr.value 1#1
+
+#guard icmp .sge (.value (-2 : BitVec 8)) (.value (-1 : BitVec 8)) == PoisonOr.value 0#1
+
+#guard icmp .ule (.value 6#8) (.value 5#8) == PoisonOr.value 0#1
+
+#guard icmp .uge (.value 5#8) (.value 5#8) == PoisonOr.value 1#1
+
+/-! ## `fshl`, `fshr` — shifts of `x ++ y`, by the amount mod the width -/
+
+#guard fshl (.value 0x12#8) (.value 0x34#8) (.value 4#8) == PoisonOr.value 0x23#8
+
+#guard fshl (.value 0x12#8) (.value 0x34#8) (.value 12#8) == PoisonOr.value 0x23#8
+
+#guard fshl (.value 0x12#8) (.value 0x34#8) (.value 0#8) == PoisonOr.value 0x12#8
+
+#guard fshr (.value 0x12#8) (.value 0x34#8) (.value 4#8) == PoisonOr.value 0x23#8
+
+#guard fshr (.value 0x12#8) (.value 0x34#8) (.value 0#8) == PoisonOr.value 0x34#8
+
+#guard (fshl (.value 0x12#8) (.value 0x34#8) .poison).isPoison
+
+/-! ## `bswap` -/
+
+#guard bswap (.value 0x12345678#32) == PoisonOr.value 0x78563412#32
+
+#guard bswap (.value 0x0102030405060708#64) == PoisonOr.value 0x0807060504030201#64
+
+/-! ## `bitcast` — lane 0 is the low bits; any poison lane poisons all -/
+
+#guard
+  bitcast (t := .bv 8) (t' := .vec 8 1) rfl (.value 0b101#8) ==
+    (#v[.value 1#1, .value 0#1, .value 1#1, .value 0#1, .value 0#1, .value 0#1, .value 0#1,
+        .value 0#1] :
+      ⟦Ty.vec 8 1⟧)
+
+#guard
+  bitcast (t := .vec 8 1) (t' := .bv 8) rfl
+      #v[.value 1#1, .value 0#1, .value 1#1, .value 0#1, .value 0#1, .value 0#1, .value 0#1,
+        .value 0#1] ==
+    PoisonOr.value 0b101#8
+
+#guard (bitcast (t := .vec 2 4) (t' := .bv 8) rfl #v[.value 1#4, .poison] : ⟦Ty.bv 8⟧).isPoison
+
+/-! ## `vpmadd52h` — the high half of the 104-bit product, of the low 52 bits -/
+
+#guard
+  vpmadd52h (#v[.value 1] : ⟦Ty.vec 1 64⟧) #v[.value (2 ^ 51)] #v[.value (2 ^ 51)] ==
+    #v[.value (1 + 2 ^ 50)]
+
+#guard
+  vpmadd52h (#v[.value 1] : ⟦Ty.vec 1 64⟧) #v[.value (2 ^ 52 + 2 ^ 51)] #v[.value (2 ^ 51)] ==
+    #v[.value (1 + 2 ^ 50)]
 
 /-! ## `select` — LLVM's orientation: the condition being *true* picks the first value -/
 

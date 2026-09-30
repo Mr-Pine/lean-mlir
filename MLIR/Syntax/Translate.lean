@@ -273,9 +273,15 @@ def overflowFlags (op : Op) : Except String OverflowFlags :=
 def intPred : Int → Except String IntPred
   | 0 => return .eq
   | 1 => return .ne
-  | p =>
-    let names := ["eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge"]
-    throw s!"predicate {(names[p.toNat]?).getD (toString p)} is not supported (only eq and ne)"
+  | 2 => return .slt
+  | 3 => return .sle
+  | 4 => return .sgt
+  | 5 => return .sge
+  | 6 => return .ult
+  | 7 => return .ule
+  | 8 => return .ugt
+  | 9 => return .uge
+  | p => throw s!"unknown predicate {p}"
 
 /-- The integers of a `dense<…>` value: one per lane, or one for all. -/
 def denseInts : AttrValue → Except String (List Int ⊕ Int)
@@ -375,6 +381,8 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       "x86vector.avx512.intr.vpermi2var.q.512"
     | "llvm.call", some (.symbol "x86_avx512_vpmadd52l_uq_512") =>
       "x86vector.avx512.intr.vpmadd52l.uq.512"
+    | "llvm.call", some (.symbol "x86_avx512_vpmadd52h_uq_512") =>
+      "x86vector.avx512.intr.vpmadd52h.uq.512"
     | name, _ => name
   match name with
   | "llvm.mlir.constant" =>
@@ -395,12 +403,44 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           return .const (.vec l w vs) dst
       | t, _ =>
         throw s!"unsupported constant of type {t.toMLIR}"
-  | "llvm.mlir.poison" =>
+  -- `undef` as poison: less defined, so what holds with poison holds for every undef
+  | "llvm.mlir.poison" | "llvm.mlir.undef" =>
     do
       let (dst, t) ← res
       return .poison t dst
   | "llvm.and" =>
     arith .and (← res) args
+  | "llvm.or" =>
+    arith (.or (op.hasAttr "isDisjoint")) (← res) args
+  | "llvm.xor" =>
+    arith .xor (← res) args
+  | "llvm.intr.fshl" | "llvm.intr.fshr" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w), (b, t₂), (c, t₃)] := args | throw "expected three integer operands"
+      unless t₂ == .bv w && t₃ == .bv w && t == .bv w do
+        throw "the operand and result types must agree"
+      if name == "llvm.intr.fshl" then
+        return .ternop (.fshl (w := w)) dst a b c
+      else
+        return .ternop (.fshr (w := w)) dst a b c
+  | "llvm.intr.bswap" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w)] := args | throw "expected one integer operand"
+      unless t == .bv w && w % 8 == 0 do
+        throw "expected a result of the operand's type, a whole number of bytes"
+      return .unop (.bswap (w := w)) dst a
+  | "llvm.bitcast" =>
+    do
+      let (dst, t) ← res
+      let [(a, t₁)] := args | throw "expected one operand"
+      if t₁ == .ptr || t == .ptr then
+        throw "pointer bitcasts are not supported"
+      if h : t₁.width = t.width then
+        return .unop (.bitcast h) dst a
+      else
+        throw s!"{t₁.toMLIR} and {t.toMLIR} differ in width"
   | "llvm.add" =>
     arith (.add (← overflowFlags op)) (← res) args
   | "llvm.sub" =>
@@ -529,6 +569,13 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless w == 64 do
         throw "expected 64-bit lanes"
       return .ternop (.vpmadd52l (l := l)) dst a b c
+  | "x86vector.avx512.intr.vpmadd52h.uq.512" =>
+    do
+      let (dst, t) ← res
+      let (l, w, a, b, c) ← vec3 t args
+      unless w == 64 do
+        throw "expected 64-bit lanes"
+      return .ternop (.vpmadd52h (l := l)) dst a b c
   | "llvm.call" =>
     do
       let some (.symbol callee) := op.getAttr? "callee" | throw "expected a `callee` symbol"
