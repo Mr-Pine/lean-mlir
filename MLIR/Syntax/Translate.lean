@@ -477,11 +477,22 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.select" =>
     do
       let (dst, t) ← res
-      let [(c, .bv 1), (a, t₁), (b, t₂)] := args
-        | throw "expected an `i1` condition and two operands"
+      let [(c, tCond), (a, t₁), (b, t₂)] := args
+        | throw "expected a condition and two operands"
+      let op : Nat → RegRef → RegRef → RegRef → PInstr ←
+        match tCond, t with
+        | .bv 1, _ =>
+          pure <| .ternop (.select (τ := t))
+        | .vec l 1, .vec l' w =>
+          do
+            unless l == l' do
+              throw "vector condition has wrong lane count"
+            pure <| .ternop (.vector (l := l) (.select (τ := .bv w)))
+        | _, _ =>
+          throw "bad arguments for select"
       unless t₁ == t && t₂ == t do
         throw "the operand and result types must agree"
-      return .ternop (.select (τ := t)) dst c a b
+      return op dst c a b
   | "llvm.trunc" | "llvm.zext" =>
     do
       let (dst, t) ← res
