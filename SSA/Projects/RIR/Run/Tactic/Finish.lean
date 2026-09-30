@@ -135,7 +135,8 @@ def evalFinishBlock : Tactic := fun stx =>
       if long then
         `(term| by decide +kernel)
       else
-        `(term| by decide)
+        -- not `decide`: it refuses a body that mentions a local (a callee parameter)
+        `(term| Nat.le_of_ble_eq_true rfl)
     evalTactic
         (←
           `(tactic|

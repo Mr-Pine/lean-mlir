@@ -8,3 +8,4 @@ public import SSA.Projects.RIR.Run.Tactic.Step.Call
 public import SSA.Projects.RIR.Run.Tactic.Widget
 public import SSA.Projects.RIR.Run.Tactic.Step.Alloca
 public import SSA.Projects.RIR.Run.Tactic.Loop
+public import SSA.Projects.RIR.Run.Tactic.Step.Pattern
