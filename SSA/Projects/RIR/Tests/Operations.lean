@@ -110,6 +110,38 @@ open Operation
 
 #guard (bitcast (t := .vec 2 4) (t' := .bv 8) rfl #v[.value 1#4, .poison] : ⟦Ty.bv 8⟧).isPoison
 
+/-! ## `insertelement`, `extractelement` — a bad or poison index is poison -/
+
+#guard
+  insertelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) (.value 9#8)
+      (.value 1#32) ==
+    #v[.value 1#8, .value 9#8, .value 3#8]
+
+#guard
+  insertelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) .poison (.value 0#32) ==
+    #v[.poison, .value 2#8, .value 3#8]
+
+#guard
+  insertelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) (.value 9#8)
+      (.value 3#32) ==
+    Ty.poisoned (.vec 3 8)
+
+#guard
+  insertelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) (.value 9#8)
+      (.poison : IntW 32) ==
+    Ty.poisoned (.vec 3 8)
+
+#guard
+  extractelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) (.value 2#64) ==
+    PoisonOr.value 3#8
+
+#guard
+  (extractelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧) (.value 3#64)).isPoison
+
+#guard
+  (extractelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧)
+      (.poison : IntW 64)).isPoison
+
 /-! ## `vpmadd52h` — the high half of the 104-bit product, of the low 52 bits -/
 
 #guard

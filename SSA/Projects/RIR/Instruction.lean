@@ -41,12 +41,14 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   |
   vector {l w₁ w₂ w : Nat} (op : BinOp (.bv w₁) (.bv w₂) (.bv w)) :
     BinOp (.vec l w₁) (.vec l w₂) (.vec l w)
+  | extractelement {l w wi : Nat} : BinOp (.vec l w) (.bv wi) (.bv w)
   |
   shufflevector {l w : Nat} (indices : Vector (Option (Fin (2 * l))) l) :
     BinOp (.vec l w) (.vec l w) (.vec l w)
 
 inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | select {τ : Ty} : TernOp (.bv 1) τ τ τ
+  | insertelement {l w wi : Nat} : TernOp (.vec l w) (.bv w) (.bv wi) (.vec l w) -- (v, x, idx)
   | vpermi2var {l w : Nat} : TernOp (.vec l w) (.vec l w) (.vec l w) (.vec l w) -- (a, idx, b)
   /-- `vpmadd52luq`: `a + (b * c)`, the multiplicands' and the product's low 52 bits. -/
   | vpmadd52l {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)

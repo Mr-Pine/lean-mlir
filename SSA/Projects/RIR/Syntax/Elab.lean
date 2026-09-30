@@ -123,6 +123,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.icmp $(← predStx p)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
+  | .extractelement => `(.extractelement)
   | .shufflevector (l := l) idx => do
     let lanes ←
       idx.toArray.mapM fun
@@ -132,6 +133,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
 
 def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .select => `(.select)
+  | .insertelement => `(.insertelement)
   | .vpermi2var => `(.vpermi2var)
   | .vpmadd52l => `(.vpmadd52l)
   | .vpmadd52h => `(.vpmadd52h)

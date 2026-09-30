@@ -36,11 +36,13 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | smin => Operation.smin
   | icmp p => Operation.icmp p
   | vector op => Vector.zipWith op.compute
+  | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm
 
 @[mlir_instr]
 def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
   | select => Operation.select
+  | insertelement => Operation.insertelement
   | vpermi2var => Operation.vpermi2var
   | vpmadd52l => Operation.vpmadd52l
   | vpmadd52h => Operation.vpmadd52h
