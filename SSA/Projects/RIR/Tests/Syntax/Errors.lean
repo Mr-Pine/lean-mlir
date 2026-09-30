@@ -191,6 +191,24 @@ mlir_def midTerminator := {
     "llvm.return"(%arg0) : (i32) -> ()
 }
 
+-- `sext` translates, and only widens
+#guard_msgs in
+mlir_def sextWiden := {
+  ^bb0(%arg0: i1):
+    %0 = "llvm.sext"(%arg0) : (i1) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+example : sextWiden.entry.body = [.unop (.sext (w := 1) (w' := 8)) ⟨0, rfl⟩ (.arg 0 rfl)] := rfl
+
+/-- error: ^bb0: %0 = "llvm.sext"(%arg0) : (i32) -> i8: the result must be wider -/
+#guard_msgs in
+mlir_def sextNarrow := {
+  ^bb0(%arg0: i32):
+    %0 = "llvm.sext"(%arg0) : (i32) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
 -- a vector condition selects lane-wise
 #guard_msgs in
 mlir_def vectorSelect := {

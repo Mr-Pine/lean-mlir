@@ -23,6 +23,7 @@ inductive UnOp : Ty → (out : Ty) → Type
   | gepConst (byteOff : Nat) : UnOp .ptr .ptr
   | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
+  | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
   | bswap {w : Nat} : UnOp (.bv w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
 

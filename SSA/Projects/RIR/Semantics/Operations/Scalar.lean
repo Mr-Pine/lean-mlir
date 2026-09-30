@@ -181,6 +181,12 @@ def zext (nneg : Bool) {w w' : Nat} (x : IntW w) : IntW w' := do
     .poison
   return a.setWidth w'
 
+/-- Sign-extended to `w'` bits -/
+@[mlir_operation]
+def sext {w w' : Nat} (x : IntW w) : IntW w' := do
+  let a : BitVec w ← x
+  return a.signExtend w'
+
 /-- The same bits at a type of the same width. Poison if any lane is: coarser than LLVM, which
 keeps the other lanes, but sound, as poison refines to any value. -/
 @[mlir_operation]

@@ -493,7 +493,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless t₁ == t && t₂ == t do
         throw "the operand and result types must agree"
       return op dst c a b
-  | "llvm.trunc" | "llvm.zext" =>
+  | "llvm.trunc" | "llvm.zext" | "llvm.sext" =>
     do
       let (dst, t) ← res
       let [(a, .bv w)] := args | throw "expected one integer operand"
@@ -505,7 +505,10 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       else
         unless w < w' do
           throw "the result must be wider"
-        return .unop (.zext (w := w) (w' := w') (op.hasAttr "nonNeg")) dst a
+        if op.name == "llvm.zext" then
+          return .unop (.zext (w := w) (w' := w') (op.hasAttr "nonNeg")) dst a
+        else
+          return .unop (.sext (w := w) (w' := w')) dst a
   | "llvm.load" =>
     do
       checkNotAtomic

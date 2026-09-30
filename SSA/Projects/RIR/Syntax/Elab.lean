@@ -97,6 +97,8 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
     `((.trunc $(← flagsStx f)))
   | .zext nneg => do
     `((.zext $(← boolStx nneg)))
+  | .sext => do
+    `((.sext))
   | .bswap => `(.bswap)
   | .bitcast (t := t) (t' := t') _ => do
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
