@@ -126,12 +126,12 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)
-  | .shufflevector (l := l) idx => do
+  | .shufflevector (l₁ := l₁) (l₂ := l₂) idx => do
     let lanes ←
       idx.toArray.mapM fun
           | some k => `(some $(num k.val))
           | none => `(none)
-    `((.shufflevector (#v[$lanes,*] : Vector (Option (Fin (2 * $(num l)))) $(num l))))
+    `((.shufflevector (#v[$lanes,*] : Vector (Option (Fin (2 * $(num l₁)))) $(num l₂))))
 
 def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .select => `(.select)

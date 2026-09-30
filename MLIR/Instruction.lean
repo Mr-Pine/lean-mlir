@@ -44,8 +44,8 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
     BinOp (.vec l w₁) (.vec l w₂) (.vec l w)
   | extractelement {l w wi : Nat} : BinOp (.vec l w) (.bv wi) (.bv w)
   |
-  shufflevector {l w : Nat} (indices : Vector (Option (Fin (2 * l))) l) :
-    BinOp (.vec l w) (.vec l w) (.vec l w)
+  shufflevector {l₁ l₂ w : Nat} (indices : Vector (Option (Fin (2 * l₁))) l₂) :
+    BinOp (.vec l₁ w) (.vec l₁ w) (.vec l₂ w)
 
 inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | select {τ : Ty} : TernOp (.bv 1) τ τ τ

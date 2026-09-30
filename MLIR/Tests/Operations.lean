@@ -155,6 +155,27 @@ open Operation
   (extractelement (#v[.value 1#8, .value 2#8, .value 3#8] : ⟦Ty.vec 3 8⟧)
       (.poison : IntW 64)).isPoison
 
+/-! ## `shufflevector` — indices past the first operand read the second; `none` is poison -/
+
+-- widening: two 2-lane operands into 4 lanes
+#guard
+  shufflevector (#v[some 0, some 3, none, some 1] : Vector (Option (Fin (2 * 2))) 4)
+      (#v[.value 1#8, .value 2#8] : ⟦Ty.vec 2 8⟧) #v[.value 3#8, .value 4#8] ==
+    (#v[.value 1#8, .value 4#8, .poison, .value 2#8] : ⟦Ty.vec 4 8⟧)
+
+-- narrowing: two 4-lane operands into 2 lanes
+#guard
+  shufflevector (#v[some 7, some 0] : Vector (Option (Fin (2 * 4))) 2)
+      (#v[.value 1#8, .value 2#8, .value 3#8, .value 4#8] : ⟦Ty.vec 4 8⟧)
+      #v[.value 5#8, .value 6#8, .value 7#8, .value 8#8] ==
+    (#v[.value 8#8, .value 1#8] : ⟦Ty.vec 2 8⟧)
+
+-- a poison lane is only read where selected
+#guard
+  shufflevector (#v[some 1, some 1] : Vector (Option (Fin (2 * 2))) 2)
+      (#v[.poison, .value 2#8] : ⟦Ty.vec 2 8⟧) #v[.value 3#8, .value 4#8] ==
+    (#v[.value 2#8, .value 2#8] : ⟦Ty.vec 2 8⟧)
+
 /-! ## `vpmadd52h` — the high half of the 104-bit product, of the low 52 bits -/
 
 #guard

@@ -22,15 +22,15 @@ def insertelement {l w wi : Nat} (v : ⟦.vec l w⟧) (x : IntW w) (idx : IntW w
   | .poison => (Ty.vec l w).poisoned
 
 @[mlir_operation]
-def shufflevector {l w : Nat} (indices : Vector (Option (Fin (2 * l))) l) (a b : ⟦.vec l w⟧) :
-    ⟦.vec l w⟧ :=
-  Vector.ofFn (n := l)
+def shufflevector {l₁ l₂ w : Nat} (indices : Vector (Option (Fin (2 * l₁))) l₂)
+    (a b : ⟦.vec l₁ w⟧) : ⟦.vec l₂ w⟧ :=
+  Vector.ofFn (n := l₂)
     (fun i => do
       let some idx := indices[i] | .poison
-      if h : idx < l then
+      if h : idx < l₁ then
         a[idx]'h
       else
-        b[idx - l])
+        b[idx - l₁])
 
 @[mlir_operation]
 def vpermi2var {l w : Nat} (a idx b : ⟦.vec l w⟧) : ⟦.vec l w⟧ :=
