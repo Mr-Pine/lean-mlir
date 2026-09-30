@@ -107,7 +107,7 @@ open Operation
 
 #guard bswap (.value 0x0102030405060708#64) == PoisonOr.value 0x0807060504030201#64
 
-/-! ## `bitcast` — lane 0 is the low bits; any poison lane poisons all -/
+/-! ## `bitcast` — lane 0 is the low bits; poison stays in its lanes, but poisons a whole scalar -/
 
 #guard
   bitcast (t := .bv 8) (t' := .vec 8 1) rfl (.value 0b101#8) ==
@@ -122,6 +122,15 @@ open Operation
     PoisonOr.value 0b101#8
 
 #guard (bitcast (t := .vec 2 4) (t' := .bv 8) rfl #v[.value 1#4, .poison] : ⟦Ty.bv 8⟧).isPoison
+
+-- between vectors, only the result lanes overlapping a poison lane are poison
+#guard
+  bitcast (t := .vec 2 8) (t' := .vec 4 4) rfl #v[.value 0x21#8, .poison] ==
+    (#v[.value 1#4, .value 2#4, .poison, .poison] : ⟦Ty.vec 4 4⟧)
+
+#guard
+  bitcast (t := .vec 4 4) (t' := .vec 2 8) rfl #v[.value 1#4, .value 2#4, .value 3#4, .poison] ==
+    (#v[.value 0x21#8, .poison] : ⟦Ty.vec 2 8⟧)
 
 /-! ## `insertelement`, `extractelement` — a bad or poison index is poison -/
 

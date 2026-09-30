@@ -187,13 +187,28 @@ def sext {w w' : Nat} (x : IntW w) : IntW w' := do
   let a : BitVec w ← x
   return a.signExtend w'
 
-/-- The same bits at a type of the same width. Poison if any lane is: coarser than LLVM, which
-keeps the other lanes, but sound, as poison refines to any value. -/
+/-- The same bits at a type of the same width, lane 0 lowest. Between vectors, a result lane is
+poison exactly when an input lane sharing one of its bits is; into or out of a scalar, any poison
+poisons all. -/
 @[mlir_operation]
 def bitcast {t t' : Ty} (h : t.width = t'.width) (x : ⟦t⟧) : ⟦t'⟧ :=
-  match t.flatten x with
-  | .value b => t'.unflatten (b.cast h)
-  | .poison => t'.poisoned
+  match t, t', x with
+  | .vec l w, .vec l' w', x =>
+    let bits : BitVec (w * l) :=
+      BitVec.packLanes
+        (x.map fun
+          | .value b => b
+          | .poison => 0)
+    Vector.ofFn fun j : Fin l' =>
+      if
+          (List.finRange l).any fun i =>
+            x[i].isPoison && i.1 * w < (j.1 + 1) * w' && j.1 * w' < (i.1 + 1) * w then
+        .poison
+      else .value (bits.extractLsb' (j.1 * w') w')
+  | t, t', x =>
+    match t.flatten x with
+    | .value b => t'.unflatten (b.cast h)
+    | .poison => t'.poisoned
 
 end Cast
 
