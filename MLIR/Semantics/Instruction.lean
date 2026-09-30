@@ -63,6 +63,8 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
   | load dst p => Operation.load dst (env.read p) env
   | store p reg => Operation.store (env.read p) (env.read reg) env
+  | memset dst v len => Operation.memset (env.read dst) (env.read v) (env.read len) env
+  | memcpy dst src len => Operation.memcpy (env.read dst) (env.read src) (env.read len) env
   | alloca dst bytes =>
     modifyGetThe GlobalState fun s => (env.write dst (.value s.allocaPtr), s.alloca bytes)
   | call f args rets => do

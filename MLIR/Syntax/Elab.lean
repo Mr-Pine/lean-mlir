@@ -164,6 +164,10 @@ def instrStx (nv : Nat) (callee : String → TSyntax `term) : PInstr → Command
     `(.load $(← dstStx nv d) $(← regStx nv p))
   | .store _ p v => do
     `(.store $(← regStx nv p) $(← regStx nv v))
+  | .memset _ dst v l => do
+    `(.memset $(← regStx nv dst) $(← regStx nv v) $(← regStx nv l))
+  | .memcpy _ dst src l => do
+    `(.memcpy $(← regStx nv dst) $(← regStx nv src) $(← regStx nv l))
   | .alloca d n => do
     `(.alloca $(← dstStx nv d) $(num n))
   | .lifetimeStart p n => do

@@ -4,6 +4,7 @@ public import MLIR.SimpSets
 public import MLIR.Ty
 public import MLIR.IntPred
 public import MLIR.Semantics.Env
+public import MLIR.Semantics.Operations.Scalar
 public import MLIR.Semantics.Effectful.Memory.Operations
 public import MLIR.Semantics.Effectful.EffectM
 
@@ -49,6 +50,29 @@ def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Poi
   if ptr.offset.uaddOverflow off then
     .poison
   return ptr.add off
+
+def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  let .value (dst, val, len) := do
+    return (← dst, ← val, (← len).toNat) | throwUB
+  let state ← get
+  throwUBIf (¬Fits state.mem dst (8 * len))
+  let replacement := val.replicate len
+  let updated := { state with mem := state.mem.storeAt dst replacement }
+  _ ← set updated
+  return env
+
+def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env : ⟪Γ⟫) :
+    EffectM ⟪Γ⟫ := do
+  let .value (dst, src, len) := do
+    return (← dst, ← src, (← len).toNat) | throwUB
+  throwUBIf (¬(Range.of dst (8 * len)).Disjoint (Range.of src (8 * len)))
+  let state ← get
+  throwUBIf (¬Fits state.mem dst (8 * len))
+  throwUBIf (¬Fits state.mem src (8 * len))
+  let replacement := state.mem.readAt src (8 * len)
+  let updated := { state with mem := state.mem.storeAt dst replacement }
+  _ ← set updated
+  return env
 
 end
 

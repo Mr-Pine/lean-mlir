@@ -48,6 +48,8 @@ inductive PInstr
   | ternop {t₁ t₂ t₃ t : Ty} (op : TernOp t₁ t₂ t₃ t) (dst : Nat) (a b c : RegRef)
   | load (t : Ty) (dst : Nat) (p : RegRef)
   | store (t : Ty) (p v : RegRef)
+  | memset (w : Nat) (p v l : RegRef)
+  | memcpy (w : Nat) (dst src l : RegRef)
   | alloca (dst : Nat) (bytes : Nat)
   | lifetimeStart (p : RegRef) (bytes : Nat)
   | lifetimeEnd (p : RegRef) (bytes : Nat)
@@ -504,6 +506,18 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       checkNotAtomic
       let [(v, t), (p, .ptr)] := args | throw "expected a value and a pointer operand"
       return .store t p v
+  | "llvm.intr.memset" =>
+    do
+      checkNotAtomic
+      let [(dst, .ptr), (val, .bv 8), (len, .bv w)] :=
+        args | throw "expected destination pointer, byte and length"
+      return .memset w dst val len
+  | "llvm.intr.memcpy" =>
+    do
+      checkNotAtomic
+      let [(dst, .ptr), (src, .ptr), (len, .bv w)] :=
+        args | throw "expected destination and source pointer, and length"
+      return .memcpy w dst src len
   | "llvm.alloca" =>
     do
       let (dst, t) ← res
@@ -788,6 +802,10 @@ def mkInstr (callees : String → Option Callee) : PInstr → Except String (Ins
     return .ternop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b) (← mkReg Γ _ c)
   | .load t d p => return .load (← mkDst Γ t d) (← mkReg Γ .ptr p)
   | .store t p v => return .store (← mkReg Γ .ptr p) (← mkReg Γ t v)
+  | .memset w dst v l =>
+    return .memset (← mkReg Γ .ptr dst) (← mkReg Γ (.bv 8) v) (← mkReg Γ (.bv w) l)
+  | .memcpy w dst src l =>
+    return .memcpy (← mkReg Γ .ptr dst) (← mkReg Γ .ptr src) (← mkReg Γ (.bv w) l)
   | .alloca d n => return .alloca (← mkDst Γ .ptr d) n
   | .lifetimeStart p n => return .lifetimeStart (← mkReg Γ .ptr p) n
   | .lifetimeEnd p n => return .lifetimeEnd (← mkReg Γ .ptr p) n
