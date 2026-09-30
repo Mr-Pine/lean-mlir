@@ -140,6 +140,23 @@ def decideDischarge : Simp.Discharge := fun prop => do
         return some (← mkExpectedTypeHint h prop)
   return none
 
+/-- Register `i` of `e`, an env without a chain fact, from a local `h : e.read (.val i _) = v`: a
+read at a block lemma's entry env. `lhs` is the read being resolved, `e.read` of `i` up to the
+skipped writes. -/
+def readFact? (e : Expr) (i : Nat) (lhs : Expr) : MetaM (Option (Expr × Expr)) := do
+  for d in ← getLCtx do
+    if d.isImplementationDetail then
+      continue
+    let some (_, l, v) := (← instantiateMVars d.type).eq? | continue
+    let_expr Env.read _ _ e' r := l | continue
+    unless e' == e do
+      continue
+    let_expr Reg.val _ _ rj _ := r | continue
+    unless (← finNLit? rj) == some i do
+      continue
+    return some (v, mkExpectedPropHint d.toExpr (← mkEq lhs v))
+  return none
+
 /-- `env.read reg` through `env`'s write chains: the value last written to `reg`, and the proof.
 Each run of writes is one definitional step (the kernel decides the index comparisons), each
 local's `hE` one rewrite. Unlike `simp`, it never walks the written values. -/
@@ -157,7 +174,7 @@ partial def walkRead (env reg : Expr) : MetaM (Option (Expr × Expr)) := do
     e := e.getArg! 2
   unless e.isFVar do
     return none
-  let some hE ← findEqWithLhs? e m!"" | return none
+  let some hE ← findEqWithLhs? e m!"" | readFact? e i lhs
   let some (_, _, chain) := (← instantiateMVars (← hE.getType)).eq? | return none
   let some (v, pf) ← walkRead chain reg | return none
   let baseRead ← mkAppM ``Env.read #[e, reg]
