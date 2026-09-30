@@ -46,6 +46,33 @@ def usedRegs (parts : Array Expr) : MetaM (Std.HashSet Nat) := do
           regs.modify (·.insert k)
   regs.get
 
+/-- The value registers `parts` (an exit, then instructions in order) reads before writing them;
+`defined` are written on entry (a block's parameters). A register a loop body rewrites before
+reading it is not live into the body. -/
+def exposedRegs (parts : Array Expr) (defined : Std.HashSet Nat := {}) : MetaM (Std.HashSet Nat) :=
+  do
+  let mut defined := defined
+  let mut regs : Std.HashSet Nat := {}
+  for part in parts.extract 1 parts.size |>.push parts[0]! do
+    for k in ← usedRegs #[part] do
+      unless defined.contains k do
+        regs := regs.insert k
+    let writes ← IO.mkRef #[]
+    part.forEachWhere (·.isAppOfArity ``Dst.mk 4) fun d => writes.modify (·.push (d.getArg! 2))
+    for i in ← writes.get do
+      if let some k← finNLit? i then
+        defined := defined.insert k
+  return regs
+
+/-- The value registers block `t`'s parameters write on entry. -/
+def paramRegs (func t : Expr) : MetaM (Std.HashSet Nat) := do
+  let params ← whnfD (mkApp2 (mkConst ``Func.blockParams) func t)
+  let regs ← IO.mkRef ({} : Std.HashSet Nat)
+  params.forEachWhere (·.isAppOfArity ``Dst.mk 4) fun d => do
+      if let some k← finNLit? (d.getArg! 2) then
+        regs.modify (·.insert k)
+  regs.get
+
 /-- A function's block `k`: its registers read and its jump targets. Each step asks again for the
 same reachable blocks. -/
 initialize blockUseCache : IO.Ref (Std.HashMap (Expr × Nat) (Std.HashSet Nat × Array Expr)) ←
@@ -53,7 +80,7 @@ initialize blockUseCache : IO.Ref (Std.HashMap (Expr × Nat) (Std.HashSet Nat ×
 
 def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
   let parts ← blockParts block pos
-  let mut live ← usedRegs parts
+  let mut live ← exposedRegs parts
   let mut todo ← jumpTargets parts[0]!
   let mut seen : Std.HashSet Nat := {}
   let func ← instantiateMVars func
@@ -71,7 +98,7 @@ def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
       | none =>
         do
           let ps ← blockParts (mkApp2 (mkConst ``Func.blocks) func t) (mkNatLit 0)
-          let r := (← usedRegs ps, ← jumpTargets ps[0]!)
+          let r := (← exposedRegs ps (← paramRegs func t), ← jumpTargets ps[0]!)
           blockUseCache.modify (·.insert (func, k) r)
           pure r
     live := live.union regs
