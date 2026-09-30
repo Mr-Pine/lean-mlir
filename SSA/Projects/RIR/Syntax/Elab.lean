@@ -139,6 +139,8 @@ def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .vpmadd52h => `(.vpmadd52h)
   | .fshl => `(.fshl)
   | .fshr => `(.fshr)
+  | .vector op => do
+    `((.vector $(← ternOpStx op)))
 
 def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .bv w v => do

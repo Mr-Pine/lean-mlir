@@ -191,13 +191,26 @@ mlir_def midTerminator := {
     "llvm.return"(%arg0) : (i32) -> ()
 }
 
-/--
-error: ^bb0: %0 = "llvm.select"(%arg0, %arg1, %arg1) : (vector<4xi1>, vector<4xi32>, vector<4xi32>) -> vector<4xi32>: expected an `i1` condition and two operands
--/
+-- a vector condition selects lane-wise
 #guard_msgs in
 mlir_def vectorSelect := {
   ^bb0(%arg0: vector<4xi1>, %arg1: vector<4xi32>):
     %0 = "llvm.select"(%arg0, %arg1, %arg1) : (vector<4xi1>, vector<4xi32>, vector<4xi32>) -> vector<4xi32>
+    "llvm.return"(%0) : (vector<4xi32>) -> ()
+}
+
+example :
+    vectorSelect.entry.body =
+      [.ternop (.vector (l := 4) (.select (τ := .bv 32))) ⟨0, rfl⟩ (.arg 0 rfl) (.arg 1 rfl)
+        (.arg 1 rfl)] := rfl
+
+/--
+error: ^bb0: %0 = "llvm.select"(%arg0, %arg1, %arg1) : (vector<2xi1>, vector<4xi32>, vector<4xi32>) -> vector<4xi32>: vector condition has wrong lane count
+-/
+#guard_msgs in
+mlir_def vectorSelectLanes := {
+  ^bb0(%arg0: vector<2xi1>, %arg1: vector<4xi32>):
+    %0 = "llvm.select"(%arg0, %arg1, %arg1) : (vector<2xi1>, vector<4xi32>, vector<4xi32>) -> vector<4xi32>
     "llvm.return"(%0) : (vector<4xi32>) -> ()
 }
 

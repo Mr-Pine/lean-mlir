@@ -48,6 +48,7 @@ def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → �
   | vpmadd52h => Operation.vpmadd52h
   | fshl => Operation.fshl
   | fshr => Operation.fshr
+  | vector op => fun a b c => Vector.ofFn (fun i => op.compute a[i] b[i] c[i])
 
 /-- Write `vs` into `ds`, first to last. -/
 def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫

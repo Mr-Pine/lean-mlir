@@ -56,6 +56,9 @@ inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | vpmadd52h {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
   | fshl {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
   | fshr {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
+  |
+  vector {l w₁ w₂ w₃ w : Nat} (op : TernOp (.bv w₁) (.bv w₂) (.bv w₃) (.bv w)) :
+    TernOp (.vec l w₁) (.vec l w₂) (.vec l w₃) (.vec l w)
 
 inductive Instr (Γ : Ctx)
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
