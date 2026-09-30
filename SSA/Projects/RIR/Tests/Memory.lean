@@ -3,10 +3,11 @@ module
 import SSA.Projects.RIR.Semantics.Operations.Memory
 meta import SSA.Projects.RIR.Semantics.Operations.Memory
 
-/-! # Execution tests for `load`/`store`
+/-! # Execution tests for `load`/`store`, `memset`/`memcpy`
 
 Everything is run against a single 8-byte block with id `0`; block `1` is never
-allocated, so it is the "dead pointer" case. -/
+allocated, so it is the "dead pointer" case. `memcpy` adds block `2`, holding the bytes
+`01 … 08`. -/
 
 namespace LeanMLIR.RIR.Tests
 
@@ -114,5 +115,78 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
 
 -- a load at `ptr` type is poison
 #guard load? .ptr (.value (p 0)) == some .poison
+
+/-! ## `memset` -/
+
+/-- The 8 bytes of block `0` after `memset dst val len`, or `none` for UB. -/
+private def memset? {w : Nat} (dst : ⟦Ty.ptr⟧) (val : ⟦Ty.bv 8⟧) (len : ⟦Ty.bv w⟧) :
+    Option (BitVec 64) :=
+  match Operation.memset dst val len env0 s0 with
+  | .value (_, s') => some (s'.mem.readAt (p 0) 64)
+  | .poison => none
+
+-- bytes 1 … 3 are set, the others stay zero
+#guard memset? (.value (p 1)) (.value 0x7f#8) (.value 3#64) == some 0x7f7f7f00#64
+
+-- the length may have any width
+#guard memset? (.value (p 0)) (.value 0xff#8) (.value 8#32) == some 0xffffffffffffffff#64
+
+#guard memset? (.value (p 0)) (.value 0x7f#8) (.value 0#64) == some 0#64
+
+-- UB: past the block, dead block, poison pointer or length; poison bytes too (stricter than
+-- LLVM, which stores them)
+#guard memset? (.value (p 4)) (.value 0x7f#8) (.value 5#64) == none
+
+#guard memset? (.value pDead) (.value 0x7f#8) (.value 1#64) == none
+
+#guard memset? .poison (.value 0x7f#8) (.value 1#64) == none
+
+#guard memset? (.value (p 0)) (.value 0x7f#8) (.poison : ⟦Ty.bv 64⟧) == none
+
+#guard memset? (.value (p 0)) .poison (.value 1#64) == none
+
+/-! ## `memcpy` -/
+
+/-- Blocks `0` (zeroed) and `2` (bytes `01 … 08`). -/
+private def s2 : GlobalState :=
+  ⟨⟨3⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨8, 0⟩), (⟨2⟩, ⟨8, 0x0807060504030201#64⟩)]⟩⟩
+
+/-- Pointer into block `2` at byte offset `off`. -/
+private def q (off : Nat) : Pointer :=
+  ⟨⟨2⟩, BitVec.ofNat 64 off⟩
+
+/-- Blocks `0` and `2` after `memcpy dst src len`, or `none` for UB. -/
+private def memcpy? (dst src : ⟦Ty.ptr⟧) (len : ⟦Ty.bv 64⟧) : Option (BitVec 64 × BitVec 64) :=
+  match Operation.memcpy dst src len env0 s2 with
+  | .value (_, s') => some (s'.mem.readAt (p 0) 64, s'.mem.readAt (q 0) 64)
+  | .poison => none
+
+-- three bytes into block `0` at offset 2; the source is unchanged
+#guard
+  memcpy? (.value (p 2)) (.value (q 0)) (.value 3#64) ==
+    some (0x0000000302010000#64, 0x0807060504030201#64)
+
+-- from a source offset
+#guard
+  memcpy? (.value (p 0)) (.value (q 4)) (.value 2#64) == some (0x0605#64, 0x0807060504030201#64)
+
+-- adjacent ranges in one block do not overlap
+#guard memcpy? (.value (q 0)) (.value (q 4)) (.value 4#64) == some (0#64, 0x0807060508070605#64)
+
+-- UB: overlapping ranges, and, stricter than LLVM, equal ones
+#guard memcpy? (.value (q 0)) (.value (q 2)) (.value 4#64) == none
+
+#guard memcpy? (.value (q 0)) (.value (q 0)) (.value 4#64) == none
+
+-- UB: past either block, dead block, poison pointer or length
+#guard memcpy? (.value (p 0)) (.value (q 6)) (.value 4#64) == none
+
+#guard memcpy? (.value (p 6)) (.value (q 0)) (.value 4#64) == none
+
+#guard memcpy? (.value (p 0)) (.value pDead) (.value 1#64) == none
+
+#guard memcpy? .poison (.value (q 0)) (.value 1#64) == none
+
+#guard memcpy? (.value (p 0)) (.value (q 0)) .poison == none
 
 end LeanMLIR.RIR.Tests

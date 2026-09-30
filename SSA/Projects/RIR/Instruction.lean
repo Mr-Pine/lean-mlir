@@ -66,6 +66,8 @@ inductive Instr (Γ : Ctx)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
+  | memset (dst : Reg Γ .ptr) (val : Reg Γ (.bv 8)) (len : Reg Γ (.bv w))
+  | memcpy (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
   /-- A fresh, zeroed block of `bytes` bytes; `dst` points to its start. -/
   | alloca (dst : Dst Γ .ptr) (bytes : Nat)
   /-- `llvm.intr.lifetime.start`: the `bytes` at `p` become live. A no-op. -/
