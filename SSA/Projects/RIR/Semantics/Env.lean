@@ -3,6 +3,7 @@ module
 public import SSA.Projects.RIR.SimpSets
 public import SSA.Projects.RIR.Context
 public meta import Lean.Elab.Term
+public meta import Lean.Elab.SyntheticMVars
 
 namespace LeanMLIR.RIR
 
@@ -122,11 +123,8 @@ meta section Syntax
 
 open Lean Elab Term Meta
 
-syntax :max term noWs "[" withoutPosition(term " := " term),+ "]" : term
-
-macro_rules
-  | `($E[$d := $v]) => `(Env.write $E $d $v)
-  | `($E[$d := $v, $[$ds := $vs],*]) => `((Env.write $E $d $v)[$[$ds := $vs],*])
+/-- `E[d := v, …]` writes `v` to `d` in `E`, left to right. -/
+syntax :max (name := envWrite) term noWs "[" withoutPosition(term " := " term),+ "]" : term
 
 @[app_unexpander Env.write] def unexpandWrite : PrettyPrinter.Unexpander
   | `($_ $E[$[$ds := $vs],*] $d $v) => `($E[$[$ds := $vs],*, $d := $v])
@@ -161,6 +159,64 @@ def elabArgReg : TermElab := fun stx ty? => do
   let k : TSyntax `num := ⟨stx.getArg 1⟩
   let ty ← whnfR (← expectedHead ty? "%k")
   elabTerm (← `(Reg.arg $k rfl)) ty
+
+/-- The type of value register `k` of `Γ`, if `Γ.vals` unfolds to a list. -/
+def valTy? (Γ : Expr) (k : Nat) : MetaM (Option Expr) := do
+  let rec go (l : Expr) : Nat → MetaM (Option Expr)
+    | k => do
+      let l ← whnfD l
+      let_expr List.cons _ x xs := l | return none
+      if k = 0 then
+        return some (← whnfR x)
+      else
+        go xs (k - 1)
+  go (mkApp (mkConst ``Ctx.vals) Γ) k
+
+/-- Elaborates `v` as a `⟦t⟧`, or else a raw value wrapped: `.value v` or `Ty.wrap v`. -/
+def elabValue (v : Term) (t : Expr) : TermElabM Expr := do
+  let expected := mkApp (mkConst ``Ty.denote) t
+  let s ← saveState
+  try
+    withoutErrToSorry do
+        let e ← elabTermEnsuringType v expected
+        synthesizeSyntheticMVarsNoPostponing
+        return e
+  catch ex =>
+    s.restore
+    let wrapped ←
+      match (← whnfR t).getAppFn.constName? with
+      | some ``Ty.vec =>
+        `(Ty.wrap (t := $(← exprToSyntax t)) $v)
+      | some ``Ty.bv | some ``Ty.ptr =>
+        `(PoisonOr.value $v)
+      | _ =>
+        throw ex
+    elabTermEnsuringType wrapped expected
+
+/-- Elaborates `E` first, so its `Γ` types each `%k` and, through it, each value. -/
+@[term_elab envWrite]
+def elabEnvWrite : TermElab := fun stx ty? => do
+  let E ← elabTerm stx[0] none
+  let envTy ← whnfR (← instantiateMVars (← inferType E))
+  let_expr Env Γ := envTy |
+    do
+      tryPostponeIfMVar envTy
+      throwError "`E[d := v]` needs `E` to be an `Env`, got{indentExpr envTy}"
+  let mut env := E
+  for w in stx[2].getSepArgs do
+    let d := w[0]
+    let t ←
+      if d.getKind == ``valReg then
+        do
+          pure ((← valTy? Γ (d[1].isNatLit?.getD 0)).getD (← mkFreshExprMVar (mkConst ``Ty)))
+      else
+        mkFreshExprMVar (mkConst ``Ty)
+    let dst ← elabTermEnsuringType d (mkApp2 (mkConst ``Dst) Γ t)
+    synthesizeSyntheticMVarsNoPostponing
+    let t ← instantiateMVars t
+    let v ← elabValue ⟨w[2]⟩ t
+    env := mkAppN (mkConst ``Env.write) #[Γ, t, env, dst, v]
+  ensureHasType ty? env
 
 @[app_unexpander Dst.mk]
 def unexpandDst : PrettyPrinter.Unexpander
