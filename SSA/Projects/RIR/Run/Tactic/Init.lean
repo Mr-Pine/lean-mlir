@@ -129,12 +129,28 @@ end FuncInit
 
 section BlockInit
 
-macro "block_init" : tactic =>
-  `(tactic | (
-    rw [Func.runFrom_eq]
-    rw [BasicBlock.run_eq]
-    simp only [EffectM.bind_eq, EffectM.map_eq, bind_assoc, bind_map_left]
-  ))
+/-- Unfold reducible definitions at the head of the block's env (a named loop-header env), so the
+steps see its writes. -/
+meta def unfoldEnvHead : TacticM Unit :=
+  withMainContext do
+    let (g, goal) ← getGoalType
+    let env := (← getRunBodyFrom goal).env
+    let env' ← whnfR env
+    unless env' == env do
+      replaceMainGoal
+          [← g.replaceTargetDefEq (goal.replace fun e => if e == env then env' else none)]
+
+elab "block_init" : tactic => do
+  evalTactic
+      (←
+        `(tactic|
+            ( rw [Func.runFrom_eq]
+              rw [BasicBlock.run_eq]
+              simp only [EffectM.bind_eq, EffectM.map_eq, bind_assoc, bind_map_left])))
+  try
+    unfoldEnvHead
+  catch _ =>
+    pure ()
 
 end BlockInit
 
