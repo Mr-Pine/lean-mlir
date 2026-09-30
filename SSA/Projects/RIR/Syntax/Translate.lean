@@ -1,0 +1,793 @@
+module
+
+public import SSA.Projects.RIR.Syntax.AST
+public import SSA.Projects.RIR.Func
+
+/-!
+# MLIR AST to `Func`
+
+`Prog.ofRegion` checks a parsed region and translates it to a `Prog`: the function's instructions
+with registers as indices and every type resolved. `Prog.toFunc` builds the `Func`, and `mlir_def`
+(`Syntax/Elab.lean`) builds the terms of a hand lift from the same `Prog`.
+
+Registers: `%argK` is `.arg K` and `%K` is `.val K`; a block's arguments are values, numbered as
+MLIR numbers them. The translation is trusted, and guarded by tests.
+-/
+
+namespace LeanMLIR.RIR
+
+open MLIR
+
+@[expose] public section
+
+/-! ## Checked programs -/
+
+/-- A register: `%argK` or `%K`. -/
+inductive RegRef
+  | arg (i : Nat)
+  | val (i : Nat)
+  deriving DecidableEq, Repr
+
+/-- A constant, as written: a scalar, a vector's lanes, or one lane for all (`dense<c>`). -/
+inductive ConstLit
+  | bv (w : Nat) (v : Int)
+  | vec (l w : Nat) (vs : List Int)
+  | splat (l w : Nat) (v : Int)
+  deriving Repr
+
+def ConstLit.ty : ConstLit → Ty
+  | .bv w _ => .bv w
+  | .vec l w _ | .splat l w _ => .vec l w
+
+/-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
+inductive PInstr
+  | const (c : ConstLit) (dst : Nat)
+  | poison (t : Ty) (dst : Nat)
+  | unop {t₁ t : Ty} (op : UnOp t₁ t) (dst : Nat) (a : RegRef)
+  | binop {t₁ t₂ t : Ty} (op : BinOp t₁ t₂ t) (dst : Nat) (a b : RegRef)
+  | ternop {t₁ t₂ t₃ t : Ty} (op : TernOp t₁ t₂ t₃ t) (dst : Nat) (a b c : RegRef)
+  | load (t : Ty) (dst : Nat) (p : RegRef)
+  | store (t : Ty) (p v : RegRef)
+  | alloca (dst : Nat) (bytes : Nat)
+  | lifetimeStart (p : RegRef) (bytes : Nat)
+  | lifetimeEnd (p : RegRef) (bytes : Nat)
+  /-- A call of the symbol `callee`, from argument types `ts` to result types `us`. -/
+  | call (callee : String) (ts us : List Ty) (args : List RegRef) (rets : List Nat)
+
+/-- A jump to block `target` with arguments `args`. -/
+structure PJump where
+  target : Nat
+  args : List RegRef
+
+inductive PExit
+  | ret (vs : List RegRef)
+  | br (j : PJump)
+  | condBr (c : RegRef) (t f : PJump)
+  | switch (w : Nat) (v : RegRef) (dflt : PJump) (cases : List (Int × PJump))
+
+structure PBlock where
+  /-- The MLIR name, e.g. `bb1`. -/
+  name : String
+  /-- The block arguments' value registers. -/
+  params : List Nat
+  body : List PInstr
+  exit : PExit
+
+/-- A checked function: its blocks, entry block first, whose parameters are `[]`. -/
+structure Prog where
+  Γ : Ctx
+  tRets : List Ty
+  blocks : List PBlock
+
+/-! ## Printing, for error messages -/
+
+def Ty.toMLIR : Ty → String
+  | .bv w => s!"i{w}"
+  | .ptr => "!llvm.ptr"
+  | .vec l w => s!"vector<{l}xi{w}>"
+
+def MLIR.Op.render (op : Op) : String :=
+  let vals (vs : List TypedSSAVal) := ", ".intercalate (vs.map (s!"%{·.1}"))
+  let tys (vs : List TypedSSAVal) := ", ".intercalate (vs.map (toString ·.2))
+  let res := if op.res.isEmpty then "" else s!"{vals op.res} = "
+  let succs :=
+    if op.successors.isEmpty then "" else s!"[{", ".intercalate (op.successors.map ("^" ++ ·))}]"
+  let resTys := if let [(_, t)] := op.res then toString t else s!"({tys op.res})"
+  s!"{res}\"{op.name}\"({vals op.args}){succs} : ({tys op.args}) -> {resTys}"
+
+/-! ## Types and layouts -/
+
+namespace Translate
+
+def ty : MLIRType → Except String Ty
+  | .int w => return .bv w
+  | .undefined "llvm.ptr" => return .ptr
+  | .vector [l] [] (.int w) => return .vec l w
+  | t => throw s!"unsupported type {t}"
+
+/-- An LLVM type as `getelementptr`'s `elem_type` and `alloca`'s `elem_type` spell it. -/
+inductive AggTy where
+  | int (bits : Nat)
+  | ptr
+  | struct (fields : List AggTy)
+  | array (n : Nat) (elem : AggTy)
+  | vector (n : Nat) (elem : AggTy)
+  deriving Repr, Inhabited
+
+def takeNat (cs : List Char) : Option (Nat × List Char) :=
+  let ds := cs.takeWhile Char.isDigit
+  if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
+
+def dropWs (cs : List Char) : List Char :=
+  cs.dropWhile (· == ' ')
+
+mutual
+/-- Decode one type from the head of `cs`. -/
+partial def parseAggTy : List Char → Option (AggTy × List Char)
+  | 'i' :: cs => (takeNat cs).map fun (w, rest) => (.int w, rest)
+  | 'p' :: 't' :: 'r' :: cs => some (.ptr, cs)
+  | 'a' :: 'r' :: 'r' :: 'a' :: 'y' :: '<' :: cs => do
+    let (n, cs) ← takeNat (dropWs cs)
+    let 'x' :: cs := dropWs cs | none
+    let (t, cs) ← parseAggTy (dropWs cs)
+    let '>' :: cs := dropWs cs | none
+    return (.array n t, cs)
+  | 'v' :: 'e' :: 'c' :: 't' :: 'o' :: 'r' :: '<' :: cs => do
+    let (n, cs) ← takeNat (dropWs cs)
+    let 'x' :: cs := dropWs cs | none
+    let (t, cs) ← parseAggTy (dropWs cs)
+    let '>' :: cs := dropWs cs | none
+    return (.vector n t, cs)
+  | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
+    -- an optional `"name", `
+    let cs ←
+      match dropWs cs with
+      | '"' :: cs =>
+        let '"' :: cs := cs.dropWhile (· != '"') | none
+        let ',' :: cs := dropWs cs | none
+        pure (dropWs cs)
+      | cs =>
+        pure cs
+    let '(' :: cs := cs | none
+    let (fields, cs) ← parseAggFields (dropWs cs) []
+    let '>' :: cs := dropWs cs | none
+    return (.struct fields, cs)
+  | _ => none
+/-- `t (, t)* )` -/
+partial def parseAggFields (cs : List Char) (acc : List AggTy) : Option (List AggTy × List Char) :=
+  do
+  let (t, cs) ← parseAggTy cs
+  match dropWs cs with
+  | ',' :: cs =>
+    parseAggFields (dropWs cs) (t :: acc)
+  | ')' :: cs =>
+    return ((t :: acc).reverse, cs)
+  | _ =>
+    none
+end
+
+def aggTy : MLIRType → Except String AggTy
+  | .int w => return .int w
+  | .vector [n] [] (.int w) => return .vector n (.int w)
+  | .undefined "llvm.ptr" => return .ptr
+  | t@(.undefined s) =>
+    match parseAggTy ((s.drop "llvm.".length).toString.toList) with
+    | some (a, []) => return a
+    | _ => throw s!"cannot decode the type {t}"
+  | t => throw s!"unsupported type {t}"
+
+/-- Round `off` up to a multiple of `a`. -/
+def alignTo (off a : Nat) : Nat :=
+  ((off + a - 1) / a) * a
+
+/-- `(size, alignment)` in bytes, in LLVM's default data layout. -/
+partial def AggTy.sizeAlign : AggTy → Except String (Nat × Nat)
+  | .int bits =>
+    let sz := (bits + 7) / 8
+    if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then return (sz, sz)
+    else throw s!"unsupported integer size i{bits}"
+  | .ptr => return (8, 8)
+  | .array n t => do
+    let (s, a) ← t.sizeAlign
+    return (n * alignTo s a, a)
+  | .vector n t => do
+    let (s, _) ← t.sizeAlign
+    return (n * s, Nat.nextPowerOfTwo (n * s))
+  | .struct fields => do
+    let (off, al) ←
+      fields.foldlM (init := (0, 1)) fun (off, al) f => do
+          let (s, a) ← f.sizeAlign
+          return (alignTo off a + s, max al a)
+    return (alignTo off al, al)
+
+/-- The padded size in bytes. -/
+def AggTy.size (t : AggTy) : Except String Nat := do
+  let (s, a) ← t.sizeAlign
+  return alignTo s a
+
+/-- The byte offset of element `k` of `t`, and that element's type. -/
+def AggTy.index (k : Nat) : AggTy → Except String (Nat × AggTy)
+  | .struct fields => do
+    let some f := fields[k]? | throw s!"struct field index {k} out of range"
+    let off ←
+      (fields.take k).foldlM (init := 0) fun off f => do
+          let (s, a) ← f.sizeAlign
+          return alignTo off a + s
+    return (alignTo off (← f.sizeAlign).2, f)
+  | .array n t => do
+    unless k < n do
+      throw s!"array index {k} out of range"
+    return (k * (← t.size), t)
+  | .vector n t => do
+    unless k < n do
+      throw s!"vector index {k} out of range"
+    return (k * (← t.sizeAlign).1, t)
+  | t => throw s!"cannot index into {repr t}"
+
+/-- The byte offset of constant `getelementptr` indices: the first steps over whole `t`s, the
+rest into `t`. -/
+def gepOffset (t : AggTy) : List Int → Except String Nat
+  | [] => return 0
+  | k₀ :: ks => do
+    let natIdx (k : Int) : Except String Nat := do
+      if k == -2147483648 then
+        throw "dynamic indices are not supported"
+      unless 0 ≤ k do
+        throw s!"negative index {k}"
+      return k.toNat
+    let (off, _) ←
+      ks.foldlM (init := ((← natIdx k₀) * (← t.size), t)) fun (off, t) k => do
+          let (step, t) ← t.index (← natIdx k)
+          return (off + step, t)
+    return off
+
+/-! ## Attributes -/
+
+def intAttr? (op : Op) (k : String) : Option Int :=
+  match op.getAttr? k with
+  | some (.int v _) => some v
+  | _ => none
+
+def arrayInts (op : Op) (k : String) : Except String (List Int) := do
+  let some (.array _ vs) := op.getAttr? k | throw s!"expected an `array<…>` attribute `{k}`"
+  vs.mapM fun
+      | .int v _ => pure v
+      | _ => throw s!"`{k}` must hold integers"
+
+def overflowFlags (op : Op) : Except String OverflowFlags :=
+  let flag : String → Except String OverflowFlags
+    | "nsw" => return { nsw := true }
+    | "nuw" => return { nuw := true }
+    | "none" => return {}
+    | s => throw s!"unknown overflow flag `{s}`"
+  match op.getAttr? "overflowFlags" with
+  | none => return {}
+  | some (.opaque_ "llvm.overflow" s) => flag s
+  | some (.list fs) =>
+    fs.foldlM (init := {}) fun acc f => do
+      let .opaque_ "llvm.overflow" s := f | throw "malformed `overflowFlags`"
+      let f ← flag s
+      return { nsw := acc.nsw || f.nsw, nuw := acc.nuw || f.nuw }
+  | some _ => throw "malformed `overflowFlags`"
+
+def intPred : Int → Except String IntPred
+  | 0 => return .eq
+  | 1 => return .ne
+  | p =>
+    let names := ["eq", "ne", "slt", "sle", "sgt", "sge", "ult", "ule", "ugt", "uge"]
+    throw s!"predicate {(names[p.toNat]?).getD (toString p)} is not supported (only eq and ne)"
+
+/-- The integers of a `dense<…>` value: one per lane, or one for all. -/
+def denseInts : AttrValue → Except String (List Int ⊕ Int)
+  | .int v _ => return .inr v
+  | .list vs =>
+    .inl <$>
+      vs.mapM fun
+        | .int v _ => pure v
+        | _ => throw "`dense<…>` elements must be integers"
+  | _ => throw "expected integers inside `dense<…>`"
+
+/-! ## Registers and blocks -/
+
+/-- What the translation reads everywhere: the context and the block names. -/
+structure Env where
+  Γ : Ctx
+  blocks : List String
+  /-- The defining op of each value, for `alloca`'s count. -/
+  defs : List (String × Op)
+
+def reg (E : Env) (v : SSAVal) : Except String (RegRef × Ty) := do
+  if v.startsWith "arg" then
+    if let some i := (v.drop 3).toString.toNat? then
+      let some t := E.Γ.args[i]? | throw s!"%{v} is not an argument of the function"
+      return (.arg i, t)
+  let some i := v.toNat? | throw s!"unsupported value name %{v}"
+  let some t := E.Γ.vals[i]? | throw s!"%{v} is not defined"
+  return (.val i, t)
+
+/-- An operand, checked against its type at the use. -/
+def operand (E : Env) (v : TypedSSAVal) : Except String (RegRef × Ty) := do
+  let (r, t) ← reg E v.1
+  let t' ← ty v.2
+  unless t == t' do
+    throw s!"%{v.1} has type {t.toMLIR} but is used at {t'.toMLIR}"
+  return (r, t)
+
+def result (op : Op) : Except String (Nat × Ty) := do
+  let [(v, t)] := op.res | throw s!"expected one result, found {op.res.length}"
+  let some i := v.toNat? | throw s!"unsupported result name %{v}"
+  return (i, ← ty t)
+
+def target (E : Env) (name : String) : Except String Nat :=
+  match E.blocks.idxOf? name with
+  | some i => return i
+  | none => throw s!"unknown block ^{name}"
+
+/-- A jump to `name` with `args`, checked against the target's parameters `blockTys`. -/
+def jump (E : Env) (blockTys : List (List Ty)) (name : String) (args : List TypedSSAVal) :
+    Except String PJump := do
+  let i ← target E name
+  let tys := blockTys[i]?.getD []
+  unless args.length == tys.length do
+    throw s!"^{name} takes {tys.length} argument(s), but the jump passes {args.length}"
+  let args ← args.mapM (operand E)
+  for ((_, t), t', k) in args.zip (tys.zip (List.range tys.length)) do
+    unless t == t' do
+      throw s!"argument {k} of the jump to ^{name} has type {t.toMLIR}, expected {t'.toMLIR}"
+  return ⟨i, args.map (·.1)⟩
+
+/-! ## Operations -/
+
+/-- A lane-wise or scalar binary operation, at the operands' type. -/
+def arith (op : ∀ {w}, BinOp (.bv w) (.bv w) (.bv w)) :
+    Nat × Ty → List (RegRef × Ty) → Except String PInstr
+  | (dst, resTy), [(a, t₁), (b, t₂)] => do
+    unless t₁ == t₂ && t₁ == resTy do
+      throw s!"the operand and result types must agree"
+    match t₁ with
+    | .bv w =>
+      return .binop (op (w := w)) dst a b
+    | .vec l w =>
+      return .binop (.vector (l := l) (op (w := w))) dst a b
+    | t =>
+      throw s!"unsupported operand type {t.toMLIR}"
+  | _, _ => throw "expected two operands"
+
+/-- The three operands of a vector intrinsic, all at `vector<l x iw>`. -/
+def vec3 (resTy : Ty) : List (RegRef × Ty) → Except String (Nat × Nat × RegRef × RegRef × RegRef)
+  | [(a, .vec l w), (b, t₂), (c, t₃)] => do
+    unless t₂ == .vec l w && t₃ == .vec l w && resTy == .vec l w do
+      throw "the operand and result types must agree"
+    return (l, w, a, b, c)
+  | _ => throw "expected three vector operands"
+
+def instr (E : Env) (op : Op) : Except String PInstr := do
+  let args ← op.args.mapM (operand E)
+  let res := result op
+  let checkNotAtomic : Except String Unit := do
+    if let some o := intAttr? op "ordering" then
+      unless o == 0 do
+        throw "atomic accesses are not supported"
+  -- the intrinsics' direct calls, as the x86vector dialect spells them
+  let name :=
+    match op.name, op.getAttr? "callee" with
+    | "llvm.call", some (.symbol "x86_avx512_vpermi2var_q_512") =>
+      "x86vector.avx512.intr.vpermi2var.q.512"
+    | "llvm.call", some (.symbol "x86_avx512_vpmadd52l_uq_512") =>
+      "x86vector.avx512.intr.vpmadd52l.uq.512"
+    | name, _ => name
+  match name with
+  | "llvm.mlir.constant" =>
+    do
+      let (dst, t) ← res
+      match t, op.getAttr? "value" with
+      | .bv w, some (.int v _) =>
+        return .const (.bv w v) dst
+      | .bv 1, some (.bool b) =>
+        return .const (.bv 1 (if b then 1 else 0)) dst
+      | .vec l w, some (.dense v _) =>
+        match ← denseInts v with
+        | .inr v =>
+          return .const (.splat l w v) dst
+        | .inl vs =>
+          unless vs.length == l do
+            throw s!"{vs.length} elements for {l} lanes"
+          return .const (.vec l w vs) dst
+      | t, _ =>
+        throw s!"unsupported constant of type {t.toMLIR}"
+  | "llvm.mlir.poison" =>
+    do
+      let (dst, t) ← res
+      return .poison t dst
+  | "llvm.and" =>
+    arith .and (← res) args
+  | "llvm.add" =>
+    arith (.add (← overflowFlags op)) (← res) args
+  | "llvm.sub" =>
+    arith (.sub (← overflowFlags op)) (← res) args
+  | "llvm.mul" =>
+    arith (.mul (← overflowFlags op)) (← res) args
+  | "llvm.shl" =>
+    arith (.shl (← overflowFlags op)) (← res) args
+  | "llvm.lshr" =>
+    arith (.lshr (op.hasAttr "isExact")) (← res) args
+  | "llvm.ashr" =>
+    arith (.ashr (op.hasAttr "isExact")) (← res) args
+  | "llvm.intr.smin" =>
+    arith .smin (← res) args
+  | "llvm.icmp" =>
+    do
+      let (dst, t) ← res
+      let some p := intAttr? op "predicate" | throw "expected a `predicate` attribute"
+      let p ← intPred p
+      let [(a, t₁), (b, t₂)] := args | throw "expected two operands"
+      unless t₁ == t₂ do
+        throw "the operand types differ"
+      match t₁, t with
+      | .bv w, .bv 1 =>
+        return .binop (.icmp (w := w) p) dst a b
+      | .vec l w, .vec l' 1 =>
+        unless l == l' do
+          throw "the result has another lane count"
+        return .binop (.vector (l := l) (.icmp (w := w) p)) dst a b
+      | t₁, _ =>
+        throw s!"unsupported operand type {t₁.toMLIR}"
+  | "llvm.select" =>
+    do
+      let (dst, t) ← res
+      let [(c, .bv 1), (a, t₁), (b, t₂)] := args
+        | throw "expected an `i1` condition and two operands"
+      unless t₁ == t && t₂ == t do
+        throw "the operand and result types must agree"
+      return .ternop (.select (τ := t)) dst c a b
+  | "llvm.trunc" | "llvm.zext" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w)] := args | throw "expected one integer operand"
+      let .bv w' := t | throw "expected an integer result"
+      if op.name == "llvm.trunc" then
+        unless w' < w do
+          throw "the result must be narrower"
+        return .unop (.trunc (w := w) (w' := w') (← overflowFlags op)) dst a
+      else
+        unless w < w' do
+          throw "the result must be wider"
+        return .unop (.zext (w := w) (w' := w') (op.hasAttr "nonNeg")) dst a
+  | "llvm.load" =>
+    do
+      checkNotAtomic
+      let (dst, t) ← res
+      let [(p, .ptr)] := args | throw "expected one pointer operand"
+      return .load t dst p
+  | "llvm.store" =>
+    do
+      checkNotAtomic
+      let [(v, t), (p, .ptr)] := args | throw "expected a value and a pointer operand"
+      return .store t p v
+  | "llvm.alloca" =>
+    do
+      let (dst, t) ← res
+      unless t == .ptr do
+        throw "expected a pointer result"
+      let [(count, _)] := op.args | throw "expected one count operand"
+      let isOne :=
+        match E.defs.lookup count with
+        | some c => c.name == "llvm.mlir.constant" && intAttr? c "value" == some 1
+        | none => false
+      unless isOne do
+        throw s!"the count %{count} must be the constant 1"
+      let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
+      return .alloca dst (← (← aggTy et).size)
+  | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
+    do
+      let [(p, .ptr)] := args | throw "expected one pointer operand"
+      let some size := intAttr? op "size" | throw "expected a `size` attribute"
+      unless 0 ≤ size do
+        throw "negative `size`"
+      if op.name == "llvm.intr.lifetime.start" then
+        return .lifetimeStart p size.toNat
+      else
+        return .lifetimeEnd p size.toNat
+  | "llvm.getelementptr" =>
+    do
+      let (dst, t) ← res
+      unless t == .ptr do
+        throw "expected a pointer result"
+      let [(p, .ptr)] := args | throw "only constant indices are supported"
+      let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
+      return .unop (.gepConst (← gepOffset (← aggTy et) (← arrayInts op "rawConstantIndices"))) dst
+          p
+  | "llvm.shufflevector" =>
+    do
+      let (dst, t) ← res
+      let [(a, .vec l w), (b, t₂)] := args | throw "expected two vector operands"
+      unless t₂ == .vec l w && t == .vec l w do
+        throw "the operand and result types must agree"
+      let mask ← arrayInts op "mask"
+      unless mask.length == l do
+        throw s!"the mask has {mask.length} lanes, expected {l}"
+      let lanes ←
+        mask.mapM fun (k : Int) => do
+            if k == -1 then
+              return none
+            unless 0 ≤ k && k < 2 * l do
+              throw s!"mask index {k} out of range"
+            return some k.toNat
+      let idx : Vector (Option (Fin (2 * l))) l :=
+        Vector.ofFn fun i =>
+          (lanes[i]?.getD none).bind fun k => if h : k < 2 * l then some ⟨k, h⟩ else none
+      return .binop (.shufflevector (w := w) idx) dst a b
+  | "x86vector.avx512.intr.vpermi2var.q.512" =>
+    do
+      let (dst, t) ← res
+      let (l, w, a, b, c) ← vec3 t args
+      return .ternop (.vpermi2var (l := l) (w := w)) dst a b c
+  | "x86vector.avx512.intr.vpmadd52l.uq.512" =>
+    do
+      let (dst, t) ← res
+      let (l, w, a, b, c) ← vec3 t args
+      unless w == 64 do
+        throw "expected 64-bit lanes"
+      return .ternop (.vpmadd52l (l := l)) dst a b c
+  | "llvm.call" =>
+    do
+      let some (.symbol callee) := op.getAttr? "callee" | throw "expected a `callee` symbol"
+      let rets ←
+        op.res.mapM fun (v, _) => do
+            let some i := v.toNat? | throw s!"unsupported result name %{v}"
+            return i
+      let us ← op.res.mapM (ty ·.2)
+      return .call callee (args.map (·.2)) us (args.map (·.1)) rets
+  | name =>
+    throw s!"unsupported operation '{name}'"
+
+def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit := do
+  match op.name, op.successors with
+  | "llvm.return", [] =>
+    return .ret ((← op.args.mapM (operand E)).map (·.1))
+  | "llvm.br", [s] =>
+    return .br (← jump E blockTys s op.args)
+  | "llvm.cond_br", [sT, sF] =>
+    do
+      let [nC, nT, nF] := (← arrayInts op "operandSegmentSizes").map Int.toNat
+        | throw "malformed `operandSegmentSizes`"
+      let c :: rest := op.args | throw "expected a condition operand"
+      unless nC == 1 && rest.length == nT + nF do
+        throw "the operands do not match `operandSegmentSizes`"
+      let (c, t) ← operand E c
+      unless t == .bv 1 do
+        throw "the condition must be an `i1`"
+      return .condBr c (← jump E blockTys sT (rest.take nT)) (← jump E blockTys sF (rest.drop nT))
+  | "llvm.switch", dflt :: cases =>
+    do
+      let v :: rest := op.args | throw "expected a scrutinee operand"
+      let (v, t) ← operand E v
+      let .bv w := t | throw s!"the scrutinee must be an integer, found {t.toMLIR}"
+      let [_, nDef, _] := (← arrayInts op "operandSegmentSizes").map Int.toNat
+        | throw "malformed `operandSegmentSizes`"
+      let segs ←
+        if cases.isEmpty then
+          pure []
+        else
+          arrayInts op "case_operand_segments"
+      let vals ←
+        match op.getAttr? "case_values" with
+        | none =>
+          pure []
+        | some (.dense v _) =>
+          match ← denseInts v with
+          | .inl vs =>
+            pure vs
+          | .inr v =>
+            pure [v]
+        | some _ =>
+          throw "`case_values` must be a `dense<…>` attribute"
+      unless vals.length == cases.length && segs.length == cases.length do
+        throw "`case_values` and `case_operand_segments` do not match the successors"
+      let dflt ← jump E blockTys dflt (rest.take nDef)
+      let (cs, _) ←
+        (vals.zip (cases.zip segs)).foldlM (init := ([], rest.drop nDef))
+            fun (cs, pending) (c, s, n) => do
+            let j ← jump E blockTys s (pending.take n.toNat)
+            return (cs ++ [(c, j)], pending.drop n.toNat)
+      return .switch w v dflt cs
+  | "llvm.return", _ | "llvm.br", _ | "llvm.cond_br", _ | "llvm.switch", _ =>
+    throw s!"wrong number of successors"
+  | name, _ =>
+    throw
+        s!"'{name}' is not a terminator; a block must end in llvm.return, llvm.br, \
+    llvm.cond_br or llvm.switch"
+
+/-- `f`, with errors prefixed by the operation. -/
+def atOp {α : Type} (blk : String) (op : Op) (f : Except String α) : Except String α :=
+  f.mapError fun e => s!"^{blk}: {op.render}: {e}"
+
+def isTerminator (name : String) : Bool :=
+  name ∈ ["llvm.return", "llvm.br", "llvm.cond_br", "llvm.switch"]
+
+end Translate
+
+open Translate in
+/-- Check `rgn` and translate it. -/
+def Prog.ofRegion (rgn : Region) : Except String Prog := do
+  let entry :: _ := rgn.blocks | throw "the region has no blocks"
+  -- `Γ.args`: the entry block's arguments, `%arg0 … %argN`
+  let args ←
+    entry.args.zipIdx.mapM fun ((v, t), i) => do
+        unless v == s!"arg{i}" do
+          throw s!"the entry block's argument {i} must be %arg{i}, not %{v}"
+        ty t |>.mapError (s!"%{v}: " ++ ·)
+  -- `Γ.vals`: every `%K`, block arguments and results, defined exactly once
+  let defs : List TypedSSAVal :=
+    (rgn.blocks.drop 1).flatMap (·.args) ++ rgn.blocks.flatMap fun b => b.ops.flatMap (·.res)
+  let mut vals : Array (Option Ty) := #[]
+  for (v, t) in defs do
+    let some i := v.toNat? | throw s!"unsupported value name %{v}; values must be %0, %1, …"
+    let t ← ty t |>.mapError (s!"%{v}: " ++ ·)
+    if vals.size ≤ i then
+      vals := vals ++ .replicate (i + 1 - vals.size) none
+    if vals[i]!.isSome then
+      throw s!"%{i} is defined twice"
+    vals := vals.set! i (some t)
+  let valTys ←
+    vals.toList.zipIdx.mapM fun (t, i) => do
+        let some t := t | throw s!"%{i} is not defined, but a higher value is"
+        return t
+  let Γ : Ctx := ⟨args, valTys⟩
+  let names := rgn.blocks.map (·.name)
+  unless names.eraseDups.length == names.length do
+    throw "duplicate block name"
+  let defs := rgn.blocks.flatMap fun b => b.ops.flatMap fun op => op.res.map fun (v, _) => (v, op)
+  let E : Env := { Γ, blocks := names, defs }
+  -- block parameters
+  let params ←
+    (rgn.blocks.drop 1).mapM fun b =>
+        b.args.mapM fun (v, _) => do
+          let (.val i, _) ← reg E v | throw s!"^{b.name}: argument %{v} must be a value"
+          return i
+  let params := [] :: params
+  let blockTys := params.map fun ps => ps.map fun i => (Γ.vals[i]?).getD (.bv 0)
+  -- return types, from the first `llvm.return`
+  let tRets ←
+    match (rgn.blocks.flatMap (·.ops)).find? (·.name == "llvm.return") with
+    | some op =>
+      op.args.mapM fun (_, t) => ty t
+    | none =>
+      pure []
+  let blocks ←
+    (rgn.blocks.zip params).mapM fun (b, ps) => do
+        let some term := b.ops.getLast? | throw s!"^{b.name} is empty"
+        let body ←
+          b.ops.dropLast.mapM fun op =>
+              atOp b.name op do
+                if isTerminator op.name then
+                  throw "a terminator must end its block"
+                instr E op
+        let exit ←
+          atOp b.name term do
+              let x ← exit E blockTys term
+              if let .ret vs := x then
+                let ts ← term.args.mapM fun (_, t) => ty t
+                unless ts == tRets do
+                  throw
+                      s!"returns ({", ".intercalate (ts.map Ty.toMLIR)}), but another llvm.return \
+            returns ({", ".intercalate (tRets.map Ty.toMLIR)})"
+                let _ := vs
+              return x
+        return { name := b.name, params := ps, body, exit : PBlock }
+  return { Γ, tRets, blocks }
+
+/-! ## Building the `Func` -/
+
+/-- A callee's semantics, typically `g.call` for a `g : Func`. -/
+abbrev Callee :=
+  Σ (ts us : List Ty), Vals ts → EffectM (Vals us)
+
+def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
+  | .bv w v => BitVec.ofInt w v
+  | .vec l w vs => Vector.ofFn fun i : Fin l => BitVec.ofInt w (vs[i]?.getD 0)
+  | .splat l w v => Vector.replicate l (BitVec.ofInt w v)
+
+namespace Prog
+
+variable (Γ : Ctx)
+
+def mkReg (t : Ty) : RegRef → Except String (Reg Γ t)
+  | .arg i =>
+    if h : i < Γ.args.length then
+      if h' : Γ.args[i] = t then return .arg ⟨i, h⟩ h' else throw s!"%arg{i}: type mismatch"
+    else throw s!"%arg{i} out of range"
+  | .val i =>
+    if h : i < Γ.vals.length then
+      if h' : Γ.vals[i] = t then return .val ⟨i, h⟩ h' else throw s!"%{i}: type mismatch"
+    else throw s!"%{i} out of range"
+
+def mkDst (t : Ty) (i : Nat) : Except String (Dst Γ t) :=
+  if h : i < Γ.vals.length then
+    if h' : Γ.vals[i] = t then return ⟨⟨i, h⟩, h'⟩ else throw s!"%{i}: type mismatch"
+  else throw s!"%{i} out of range"
+
+def mkRegs : (ts : List Ty) → List RegRef → Except String (Regs Γ ts)
+  | [], [] => return .nil
+  | t :: ts, r :: rs => return .cons (← mkReg Γ t r) (← mkRegs ts rs)
+  | _, _ => throw "wrong number of registers"
+
+def mkDsts : (ts : List Ty) → List Nat → Except String (Dsts Γ ts)
+  | [], [] => return .nil
+  | t :: ts, d :: ds => return .cons (← mkDst Γ t d) (← mkDsts ts ds)
+  | _, _ => throw "wrong number of registers"
+
+def mkInstr (callees : String → Option Callee) : PInstr → Except String (Instr Γ)
+  | .const c d => return .const c.value (← mkDst Γ _ d)
+  | .poison t d => return .poison (← mkDst Γ t d)
+  | .unop op d a => return .unop op (← mkDst Γ _ d) (← mkReg Γ _ a)
+  | .binop op d a b => return .binop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b)
+  | .ternop op d a b c =>
+    return .ternop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b) (← mkReg Γ _ c)
+  | .load t d p => return .load (← mkDst Γ t d) (← mkReg Γ .ptr p)
+  | .store t p v => return .store (← mkReg Γ .ptr p) (← mkReg Γ t v)
+  | .alloca d n => return .alloca (← mkDst Γ .ptr d) n
+  | .lifetimeStart p n => return .lifetimeStart (← mkReg Γ .ptr p) n
+  | .lifetimeEnd p n => return .lifetimeEnd (← mkReg Γ .ptr p) n
+  | .call name ts us args rets => do
+    let some ⟨ts', us', f⟩ := callees name | throw s!"no callee bound for @{name}"
+    if h : ts' = ts ∧ us' = us then
+      return .call (h.1 ▸ h.2 ▸ f) (← mkRegs Γ ts args) (← mkDsts Γ us rets)
+    else
+      throw s!"@{name} does not have the type the call site needs"
+
+variable {n : Nat} (blockTys : Fin n → List Ty)
+
+def mkJump (j : PJump) : Except String (Jump Γ blockTys) := do
+  if h : j.target < n then
+    return ⟨⟨j.target, h⟩, ← mkRegs Γ _ j.args⟩
+  else
+    throw s!"block {j.target} out of range"
+
+def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
+  | .ret vs => return .ret (← mkRegs Γ tRets vs)
+  | .br j => return .br (← mkJump Γ blockTys j)
+  | .condBr c t f =>
+    return .condBr (← mkReg Γ (.bv 1) c) (← mkJump Γ blockTys t) (← mkJump Γ blockTys f)
+  | .switch w v d cs => do
+    let cs ← cs.mapM fun (c, j) => return ((BitVec.ofInt w c : ⟦Ty.bv w⟧ᵣ), ← mkJump Γ blockTys j)
+    return .switch (← mkReg Γ (.bv w) v) (← mkJump Γ blockTys d) cs
+
+end Prog
+
+/-- The `Func` of `p`, calling `callees name` for `@name`. -/
+def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none) :
+    Except String Func := do
+  let n := p.blocks.length
+  let params ←
+    p.blocks.toArray.mapM fun b => do
+        let ts := b.params.map fun i => (p.Γ.vals[i]?).getD (.bv 0)
+        return (⟨ts, ← mkDsts p.Γ ts b.params⟩ : Σ ts, Dsts p.Γ ts)
+  let blockTys (k : Fin n) : List Ty := (params[k.val]?.getD ⟨[], .nil⟩).1
+  let blockParams (k : Fin n) : Dsts p.Γ (blockTys k) := (params[k.val]?.getD ⟨[], .nil⟩).2
+  if hn : n > 0 then
+    if hentry : blockTys ⟨0, hn⟩ = [] then
+      let blocks ←
+        p.blocks.toArray.mapM fun b => do
+            return ({
+                  body := ← b.body.mapM (mkInstr p.Γ callees)
+                  exit := ← mkExit p.Γ blockTys p.tRets b.exit } :
+                BasicBlock p.Γ p.tRets blockTys)
+      if hs : blocks.size = n then
+        return { Γ := p.Γ, tRets := p.tRets, n, blockTys, blockParams, hhasBlock := hn, hentry,
+                 blocks := fun k => blocks[k.val] }
+      else
+        throw "internal: block count"
+    else
+      throw "the entry block has parameters"
+  else
+    throw "no blocks"
+
+/-- Translate `reg` to a `Func`. -/
+def translate (reg : Region) (callees : String → Option Callee := fun _ => none) :
+    Except String Func := do
+  (← Prog.ofRegion reg).toFunc callees
+
+end
+
+end LeanMLIR.RIR
