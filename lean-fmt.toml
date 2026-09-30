@@ -1,0 +1,2 @@
+exclude = ["MLIR/Tests/Syntax/**"]
+force-exclude = true
