@@ -19,6 +19,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | gepConst byteOff => Operation.gep (.value byteOff)
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
+  | sext => Operation.sext
   | bswap => Operation.bswap
   | bitcast h => Operation.bitcast h
 

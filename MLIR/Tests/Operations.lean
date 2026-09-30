@@ -74,6 +74,19 @@ open Operation
 
 #guard icmp .uge (.value 5#8) (.value 5#8) == PoisonOr.value 1#1
 
+/-! ## `sext` — the sign bit fills the new high bits -/
+
+#guard sext (w' := 16) (.value 0x7F#8) == PoisonOr.value 0x007F#16
+
+#guard sext (w' := 16) (.value 0x80#8) == PoisonOr.value 0xFF80#16
+
+-- `i1` to `i8`, as `ge_decode2` uses it: true is all ones
+#guard sext (w' := 8) (.value 1#1) == PoisonOr.value 0xFF#8
+
+#guard sext (w' := 8) (.value 0#1) == PoisonOr.value 0#8
+
+#guard (sext (w' := 8) (.poison : IntW 1)).isPoison
+
 /-! ## `fshl`, `fshr` — shifts of `x ++ y`, by the amount mod the width -/
 
 #guard fshl (.value 0x12#8) (.value 0x34#8) (.value 4#8) == PoisonOr.value 0x23#8
