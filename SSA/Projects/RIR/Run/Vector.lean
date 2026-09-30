@@ -59,8 +59,9 @@ open Lean Meta in
 /-- `shufflevector` with a literal mask, to its lanes: `a[k]`, `b[k - n]` or poison. Before the
 unfolded `Vector.ofFn` is simplified with a symbolic lane, which cannot decide the mask. -/
 dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _ _ _) := fun e => do
-  let_expr Operation.shufflevector l _ mask a b := e | return .continue
-  let some n ← (evalNat l).run | return .continue
+  let_expr Operation.shufflevector l₁ l₂ _ mask a b := e | return .continue
+  let some n ← (evalNat l₁).run | return .continue
+  let some m ← (evalNat l₂).run | return .continue
   let_expr Vector.mk _ _ arr _ := ← whnfR mask | return .continue
   let_expr List.toArray _ lst := arr | return .continue
   let some (_, entries) := lst.listLit? | return .continue
@@ -85,7 +86,7 @@ dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _
     | _ =>
       return .continue
   let arr ← mkAppM ``List.toArray #[← mkListLit β lanes.toList]
-  let nE := mkNatLit n
+  let nE := mkNatLit m
   return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel β]) β nE arr (← mkEqRefl nE))
 
 /-- `zipWith` as an `ofFn`, for `expandOfFn` to split into lanes. -/

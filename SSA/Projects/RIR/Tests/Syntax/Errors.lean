@@ -209,6 +209,34 @@ mlir_def sextNarrow := {
     "llvm.return"(%0) : (i8) -> ()
 }
 
+-- `shufflevector` may change the lane count, as `fd_r43x6_unpack` widens `4 x i64` to `8 x i64`
+#guard_msgs in
+mlir_def shuffleWiden := {
+  ^bb0(%arg0: vector<2xi64>, %arg1: vector<2xi64>):
+    %0 = "llvm.shufflevector"(%arg0, %arg1) <{mask = array<i32: 0, 1, 2, 3, -1>}> : (vector<2xi64>, vector<2xi64>) -> vector<5xi64>
+    "llvm.return"(%0) : (vector<5xi64>) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.shufflevector"(%arg0, %arg1) : (vector<2xi64>, vector<2xi64>) -> vector<2xi64>: mask index 4 out of range
+-/
+#guard_msgs in
+mlir_def shuffleRange := {
+  ^bb0(%arg0: vector<2xi64>, %arg1: vector<2xi64>):
+    %0 = "llvm.shufflevector"(%arg0, %arg1) <{mask = array<i32: 0, 4>}> : (vector<2xi64>, vector<2xi64>) -> vector<2xi64>
+    "llvm.return"(%0) : (vector<2xi64>) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.shufflevector"(%arg0, %arg1) : (vector<2xi64>, vector<2xi64>) -> vector<2xi32>: the input and output element widths must agree
+-/
+#guard_msgs in
+mlir_def shuffleWidth := {
+  ^bb0(%arg0: vector<2xi64>, %arg1: vector<2xi64>):
+    %0 = "llvm.shufflevector"(%arg0, %arg1) <{mask = array<i32: 0, 1>}> : (vector<2xi64>, vector<2xi64>) -> vector<2xi32>
+    "llvm.return"(%0) : (vector<2xi32>) -> ()
+}
+
 -- a vector condition selects lane-wise
 #guard_msgs in
 mlir_def vectorSelect := {

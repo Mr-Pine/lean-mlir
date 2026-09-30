@@ -567,24 +567,26 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           p
   | "llvm.shufflevector" =>
     do
-      let (dst, t) ← res
-      let [(a, .vec l w), (b, t₂)] := args | throw "expected two vector operands"
-      unless t₂ == .vec l w && t == .vec l w do
-        throw "the operand and result types must agree"
+      let (dst, .vec l₂ wₒ) ← res | throw "expected vector output type"
+      let [(a, .vec l₁ w), (b, t₂)] := args | throw "expected two vector operands"
+      unless t₂ == .vec l₁ w do
+        throw "the two operand types must agree"
+      unless w == wₒ do
+        throw "the input and output element widths must agree"
       let mask ← arrayInts op "mask"
-      unless mask.length == l do
-        throw s!"the mask has {mask.length} lanes, expected {l}"
+      unless mask.length == l₂ do
+        throw s!"the mask has {mask.length} lanes, expected {l₂}"
       let lanes ←
         mask.mapM fun (k : Int) => do
             if k == -1 then
               return none
-            unless 0 ≤ k && k < 2 * l do
+            unless 0 ≤ k && k < 2 * l₁ do
               throw s!"mask index {k} out of range"
             return some k.toNat
-      let idx : Vector (Option (Fin (2 * l))) l :=
+      let idx : Vector (Option (Fin (2 * l₁))) l₂ :=
         Vector.ofFn fun i =>
-          (lanes[i]?.getD none).bind fun k => if h : k < 2 * l then some ⟨k, h⟩ else none
-      return .binop (.shufflevector (w := w) idx) dst a b
+          (lanes[i]?.getD none).bind fun k => if h : k < 2 * l₁ then some ⟨k, h⟩ else none
+      return .binop (.shufflevector (w := w) (l₁ := l₁) (l₂ := l₂) idx) dst a b
   | "llvm.insertelement" =>
     do
       let (dst, t) ← res
