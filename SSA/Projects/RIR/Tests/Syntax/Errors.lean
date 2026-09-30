@@ -143,6 +143,17 @@ mlir_def calleeType (g : Vals [.bv 32] → EffectM (Vals [.bv 32])) := {
     "llvm.return"(%0) : (i64) -> ()
 } with @g := g
 
+-- a single block whose callee is a binder: `blocks` applies it
+#guard_msgs in
+mlir_def calleeBinder (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) := {
+  ^bb0(%arg0: i64):
+    %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+} with @g := g
+
+example (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) :
+    (calleeBinder g).blocks 0 = calleeBinder.entry g := rfl
+
 /--
 error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch
 -/
