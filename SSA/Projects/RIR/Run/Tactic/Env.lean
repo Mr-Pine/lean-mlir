@@ -218,19 +218,17 @@ def stateFacts : MetaM (Array FVarId) := do
       return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
 
 /-- The equations `x = _` of the locals in `e`: the state `S = …` and the step values `v = …`
-it reads; with `keepNamed`, not those of values named with `with`. -/
+it reads; with `keepNamed`, not those of values named with `with` (`tagNamed`). -/
 private def valueStateFacts (e : Expr) (keepNamed := false) : MetaM (Array FVarId) := do
   let xs := (collectFVars {} e).fvarSet
   (← getLCtx).foldlM (init := #[]) fun acc d => do
       if d.isImplementationDetail then
         return acc
-      let some (_, .fvar x, _) := (← instantiateMVars d.type).eq? | return acc
+      let ty ← instantiateMVars d.type
+      let some (_, .fvar x, _) := ty.consumeMData.eq? | return acc
       unless xs.contains x do
         return acc
-      -- the state's equation always; a value's only if its name is generated
-      if
-          keepNamed && !(← inferType (.fvar x)).isConstOf ``GlobalState &&
-            !isAutoValueName (← x.getUserName) then
+      if keepNamed && isNamedEq ty then
         return acc
       return acc.push d.fvarId
 
