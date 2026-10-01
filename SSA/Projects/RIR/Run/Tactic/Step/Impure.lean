@@ -26,6 +26,90 @@ syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)?
 /-- `step_impure` for a `store`, closing the instruction with `run_store`. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
+/-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
+unproved ones are returned as goals) and dropping the `consumed` ones. -/
+def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) := do
+  let ⟨S', hS', hS⟩ ← sealState inState
+  -- Drop the consumed facts, where nothing else depends on them
+  withMainContext do
+      let mut g ← getMainGoal
+      for h in consumed do
+        let fvarId ← getFVarId h
+        g ← g.clear fvarId
+      replaceMainGoal [g]
+  -- Get facts to preserve
+  let goals ←
+    withMainContext do
+        let preserveHyps ← hypsMentioning inState (except := #[hS', hS])
+        let mut g ← getMainGoal
+        let mut goals := #[]
+        let hSId := mkIdent (← hS.getUserName)
+        let hS'Id := mkIdent (← hS'.getUserName)
+        let mlirMem := mkIdent `mlir_mem
+        for hyp in preserveHyps do
+          let decl ← hyp.getDecl
+          -- P S ↦ P S'
+          let newTy := (← kabstract (← instantiateMVars decl.type) inState).instantiate1 (.fvar S')
+          let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
+          let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
+          g ← g'.clear hyp
+          -- fast path, without elaborating tactics: `P S₀chain` from `hS`, one or two
+          -- transport lemmas to `P (new state)`, then `hS'` back
+          let fast? ←
+            observing? do
+                let some (_, _, chain) := (← instantiateMVars (← hS.getType)).eq? | failure
+                let some (_, _, new) := (← instantiateMVars (← hS'.getType)).eq? | failure
+                let motive ←
+                  withLocalDeclD `s (← inferType inState) fun x => do
+                      mkLambdaFVars #[x]
+                          ((← kabstract (← instantiateMVars decl.type) inState).instantiate1 x)
+                let h₀ ← mkEqNDRec motive (.fvar hyp) (.fvar hS)
+                -- keyed as is, and `dsimp`ed like the new state
+                let key ← instantiateMVars (motive.beta #[chain])
+                let facts : Std.HashMap Expr Expr :=
+                  (({} : Std.HashMap Expr Expr).insert key h₀).insert (← Tactic.dsimpState key) h₀
+                let some pf ←
+                  Tactic.transportWith facts (← labelled `mlir_transport) 2
+                      (motive.beta #[new]) | failure
+                mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
+          if let some pf := fast? then
+            pg.mvarId!.assign pf
+            continue
+          setGoals [pg.mvarId!]
+          let hId := mkIdent decl.userName
+          evalTactic
+              (←
+                `(tactic|
+                    first
+                    -- fast path: the old fact and one transport lemma; the context
+                    -- (`*`) only when a lemma needs a side fact
+                    | ( subst $hS'Id:ident $hSId:ident
+                        solve_by_elim (transparency := .reducible) only [$hId:ident] using
+                          $(mkIdent `mlir_transport):ident)
+                    | ( subst $hS'Id:ident $hSId:ident
+                        solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
+                          $(mkIdent `mlir_transport):ident)
+                    -- a chain of transports, still at reducible transparency
+                    | ( subst $hS'Id:ident $hSId:ident
+                        transport_fact)
+                    | ( subst $hSId:ident
+                        try simp at $hId:ident
+                        simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
+                        done)
+                    | (subst $hSId:ident $hS'Id:ident; assumption)
+                    | skip))
+          unless ← pg.mvarId!.isAssigned do
+            goals := goals.push pg.mvarId!
+        -- substitute, not clear: a written value may mention the old state (`alloca`).
+        -- `substCore` reverts and reintroduces what follows `S`, so `S'`/`hS'` get new ids
+        let (fs, g') ← substCore g hS (symm := false)
+        g := g'
+        g ← g.rename (fs.get S').fvarId! `S
+        g ← g.rename (fs.get hS').fvarId! `hS
+        setGoals [g]
+        return goals
+  return goals
+
 /-- Step a pure instruction, extending the env with the new value -/
 def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
     (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) : TacticM Unit :=
@@ -54,88 +138,7 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         unless (← getUnsolvedGoals).isEmpty do
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
-        let ⟨S', hS', hS⟩ ← sealState inState
-        -- Drop the consumed facts, where nothing else depends on them
-        withMainContext do
-            let mut g ← getMainGoal
-            for h in consumed do
-              let fvarId ← getFVarId h
-              g ← g.clear fvarId
-            replaceMainGoal [g]
-        -- Get facts to preserve
-        let goals ←
-          withMainContext do
-              let preserveHyps ← hypsMentioning inState (except := #[hS', hS])
-              let mut g ← getMainGoal
-              let mut goals := #[]
-              let hSId := mkIdent (← hS.getUserName)
-              let hS'Id := mkIdent (← hS'.getUserName)
-              let mlirMem := mkIdent `mlir_mem
-              for hyp in preserveHyps do
-                let decl ← hyp.getDecl
-                -- P S ↦ P S'
-                let newTy :=
-                  (← kabstract (← instantiateMVars decl.type) inState).instantiate1 (.fvar S')
-                let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
-                let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
-                g ← g'.clear hyp
-                -- fast path, without elaborating tactics: `P S₀chain` from `hS`, one or two
-                -- transport lemmas to `P (new state)`, then `hS'` back
-                let fast? ←
-                  observing? do
-                      let some (_, _, chain) := (← instantiateMVars (← hS.getType)).eq? | failure
-                      let some (_, _, new) := (← instantiateMVars (← hS'.getType)).eq? | failure
-                      let motive ←
-                        withLocalDeclD `s (← inferType inState) fun x => do
-                            mkLambdaFVars #[x]
-                                ((← kabstract (← instantiateMVars decl.type) inState).instantiate1
-                                  x)
-                      let h₀ ← mkEqNDRec motive (.fvar hyp) (.fvar hS)
-                      -- keyed as is, and `dsimp`ed like the new state
-                      let key ← instantiateMVars (motive.beta #[chain])
-                      let facts : Std.HashMap Expr Expr :=
-                        (({} : Std.HashMap Expr Expr).insert key h₀).insert
-                          (← Tactic.dsimpState key) h₀
-                      let some pf ←
-                        Tactic.transportWith facts (← labelled `mlir_transport) 2
-                            (motive.beta #[new]) | failure
-                      mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
-                if let some pf := fast? then
-                  pg.mvarId!.assign pf
-                  continue
-                setGoals [pg.mvarId!]
-                let hId := mkIdent decl.userName
-                evalTactic
-                    (←
-                      `(tactic|
-                          first
-                          -- fast path: the old fact and one transport lemma; the context
-                          -- (`*`) only when a lemma needs a side fact
-                          | ( subst $hS'Id:ident $hSId:ident
-                              solve_by_elim (transparency := .reducible) only [$hId:ident] using
-                                $(mkIdent `mlir_transport):ident)
-                          | ( subst $hS'Id:ident $hSId:ident
-                              solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
-                                $(mkIdent `mlir_transport):ident)
-                          -- a chain of transports, still at reducible transparency
-                          | ( subst $hS'Id:ident $hSId:ident
-                              transport_fact)
-                          | ( subst $hSId:ident
-                              try simp at $hId:ident
-                              simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
-                              done)
-                          | (subst $hSId:ident $hS'Id:ident; assumption)
-                          | skip))
-                unless ← pg.mvarId!.isAssigned do
-                  goals := goals.push pg.mvarId!
-              -- substitute, not clear: a written value may mention the old state (`alloca`).
-              -- `substCore` reverts and reintroduces what follows `S`, so `S'`/`hS'` get new ids
-              let (fs, g') ← substCore g hS (symm := false)
-              g := g'
-              g ← g.rename (fs.get S').fvarId! `S
-              g ← g.rename (fs.get hS').fvarId! `hS
-              setGoals [g]
-              return goals
+        let goals ← sealStep inState consumed
         finishStep value hyp only simpArgs expand
         setGoals (goals.toList ++ (← getGoals))
 
