@@ -8,6 +8,7 @@ public meta import MLIR.Syntax.Parser
 public meta import MLIR.Syntax.Translate
 public meta import MLIR.TyTree
 public meta import Lean.Elab.Command
+public meta import Lean.Meta.Reduce
 
 /-!
 # `mlir_def`
@@ -19,15 +20,15 @@ defines it in the shape of a hand lift:
 * one `def` per block: `X.entry` for a single block, else `X.bb0`, `X.bb1`, … by MLIR name;
 * `X : Func` (`@[reducible]`), and `X.args`, the argument vector.
 
-A call to `@f` calls the term bound by `with @f := t`, which may use the binders; without a
-binding, a `Func` named `f` in scope is called as `f.call`.
+A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`, which may use the binders.
+Every called symbol needs a binding.
 -/
 
 namespace MLIR
 
 open Lean Elab Command Term MLIR
 
-/-- `@f := t`: calls to `@f` call `t`. -/
+/-- `@f := t`: calls to `@f` call the `Func` `t`. -/
 public syntax calleeBinding := "@" ident " := " term
 
 public meta section
@@ -228,37 +229,34 @@ partial def idents (stx : Syntax) : Array Name :=
   | .node _ _ args => args.flatMap idents
   | _ => #[]
 
-/-- The term a call to `@name` calls: the binding's, or `name.call` for a `Func` named `name`. -/
+/-- The `Func` bound to `@name`. -/
 def calleeTerm (ref : Syntax) (table : List (String × TSyntax `term)) (name : String) :
     CommandElabM (TSyntax `term) := do
-  if let some t := table.lookup name then
-    return t
-  let candidates ←
-    try
-      liftCoreM (resolveGlobalName name.toName)
-    catch _ =>
-      pure []
-  for (c, fields) in candidates do
-    if fields.isEmpty then
-      if let some info := (← getEnv).find? c then
-        if info.type == Lean.mkConst ``Func then
-          return ← `($(mkIdent c).call)
-  throwErrorAt ref "llvm.call to @{name}: no callee bound; add `with @{name} := …`, or define a \
-    `{name} : Func`"
+  let some t := table.lookup name
+    | throwErrorAt ref "llvm.call to @{name}: no callee bound; add `with @{name} := …`"
+  return t
 
-/-- Check that `t` has the type the calls to `@name` need, under the binders. -/
+/-- Check that `t` is a `Func` whose `call` has the type the calls to `@name` need, under the
+binders. -/
 def checkCallee (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder)) (name : String)
     (t : TSyntax `term) (ts us : List Ty) : CommandElabM Unit := do
   let expected ← `(Vals $(← tysStx ts) → EffectM (Vals $(← tysStx us)))
   runTermElabM fun _ =>
       Term.elabBinders binders fun _ => do
         let ty ← Term.elabType expected
-        let e ← Term.elabTerm t ty
+        let g ← Term.elabTermEnsuringType t (mkConst ``Func)
         Term.synthesizeSyntheticMVarsNoPostponing
-        let ety ← Meta.inferType e
+        let ety ← Meta.inferType (mkApp (mkConst ``Func.call) g)
         unless ← Meta.isDefEq ety ty do
-          throwErrorAt t "@{name}: the call sites need a callee of type{indentExpr ty}\nbut the \
-        term has type{indentExpr ety}"
+          -- `g.Γ.args` and `g.tRets` as lists
+          let args ← Meta.mkAppM ``Ctx.args #[← Meta.mkAppM ``Func.Γ #[g]]
+          let rets ← Meta.mkAppM ``Func.tRets #[g]
+          let (args', rets') := (← Meta.reduce args, ← Meta.reduce rets)
+          let ety :=
+            (← instantiateMVars ety).replace fun e =>
+              if e == args then some args' else if e == rets then some rets' else none
+          throwErrorAt t "@{name}: the call sites need a callee of type{indentExpr ty}\nbut \
+        `{t}.call` has type{indentExpr ety}"
 
 end MlirDef
 
@@ -284,7 +282,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
     if (terms.lookup f).isNone then
       let t ← calleeTerm r table f
       checkCallee binders f t ts us
-      terms := terms ++ [(f, t)]
+      terms := terms ++ [(f, ← `(($t).call))]
   for (f, _) in table do
     unless (terms.lookup f).isSome do
       logWarning m!"@{f} is bound but never called"
