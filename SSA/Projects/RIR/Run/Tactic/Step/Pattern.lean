@@ -118,7 +118,7 @@ def evalStepPattern : Tactic := fun stx => do
       -- a constant with all its arguments open, so its implicit registers are ours to split
       let lem ←
         if stx[2].isIdent then
-          mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload stx[2])
+          mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverloadWithInfo stx[2])
         else
           instantiateMVars (← Term.elabTerm stx[2] none)
       let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
