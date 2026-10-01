@@ -64,4 +64,17 @@ example (x : BitVec 8) (v : ⟦Ty.bv 8⟧) :
 -- writing poison is fine; it just reads back as poison
 #guard (((E0 7#8).write ⟨1, rfl⟩ .poison).read (.val 1 rfl)).isPoison
 
+/-! ## `E ⊨ [r := v, …]`: reads as a conjunction -/
+
+-- registers as `%k`, `%argk` or a `Dst`; raw values wrapped
+example (E : ⟪G⟫) (d : Dst G (.bv 8)) (x y z : BitVec 8) :
+    (E ⊨ [%0 := x, %arg0 := y, d := z]) =
+      (E.read (.val 0 rfl) = .value x ∧
+        E.read (.arg 0 rfl) = .value y ∧ E.read (.val d.i d.h) = .value z) :=
+  rfl
+
+-- one read: the equation itself
+example (E : ⟪G⟫) (x : BitVec 8) : (E ⊨ [%1 := x]) = (E.read (.val 1 rfl) = .value x) :=
+  rfl
+
 end LeanMLIR.RIR.Tests
