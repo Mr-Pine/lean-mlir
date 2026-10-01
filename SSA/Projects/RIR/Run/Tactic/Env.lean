@@ -87,28 +87,6 @@ def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
   let keys ← DiscrTree.mkPath (mkApp argsFn (← mkFreshExprMVar indexType))
   return simprocs.addCore keys ``reduceArgsApp false (.inr reduceArgsApp)
 
-/-- `a ≠ b` from `h : [...].Nodup`, when `a` and `b` are among the list's elements. -/
-def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
-  let_expr List.Nodup _ l := ty | return none
-  let some xs := l.listLit? |>.map (·.2) | return none
-  let idx (e : Expr) : MetaM (Option Nat) := do
-    for x in xs, k in [0:xs.length] do
-      if ← withReducible (isDefEq e x) then
-        return some k
-    return none
-  let some i ← idx a | return none
-  let some j ← idx b | return none
-  let lt (m n : Expr) :=
-    mkDecideProof (mkApp4 (mkConst ``LT.lt [0]) (mkConst ``Nat) (mkConst ``instLTNat) m n)
-  let len ← mkAppM ``List.length #[l]
-  let ne (i j : Nat) := do
-    mkAppM ``List.Nodup.getElem_ne #[h, ← lt (mkNatLit i) (mkNatLit j), ← lt (mkNatLit j) len]
-  if i < j then
-    return some (← ne i j)
-  if j < i then
-    return some (← mkAppM ``Ne.symm #[← ne j i])
-  return none
-
 def decideDischarge : Simp.Discharge := fun prop => do
   if let .some inst← trySynthInstance (← mkAppM ``Decidable #[prop]) then
     let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
@@ -224,7 +202,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
           argsSimprocs facts[0]
         else
           Simp.getSimprocs,
-      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false),
+      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs,
       ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
@@ -240,14 +218,21 @@ def stateFacts : MetaM (Array FVarId) := do
       return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
 
 /-- The equations `x = _` of the locals in `e`: the state `S = …` and the step values `v = …`
-it reads. -/
-private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
+it reads; with `keepNamed`, not those of values named with `with`. -/
+private def valueStateFacts (e : Expr) (keepNamed := false) : MetaM (Array FVarId) := do
   let xs := (collectFVars {} e).fvarSet
   (← getLCtx).foldlM (init := #[]) fun acc d => do
       if d.isImplementationDetail then
         return acc
       let some (_, .fvar x, _) := (← instantiateMVars d.type).eq? | return acc
-      return if xs.contains x then acc.push d.fvarId else acc
+      unless xs.contains x do
+        return acc
+      -- the state's equation always; a value's only if its name is generated
+      if
+          keepNamed && !(← inferType (.fvar x)).isConstOf ``GlobalState &&
+            !isAutoValueName (← x.getUserName) then
+        return acc
+      return acc.push d.fvarId
 
 /-- The local facts `E.read r = v` (a pattern lemma's inputs): read resolution goes through them as
 through `hE`. -/
@@ -261,8 +246,8 @@ def readFacts : MetaM (Array FVarId) := do
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
-def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool) :
-    TacticM Simp.Result := do
+def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool)
+    (keepNamed := false) : TacticM Simp.Result := do
   let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
   let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
   let reads ← readFacts
@@ -271,7 +256,7 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then
-      valueStateFacts r.expr
+      valueStateFacts r.expr keepNamed
     else
       stateFacts
   let r ←

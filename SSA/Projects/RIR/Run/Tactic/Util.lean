@@ -124,6 +124,38 @@ def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
   let some (h) := h | throwError "no hypothesis {what}"
   return h
 
+/-- `a ≠ b` from `h : [...].Nodup`, when `a` and `b` are among the list's elements. -/
+def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
+  let_expr List.Nodup _ l := ty | return none
+  let some xs := l.listLit? |>.map (·.2) | return none
+  let idx (e : Expr) : MetaM (Option Nat) := do
+    for x in xs, k in [0:xs.length] do
+      if ← withReducible (isDefEq e x) then
+        return some k
+    return none
+  let some i ← idx a | return none
+  let some j ← idx b | return none
+  let lt (m n : Expr) :=
+    mkDecideProof (mkApp4 (mkConst ``LT.lt [0]) (mkConst ``Nat) (mkConst ``instLTNat) m n)
+  let len ← mkAppM ``List.length #[l]
+  let ne (i j : Nat) := do
+    mkAppM ``List.Nodup.getElem_ne #[h, ← lt (mkNatLit i) (mkNatLit j), ← lt (mkNatLit j) len]
+  if i < j then
+    return some (← ne i j)
+  if j < i then
+    return some (← mkAppM ``Ne.symm #[← ne j i])
+  return none
+
+/-- The generated name `vN` of the step value written to register `idx`. -/
+def autoValueName (idx : Nat) : Name :=
+  (`v).appendAfter (toString idx)
+
+/-- A step value's generated name (`autoValueName`), not one given with `with`. -/
+def isAutoValueName (n : Name) : Bool :=
+  match n with
+  | .str .anonymous s => s.length > 1 && s.front == 'v' && (s.drop 1).all Char.isDigit
+  | _ => false
+
 end
 
 end LeanMLIR.RIR.Tactic

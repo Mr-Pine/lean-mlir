@@ -19,62 +19,22 @@ structure SealedState where
   hS' : FVarId
   hS : FVarId
 
-/-- The new state with its projections reduced -/
-def dsimpState (e : Expr) : MetaM Expr := do
-  return (← dsimp e (← Simp.mkContext)).1
-
-/-- `transportDischarge`'s search, with the context's facts by (instantiated) type. -/
-partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) (fuel : Nat)
-    (p : Expr) : MetaM (Option Expr) := do
-  if let some h := facts[p]? then
-    return some h
-  if fuel = 0 then
-    return none
-  for n in lemmas do
-    let saved ← saveState
-    let m ← mkFreshExprMVar p
-    let pf? ←
-      (do
-            let gs ← withReducible (m.mvarId!.apply (← mkConstWithFreshMVarLevels n))
-            for g in gs do
-              if ← g.isAssigned then
-                continue
-              let some pf ←
-                transportWith facts lemmas (fuel - 1)
-                    (← instantiateMVars (← g.getType)) | return none
-              g.assign pf
-            return some (← instantiateMVars m)) <|>
-          pure none
-    if pf?.isSome then
-      return pf?
-    restoreState saved
-  -- a fact equal only up to reducible unfolding
-  for d in ← getLCtx do
-    if !d.isImplementationDetail && (← withReducible (isDefEq d.type p)) then
-      return some d.toExpr
-  return none
-
 /-- Prove `p` from the context and the `mlir_transport` lemmas, at reducible transparency:
 `LimbsFit` of a store chain is its base's fact. -/
 def transportDischarge (fuel : Nat) (p : Expr) : MetaM (Option Expr) := do
-  let mut facts : Std.HashMap Expr Expr := {}
-  for d in ← getLCtx do
-    if !d.isImplementationDetail then
-      facts := facts.insert (← instantiateMVars d.type) d.toExpr
-  transportWith facts (← labelled `mlir_transport) fuel (← instantiateMVars p)
+  transportWith (← contextFactMap) (← labelled `mlir_transport) fuel (← instantiateMVars p)
 
-/-- The new state simplified by `mlir_state` and `readThroughStore`; side conditions are
-discharged from the context, at reducible transparency. -/
+/-- The new state simplified by `mlir_state` and the memory simprocs (reads through stores, by read
+facts, through `hS`); side conditions are discharged from the context, at reducible transparency. -/
 def simpState (e : Expr) : MetaM Simp.Result := do
   let some ext ← getSimpExtension? `mlir_state | throwError "no `mlir_state` simp set"
   let ctx ←
     Simp.mkContext (simpTheorems := #[← ext.getTheorems]) (congrTheorems := ← getSimpCongrTheorems)
-  let procs := #[← Simp.getSimprocs, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true)]
+  let dischProcs :=
+    #[← Simp.getSimprocs, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true)]
+  let procs := dischProcs.push (← memSimprocs)
   -- the context's facts, once for all side conditions
-  let mut facts : Std.HashMap Expr Expr := {}
-  for d in ← getLCtx do
-    if !d.isImplementationDetail then
-      facts := facts.insert (← instantiateMVars d.type) d.toExpr
+  let facts ← contextFactMap
   let lemmas ← labelled `mlir_transport
   -- reducible: a side condition's `assumption` must not unfold memory chains
   let disch : Simp.Discharge := fun p => do
@@ -83,7 +43,8 @@ def simpState (e : Expr) : MetaM Simp.Result := do
     let p ← instantiateMVars p
     if let some pf := facts[p]? then
       return some pf
-    let (r, _) ← simp p ctx (simprocs := procs)
+    -- side conditions (`LimbsFit`, `Fits`) read no memory
+    let (r, _) ← simp p ctx (simprocs := dischProcs)
     if let some pf := facts[r.expr]? then
       return some (← mkEqMPR (← r.getProof) pf)
     if let some pf← withReducible (Simp.dischargeDefault? p) then
@@ -109,28 +70,110 @@ elab "transport_fact" : tactic =>
         g.assign pf
     replaceMainGoal []
 
-def sealState (S : Expr) : TacticM SealedState :=
+/-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
+`h : motive new`: every write an `mlir_read` lemma reads back, and every read fact of `S` the
+writes miss (one they overwrite is dropped). Asserted in `g`; the old read facts returned, for
+clearing once the state is sealed. Read through the writes while `S`'s facts hold. -/
+def memFactsOf (g : MVarId) (S new : Expr) :
+    MetaM (Array (FVarId × Expr) × Array FVarId × MVarId) :=
+  g.withContext do
+    let newMem ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[new]))
+    let oldMem ← mkAppM ``GlobalState.mem #[S]
+    let c ← MemCtx.build
+    -- the fact `read e = v` at `new`: `motive new` with `motive s := read (e at s.mem) = v`
+    let motiveOf (e v : Expr) : MetaM Expr := memMotive e newMem (mkEq · v)
+    let mut g := g
+    let mut hyps := #[]
+    let mut seen : Array Expr := #[]
+    -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
+    for w in ← writesOf newMem do
+      for l in c.lemmas do
+        unless w.isAppOf l.write do
+          continue
+        let read? ←
+          observing? do
+              let (_, _, concl) ←
+                forallMetaTelescopeReducing (← inferType (← mkConstWithFreshMVarLevels l.name))
+              let some (_, lhs, _) := concl.eq? | failure
+              let some wpat := lhs.getAppArgs.find? (·.isApp) | failure
+              unless ← withReducible (isDefEq wpat w) do
+                failure
+              instantiateMVars (lhs.replace fun t => if t == wpat then some newMem else none)
+        let some e := read? | continue
+        if seen.contains e || e.hasMVar then
+          continue
+        seen := seen.push e
+        let (v, pf) ← readThrough c e
+        -- unresolved: a write no lemma reads back or past
+        if v == e || (v.find? (· == newMem)).isSome then
+          continue
+        -- the value's own reads of `S` by `S`'s facts
+        let r ← simpState v
+        let (v, pf) := (r.expr, ← mkEqTrans pf (← r.getProof))
+        let motive ← motiveOf e v
+        -- named after the pointer read, so facts at distinct pointers stay accessible
+        let ptr? ←
+          e.getAppArgs.findM? fun a => do
+              return a.isFVar && (← inferType a).isConstOf ``Pointer
+        let name ←
+          match ptr? with
+          | some a =>
+            do
+              pure ((`hread).appendAfter s!"_{← a.fvarId!.getUserName}")
+          | none =>
+            pure `hread
+        let (h, g') ← (← g.assert name (motive.beta #[new]) pf).intro1P
+        g := g'
+        hyps := hyps.push (h, motive)
+    -- the read facts of `S` carried through the writes; the old ones kept for sealing the state
+    let mut olds := #[]
+    for d in ← getLCtx do
+      let some (l, y) := memReadFact? c.heads S (← instantiateMVars d.type) | continue
+      let e := l.replace fun t => if t == oldMem then some newMem else none
+      let (r, pf) ← readThrough c e
+      if r == l then
+        let motive ← motiveOf e y
+        let (h, g') ← (← g.assert d.userName (motive.beta #[new]) (← mkEqTrans pf d.toExpr)).intro1P
+        g := g'
+        hyps := hyps.push (h, motive)
+      olds := olds.push d.fvarId
+    return (hyps, olds, g)
+
+def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM SealedState :=
   withMainContext do
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal
     let S' := runBodyFrom.state
     let hS ← findEqWithLhs S m!"of the form `{S} = _`"
-    let some (_, _, S₀chain) :=
-      (← instantiateMVars (← hS.getType)).eq? | throwError "expected an equation"
-    -- new state as function of the old one
-    let abstract := Expr.lam `s (← inferType S) (← kabstract S' S) .default
-    let new ← dsimpState (abstract.beta #[S₀chain])
+    -- the new state over the old one, `S`, whose facts the simplification's side conditions use
+    let new ← dsimpState S'
     let r ← simpState new
-    let hNew := mkExpectedPropHint (← mkCongrArg abstract (.fvar hS)) (← mkEq S' new)
+    let hNew := mkExpectedPropHint (← mkEqRefl S') (← mkEq S' new)
     let (fvs, g) ←
       generalizeOpaque g (hyps := #[]) S' `S'
           #[⟨`hS', (mkEq · r.expr), ← mkEqTrans hNew (← r.getProof)⟩]
+    -- `hyps`, `h : motive (S'`'s term)`, about `S'`: `S'`'s term `= S'` by `hS'`
+    let mut g := g
+    if !hyps.isEmpty then
+      let hRaw ←
+        g.withContext do
+            mkEqTrans (← mkEqTrans hNew (← r.getProof)) (← mkEqSymm (.fvar fvs[1]!))
+      for (h, motive) in hyps do
+        g ←
+          g.withContext do
+              -- `Eq.ndrec` built directly: `mkEqNDRec` infers the types of the state's big terms
+              let pf :=
+                mkAppN (mkConst ``Eq.ndrec [.zero, .succ .zero])
+                  #[mkConst ``GlobalState, S', motive, .fvar h, .fvar fvs[0]!, hRaw]
+              let (_, g') ← (← g.assert (← h.getUserName) (motive.beta #[.fvar fvs[0]!]) pf).intro1P
+              g'.clear h
     replaceMainGoal [g]
     return ⟨fvs[0]!, fvs[1]!, hS⟩
 
 /-- Name the goal's state `S`, with `hS : S = s`, unless it has an equation already: a loop's
-proof starts from a bare state `s`, a loop's continuation from a term over an earlier state. That
-state's facts are carried over to `S`, and `s` is simplified as a step's new state is. -/
+proof starts from a bare state `s`, a loop's continuation from a term over an earlier state. The
+facts of `s` (or of the earlier state) are carried over to `S`, and `s` is simplified as a step's
+new state is. -/
 def ensureStateEq : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -171,6 +214,17 @@ def ensureStateEq : TacticM Unit :=
         g := g'
         carried := carried.push h
         olds := olds.push d.fvarId
+    -- a bare state's own facts (`Fits s.mem p w`, `s.mem.readAt p w = x`), generalized with it:
+    -- about `S`, so each seal transports them
+    if s.isFVar then
+      let heads ← readHeads
+      for h in ← g.withContext (hypsMentioning s) do
+        let ty ← instantiateMVars (← g.withContext h.getType)
+        -- facts and memory reads, not other equations nor continuations
+        if
+            (← g.withContext (isProp ty)) && (!ty.isEq || (memReadFact? heads s ty).isSome) &&
+              !ty.isForall then
+          carried := carried.push h
     -- simplified like a step's new state: reads through the stores resolve
     let r ←
       g.withContext do

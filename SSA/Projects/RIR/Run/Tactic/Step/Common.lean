@@ -143,7 +143,7 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
             do
               let some idx ←
                 dstIndex? envWrite.dst | throwError m!"Could not get dst index from {envWrite.dst}"
-              pure ((`v).appendAfter (toString idx))
+              pure (Tactic.autoValueName idx)
         let hyp_name ←
           match hyp with
           | .inline =>
