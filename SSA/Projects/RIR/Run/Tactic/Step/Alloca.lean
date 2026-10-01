@@ -10,19 +10,18 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-/-- `step_impure` for an `alloca`, closing the instruction with `run_alloca`. Before the step, each
-pointer `q` with a `Fits` fact about the state gets `hq_fresh : q.id ≠ S.allocaPtr.id` and its
-symmetric form, with `S` written as its `hS` right-hand side, so the facts outlive the state. -/
+/-- `step_impure` for an `alloca`, closing the instruction with `run_alloca`. Each pointer `q` with
+a `Fits` fact gets `hq_ne_x : q.id ≠ x.id` for the new slot `x`, and the slot `Fits` its bytes;
+facts name the slot `x`, not the state's `allocaPtr`. -/
 syntax (name := stepAlloca) "step_alloca" (stepNames)? (stepConsuming)? : tactic
 
-/-- Add the freshness facts for the next `alloca` of the main goal's state. -/
+/-- `q.id ≠ S.allocaPtr.id` for each pointer `q` with a `Fits` fact about the state `S`, before
+the `alloca` of `S`'s next slot. -/
 def addAllocaFreshness : TacticM Unit := do
   Tactic.ensureStateEq
   withMainContext do
       let (g, goal) ← Tactic.getGoalType
       let S := (← Tactic.getRunBodyFrom goal).state
-      let hS ← Tactic.findEqWithLhs S m!"`{S} = _`"
-      let some (_, _, rhs) := (← instantiateMVars (← hS.getType)).eq? | throwError "not an equation"
       let wfTy ← mkAppM ``GlobalState.WF #[S]
       let some hwf ←
         (← getLCtx).findDeclM? fun d => do
@@ -30,45 +29,59 @@ def addAllocaFreshness : TacticM Unit := do
               return some d.toExpr
             return none | throwError "`step_alloca`: no hypothesis `{wfTy}`"
       let memS ← mkAppM ``GlobalState.mem #[S]
-      -- `fun x => q.id ≠ x.allocaPtr.id`, to move the fact from `S` to `rhs`
-      let motive (q : Expr) : MetaM Expr :=
-        withLocalDeclD `x (mkConst ``GlobalState) fun x => do
-          mkLambdaFVars #[x]
-              (←
-                mkAppM ``Ne
-                    #[← mkAppM ``Pointer.id #[q],
-                      ← mkAppM ``Pointer.id #[← mkAppM ``GlobalState.allocaPtr #[x]]])
       let mut seen : Array Expr := #[]
       let mut hyps : Array Hypothesis := #[]
       for (pf, ty) in ← Tactic.splitConjunctedFacts do
         let_expr Fits m q _ := ty | continue
-        unless q.isFVar && !seen.contains q do
-          continue
-        unless ← withReducible (isDefEq m memS) do
+        unless q.isFVar && !seen.contains q && m == memS do
           continue
         seen := seen.push q
         let ne ← mkAppM ``GlobalState.ne_allocaPtr_of_fits #[hwf, pf]
-        let fresh ← mkEqNDRec (← motive q) ne (mkFVar hS)
-        let freshTy ← instantiateMVars (← inferType fresh)
-        let name := s!"h{(← q.fvarId!.getUserName).toString}_fresh"
-        hyps := hyps.push { userName := .mkSimple name, type := freshTy, value := fresh }
         hyps :=
           hyps.push
-            { userName := .mkSimple (name ++ "'"),
-              type :=
-                ←
-                  mkAppM ``Ne
-                      #[(← instantiateMVars freshTy).appArg!,
-                        (← instantiateMVars freshTy).appFn!.appArg!],
-              value := ← mkAppM ``Ne.symm #[fresh] }
+            { userName := .mkSimple s!"h{(← q.fvarId!.getUserName).toString}_ne",
+              type := ← inferType ne, value := ne }
       let (_, g) ← g.assertHypotheses hyps
       replaceMainGoal [g]
+
+/-- After the `alloca`: the facts about the slot `hx : x = p` (`p` an `allocaPtr`) stated about
+`x`, named after it. -/
+def nameAllocaSlot : TacticM Unit :=
+  withMainContext do
+    let mut g ← getMainGoal
+    -- the slot: the newest local `x` with `hx : x = _.allocaPtr`
+    let some (x, hx, p) ←
+      (← getLCtx).foldlM (init := none) fun acc d => do
+          let some (_, .fvar x, p) := (← instantiateMVars d.type).consumeMData.eq? | return acc
+          return if p.isAppOf ``GlobalState.allocaPtr then some (x, d.fvarId, p) else acc | return
+    let xName ← x.getUserName
+    -- the slot stays folded where memory steps take it, as the facts name it
+    g ←
+      g.replaceLocalDeclDefEq hx (Tactic.tagNamed (← instantiateMVars (← hx.getType)).consumeMData)
+    let pf ← mkEqSymm (.fvar hx)
+    for d in ← getLCtx do
+      if d.isImplementationDetail || d.fvarId == hx then
+        continue
+      let ty ← instantiateMVars d.type
+      unless (ty.find? (· == p)).isSome do
+        continue
+      let motive ←
+        withLocalDeclD `y (mkConst ``Pointer) fun y => do
+            mkLambdaFVars #[y] (ty.replace fun t => if t == p then some y else none)
+      let ty' := motive.beta #[.fvar x]
+      let name :=
+        if ty.isAppOf ``Fits then (`h).appendAfter s!"{xName}_fits"
+        else d.userName.appendAfter s!"_{xName}"
+      let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
+      g ← g'.clear d.fvarId
+    replaceMainGoal [g]
 
 @[tactic stepAlloca]
 def evalStepAlloca : Tactic := fun stx => do
   addAllocaFreshness
   runStep (StepArgs.parse mkNullNode stx[1] stx[2] mkNullNode (named := true))
       (← `(tacticSeq| exact run_alloca))
+  nameAllocaSlot
 
 end
 

@@ -23,6 +23,9 @@ syntax (name := stepImpure)
 /-- `step_impure` for a `load`, closing the instruction with `run_load`. -/
 syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)? : tactic
 
+/-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`. -/
+syntax (name := stepMemcpy) "step_memcpy" stepSimpArgs (stepConsuming)? : tactic
+
 /-- `step_impure` for a `store`, closing the instruction with `run_store`. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
@@ -51,9 +54,15 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
   let goals ←
     withMainContext do
         -- not the new state's own facts (its reads may mention `inState` in their values)
+        -- not the new state's own facts (its reads may mention `inState` in their values), nor
+        -- facts about `inState` only as `inState.allocaPtr`: a fixed pointer, not the state
+        let allocaPtr ← mkAppM ``GlobalState.allocaPtr #[inState]
         let preserveHyps ←
           (← hypsMentioning inState (except := #[hS', hS])).filterM fun h => do
-              return !(← instantiateMVars (← h.getType)).containsFVar S'
+              let ty ← instantiateMVars (← h.getType)
+              let rest :=
+                ty.replace fun t => if t == allocaPtr then some (mkConst ``Unit.unit) else none
+              return !ty.containsFVar S' && inState.occurs rest
         let mut g ← getMainGoal
         let mut goals := #[]
         let hSId := mkIdent (← hS.getUserName)
@@ -192,13 +201,42 @@ elab "fits_fact" : tactic =>
     g.assign pf
     replaceMainGoal []
 
+/-- Close `a ≠ b` (or `¬a = b`) from the facts: either way round, or by a `Nodup`. -/
+elab "ne_fact" : tactic =>
+  withMainContext do
+    let g ← getMainGoal
+    let ty := (← instantiateMVars (← g.getType)).cleanupAnnotations
+    let some (a, b) :=
+      ty.ne?.map (fun (_, a, b) => (a, b)) <|> (ty.not?.bind (·.eq?)).map fun (_, a, b) => (a, b)
+      | throwError "goal is not `≠`"
+    let some pf ← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b | throwError "no `≠` fact"
+    g.assign (mkExpectedPropHint pf ty)
+    replaceMainGoal []
+
+/-- Close `(Range.of p v).Disjoint (Range.of q w)` from the facts (distinct blocks, offsets). -/
+elab "disjoint_fact" : tactic =>
+  withMainContext do
+    let g ← getMainGoal
+    let_expr Range.Disjoint a b :=
+      ← instantiateMVars (← g.getType) | throwError "goal is not `Disjoint`"
+    let_expr Range.of p v := a | throwError "goal is not `Disjoint` of two ranges"
+    let_expr Range.of q w := b | throwError "goal is not `Disjoint` of two ranges"
+    let some pf ←
+      Tactic.disjointProof? (← Tactic.splitConjunctedFacts) p v q
+          w | throwError "no disjointness from the facts"
+    g.assign pf
+    replaceMainGoal []
+
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
-  runStep (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true))
+  let args := StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true)
+  -- the pointer keeps the values named with `with`, as the facts about it do
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
       (←
         `(tacticSeq|
         expect_values
         exact run_load (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
+      args.consumed (keepNamed := true)
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
@@ -209,6 +247,19 @@ def evalStepStore : Tactic := fun stx => do
         `(tacticSeq|
         expect_values
         exact run_store (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
+      args.consumed (keepNamed := true)
+
+@[tactic stepMemcpy]
+def evalStepMemcpy : Tactic := fun stx => do
+  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
+  -- the pointers keep the values named with `with`, as the facts about them do
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
+      (←
+        `(tacticSeq|
+        expect_values
+        exact
+            run_memcpy (by rfl) (by first | disjoint_fact | simp_all)
+              (by first | fits_fact | simp_all) (by first | fits_fact | simp_all)))
       args.consumed (keepNamed := true)
 
 end InstructionSpecific

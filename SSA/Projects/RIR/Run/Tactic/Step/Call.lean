@@ -19,8 +19,11 @@ def evalStepCall : Tactic := fun stx => do
   let innerDischarge ←
     `(tacticSeq| exact run_call (by
         apply $thm <;> first
-          | with_reducible assumption | transport_fact | simp [$(mkIdent `mlir_mem):ident, *]))
-  runStep args innerDischarge
+          | with_reducible assumption | ne_fact | transport_fact
+          | simp [$(mkIdent `mlir_mem):ident, *]))
+  -- the arguments keep the values named with `with` (and stack slots), as the facts about them do
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand innerDischarge args.consumed
+      (keepNamed := true)
 
 end
 
