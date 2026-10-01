@@ -95,19 +95,13 @@ theorem zipWith_eq_ofFn {f : α → β → γ} {as : Vector α n} {bs : Vector �
     Vector.zipWith f as bs = Vector.ofFn fun i => f as[i] bs[i] := by
   ext; simp
 
-open Lean Meta in
-/-- `Vector.mk arr h` with `h` mentioning locals, to `Vector.mk arr rfl`: `simp` casts `h` along a
-rewrite of `arr`, which ties the value to that rewrite's hypotheses. -/
-dsimproc [simp]reproveVectorMk (Vector.mk _ _) := fun e => do
-  let_expr Vector.mk α n arr h := e | return .continue
-  unless h.hasFVar do
-    return .continue
-  -- only a literal's size is `n` by `rfl`
-  let_expr List.toArray _ l := arr | return .continue
-  unless l.listLit?.isSome do
-    return .continue
-  let ty ← mkEq (← mkAppM ``Array.size #[arr]) n
-  return .visit (mkApp4 e.getAppFn α n arr (mkExpectedPropHint (← mkEqRefl n) ty))
+/-- Rewrite under `Vector.mk arr h` proving the new size afresh: `simp` would cast `h` along the
+rewrite, tying the vector to that rewrite's hypotheses. -/
+@[congr]
+theorem Vector.mk_congr {a a' : Array α} (e : a = a') (h : a.size = n)
+    (h' : a'.size ≤ n ∧ n ≤ a'.size) :
+    Vector.mk a h = Vector.mk a' (Nat.le_antisymm h'.1 h'.2) := by
+  subst e; rfl
 
 open Lean Meta in
 /-- `Vector.map PoisonOr.value xs` unfolded, `⟨xs.toArray.map .value, _⟩`, back to `Ty.wrap xs`. -/
