@@ -43,8 +43,8 @@ def unfoldLocals (v pf : Expr) : MetaM (Expr × Expr) := do
   return (v, pf)
 
 /-- Close a pattern read `E.read r = v`: the value the env's writes give `r`, as is or with locals'
-definitions unfolded (a named constant against the pattern's). -/
-def closePatternRead (g : MVarId) : MetaM Unit :=
+definitions unfolded (a named constant against the pattern's); an argument's, from the args fact. -/
+def closePatternRead (g : MVarId) : TacticM Unit :=
   g.withContext do
     let some (_, lhs, rhs) := (← instantiateMVars (← g.getType)).eq? | throwError "not a read"
     -- the register as the body fixed it: `(Dst.mk 24 _).i` to `24`
@@ -59,9 +59,19 @@ def closePatternRead (g : MVarId) : MetaM Unit :=
             return .done h
           | _ =>
             return .continue)
-    let some (v, pf) ←
-      Tactic.walkRead (lhs.getArg! 2)
-          reg | throwError "step_pattern: cannot resolve the read{indentExpr lhs}"
+    if reg.isAppOf ``Reg.arg then
+      let r ←
+        Tactic.simpValue true mkNullNode (← mkAppM ``Env.read #[lhs.getArg! 2, reg]) (lhs.getArg! 2)
+          false
+      unless ← withDefault (isDefEq r.expr rhs) do
+        throwError "step_pattern: {lhs} is{indentExpr r.expr}\nnot{indentExpr rhs}"
+      g.assign (mkExpectedPropHint (← r.getProof) (← mkEq lhs rhs))
+      return
+    let some (v, pf) ← Tactic.walkRead (lhs.getArg! 2) reg |
+      do
+        let r ← mkAppM ``Env.read #[lhs.getArg! 2, reg]
+        throwError "step_pattern: no value for the read{indentExpr r}\nthrough the writes; add a fact \
+        `h : E.read %k = _` about the block's entry env"
     if ← isDefEq v rhs then
       g.assign (mkExpectedPropHint pf (← mkEq lhs rhs))
       return
