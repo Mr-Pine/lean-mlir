@@ -227,6 +227,25 @@ def clearUnusedValues (g : MVarId) : MetaM MVarId :=
         uses := uses.modify x (· - 1)
     return g
 
+/-- Whether the fact `ty` about the root `E₀` also holds of `E₀` after writes to `dead`, by
+definition: a read of an argument or of a value register no dead write touches, or `E₀.args`. -/
+def carriesOver (E₀ : Expr) (dead : Std.HashSet Nat) (ty : Expr) : MetaM Bool := do
+  let some (_, lhs, rhs) := ty.eq? | return false
+  if rhs.containsFVar E₀.fvarId! then
+    return false
+  match_expr lhs with
+  | Env.args _ e =>
+    return e == E₀
+  | Env.read _ _ e reg =>
+    unless e == E₀ do
+      return false
+    if reg.isAppOf ``Reg.arg then
+      return true
+    let some k ← valRegIndex? reg | return false
+    return !dead.contains k
+  | _ =>
+    return false
+
 def runSeal : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -239,25 +258,39 @@ def runSeal : TacticM Unit :=
     let some cont := goal.find? (·.isAppOf ``Func.continue) | return
     let liveRegs ← liveRegs (cont.getArg! 0) runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
-    -- a loop's root env is mentioned by its continuation, so it cannot be replaced
-    if
-        E₀.isFVar &&
-          (← getLCtx).any fun d =>
-            !d.isImplementationDetail && d.fvarId != hE && d.type.containsFVar E₀.fvarId! then
-      return
-    let partitionProof ← partitionProof liveRegs E₀ chain
     let deadWrites := chain.filter (·.idx ∉ liveRegs)
+    let dead : Std.HashSet Nat := deadWrites.foldl (·.insert ·.idx) {}
     let E₀' := (← chainFn deadWrites.toList E₀).beta #[E₀]
+    -- the root's facts (a block lemma's inputs) carry over to the sealed root; any other mention (a
+    -- loop's continuation) keeps the root
+    let mut carried : Array (FVarId × Name × Expr) := #[]
+    if E₀.isFVar then
+      for d in ← getLCtx do
+        if d.isImplementationDetail || d.fvarId == hE then
+          continue
+        let ty ← instantiateMVars d.type
+        unless ty.containsFVar E₀.fvarId! do
+          continue
+        unless ← carriesOver E₀ dead ty do
+          return
+        carried := carried.push (d.fvarId, d.userName, ty.replaceFVar E₀ E₀')
+    let partitionProof ← partitionProof liveRegs E₀ chain
     let hE' ← mkEqTrans (.fvar hE) partitionProof
     let r ← g.assertAfter hE `hE (← inferType hE') hE'
-    let g ← r.mvarId.clear hE
+    let mut g ← r.mvarId.clear hE
+    let (facts, g') ←
+      g.assertHypotheses
+          (carried.map fun (h, n, ty) =>
+            { userName := n, type := ty, value := mkExpectedPropHint (.fvar h) ty })
+    g := g'
+    for (h, _, _) in carried do
+      g ← g.clear h
     replaceMainGoal [g]
-    let (_, g) ← generalizeOpaque g (hyps := #[r.fvarId]) E₀' `E₀ #[]
-    let g ← g.clear E₀.fvarId!
+    let (_, g') ← generalizeOpaque g (hyps := #[r.fvarId] ++ facts) E₀' `E₀ #[]
+    g ← g'.clear E₀.fvarId!
     replaceMainGoal [g]
     -- Clear away unused values: the dead writes', then, until nothing changes, those only their
     -- own `hv` mentions (clearing `v21` frees the `v20` that `hv21` used)
-    let mut g := g
     for write in deadWrites do
       let v := if write.val.isAppOfArity ``PoisonOr.value 2 then write.val.appArg! else write.val
       if let some x := v.fvarId? then
