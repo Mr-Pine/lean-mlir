@@ -85,8 +85,9 @@ def finNLit? (n : Expr) : MetaM (Option Nat) := do
 
 /-- Replace `e` in `m`'s target by `r.expr`, using the proof `e = r.expr` from `r`. -/
 def replaceBySimp (m : MVarId) (e : Expr) (r : Simp.Result) : MetaM MVarId := do
-  let body ←
-    kabstract (← instantiateMVars (← m.getType)) e -- Abstract the expression value in the mvar
+  -- reducible: `e` occurs verbatim, and a default-transparency mismatch against a similar value
+  -- (`(f x).1` against `(f x).2`) unfolds `f` before failing
+  let body ← withReducible <| kabstract (← instantiateMVars (← m.getType)) e
   let motive := Expr.lam `val (← inferType e) body .default -- As a lambda
   let simpProof ← r.getProof' e
   let mvarProof ← mkCongrArg motive simpProof

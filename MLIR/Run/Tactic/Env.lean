@@ -243,6 +243,25 @@ def readFacts : MetaM (Array FVarId) := do
             return ty.eq?.any (·.2.1.isAppOf ``Env.read)
       return if reads then acc.push d.fvarId else acc
 
+/-- `e` with each proof in it that mentions locals but proves a closed fact by `decide` (`x[0]`'s
+`0 < 8`, proved through the args fact), so sealing can clear those locals. Equal by proof
+irrelevance. -/
+def closeProofs (e : Expr) : MetaM Expr :=
+  Meta.transform e (pre := fun t => do
+    unless t.hasFVar do
+      return .done t
+    unless ← isProof t do
+      return .continue
+    -- beta-reduced: an `Eq.ndrec` motive's redex may mention locals the fact doesn't
+    let ty ← Core.betaReduce (← instantiateMVars (← inferType t))
+    if ty.hasFVar || ty.hasMVar then
+      return .continue
+    let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[ty])) | return .continue
+    unless
+      (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) ty inst)).isConstOf ``Bool.true do
+      return .continue
+    return .done (← mkDecideProof ty))
+
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
@@ -267,7 +286,8 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   -- last: `#v[.value x, …]` to `Ty.wrap #v[x, …]`, once every lane is final
   let ctx ← Simp.mkContext
   let (p, _) ← simp r.expr ctx (simprocs := #[← ({} : Simp.Simprocs).add ``pullWrap (post := true)])
-  r.mkEqTrans p
+  let r ← r.mkEqTrans p
+  return { r with expr := ← closeProofs r.expr }
 
 end ResolveReads
 
