@@ -12,23 +12,24 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-/-- Splits all conjuncted facts `h : a ∧ b ∧ c ∧ ...` into `#[(h.1, a), (h.2.1, b), (h.2.2.1, c), ...]` -/
-partial def splitConjunctedFacts : MetaM (Array (Expr × Expr)) := do
+/-- The conjuncts of `h : ty`, `(proof, type)` each: `h : a ∧ b ∧ c` into
+`#[(h.1, a), (h.2.1, b), (h.2.2, c)]`. -/
+partial def conjuncts (h ty : Expr) : MetaM (Array (Expr × Expr)) := do
+  match_expr ← whnfR ty with
+  | And a b =>
+    return (← conjuncts (mkApp3 (mkConst ``And.left) a b h) a) ++
+        (← conjuncts (mkApp3 (mkConst ``And.right) a b h) b)
+  | _ =>
+    return #[(h, ty)]
+
+/-- The context's facts, conjunctions split (`conjuncts`). -/
+def splitConjunctedFacts : MetaM (Array (Expr × Expr)) := do
   let mut out := #[]
   for d in ← getLCtx do
     if d.isImplementationDetail || !(← isProp d.type) then
       continue
-    out ← go (mkFVar d.fvarId) (← instantiateMVars d.type) out
+    out := out ++ (← conjuncts (mkFVar d.fvarId) (← instantiateMVars d.type))
   return out
-where go (pf ty : Expr) (acc : Array (Expr × Expr)) : MetaM (Array (Expr × Expr)) := do
-    let ty' ← whnfR ty
-    match_expr ty' with
-    | And a b =>
-      do
-        let acc ← go (mkApp3 (mkConst ``And.left) a b pf) a acc
-        go (mkApp3 (mkConst ``And.right) a b pf) b acc
-    | _ =>
-      return acc.push (pf, ty)
 
 /-- The context's facts by (instantiated) type. -/
 def contextFactMap : MetaM (Std.HashMap Expr Expr) := do

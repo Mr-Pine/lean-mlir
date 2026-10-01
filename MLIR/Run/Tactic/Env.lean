@@ -122,17 +122,15 @@ def decideDischarge : Simp.Discharge := fun prop => do
 read at a block lemma's entry env. `lhs` is the read being resolved, `e.read` of `i` up to the
 skipped writes. -/
 def readFact? (e : Expr) (i : Nat) (lhs : Expr) : MetaM (Option (Expr × Expr)) := do
-  for d in ← getLCtx do
-    if d.isImplementationDetail then
-      continue
-    let some (_, l, v) := (← instantiateMVars d.type).eq? | continue
+  for (h, ty) in ← splitConjunctedFacts do
+    let some (_, l, v) := (← instantiateMVars ty).eq? | continue
     let_expr Env.read _ _ e' r := l | continue
     unless e' == e do
       continue
     let_expr Reg.val _ _ rj _ := r | continue
     unless (← finNLit? rj) == some i do
       continue
-    return some (v, mkExpectedPropHint d.toExpr (← mkEq lhs v))
+    return some (v, mkExpectedPropHint h (← mkEq lhs v))
   return none
 
 /-- `env.read reg` through `env`'s write chains: the value last written to `reg`, and the proof.
@@ -181,14 +179,16 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
       getSimpTheorems
   for fact in facts do
     thms ← thms.add (.fvar fact) #[] (mkFVar fact)
-    -- an argument read's fact also in `read_arg`'s form, which the args pass rewrites reads to
-    if let some (_, l, v) := (← instantiateMVars (← fact.getType)).eq? then
+    -- an argument read's fact also in `read_arg`'s form, which the args pass rewrites reads to;
+    -- a fact's conjuncts each (`E ⊨ [r := v, …]`)
+    for (h, ty) in ← conjuncts (mkFVar fact) (← instantiateMVars (← fact.getType)) do
+      let some (_, l, v) := ty.eq? | continue
       if l.isAppOfArity ``Env.read 4 && (l.getArg! 3).isAppOf ``Reg.arg then
         let (_, _, ty) ←
           forallMetaTelescopeReducing (← inferType (← mkConstWithFreshMVarLevels ``Env.read_arg))
         if let some (_, ll, rr) := ty.eq? then
           if ← isDefEq ll l then
-            let pf := mkExpectedPropHint (mkFVar fact) (← mkEq (← instantiateMVars rr) v)
+            let pf := mkExpectedPropHint h (← mkEq (← instantiateMVars rr) v)
             thms ← thms.add (.other `argReadFact) #[] pf
   -- operations unfold, even with `only`: the step machinery, like `mlir_env`
   let some ops ← getSimpExtension? `mlir_operation | throwError "no `mlir_operation` simp set"
@@ -238,8 +238,10 @@ def readFacts : MetaM (Array FVarId) := do
   (← getLCtx).foldlM (init := #[]) fun acc d => do
       if d.isImplementationDetail then
         return acc
-      let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
-      return if l.isAppOf ``Env.read then acc.push d.fvarId else acc
+      let reads ←
+        (← conjuncts d.toExpr (← instantiateMVars d.type)).anyM fun (_, ty) =>
+            return ty.eq?.any (·.2.1.isAppOf ``Env.read)
+      return if reads then acc.push d.fvarId else acc
 
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.

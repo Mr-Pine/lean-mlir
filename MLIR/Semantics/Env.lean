@@ -218,6 +218,57 @@ def elabEnvWrite : TermElab := fun stx ty? => do
     env := mkAppN (mkConst ``Env.write) #[Γ, t, env, dst, v]
   ensureHasType ty? env
 
+/-- `E ⊨ [r := v, …]`: `E` reads `v` at `r`, for each pair, as a conjunction. A register is `%k`,
+`%argk`, a `Reg`, or a `Dst` (its value register); a value is typed and wrapped as in
+`E[d := v]`. -/
+syntax :50 (name := envReads) term:51 " ⊨ " "[" withoutPosition(term " := " term),+ "]" : term
+
+/-- The register `d` of `Γ`: elaborated as a `Reg`, else a `Dst`'s value register. -/
+def elabReadReg (Γ : Expr) (d : Syntax) : TermElabM (Expr × Expr) := do
+  let t ←
+    if d.getKind == ``valReg then
+      pure ((← valTy? Γ (d[1].isNatLit?.getD 0)).getD (← mkFreshExprMVar (mkConst ``Ty)))
+    else
+      mkFreshExprMVar (mkConst ``Ty)
+  let s ← saveState
+  try
+    let r ←
+      withoutErrToSorry do
+          let r ← elabTermEnsuringType d (mkApp2 (mkConst ``Reg) Γ t)
+          synthesizeSyntheticMVarsNoPostponing
+          pure r
+    -- an argument's type as a `Ty` constructor (`G.args[0]` is `.bv 8`), for wrapping its value
+    return (r, ← whnfD (← instantiateMVars t))
+  catch _ =>
+    s.restore
+    let x ← elabTerm d none
+    synthesizeSyntheticMVarsNoPostponing
+    let_expr Dst Γ' t :=
+      ←
+        whnfR
+            (←
+              inferType
+                  x) | throwError "`E ⊨ [r := v]` needs `r` to be a register, got{indentExpr x}"
+    let i := mkApp3 (mkConst ``Dst.i) Γ' t x
+    let h := mkApp3 (mkConst ``Dst.h) Γ' t x
+    return (mkApp4 (mkConst ``Reg.val) Γ' t i h, t)
+
+@[term_elab envReads]
+def elabEnvReads : TermElab := fun stx ty? => do
+  let E ← elabTerm stx[0] none
+  let envTy ← whnfR (← instantiateMVars (← inferType E))
+  let_expr Env Γ := envTy |
+    do
+      tryPostponeIfMVar envTy
+      throwError "`E ⊨ [r := v]` needs `E` to be an `Env`, got{indentExpr envTy}"
+  let mut reads := #[]
+  for w in stx[3].getSepArgs do
+    let (r, t) ← elabReadReg Γ w[0]
+    let v ← elabValue ⟨w[2]⟩ t
+    reads := reads.push (← mkEq (mkAppN (mkConst ``Env.read) #[Γ, t, E, r]) v)
+  let some last := reads.back? | throwError "`E ⊨ []`: no reads"
+  ensureHasType ty? (reads.pop.foldr mkAnd last)
+
 @[app_unexpander Dst.mk]
 def unexpandDst : PrettyPrinter.Unexpander
   | `($_ $k:num $_) => pure (mkNode ``valReg #[mkAtom "%", k])

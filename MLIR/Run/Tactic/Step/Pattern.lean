@@ -105,6 +105,21 @@ def closeSide (g : MVarId) : TacticM Unit := do
     return
   closeByDecide g
 
+/-- A premise of a pattern lemma: a read (`closePatternRead`), a side condition (`closeSide`), or
+a conjunction of them (`E ⊨ [r := v, …]`), split. -/
+partial def closePremise (g : MVarId) : TacticM Unit := do
+  let ty ← instantiateMVars (← g.getType)
+  if let some (a, b) := ty.and? then
+    let ga ← mkFreshExprMVar a
+    let gb ← mkFreshExprMVar b
+    g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
+    closePremise ga.mvarId!
+    closePremise gb.mvarId!
+  else if ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4) then
+    closePatternRead g
+  else
+    closeSide g
+
 @[tactic stepPattern]
 def evalStepPattern : Tactic := fun stx => do
   -- the state as `S` with `hS`, to seal what the pattern stores
@@ -156,14 +171,7 @@ def evalStepPattern : Tactic := fun stx => do
         if ty.isForall then
           cont? := some mv
           continue
-        match ty.eq? with
-        | some (_, lhs, rhs) =>
-          if lhs.isAppOfArity ``Env.read 4 then
-            closePatternRead mv
-          else
-            closeSide mv
-        | none =>
-          closeSide mv
+        closePremise mv
       -- a register's type proof: unification skips proofs, so none got assigned
       for h in typeProofs do
         unless ← h.isAssigned do
