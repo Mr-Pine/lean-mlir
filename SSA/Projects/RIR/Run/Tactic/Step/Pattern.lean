@@ -74,13 +74,20 @@ def closePatternRead (g : MVarId) : TacticM Unit :=
         let r ← mkAppM ``Env.read #[lhs.getArg! 2, reg]
         throwError "step_pattern: no value for the read{indentExpr r}\nthrough the writes; add a fact \
         `h : E.read %k = _` about the block's entry env"
-    if ← isDefEq v rhs then
+    -- reducible first: a default-transparency mismatch unfolds every definition before failing
+    if ← withReducible (isDefEq v rhs) then
       g.assign (mkExpectedPropHint pf (← mkEq lhs rhs))
       return
     let (v', pf') ← unfoldLocals v pf
-    unless ← withDefault (isDefEq v' rhs) do
+    unless (← withReducible (isDefEq v' rhs)) || (← withDefault (isDefEq v' rhs)) do
       throwError "step_pattern: {lhs} is{indentExpr v}\nnot{indentExpr rhs}"
     g.assign (mkExpectedPropHint pf' (← mkEq lhs rhs))
+
+/-- A continuation premise: `∀ …, (blk.runBodyFrom … >>= g) = K`, with or without binders. -/
+def isContinuation (ty : Expr) : MetaM Bool :=
+  forallTelescope ty fun _ b => do
+    let some (_, l, _) := b.eq? | return false
+    return (l.find? (·.isAppOf ``BasicBlock.runBodyFrom)).isSome
 
 /-- Close a decidable side condition by `decide`, failing loudly when it is false. -/
 def closeByDecide (g : MVarId) : MetaM Unit := do
@@ -137,12 +144,11 @@ def evalStepPattern : Tactic := fun stx => do
         else
           instantiateMVars (← Term.elabTerm stx[2] none)
       let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
-      unless ← isDefEq concl (← instantiateMVars (← g.getType)) do
-        throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
       -- registers as `⟨?i, ?h⟩`, so the body's `.val k _` fixes them
-      -- (assigned, not unified: structure eta would solve `?x =?= ⟨?i, ?h⟩` by `?i := ?x.i`)
+      -- (assigned, not unified: structure eta would solve `?x =?= ⟨?i, ?h⟩` by `?i := ?x.i`);
+      -- with explicit arguments, the elaborator's open implicits too
       let mut typeProofs := #[]
-      for m in ms do
+      for m in (← getMVars lem).map mkMVar ++ ms do
         let ty ← instantiateMVars (← inferType m)
         if ty.isAppOfArity ``Dst 2 && !(← m.mvarId!.isAssigned) then
           let dst := mkApp2 (mkConst ``Dst.mk) (ty.getArg! 0) (ty.getArg! 1)
@@ -153,6 +159,8 @@ def evalStepPattern : Tactic := fun stx => do
           let h ← mkFreshExprMVar hTy
           typeProofs := typeProofs.push h.mvarId!
           m.mvarId!.assign (mkApp2 dst i h)
+      unless ← isDefEq concl (← instantiateMVars (← g.getType)) do
+        throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
       -- the body first: it fixes the registers and arguments the other premises mention
       for m in ms do
         let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
@@ -168,7 +176,7 @@ def evalStepPattern : Tactic := fun stx => do
         let ty ← instantiateMVars (← mv.getType)
         unless ← isProp ty do
           continue
-        if ty.isForall then
+        if ← isContinuation ty then
           cont? := some mv
           continue
         closePremise mv
@@ -181,13 +189,16 @@ def evalStepPattern : Tactic := fun stx => do
           h.assign (← mkEqRefl l)
       let some cont := cont? | throwError "step_pattern: no continuation premise"
       g.assign (← instantiateMVars (mkAppN lem ms))
-      let (dead, main) ← cont.intros
+      -- the lemma's names: a kept fact is referred to by them
+      let (dead, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
       replaceMainGoal [← Tactic.reduceIndex main]
       finishStep args.value args.hyp false mkNullNode true
-      -- the pattern's intermediates: sealed away, so unused
+      -- the pattern's intermediates: sealed away, so unused; its facts about them kept
       let mut main ← getMainGoal
-      for x in dead do
-        main ← main.tryClear x
+      for x in dead.reverse do
+        let some d := (← main.getDecl).lctx.find? x | continue
+        unless ← main.withContext (isProp d.type) do
+          main ← main.tryClear x
       replaceMainGoal [main]
       -- a pattern that stores: its new state sealed, as an impure step's (last: `substCore`
       -- reintroduces the locals after the state)
