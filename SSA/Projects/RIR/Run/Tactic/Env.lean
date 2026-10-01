@@ -203,6 +203,15 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
       getSimpTheorems
   for fact in facts do
     thms ← thms.add (.fvar fact) #[] (mkFVar fact)
+    -- an argument read's fact also in `read_arg`'s form, which the args pass rewrites reads to
+    if let some (_, l, v) := (← instantiateMVars (← fact.getType)).eq? then
+      if l.isAppOfArity ``Env.read 4 && (l.getArg! 3).isAppOf ``Reg.arg then
+        let (_, _, ty) ←
+          forallMetaTelescopeReducing (← inferType (← mkConstWithFreshMVarLevels ``Env.read_arg))
+        if let some (_, ll, rr) := ty.eq? then
+          if ← isDefEq ll l then
+            let pf := mkExpectedPropHint (mkFVar fact) (← mkEq (← instantiateMVars rr) v)
+            thms ← thms.add (.other `argReadFact) #[] pf
   -- operations unfold, even with `only`: the step machinery, like `mlir_env`
   let some ops ← getSimpExtension? `mlir_operation | throwError "no `mlir_operation` simp set"
   let opThms ← ops.getTheorems

@@ -105,7 +105,7 @@ theorem MemoryState.readAt_storeAt_subrange (hfits : Fits m p v) (hid : q.id = p
   simp [readAt, hid, getElem?_storeAt_self hblk]
   exact extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) hw hsz
 
-@[mlir_mem]
+@[mlir_mem, mlir_transport]
 theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
   unfold Fits
   obtain ⟨blk, hblk, hsz⟩ := hq

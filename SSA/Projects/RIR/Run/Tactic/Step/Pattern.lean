@@ -6,6 +6,7 @@ public meta import SSA.Projects.RIR.Run.Tactic.Parse
 public meta import SSA.Projects.RIR.Run.Tactic.Util
 public meta import SSA.Projects.RIR.Run.Tactic.Env
 public meta import SSA.Projects.RIR.Run.Tactic.Seal
+public meta import SSA.Projects.RIR.Run.Tactic.State
 public meta import SSA.Projects.RIR.Run.Tactic.Step.Common
 public meta import SSA.Projects.RIR.Run.Tactic.Step.Syntax
 public meta import Lean.Elab.Tactic
@@ -62,7 +63,7 @@ def closePatternRead (g : MVarId) : TacticM Unit :=
     if reg.isAppOf ``Reg.arg then
       let r ←
         Tactic.simpValue true mkNullNode (← mkAppM ``Env.read #[lhs.getArg! 2, reg]) (lhs.getArg! 2)
-          false
+            false
       unless ← withDefault (isDefEq r.expr rhs) do
         throwError "step_pattern: {lhs} is{indentExpr r.expr}\nnot{indentExpr rhs}"
       g.assign (mkExpectedPropHint (← r.getProof) (← mkEq lhs rhs))
@@ -90,10 +91,13 @@ def closeByDecide (g : MVarId) : MetaM Unit := do
   g.assign (← mkDecideProof ty)
 
 /-- Close a side condition by a local hypothesis (a fact about the pattern's inputs, like a flag
-being `0` or `1`), else by `decide`. -/
-def closeSide (g : MVarId) : MetaM Unit := do
-  unless ← g.assumptionCore do
-    closeByDecide g
+being `0` or `1`), or one about an earlier state through `transport_fact`, else by `decide`. -/
+def closeSide (g : MVarId) : TacticM Unit := do
+  if ← g.assumptionCore then
+    return
+  if (← observing? (Tactic.run g (evalTactic (← `(tactic| transport_fact))))) matches some [] then
+    return
+  closeByDecide g
 
 @[tactic stepPattern]
 def evalStepPattern : Tactic := fun stx =>
@@ -124,6 +128,13 @@ def evalStepPattern : Tactic := fun stx =>
         let h ← mkFreshExprMVar hTy
         typeProofs := typeProofs.push h.mvarId!
         m.mvarId!.assign (mkApp2 dst i h)
+    -- the body first: it fixes the registers and arguments the other premises mention
+    for m in ms do
+      let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
+      if lhs.isAppOf ``List.drop then
+        unless ← withDefault (isDefEq lhs rhs) do
+          throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
+        m.mvarId!.assign (← mkEqRefl lhs)
     let mut cont? := none
     for m in ms do
       let mv := m.mvarId!
@@ -137,11 +148,7 @@ def evalStepPattern : Tactic := fun stx =>
         continue
       match ty.eq? with
       | some (_, lhs, rhs) =>
-        if lhs.isAppOf ``List.drop then
-          unless ← withDefault (isDefEq lhs rhs) do
-            throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
-          mv.assign (← mkEqRefl lhs)
-        else if lhs.isAppOfArity ``Env.read 4 then
+        if lhs.isAppOfArity ``Env.read 4 then
           closePatternRead mv
         else
           closeSide mv
