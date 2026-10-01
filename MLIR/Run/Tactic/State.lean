@@ -84,6 +84,18 @@ def memFactsOf (g : MVarId) (S new : Expr) :
     let motiveOf (e v : Expr) : MetaM Expr := memMotive e newMem (mkEq · v)
     let mut g := g
     let mut hyps := #[]
+    -- an `alloca`'s fresh slot fits its bytes: `Fits (S.alloca n).mem S.allocaPtr (8 * n)`
+    if new.isAppOfArity ``GlobalState.alloca 2 then
+      let n := new.getArg! 1
+      let ptr ← mkAppM ``GlobalState.allocaPtr #[S]
+      let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
+      let motive ←
+        withLocalDeclD `s (mkConst ``GlobalState) fun x => do
+            mkLambdaFVars #[x] (← mkAppM ``Fits #[← mkAppM ``GlobalState.mem #[x], ptr, w])
+      let pf ← mkAppOptM ``Fits.allocaPtr #[w, n, S, ← mkAppM ``Nat.le_refl #[w]]
+      let (h, g') ← (← g.assert `hfits (motive.beta #[new]) pf).intro1P
+      g := g'
+      hyps := hyps.push (h, motive)
     let mut seen : Array Expr := #[]
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
     for w in ← writesOf newMem do
@@ -229,11 +241,46 @@ def ensureStateEq : TacticM Unit :=
     let r ←
       g.withContext do
           simpState s
-    let (_, g') ←
+    let (fvs, g') ←
       g.withContext do
           generalizeOpaque g (hyps := carried) s `S #[⟨`hS, (mkEq · r.expr), ← r.getProof⟩]
-    -- the originals are about a state that is gone
-    replaceMainGoal [← g'.tryClearMany olds]
+    g ← g'.tryClearMany olds
+    -- a bare state's memory where its facts say it fits: `S.mem.readAt q w = s.mem.readAt q w`,
+    -- carried past the writes that miss it, so reads below them resolve to `s`'s
+    if s.isFVar then
+      g ←
+        g.withContext do
+            let S := mkFVar fvs[0]!
+            let mut g₁ := g
+            let mut seen : Array (Expr × Expr) := #[]
+            let facts ← splitConjunctedFacts
+            let heads ← readHeads
+            let known ←
+              facts.filterMapM fun (_, ty) => do
+                  let some (l, _) := memReadFact? heads S ty | return none
+                  return some (← normWidths l)
+            for (_, ty) in facts do
+              let_expr Fits m q w := ty | continue
+              unless m.isAppOfArity ``GlobalState.mem 1 && m.appArg! == S && q.isFVar do
+                continue
+              let w ← normWidths w
+              if seen.contains (q, w) then
+                continue
+              seen := seen.push (q, w)
+              let motive ←
+                withLocalDeclD `x (mkConst ``GlobalState) fun x => do
+                    mkLambdaFVars #[x]
+                        (← mkAppM ``MemoryState.readAt #[← mkAppM ``GlobalState.mem #[x], q, w])
+              -- not where a read fact already gives the value
+              if known.contains (motive.beta #[S]) then
+                continue
+              let pf ← mkCongrArg motive (mkFVar fvs[1]!)
+              let name := (`hread).appendAfter s!"_{← q.fvarId!.getUserName}"
+              let ty ← mkEq (motive.beta #[S]) (motive.beta #[s])
+              let (_, g') ← (← g₁.assert name ty pf).intro1P
+              g₁ := g'
+            return g₁
+    replaceMainGoal [g]
 
 end SealState
 

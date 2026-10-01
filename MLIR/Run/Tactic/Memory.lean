@@ -295,7 +295,10 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
     return some pf
   match_expr goal with
   | Fits m p w =>
-    fitsProof? c.facts m p w
+    if let some pf← fitsProof? c.facts m p w then
+      return some pf
+    -- a width only this premise mentions (`readAt_alloca`'s), bound by a fact
+    transportWith c.factMap (← labelled `mlir_transport) 4 goal
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
     let_expr Range.of q w := b | return none
@@ -318,17 +321,19 @@ def readStep (c : MemCtx) (e : Expr) : MetaM (Option (Bool × Expr × Expr)) := 
     let some (_, lhs, rhs) := concl.eq? | continue
     if ← withReducible (isDefEq lhs e) then
       let mut ok := true
+      -- the premises; a value only they mention (`readAt_alloca`'s fitting width) bound by them
       for m in ms do
         if ← m.mvarId!.isAssigned then
           continue
         let ty ← instantiateMVars (← inferType m)
         unless ← isProp ty do
-          ok := false
-          break
+          continue
         let some pf ← dischargeRead c ty |
           ok := false;
           break
         m.mvarId!.assign pf
+      if ok then
+        ok ← ms.allM (·.mvarId!.isAssigned)
       if ok then
         -- past a write when the right side reads again
         return some

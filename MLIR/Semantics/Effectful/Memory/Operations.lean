@@ -203,7 +203,7 @@ theorem GlobalState.ne_allocaPtr_of_fits {s : GlobalState} (hwf : s.WF) (h : Fit
   have := hwf.lt h.mem
   simp [heq, GlobalState.allocaPtr] at this
 
-@[mlir_mem]
+@[mlir_mem, mlir_transport]
 theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n).WF := by
   intro k hk
   simp only [GlobalState.alloca, Std.ExtHashMap.mem_insert] at hk ⊢
@@ -221,6 +221,7 @@ theorem GlobalState.getElem?_alloca {s : GlobalState} (hq : q ≠ s.allocaPtr.id
     exact absurd (show s.allocaPtr.id = q by simpa [GlobalState.allocaPtr] using h) (Ne.symm hq)
   · rfl
 
+@[mlir_transport]
 theorem Fits.alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
     Fits (s.alloca n).mem q w := by
   obtain ⟨b, hb, hs⟩ := h
@@ -234,6 +235,7 @@ theorem Fits.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
+@[mlir_read]
 theorem MemoryState.readAt_alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w') :
     (s.alloca n).mem.readAt q w = s.mem.readAt q w := by
   simp only [MemoryState.readAt,
