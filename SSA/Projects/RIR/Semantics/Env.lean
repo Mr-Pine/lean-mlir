@@ -65,6 +65,16 @@ theorem read_write_dst (env : ⟪Γ⟫) (dst : Dst Γ t) (v : ⟦t⟧) :
   subst h
   simp [write, read, set]
 
+/-- Writing the value a register already holds changes nothing. -/
+theorem write_of_read (env : ⟪Γ⟫) (dst : Dst Γ t) (h : env.read (.val dst.i dst.h) = v) :
+    env.write dst v = env := by
+  obtain ⟨i, hi⟩ := dst
+  subst hi h
+  cases env
+  simp only [write, set, read, Env.mk.injEq, true_and]
+  funext j
+  split <;> rename_i h <;> (try subst h) <;> rfl
+
 theorem write_comm (env : ⟪Γ⟫) (h : dst.i ≠ dst'.i) :
     (env.write dst v).write dst' w = (env.write dst' w).write dst v := by
   unfold write

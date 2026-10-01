@@ -192,7 +192,8 @@ def evalStepPattern : Tactic := fun stx => do
       -- the lemma's names: a kept fact is referred to by them
       let (dead, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
       replaceMainGoal [← Tactic.reduceIndex main]
-      finishStep args.value args.hyp false mkNullNode true
+      -- the inputs keep the values named with `with`, as later patterns read them
+      finishStep args.value args.hyp false mkNullNode true (keepNamed := true)
       -- the pattern's intermediates: sealed away, so unused; its facts about them kept
       let mut main ← getMainGoal
       for x in dead.reverse do

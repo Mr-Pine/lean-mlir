@@ -74,6 +74,14 @@ def nameAllocaSlot : TacticM Unit :=
         else d.userName.appendAfter s!"_{xName}"
       let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
       g ← g'.clear d.fvarId
+    -- its offset, `0`: offsets into the slot (`x.add 24`) stay in range
+    g ←
+      g.withContext do
+          let off := mkApp (mkConst ``GlobalState.allocaPtr_offset) p.appArg!
+          let some (_, _, zero) := (← inferType off).eq? | return g
+          let pf ← mkEqTrans (← mkCongrArg (mkConst ``Pointer.offset) (.fvar hx)) off
+          let ty ← mkEq (← mkAppM ``Pointer.offset #[.fvar x]) zero
+          return (← (← g.assert ((`h).appendAfter s!"{xName}_off") ty pf).intro1P).2
     replaceMainGoal [g]
 
 @[tactic stepAlloca]

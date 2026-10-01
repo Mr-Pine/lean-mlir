@@ -152,6 +152,21 @@ def evalFinishBlock : Tactic := fun stx =>
     let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env true
     replaceMainGoal [← replaceBySimp g ret r]
 
+/-- Erase a frame from a result state: stores into the frame's blocks and its `alloca`s are
+dropped, their bounds `n ≤ _` by a fact or `omega` over the counters; then the erase itself, below a
+`WF` state's counter. -/
+macro "erase_frame" : tactic =>
+  `(tactic|
+    ( simp (disch :=
+        first
+        | assumption
+        |
+          (simp only [GlobalState.allocaPtr_id_id, GlobalState.alloca_alloc, Pointer.add];
+            omega)) only [MemoryState.eraseFrom_storeAt,
+        MemoryState.storeAt_eraseFrom_of_le, GlobalState.eraseFrom_alloca,
+        GlobalState.eraseFrom_alloca_of_le]
+      try simp (disch := assumption) only [GlobalState.WF.eraseFrom]))
+
 end
 
 end LeanMLIR.RIR

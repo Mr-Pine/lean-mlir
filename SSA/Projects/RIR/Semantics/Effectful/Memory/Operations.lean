@@ -105,6 +105,64 @@ theorem MemoryState.readAt_storeAt_subrange (hfits : Fits m p v) (hid : q.id = p
   simp [readAt, hid, getElem?_storeAt_self hblk]
   exact extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) hw hsz
 
+/-- `p.add off`'s offset in bits, without overflow. -/
+theorem Pointer.offsetInBits_add {p : Pointer} {off : BitVec 64}
+    (hov : ¬p.offset.uaddOverflow off) :
+    (p.add off).offsetInBits = p.offsetInBits + off.toNat * 8 := by
+  simp only [Pointer.offsetInBits, Pointer.add, BitVec.toNat_add_of_not_uaddOverflow hov]
+  omega
+
+/-- A range inside `p`'s fits too. -/
+theorem Fits.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
+    (hw : off.toNat * 8 + w ≤ v) (h : Fits m p v) : Fits m (p.add off) w := by
+  obtain ⟨blk, hblk, hsz⟩ := h
+  exact
+    ⟨blk, hblk, by
+      rw [Pointer.offsetInBits_add hov]; omega⟩
+
+/-- A read inside a store: the stored value's bits. -/
+@[mlir_read]
+theorem MemoryState.readAt_storeAt_add {off : BitVec 64} (hfits : Fits m p v)
+    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x : BitVec v) :
+    (m.storeAt p x).readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w := by
+  rw [readAt_storeAt_subrange (q := p.add off) hfits rfl
+      (by
+        rw [Pointer.offsetInBits_add hov]; omega)
+      (by
+        rw [Pointer.offsetInBits_add hov]; omega)]
+  rw [Pointer.offsetInBits_add hov, Nat.add_sub_cancel_left]
+
+/-- A read inside a known read: its bits. -/
+theorem MemoryState.readAt_add_of_readAt {off : BitVec 64} (hfits : Fits m p v)
+    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (h : m.readAt p v = x) :
+    m.readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w := by
+  subst h
+  obtain ⟨blk, hblk, hsz⟩ := hfits
+  have hblk' : m[(p.add off).id]? = some blk := hblk
+  simp only [readAt, hblk, hblk', Pointer.offsetInBits_add hov]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb']
+  grind
+
+/-- A read over a store inside it: the bits read before, with the stored ones spliced in. -/
+@[mlir_read]
+theorem MemoryState.readAt_add_storeAt {off : BitVec 64} (hfits : Fits m p v)
+    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x : BitVec w) :
+    (m.storeAt (p.add off) x).readAt p v = spliceBits (m.readAt p v) (off.toNat * 8) x := by
+  obtain ⟨blk, hblk, hsz⟩ := hfits
+  have hs :
+    (m.storeAt (p.add off) x)[p.id]? =
+      some { blk with bytes := spliceBits blk.bytes (p.add off).offsetInBits x } :=
+    getElem?_storeAt_self (p := p.add off) hblk
+  simp only [readAt, hs, hblk]
+  unfold MemoryBlock.lengthInBits at hsz
+  rw [Pointer.offsetInBits_add hov]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', getLsbD_spliceBits]
+  grind
+
 @[mlir_mem, mlir_transport]
 theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
   unfold Fits
@@ -203,6 +261,15 @@ theorem GlobalState.ne_allocaPtr_of_fits {s : GlobalState} (hwf : s.WF) (h : Fit
   have := hwf.lt h.mem
   simp [heq, GlobalState.allocaPtr] at this
 
+/-- Advancing the block counter keeps a state well-formed: a callee's frames, freed again. -/
+@[mlir_transport]
+theorem GlobalState.WF.add_blocks {s : GlobalState} (h : s.WF) :
+    (⟨⟨s.alloc.nextFreeBlock + k⟩, s.mem⟩ : GlobalState).WF := by
+  intro b hb
+  have := h b hb
+  dsimp
+  omega
+
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n).WF := by
   intro k hk
@@ -277,6 +344,18 @@ theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
   split
   · rename_i h; simp at h; subst h; simp
+  · rfl
+
+/-- An `alloca` at or above `n` is gone once the frame from `n` is erased. -/
+@[mlir_frame]
+theorem GlobalState.eraseFrom_alloca_of_le {s : GlobalState} (h : n ≤ s.alloc.nextFreeBlock) :
+    (s.alloca b).mem.eraseFrom n = s.mem.eraseFrom n := by
+  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  apply Std.ExtHashMap.ext_getElem?
+  intro k
+  simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
+  split
+  · rename_i h'; simp at h'; subst h'; simp [show ¬s.alloc.nextFreeBlock < n by omega]
   · rfl
 
 /-- A store into an erased block does nothing. -/

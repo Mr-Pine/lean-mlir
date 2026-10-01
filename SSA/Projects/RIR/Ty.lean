@@ -151,9 +151,13 @@ theorem extractVecElem_eq (x : BitVec (w * l)) :
     extractVecElem l w i x = x.extractLsb' (i.val * w) w := by
   unfold extractVecElem; rfl
 
+@[mlir_operation]
 theorem extractVecElem_packLanes {xs : Vector (BitVec _) l} :
     extractVecElem l w i (BitVec.packLanes xs) = xs[i] := by
   simp [extractVecElem, BitVec.extractLsb'_packLanes]
+
+-- a vector rebuilt from its lanes: a load of a stored vector
+attribute [mlir_operation] Vector.ofFn_getElem
 
 def unflatten : (t : Ty) → BitVec t.width → ⟦t⟧
   | bv _, x => .value x

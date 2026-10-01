@@ -101,8 +101,8 @@ def clearStaleBodyFacts : TacticM Unit :=
         g ← g.tryClear d.fvarId
     replaceMainGoal [g]
 
-def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool) :
-    TacticM Unit :=
+def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool)
+    (keepNamed := false) : TacticM Unit :=
   withMainContext do
     clearStaleBodyFacts
     -- a call writes its results with `writeMany`: unfold it into single writes (none for `void`)
@@ -122,7 +122,8 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
     let envWrite ← getEnvWrite runBodyFrom.env
     let env := envWrite.base
     let resultValue ←
-      simpValue only simpArgs envWrite.value env expand -- Let simp work on the newly written value
+      simpValue only simpArgs envWrite.value env expand
+          keepNamed -- Let simp work on the newly written value
     replaceMainGoal [← replaceBySimp g envWrite.value resultValue]
     -- If not `inline`, extract the value into a local variable with a hypothesis
     match value with
