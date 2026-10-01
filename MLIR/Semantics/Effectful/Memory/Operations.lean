@@ -72,14 +72,14 @@ theorem MemoryState.getElem?_storeAt_isSome {m : MemoryState} {i : BlockId} :
     | none => simp [storeAt, h']
     | some blk => simp [storeAt, h', getElem?_eq, h]
 
-@[mlir_mem]
+@[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeAt_self (hfits : Fits m p w) (x : BitVec w) :
     (m.storeAt p x).readAt p w = x := by
   obtain ⟨blk, hblk, hsz⟩ := hfits
   unfold MemoryBlock.lengthInBits at hsz
   simp [readAt, getElem?_storeAt_self hblk, extractLsb'_spliceBits_self, hsz]
 
-@[mlir_mem]
+@[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeAt_disjoint {v w : Nat} {m : MemoryState}
     (h : (Range.of p v).Disjoint (Range.of q w)) (x : BitVec v) :
     (m.storeAt p x).readAt q w = m.readAt q w := by

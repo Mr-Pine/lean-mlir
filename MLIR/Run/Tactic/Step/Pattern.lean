@@ -92,10 +92,15 @@ def closeByDecide (g : MVarId) : MetaM Unit := do
   g.assign (← mkDecideProof ty)
 
 /-- Close a side condition by a local hypothesis (a fact about the pattern's inputs, like a flag
-being `0` or `1`), or one about an earlier state through `transport_fact`, else by `decide`. -/
+being `0` or `1`), a `≠` from a `Nodup`, or one about an earlier state through `transport_fact`,
+else by `decide`. -/
 def closeSide (g : MVarId) : TacticM Unit := do
   if ← g.assumptionCore then
     return
+  if let some (_, a, b) := (← instantiateMVars (← g.getType)).ne? then
+    if let some pf← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b then
+      g.assign pf
+      return
   if (← observing? (Tactic.run g (evalTactic (← `(tactic| transport_fact))))) matches some [] then
     return
   closeByDecide g
@@ -170,21 +175,20 @@ def evalStepPattern : Tactic := fun stx => do
       g.assign (← instantiateMVars (mkAppN lem ms))
       let (dead, main) ← cont.intros
       replaceMainGoal [← Tactic.reduceIndex main]
-      -- a pattern that stores: its new state sealed, as an impure step's
-      let outState ←
-        withMainContext do
-            return (← getRunBodyFrom (← getGoalType).2).state
-      let goals ←
-        if outState != inState then
-          sealStep inState #[]
-        else
-          pure #[]
       finishStep args.value args.hyp false mkNullNode true
       -- the pattern's intermediates: sealed away, so unused
       let mut main ← getMainGoal
       for x in dead do
         main ← main.tryClear x
-      replaceMainGoal (main :: goals.toList)
+      replaceMainGoal [main]
+      -- a pattern that stores: its new state sealed, as an impure step's (last: `substCore`
+      -- reintroduces the locals after the state)
+      let outState ←
+        withMainContext do
+            return (← getRunBodyFrom (← getGoalType).2).state
+      if outState != inState then
+        let goals ← sealStep inState #[]
+        replaceMainGoal ((← getMainGoal) :: goals.toList)
 
 end
 

@@ -228,6 +228,7 @@ public theorem fd_f25519_sub.call_eq (r a b : Pointer) (s : GlobalState) (hwf : 
   step_store
   finish_block
   rw [hS]
+  subst_vars
   congr 1; congr 1; congr 1; congr 1; congr 1
   apply Vector.ext
   intro i hi

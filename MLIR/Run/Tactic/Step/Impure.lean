@@ -29,7 +29,17 @@ syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
 unproved ones are returned as goals) and dropping the `consumed` ones. -/
 def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) := do
-  let ⟨S', hS', hS⟩ ← sealState inState
+  -- the new state's memory facts, about it as a term over `inState`, then generalized with it
+  let (mem, olds) ←
+    withMainContext do
+        let (g, goal) ← getGoalType
+        let (hyps, olds, g) ← Tactic.memFactsOf g inState (← getRunBodyFrom goal).state
+        replaceMainGoal [g]
+        return (hyps, olds)
+  let ⟨S', hS', hS⟩ ← sealState inState mem
+  -- the old read facts: carried over by `memFactsOf`, used by `sealState`'s simplification
+  withMainContext do
+      replaceMainGoal [← (← getMainGoal).tryClearMany olds]
   -- Drop the consumed facts, where nothing else depends on them
   withMainContext do
       let mut g ← getMainGoal
@@ -40,7 +50,10 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
   -- Get facts to preserve
   let goals ←
     withMainContext do
-        let preserveHyps ← hypsMentioning inState (except := #[hS', hS])
+        -- not the new state's own facts (its reads may mention `inState` in their values)
+        let preserveHyps ←
+          (← hypsMentioning inState (except := #[hS', hS])).filterM fun h => do
+              return !(← instantiateMVars (← h.getType)).containsFVar S'
         let mut g ← getMainGoal
         let mut goals := #[]
         let hSId := mkIdent (← hS.getUserName)
@@ -53,21 +66,20 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
           let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
           let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
           g ← g'.clear hyp
-          -- fast path, without elaborating tactics: `P S₀chain` from `hS`, one or two
-          -- transport lemmas to `P (new state)`, then `hS'` back
+          -- fast path, without elaborating tactics: `P S`, one or two transport lemmas to
+          -- `P (new state)`, then `hS'` back
           let fast? ←
             observing? do
-                let some (_, _, chain) := (← instantiateMVars (← hS.getType)).eq? | failure
                 let some (_, _, new) := (← instantiateMVars (← hS'.getType)).eq? | failure
                 let motive ←
                   withLocalDeclD `s (← inferType inState) fun x => do
                       mkLambdaFVars #[x]
                           ((← kabstract (← instantiateMVars decl.type) inState).instantiate1 x)
-                let h₀ ← mkEqNDRec motive (.fvar hyp) (.fvar hS)
-                -- keyed as is, and `dsimp`ed like the new state
-                let key ← instantiateMVars (motive.beta #[chain])
+                -- `P S`, keyed as is, and `dsimp`ed like the new state
+                let key ← instantiateMVars decl.type
                 let facts : Std.HashMap Expr Expr :=
-                  (({} : Std.HashMap Expr Expr).insert key h₀).insert (← Tactic.dsimpState key) h₀
+                  (({} : Std.HashMap Expr Expr).insert key (.fvar hyp)).insert
+                    (← Tactic.dsimpState key) (.fvar hyp)
                 let some pf ←
                   Tactic.transportWith facts (← labelled `mlir_transport) 2
                       (motive.beta #[new]) | failure
@@ -105,14 +117,21 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
         let (fs, g') ← substCore g hS (symm := false)
         g := g'
         g ← g.rename (fs.get S').fvarId! `S
-        g ← g.rename (fs.get hS').fvarId! `hS
+        let hNew := (fs.get hS').fvarId!
+        g ← g.rename hNew `hS
+        -- the substituted old state's projections reduced
+        g ←
+          g.withContext do
+              let some (_, l, r) := (← instantiateMVars (← hNew.getType)).eq? | return g
+              g.replaceLocalDeclDefEq hNew (← mkEq l (← Tactic.dsimpState r))
         setGoals [g]
         return goals
   return goals
 
 /-- Step a pure instruction, extending the env with the new value -/
 def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
-    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) : TacticM Unit :=
+    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) (keepNamed := false) :
+    TacticM Unit :=
   focus do
     Tactic.ensureStateEq
     withMainContext do
@@ -129,8 +148,8 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         let operation := op_run.appFn!.appFn!
         setGoals [runGoal] -- Makes the following simp work
         let resultValue ←
-          simpValue only simpArgs operation (← getRunBodyFrom goal).env
-              expand -- Let simp work on the newly written value
+          simpValue only simpArgs operation (← getRunBodyFrom goal).env expand
+              keepNamed -- Let simp work on the newly written value
         let runGoal ← replaceBySimp runGoal operation resultValue
         -- Apply runTactics to runGoal
         setGoals [runGoal]
@@ -168,14 +187,10 @@ elab "fits_fact" : tactic =>
   withMainContext do
     let g ← getMainGoal
     let_expr Fits m p w := ← instantiateMVars (← g.getType) | throwError "goal is not `Fits`"
-    for (pf, ty) in ← Tactic.splitConjunctedFacts do
-      let_expr Fits m' p' w' := ty | continue
-      -- `isDefEq` for `w`: the goal's is `(Ty.bv 64).width`
-      if m' == m && p' == p && (← withNewMCtxDepth (isDefEq w' w)) then
-        g.assign pf
-        replaceMainGoal []
-        return
-    throwError "no fact `{← g.getType}`"
+    let some pf ←
+      Tactic.fitsProof? (← Tactic.splitConjunctedFacts) m p w | throwError "no fact `{← g.getType}`"
+    g.assign pf
+    replaceMainGoal []
 
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
@@ -187,11 +202,14 @@ def evalStepLoad : Tactic := fun stx => do
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
-  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
+  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
+  -- the stored value keeps the values named with `with`: unfolded, they would inline into the state
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
       (←
         `(tacticSeq|
         expect_values
         exact run_store (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
+      args.consumed (keepNamed := true)
 
 end InstructionSpecific
 

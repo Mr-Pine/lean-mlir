@@ -32,4 +32,9 @@ public meta section
 the step tactics' fast path -/
 register_label_attr mlir_transport
 
+/-- Reads through a write: back (`read (store m p x) p = x`), or past it (`read (write m …) p =
+read m p`), side conditions allowed. The step tactics record a write's read back as a fact about the
+new state, and carry read facts past writes -/
+register_label_attr mlir_read
+
 end
