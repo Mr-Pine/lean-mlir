@@ -277,6 +277,8 @@ def runSeal : TacticM Unit :=
     let partitionProof ← partitionProof liveRegs E₀ chain
     let hE' ← mkEqTrans (.fvar hE) partitionProof
     let r ← g.assertAfter hE `hE (← inferType hE') hE'
+    -- `assertAfter` reintroduces the locals after `hE`: the carried facts by their new ids
+    carried := carried.map fun (h, n, ty) => ((r.subst.get h).fvarId!, n, r.subst.apply ty)
     let mut g ← r.mvarId.clear hE
     let (facts, g') ←
       g.assertHypotheses
