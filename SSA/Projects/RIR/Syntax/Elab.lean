@@ -3,8 +3,10 @@ module
 public import SSA.Projects.RIR.Syntax.Parser
 public import SSA.Projects.RIR.Syntax.Translate
 public import SSA.Projects.RIR.Semantics.Func
+public import SSA.Projects.RIR.TyTree
 public meta import SSA.Projects.RIR.Syntax.Parser
 public meta import SSA.Projects.RIR.Syntax.Translate
+public meta import SSA.Projects.RIR.TyTree
 public meta import Lean.Elab.Command
 
 /-!
@@ -12,7 +14,8 @@ public meta import Lean.Elab.Command
 
 `mlir_def X binders := { region } with @f := t, …` translates a generic-form MLIR region and
 defines it in the shape of a hand lift:
-* `X.Γ`, `X.blockTys`, `X.blockParams` (`abbrev`s);
+* `X.Γ`, `X.tree`, `X.blockTys`, `X.blockParams` (`abbrev`s), and `X.hty`, which proves a value
+  register's type from `X.tree`;
 * one `def` per block: `X.entry` for a single block, else `X.bb0`, `X.bb1`, … by MLIR name;
 * `X : Func` (`@[reducible]`), and `X.args`, the argument vector.
 
@@ -48,13 +51,33 @@ def tyStx : Ty → CommandElabM (TSyntax `term)
 def tysStx (ts : List Ty) : CommandElabM (TSyntax `term) := do
   `([$(← ts.toArray.mapM tyStx),*])
 
-def regStx : RegRef → CommandElabM (TSyntax `term)
+/-- The value registers' types, and `hty`, the lemma that proves them. -/
+structure ValTys where
+  hty : Ident
+  vals : List Ty
+
+/-- `Γ.ty i = t` for value register `i` of type `t`: `hty i t rfl`. -/
+def ValTys.proof (tys : ValTys) (i : Nat) : CommandElabM (TSyntax `term) := do
+  `($(tys.hty) $(num i) $(← tyStx ((tys.vals[i]?).getD (.bv 0))) rfl)
+
+def regStx (tys : ValTys) : RegRef → CommandElabM (TSyntax `term)
   | .arg i => `((.arg $(num i) rfl))
   | .val i => do
-    `((.val $(num i) rfl))
+    `((.val $(num i) $(← tys.proof i)))
 
-def dstStx (i : Nat) : CommandElabM (TSyntax `term) := do
-  `(⟨$(num i), rfl⟩)
+def dstStx (tys : ValTys) (i : Nat) : CommandElabM (TSyntax `term) := do
+  `(⟨$(num i), $(← tys.proof i)⟩)
+
+/-- The trie literal. -/
+def treeStx : TyTree → CommandElabM (TSyntax `term)
+  | .leaf t => do
+    `(.leaf $(← tyStx t))
+  | .node l r => do
+    `(.node $(← treeStx l) $(← treeStx r))
+
+/-- The least `d` with `n ≤ 2 ^ d`. -/
+def depth (n : Nat) : Nat :=
+  if n ≤ 1 then 0 else (n - 1).log2 + 1
 
 /-- `.cons x₀ (.cons x₁ … .nil)`. -/
 def consStx (xs : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
@@ -144,44 +167,47 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
 
 /-- The instruction, calling `callee f` for `@f`. -/
-def instrStx (callee : String → TSyntax `term) : PInstr → CommandElabM (TSyntax `term)
+def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
+    PInstr → CommandElabM (TSyntax `term)
   | .const c d => do
-    `(.const $(← constStx c) $(← dstStx d))
+    `(.const $(← constStx c) $(← dstStx tys d))
   | .poison _ d => do
-    `(.poison $(← dstStx d))
+    `(.poison $(← dstStx tys d))
   | .unop op d a => do
-    `(.unop $(← unOpStx op) $(← dstStx d) $(← regStx a))
+    `(.unop $(← unOpStx op) $(← dstStx tys d) $(← regStx tys a))
   | .binop op d a b => do
-    `(.binop $(← binOpStx op) $(← dstStx d) $(← regStx a) $(← regStx b))
+    `(.binop $(← binOpStx op) $(← dstStx tys d) $(← regStx tys a) $(← regStx tys b))
   | .ternop op d a b c => do
-    `(.ternop $(← ternOpStx op) $(← dstStx d) $(← regStx a) $(← regStx b) $(← regStx c))
+    `(.ternop $(← ternOpStx op) $(← dstStx tys d) $(← regStx tys a) $(← regStx tys b)
+          $(← regStx tys c))
   | .load _ d p => do
-    `(.load $(← dstStx d) $(← regStx p))
+    `(.load $(← dstStx tys d) $(← regStx tys p))
   | .store _ p v => do
-    `(.store $(← regStx p) $(← regStx v))
+    `(.store $(← regStx tys p) $(← regStx tys v))
   | .memset _ dst v l => do
-    `(.memset $(← regStx dst) $(← regStx v) $(← regStx l))
+    `(.memset $(← regStx tys dst) $(← regStx tys v) $(← regStx tys l))
   | .memcpy _ dst src l => do
-    `(.memcpy $(← regStx dst) $(← regStx src) $(← regStx l))
+    `(.memcpy $(← regStx tys dst) $(← regStx tys src) $(← regStx tys l))
   | .alloca d n => do
-    `(.alloca $(← dstStx d) $(num n))
+    `(.alloca $(← dstStx tys d) $(num n))
   | .lifetimeStart p n => do
-    `(.lifetimeStart $(← regStx p) $(num n))
+    `(.lifetimeStart $(← regStx tys p) $(num n))
   | .lifetimeEnd p n => do
-    `(.lifetimeEnd $(← regStx p) $(num n))
+    `(.lifetimeEnd $(← regStx tys p) $(num n))
   | .call f _ _ args rets => do
-    `(.call $(callee f) $(← consStx (← args.mapM (regStx))) $(← consStx (← rets.mapM (dstStx))))
+    `(.call $(callee f) $(← consStx (← args.mapM (regStx tys)))
+          $(← consStx (← rets.mapM (dstStx tys))))
 
-def jumpStx (j : PJump) : CommandElabM (TSyntax `term) := do
-  `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx)))⟩)
+def jumpStx (tys : ValTys) (j : PJump) : CommandElabM (TSyntax `term) := do
+  `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx tys)))⟩)
 
-def exitStx : PExit → CommandElabM (TSyntax `term)
+def exitStx (tys : ValTys) : PExit → CommandElabM (TSyntax `term)
   | .ret vs => do
-    `(.ret $(← consStx (← vs.mapM (regStx))))
+    `(.ret $(← consStx (← vs.mapM (regStx tys))))
   | .br j => do
-    `(.br $(← jumpStx j))
+    `(.br $(← jumpStx tys j))
   | .condBr c t f => do
-    `(.condBr $(← regStx c) $(← jumpStx t) $(← jumpStx f))
+    `(.condBr $(← regStx tys c) $(← jumpStx tys t) $(← jumpStx tys f))
   | .switch w v d cs => do
     let cs ←
       cs.toArray.mapM fun (c, j) => do
@@ -190,8 +216,8 @@ def exitStx : PExit → CommandElabM (TSyntax `term)
               `(BitVec.ofInt $(num w) $(← intLit c))
             else
               `(BitVec.ofNat $(num w) $(num c.toNat))
-          `(($c, $(← jumpStx j)))
-    `(.switch $(← regStx v) $(← jumpStx d) [$cs,*])
+          `(($c, $(← jumpStx tys j)))
+    `(.switch $(← regStx tys v) $(← jumpStx tys d) [$cs,*])
 
 /-! ## Callees and binders -/
 
@@ -277,6 +303,8 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
   let Γ := name `Γ
   let blockTys := name `blockTys
   let blockParams := name `blockParams
+  let tree := name `tree
+  let tys : ValTys := { hty := name `hty, vals := p.Γ.vals }
   let blockName (b : PBlock) : Ident := name (if n == 1 then `entry else .mkSimple b.name)
   let tRets ← tysStx p.tRets
   let cmds ← do
@@ -286,6 +314,12 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       -- the kernel checks the count: the elaborator would recurse once per value
       `(abbrev $Γ : Ctx :=
           ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), $(← tysStx p.Γ.vals), by decide +kernel⟩)
+    let d := depth p.Γ.n
+    let treeDef ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d p.Γ.vals)))
+    -- the kernel checks the trie against `Γ.vals` once
+    let htyDef ←
+      `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
+          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h)
     let tysDef ←
       if n == 1 then `(abbrev $blockTys : Fin 1 → List Ty := fun _ => [])
       else
@@ -300,15 +334,15 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
         `(abbrev $blockParams : (k : Fin 1) → Dsts $Γ ($blockTys k) := fun _ => .nil)
       else
         let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
-          let ds ← consStx (← b.params.mapM (dstStx))
+          let ds ← consStx (← b.params.mapM (dstStx tys))
           `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $ds)
         `(abbrev $blockParams : (k : Fin $(num n)) → Dsts $Γ ($blockTys k) :=
             fun $alts:matchAlt*)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
-      let body ← b.body.toArray.mapM (instrStx callee)
+      let body ← b.body.toArray.mapM (instrStx tys callee)
       `(def $(blockName b) $bs* : BasicBlock $Γ $tRets $blockTys :=
-          { body := [$body,*], exit := $(← exitStx b.exit) })
+          { body := [$body,*], exit := $(← exitStx tys b.exit) })
     let blocksVal ←
       if let [b] := p.blocks then `(fun _ => $(blockName b) $((blockBinders b).2)*)
       else
@@ -326,7 +360,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       `(Lean.Parser.Term.bracketedBinderF| ($a : ⟦($(← tyStx t) : Ty)⟧))
     let argsDef ←
       `(def $(name `args) $argBinders* : Vals ($Γ).args := $(← consStx (argNames.map (⟨·.raw⟩))))
-    pure (#[Γdef, tysDef, paramsDef] ++ blockDefs ++ #[funcDef, argsDef])
+    pure (#[Γdef, treeDef, htyDef, tysDef, paramsDef] ++ blockDefs ++ #[funcDef, argsDef])
   for c in cmds do
     elabCommand c
 
