@@ -122,7 +122,7 @@ mlir_def predicate := {
     "llvm.return"(%0) : (i1) -> ()
 }
 
-/-- error: llvm.call to @g: no callee bound; add `with @g := …`, or define a `g : Func` -/
+/-- error: llvm.call to @g: no callee bound; add `with @g := …` -/
 #guard_msgs in
 mlir_def noCallee := {
   ^bb0(%arg0: i64):
@@ -130,29 +130,56 @@ mlir_def noCallee := {
     "llvm.return"(%0) : (i64) -> ()
 }
 
+mlir_def id32 := {
+  ^bb0(%arg0: i32):
+    "llvm.return"(%arg0) : (i32) -> ()
+}
+
+mlir_def id64 := {
+  ^bb0(%arg0: i64):
+    "llvm.return"(%arg0) : (i64) -> ()
+}
+
 /--
 error: @g: the call sites need a callee of type
   Vals [Ty.bv 64] → EffectM (Vals [Ty.bv 64])
-but the term has type
+but `id32.call` has type
   Vals [Ty.bv 32] → EffectM (Vals [Ty.bv 32])
 -/
 #guard_msgs in
-mlir_def calleeType (g : Vals [.bv 32] → EffectM (Vals [.bv 32])) := {
+mlir_def calleeType := {
   ^bb0(%arg0: i64):
     %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
     "llvm.return"(%0) : (i64) -> ()
-} with @g := g
+} with @g := id32
 
--- a single block whose callee is a binder: `blocks` applies it
+/--
+error: Type mismatch
+  g
+has type
+  Vals [Ty.bv 64] → EffectM (Vals [Ty.bv 64])
+but is expected to have type
+  Func
+-/
 #guard_msgs in
-mlir_def calleeBinder (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) := {
+mlir_def calleeNotFunc (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) := {
   ^bb0(%arg0: i64):
     %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
     "llvm.return"(%0) : (i64) -> ()
 } with @g := g
 
-example (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) :
-    (calleeBinder g).blocks 0 = calleeBinder.entry g := rfl
+/-- `id64`, for any `k`. -/
+def pick (_ : Nat) : Func := id64
+
+-- a single block whose callee mentions a binder: `blocks` applies it
+#guard_msgs in
+mlir_def calleeBinder (k : Nat) := {
+  ^bb0(%arg0: i64):
+    %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+} with @g := pick k
+
+example (k : Nat) : (calleeBinder k).blocks 0 = calleeBinder.entry k := rfl
 
 /--
 error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch

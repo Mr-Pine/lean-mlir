@@ -19,6 +19,32 @@ abbrev SqrFast := Vals [V] → EffectM (Vals [V])
 /-- `fd_r43x6_mul_fast`'s type. -/
 abbrev MulFast := Vals [V, V] → EffectM (Vals [V])
 
+/-- The `Func` returning `sqr x`. -/
+@[reducible] def sqrFunc (sqr : SqrFast) : Func where
+  Γ := ⟨1, [V], [V], rfl⟩
+  tRets := [V]
+  n := 1
+  blockTys _ := []
+  blockParams _ := .nil
+  hhasBlock := by decide
+  hentry := rfl
+  blocks _ :=
+    { body := [.call sqr (.cons (.arg 0 rfl) .nil) (.cons ⟨0, rfl⟩ .nil)]
+      exit := .ret (.cons (.val 0 rfl) .nil) }
+
+/-- The `Func` returning `mul x y`. -/
+@[reducible] def mulFunc (mul : MulFast) : Func where
+  Γ := ⟨1, [V, V], [V], rfl⟩
+  tRets := [V]
+  n := 1
+  blockTys _ := []
+  blockParams _ := .nil
+  hhasBlock := by decide
+  hentry := rfl
+  blocks _ :=
+    { body := [.call mul (.cons (.arg 0 rfl) (.cons (.arg 1 rfl) .nil)) (.cons ⟨0, rfl⟩ .nil)]
+      exit := .ret (.cons (.val 0 rfl) .nil) }
+
 mlir_def fd_r43x6_repsqr_mul2 (sqr : SqrFast) (mul : MulFast) :=
 {
   ^bb0(%arg0: !llvm.ptr, %arg1: vector<8xi64>, %arg2: vector<8xi64>, %arg3: !llvm.ptr, %arg4: vector<8xi64>, %arg5: vector<8xi64>, %arg6: i64):
@@ -59,7 +85,7 @@ mlir_def fd_r43x6_repsqr_mul2 (sqr : SqrFast) (mul : MulFast) :=
     "llvm.store"(%33, %arg3) <{alignment = 64 : i64, ordering = 0 : i64, tbaa = [#tbaa_tag]}> : (vector<8xi64>, !llvm.ptr) -> ()
     "llvm.return"() : () -> ()
 }
-  with @fd_r43x6_sqr_fast := sqr, @fd_r43x6_mul_fast := mul
+  with @fd_r43x6_sqr_fast := sqrFunc sqr, @fd_r43x6_mul_fast := mulFunc mul
 
 /-! The hand lift, for comparison. -/
 namespace Hand
@@ -170,7 +196,8 @@ def fd_r43x6_repsqr_mul2.args (za : ⟦Ty.ptr⟧) (xa ya : ⟦V⟧) (zb : ⟦Ty.
 end Hand
 
 example (sqr : SqrFast) (mul : MulFast) :
-    fd_r43x6_repsqr_mul2 sqr mul = Hand.fd_r43x6_repsqr_mul2 sqr mul := rfl
+    fd_r43x6_repsqr_mul2 sqr mul = Hand.fd_r43x6_repsqr_mul2 (sqrFunc sqr).call (mulFunc mul).call :=
+  rfl
 example : fd_r43x6_repsqr_mul2.args = Hand.fd_r43x6_repsqr_mul2.args := rfl
 
 end
