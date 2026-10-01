@@ -143,7 +143,7 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
             do
               let some idx ←
                 dstIndex? envWrite.dst | throwError m!"Could not get dst index from {envWrite.dst}"
-              pure (Tactic.autoValueName idx)
+              pure ((`v).appendAfter (toString idx))
         let hyp_name ←
           match hyp with
           | .inline =>
@@ -162,8 +162,13 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
         unless abstractionTarget.isFVar do
           let (_, g) ←
             g.withContext do
+                -- a value named with `with` stays folded where the state takes it
+                let named := value matches .named _
                 generalizeOpaque g (hyps := #[]) abstractionTarget var_name
-                    #[⟨hyp_name, (mkEq · abstractionTarget), ← mkEqRefl abstractionTarget⟩]
+                    #[⟨hyp_name, fun x => do
+                        let ty ← mkEq x abstractionTarget
+                        return if named then Tactic.tagNamed ty else ty,
+                        ← mkEqRefl abstractionTarget⟩]
           replaceMainGoal [g]
     -- Extract new `E`
     sealEnv

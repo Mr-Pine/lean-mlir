@@ -105,7 +105,7 @@ private def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
       (fun acc d => do
         if d.isImplementationDetail then
           return acc
-        let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
+        let some (_, l, _) := (← instantiateMVars d.type).consumeMData.eq? | return acc
         return if l == lhs then acc.push d.fvarId else acc)
 
 /-- The unique hypothesis `_ : lhs = _`, if there is one. -/
@@ -146,14 +146,19 @@ def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
     return some (← mkAppM ``Ne.symm #[← ne j i])
   return none
 
-/-- The generated name `vN` of the step value written to register `idx`. -/
-def autoValueName (idx : Nat) : Name :=
-  (`v).appendAfter (toString idx)
+/-- The tag on the equation `hx : x = _` of a step value named with `with`. -/
+def namedTag : Name :=
+  `rir_named
 
-/-- A step value's generated name (`autoValueName`), not one given with `with`. -/
-def isAutoValueName (n : Name) : Bool :=
-  match n with
-  | .str .anonymous s => s.length > 1 && s.front == 'v' && (s.drop 1).all Char.isDigit
+/-- `ty`, the equation of a step value named with `with`, tagged so: such a value stays folded where
+the state takes it. -/
+def tagNamed (ty : Expr) : Expr :=
+  mkMData (KVMap.empty.insert namedTag (.ofBool true)) ty
+
+/-- Whether `ty` is a named value's equation (`tagNamed`). -/
+def isNamedEq (ty : Expr) : Bool :=
+  match ty with
+  | .mdata d _ => d.getBool namedTag
   | _ => false
 
 end

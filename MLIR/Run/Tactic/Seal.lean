@@ -208,7 +208,7 @@ def clearUnusedValues (g : MVarId) : MetaM MVarId :=
       let xs := (collectFVars {} ty).fvarIds
       for x in xs do
         uses := uses.alter x (some <| ·.getD 0 + 1)
-      if let some (_, .fvar v, _) := ty.eq? then
+      if let some (_, .fvar v, _) := ty.consumeMData.eq? then
         unless ← isProp (← v.getType) do
           defs := defs.push (v, d.fvarId, xs)
     for x in (collectFVars {} (← instantiateMVars (← g.getType))).fvarIds do

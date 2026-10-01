@@ -36,7 +36,7 @@ def unfoldLocals (v pf : Expr) : MetaM (Expr × Expr) := do
   let mut pf := pf
   for x in (collectFVars {} v).fvarIds do
     let some h ← Tactic.findEqWithLhs? (.fvar x) m!"" | continue
-    let some (_, _, t) := (← instantiateMVars (← h.getType)).eq? | continue
+    let some (_, _, t) := (← instantiateMVars (← h.getType)).consumeMData.eq? | continue
     let motive ←
       withLocalDeclD `y (← x.getType) fun y => do
           mkLambdaFVars #[y] (v.replaceFVar (.fvar x) y)
