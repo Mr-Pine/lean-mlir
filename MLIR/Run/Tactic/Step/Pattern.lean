@@ -7,6 +7,7 @@ public meta import MLIR.Run.Tactic.Util
 public meta import MLIR.Run.Tactic.Env
 public meta import MLIR.Run.Tactic.Seal
 public meta import MLIR.Run.Tactic.State
+public meta import MLIR.Run.Tactic.Step.Impure
 public meta import MLIR.Run.Tactic.Step.Common
 public meta import MLIR.Run.Tactic.Step.Syntax
 public meta import Lean.Elab.Tactic
@@ -100,77 +101,90 @@ def closeSide (g : MVarId) : TacticM Unit := do
   closeByDecide g
 
 @[tactic stepPattern]
-def evalStepPattern : Tactic := fun stx =>
+def evalStepPattern : Tactic := fun stx => do
+  -- the state as `S` with `hS`, to seal what the pattern stores
+  Tactic.ensureStateEq
   withMainContext do
-    let args :=
-      StepArgs.parse (mkNullNode #[mkNullNode, mkNullNode]) stx[3] mkNullNode mkNullNode (named :=
-        true)
-    let g ← getMainGoal
-    -- a constant with all its arguments open, so its implicit registers are ours to split
-    let lem ←
-      if stx[2].isIdent then
-        mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload stx[2])
-      else
-        instantiateMVars (← Term.elabTerm stx[2] none)
-    let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
-    unless ← isDefEq concl (← instantiateMVars (← g.getType)) do
-      throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
-    -- registers as `⟨?i, ?h⟩`, so the body's `.val k _` fixes them
-    -- (assigned, not unified: structure eta would solve `?x =?= ⟨?i, ?h⟩` by `?i := ?x.i`)
-    let mut typeProofs := #[]
-    for m in ms do
-      let ty ← instantiateMVars (← inferType m)
-      if ty.isAppOfArity ``Dst 2 && !(← m.mvarId!.isAssigned) then
-        let dst := mkApp2 (mkConst ``Dst.mk) (ty.getArg! 0) (ty.getArg! 1)
-        let .forallE _ iTy _ _ ← whnf (← inferType dst) | throwError "`Dst.mk`: no index"
-        let i ← mkFreshExprMVar iTy
-        let .forallE _ hTy _ _ ← whnf (← inferType (mkApp dst i)) | throwError "`Dst.mk`: no proof"
-        let h ← mkFreshExprMVar hTy
-        typeProofs := typeProofs.push h.mvarId!
-        m.mvarId!.assign (mkApp2 dst i h)
-    -- the body first: it fixes the registers and arguments the other premises mention
-    for m in ms do
-      let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
-      if lhs.isAppOf ``List.drop then
-        unless ← withDefault (isDefEq lhs rhs) do
-          throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
-        m.mvarId!.assign (← mkEqRefl lhs)
-    let mut cont? := none
-    for m in ms do
-      let mv := m.mvarId!
-      if ← mv.isAssigned then
-        continue
-      let ty ← instantiateMVars (← mv.getType)
-      unless ← isProp ty do
-        continue
-      if ty.isForall then
-        cont? := some mv
-        continue
-      match ty.eq? with
-      | some (_, lhs, rhs) =>
-        if lhs.isAppOfArity ``Env.read 4 then
-          closePatternRead mv
+      let args :=
+        StepArgs.parse (mkNullNode #[mkNullNode, mkNullNode]) stx[3] mkNullNode mkNullNode (named :=
+          true)
+      let g ← getMainGoal
+      let inState := (← getRunBodyFrom (← getGoalType).2).state
+      -- a constant with all its arguments open, so its implicit registers are ours to split
+      let lem ←
+        if stx[2].isIdent then
+          mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverload stx[2])
         else
+          instantiateMVars (← Term.elabTerm stx[2] none)
+      let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
+      unless ← isDefEq concl (← instantiateMVars (← g.getType)) do
+        throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
+      -- registers as `⟨?i, ?h⟩`, so the body's `.val k _` fixes them
+      -- (assigned, not unified: structure eta would solve `?x =?= ⟨?i, ?h⟩` by `?i := ?x.i`)
+      let mut typeProofs := #[]
+      for m in ms do
+        let ty ← instantiateMVars (← inferType m)
+        if ty.isAppOfArity ``Dst 2 && !(← m.mvarId!.isAssigned) then
+          let dst := mkApp2 (mkConst ``Dst.mk) (ty.getArg! 0) (ty.getArg! 1)
+          let .forallE _ iTy _ _ ← whnf (← inferType dst) | throwError "`Dst.mk`: no index"
+          let i ← mkFreshExprMVar iTy
+          let .forallE _ hTy _ _ ←
+            whnf (← inferType (mkApp dst i)) | throwError "`Dst.mk`: no proof"
+          let h ← mkFreshExprMVar hTy
+          typeProofs := typeProofs.push h.mvarId!
+          m.mvarId!.assign (mkApp2 dst i h)
+      -- the body first: it fixes the registers and arguments the other premises mention
+      for m in ms do
+        let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
+        if lhs.isAppOf ``List.drop then
+          unless ← withDefault (isDefEq lhs rhs) do
+            throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
+          m.mvarId!.assign (← mkEqRefl lhs)
+      let mut cont? := none
+      for m in ms do
+        let mv := m.mvarId!
+        if ← mv.isAssigned then
+          continue
+        let ty ← instantiateMVars (← mv.getType)
+        unless ← isProp ty do
+          continue
+        if ty.isForall then
+          cont? := some mv
+          continue
+        match ty.eq? with
+        | some (_, lhs, rhs) =>
+          if lhs.isAppOfArity ``Env.read 4 then
+            closePatternRead mv
+          else
+            closeSide mv
+        | none =>
           closeSide mv
-      | none =>
-        closeSide mv
-    -- a register's type proof: unification skips proofs, so none got assigned
-    for h in typeProofs do
-      unless ← h.isAssigned do
-        let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | continue
-        unless ← withDefault (isDefEq l r) do
-          throwError "step_pattern: register type mismatch{indentExpr (← h.getType)}"
-        h.assign (← mkEqRefl l)
-    let some cont := cont? | throwError "step_pattern: no continuation premise"
-    g.assign (← instantiateMVars (mkAppN lem ms))
-    let (dead, main) ← cont.intros
-    replaceMainGoal [← Tactic.reduceIndex main]
-    finishStep args.value args.hyp false mkNullNode true
-    -- the pattern's intermediates: sealed away, so unused
-    let mut main ← getMainGoal
-    for x in dead do
-      main ← main.tryClear x
-    replaceMainGoal [main]
+      -- a register's type proof: unification skips proofs, so none got assigned
+      for h in typeProofs do
+        unless ← h.isAssigned do
+          let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | continue
+          unless ← withDefault (isDefEq l r) do
+            throwError "step_pattern: register type mismatch{indentExpr (← h.getType)}"
+          h.assign (← mkEqRefl l)
+      let some cont := cont? | throwError "step_pattern: no continuation premise"
+      g.assign (← instantiateMVars (mkAppN lem ms))
+      let (dead, main) ← cont.intros
+      replaceMainGoal [← Tactic.reduceIndex main]
+      -- a pattern that stores: its new state sealed, as an impure step's
+      let outState ←
+        withMainContext do
+            return (← getRunBodyFrom (← getGoalType).2).state
+      let goals ←
+        if outState != inState then
+          sealStep inState #[]
+        else
+          pure #[]
+      finishStep args.value args.hyp false mkNullNode true
+      -- the pattern's intermediates: sealed away, so unused
+      let mut main ← getMainGoal
+      for x in dead do
+        main ← main.tryClear x
+      replaceMainGoal (main :: goals.toList)
 
 end
 
