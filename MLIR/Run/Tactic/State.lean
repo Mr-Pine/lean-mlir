@@ -124,14 +124,22 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         let (v, pf) := (r.expr, ← mkEqTrans pf (← r.getProof))
         let motive ← motiveOf e v
         -- named after the pointer read, so facts at distinct pointers stay accessible
+        -- (`q.add k` after `q` and `k`)
         let ptr? ←
           e.getAppArgs.findM? fun a => do
-              return a.isFVar && (← inferType a).isConstOf ``Pointer
+              return (← inferType a).isConstOf ``Pointer
         let name ←
           match ptr? with
+          | some (.fvar x) =>
+            pure ((`hread).appendAfter s!"_{← x.getUserName}")
           | some a =>
             do
-              pure ((`hread).appendAfter s!"_{← a.fvarId!.getUserName}")
+              let some (.fvar x, off) := a.app2? ``Pointer.add | pure `hread
+              let k ←
+                (do
+                      return (← getBitVecValue? off).map (·.2.toNat)) <|>
+                    pure none
+              pure ((`hread).appendAfter s!"_{← x.getUserName}_{k.getD 0}")
           | none =>
             pure `hread
         let (h, g') ← (← g.assert name (motive.beta #[new]) pf).intro1P
@@ -143,9 +151,18 @@ def memFactsOf (g : MVarId) (S new : Expr) :
       let some (l, y) := memReadFact? c.heads S (← instantiateMVars d.type) | continue
       let e := l.replace fun t => if t == oldMem then some newMem else none
       let (r, pf) ← readThrough c e
-      if r == l then
-        let motive ← motiveOf e y
-        let (h, g') ← (← g.assert d.userName (motive.beta #[new]) (← mkEqTrans pf d.toExpr)).intro1P
+      -- past the writes, or through one inside it (`spliceBits (S.mem.readAt p v) off x`): the
+      -- old read by its value
+      let at_ ←
+        withLocalDeclD `z (← inferType l) fun z => do
+            mkLambdaFVars #[z] (r.replace fun t => if t == l then some z else none)
+      let y' ← Tactic.normWidths (at_.beta #[y])
+      if
+          (r.find? (· == l)).isSome && (y'.find? (· == S)).isNone &&
+            (y'.find? (· == newMem)).isNone then
+        let motive ← motiveOf e y'
+        let pf ← mkEqTrans pf (← mkCongrArg at_ d.toExpr)
+        let (h, g') ← (← g.assert d.userName (motive.beta #[new]) pf).intro1P
         g := g'
         hyps := hyps.push (h, motive)
       olds := olds.push d.fvarId
@@ -158,7 +175,8 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
     let S' := runBodyFrom.state
     let hS ← findEqWithLhs S m!"of the form `{S} = _`"
     -- the new state over the old one, `S`, whose facts the simplification's side conditions use
-    let new ← dsimpState S'
+    -- widths as literals, as the facts have them: transport lemmas unify at reducible transparency
+    let new ← Tactic.normWidths (← dsimpState S')
     let r ← simpState new
     let hNew := mkExpectedPropHint (← mkEqRefl S') (← mkEq S' new)
     let (fvs, g) ←

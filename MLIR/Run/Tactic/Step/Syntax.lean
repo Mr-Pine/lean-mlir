@@ -15,8 +15,8 @@ public meta section
 syntax stepSimpArgs := (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")?
 
 /-- How to bind a written value: `with v hv` names it and its equation, `named` names it `vN`,
-`inline` keeps it in the env. -/
-syntax stepNames := (" with " ident (colGt ident)?) <|> &" inline" <|> &" named"
+`inline` keeps it in the env. `hv` is never `consuming`, which starts `stepConsuming`. -/
+syntax stepNames := (" with " ident (colGt !&"consuming" ident)?) <|> &" inline" <|> &" named"
 
 /-- Facts about the old state that are not carried over to the new one. -/
 syntax stepConsuming := &" consuming" (ppSpace colGt ident)+

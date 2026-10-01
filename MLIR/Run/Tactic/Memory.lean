@@ -52,14 +52,63 @@ def normWidths (e : Expr) : MetaM Expr := do
   return (←
         dsimp e (← Simp.mkContext (simpTheorems := #[thms])) (simprocs := #[← Simp.getSimprocs])).1
 
+/-- Prove a closed fact by `decide`, pointers' offsets first replaced by their facts
+(`x.offset = 0`, a stack slot's): an offset sum's `¬uaddOverflow`, a width bound. -/
+def decideWithOffsets? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Option Expr) := do
+  let goal ← instantiateMVars goal
+  let mut eqs : Array (Expr × Expr × Expr) := #[]
+  for (pf, ty) in facts do
+    let some (_, l, r) := ty.eq? | continue
+    if
+        l.isAppOfArity ``Pointer.offset 1 && !r.hasFVar && (goal.find? (· == l)).isSome &&
+          !eqs.any (·.2.1 == l) then
+      eqs := eqs.push (pf, l, r)
+  -- `subst k e`: `e` with the offsets from the `k`-th on replaced by their values
+  let subst (k : Nat) (e : Expr) : Expr :=
+    (eqs.extract k).foldl (fun e (_, l, r) => e.replace fun t => if t == l then some r else none) e
+  let goal' := subst 0 goal
+  if goal'.hasFVar || goal'.hasMVar then
+    return none
+  let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[goal'])) | return none
+  unless
+    (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) goal' inst)).isConstOf
+      ``Bool.true do
+    return none
+  -- back from the values to the offsets, one at a time
+  let mut pf ← mkDecideProof goal'
+  for k in [0:eqs.size] do
+    let (h, l, _) := eqs[k]!
+    let motive ←
+      withLocalDeclD `o (← inferType l) fun o => do
+          mkLambdaFVars #[o] (subst (k + 1) (goal.replace fun t => if t == l then some o else none))
+    pf ← mkEqNDRec motive pf (← mkEqSymm h)
+  return some (mkExpectedPropHint pf goal)
+
 /-- Prove `Fits m p w`: a fact with the same `m` and `p`, and the same width as a literal
-(`(Ty.vec 8 64).width` is `512`); not `isDefEq` on `Fits` itself, which unfolds the memory. -/
+(`(Ty.vec 8 64).width` is `512`); not `isDefEq` on `Fits` itself, which unfolds the memory. An
+offset `q.add off` fits inside a fact for `q` (`Fits.add_of_le`). -/
 partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Option Expr) := do
   let w₁ ← normWidths w
   for (pf, ty) in facts do
     let_expr Fits m' p' w' := ty | continue
     if m' == m && p' == p && (w' == w || w' == w₁ || (← normWidths w') == w₁) then
       return some (mkExpectedPropHint pf (← mkAppM ``Fits #[m, p, w]))
+  if let some (q, off) := p.app2? ``Pointer.add then
+    for (pf, ty) in facts do
+      let_expr Fits m' q' v := ty | continue
+      unless m' == m && q' == q do
+        continue
+      let v ← normWidths v
+      let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off]
+      let some hov ← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) | continue
+      let hwTy ←
+        mkAppM ``LE.le
+            #[←
+                mkAppM ``HAdd.hAdd
+                    #[← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8], w₁],
+              v]
+      let some hw ← decideWithOffsets? facts hwTy | continue
+      return some (← mkAppOptM ``Fits.add_of_le #[none, none, none, none, off, hov, hw, pf])
   -- If not found directly, go through `Fits.storeAt`
   let_expr MemoryState.storeAt m' q _ x := m | return none
   let some h ← fitsProof? facts m' p w | return none
@@ -187,7 +236,14 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
   let_expr Operation.gep bo pp := e | return .continue
   let_expr PoisonOr.value _ off := bo | return .continue
   let_expr PoisonOr.value _ p := pp | return .continue
-  let some h ← noOverflowProof? (← splitConjunctedFacts) p off | return .continue
+  let facts ← splitConjunctedFacts
+  -- a stack slot's offset by its fact, else bounds by `omega`
+  let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off]
+  let some h ←
+    (do
+        if let some h← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) then
+          return some h
+        noOverflowProof? facts p off) | return .continue
   return .visit
       { expr := ← mkAppM ``PoisonOr.value #[← mkAppM ``Pointer.add #[p, off]],
         proof? := ← mkAppM ``gep_value #[h] }
@@ -306,6 +362,9 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
   | Ne _ a b =>
     neProof? c.facts a b
   | _ =>
+    -- closed side conditions: an offset's `¬uaddOverflow`, a width bound
+    if let some pf← decideWithOffsets? c.facts goal then
+      return some pf
     transportWith c.factMap (← labelled `mlir_transport) 4 goal
 
 /-- One `mlir_read` lemma on the read `e`: a stored value (`true`), or the read past a write, with
@@ -381,8 +440,30 @@ unfolds `S`. -/
 def readMemFact (c : MemCtx) : Simp.Simproc := fun e => do
   if (stateMemArg? c e).isNone then
     return .continue
-  let some (x, h) := c.reads[← normWidths e]? | return .continue
-  return .visit { expr := x, proof? := some (mkExpectedPropHint h (← mkEq e x)) }
+  let e' ← normWidths e
+  if let some (x, h) := c.reads[e']? then
+    return .visit { expr := x, proof? := some (mkExpectedPropHint h (← mkEq e x)) }
+  -- inside a known read: `S.mem.readAt (q.add off) w` from `S.mem.readAt q v = x`
+  let_expr MemoryState.readAt m p w := e' | return .continue
+  let some (q, off) := p.app2? ``Pointer.add | return .continue
+  for (l, x, h) in c.reads.toArray.map fun (l, (x, h)) => (l, x, h) do
+    let_expr MemoryState.readAt m' q' v := l | continue
+    unless m' == m && q' == q do
+      continue
+    let some hfits ← fitsProof? c.facts m q v | continue
+    let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off]
+    let some hov ← decideWithOffsets? c.facts (mkNot (← mkEq ov (mkConst ``Bool.true))) | continue
+    let hwTy ←
+      mkAppM ``LE.le
+          #[←
+              mkAppM ``HAdd.hAdd
+                  #[← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8], w],
+            v]
+    let some hw ← decideWithOffsets? c.facts hwTy | continue
+    let pf ← mkAppM ``MemoryState.readAt_add_of_readAt #[hfits, hov, hw, h]
+    let some (_, _, r) := (← inferType pf).eq? | continue
+    return .visit { expr := r, proof? := some (mkExpectedPropHint pf (← mkEq e r)) }
+  return .continue
 
 /-- A registered read of `S.mem` without a fact, through the writes of `S`'s equation `hS : S = s`
 by the `mlir_read` lemmas: kept when it resolves, to a stored value or a read below every write.

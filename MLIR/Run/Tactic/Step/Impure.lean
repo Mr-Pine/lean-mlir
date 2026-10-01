@@ -166,8 +166,14 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         unless (← getUnsolvedGoals).isEmpty do
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
-        let goals ← sealStep inState consumed
-        finishStep value hyp only simpArgs expand
+        let goals ← sealStep inState #[]
+        finishStep value hyp only simpArgs expand keepNamed
+        -- the consumed facts last: the value may read through them
+        withMainContext do
+            let mut g ← getMainGoal
+            for h in consumed do
+              g ← g.clear (← getFVarId h)
+            replaceMainGoal [g]
         setGoals (goals.toList ++ (← getGoals))
 
 /-- Step an effectful instruction, proving it with `tac`. -/

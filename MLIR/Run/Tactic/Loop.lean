@@ -134,6 +134,35 @@ def closeRead (g : MVarId) : TacticM (List MVarId) :=
     g.assign (← mkEqTrans pf rest)
     return [rest.mvarId!]
 
+/-- `env_reads` closes `E.read r = v`, or a conjunction of such (`E ⊨ [r := v, …]`), through
+`E`'s writes as `step_loop` closes its reads; what remains, by `rfl`. -/
+elab "env_reads" : tactic => do
+  let mut todo := [← getMainGoal]
+  let mut rest := #[]
+  while true do
+    let g :: gs := todo | break
+    todo := gs
+    let ty ←
+      g.withContext do
+          whnfR (← instantiateMVars (← g.getType))
+    if let some (a, b) := ty.and? then
+      let ga ← g.withContext (mkFreshExprSyntheticOpaqueMVar a)
+      let gb ← g.withContext (mkFreshExprSyntheticOpaqueMVar b)
+      g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
+      todo := ga.mvarId! :: gb.mvarId! :: todo
+    else
+      rest := rest ++ (← closeRead g)
+  let mut open_ := #[]
+  for g in rest do
+    let closed ←
+      (do
+            g.refl;
+            pure true) <|>
+          pure false
+    unless closed do
+      open_ := open_.push g
+  replaceMainGoal open_.toList
+
 /-- `step_loop using h` closes a `runFrom E k S` goal, or `runFrom E k S >>= g`, with the loop
 lemma `h` (or the induction hypothesis at a back-edge), whose env is a write chain over a base: the
 base becomes `E`, and each write a goal `E.read r = v`. Those and `h`'s premises get
