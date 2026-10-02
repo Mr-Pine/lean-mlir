@@ -68,8 +68,23 @@ def reduceIndex (g : MVarId) : MetaM MVarId :=
   g.withContext do
     let goal ← instantiateMVars (← g.getType)
     let idx := (← getRunBodyFrom goal).idx
-    let some literal ← (Meta.evalNat idx).run | return g
-    let lit := mkNatLit literal
+    -- `pos + 1 + 1` to `pos + 2`, as pattern lemmas state their continuations; else a literal
+    let lit ←
+      match ← (Meta.evalNat idx).run with
+      | some literal =>
+        pure (mkNatLit literal)
+      | none =>
+        do
+          let mut base := idx
+          let mut k := 0
+          while true do
+            let_expr HAdd.hAdd _ _ _ _ a b := base | break
+            let some n ← (Meta.evalNat b).run | break
+            base := a
+            k := k + n
+          if k ≤ 1 then
+            return g
+          mkAppM ``HAdd.hAdd #[base, mkNatLit k]
     if lit == idx then
       return g
     let body ← kabstract goal idx
