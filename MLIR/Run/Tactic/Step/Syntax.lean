@@ -14,14 +14,21 @@ public meta section
 /-- `only` and `[simp args]`, as for `simp`: used to resolve the instruction's reads. -/
 syntax stepSimpArgs := (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")?
 
+/-- `transparent`: a named value that later steps still unfold, as an unnamed one. -/
+syntax stepTransparent := &" transparent"
+
 /-- How to bind a written value: `with v hv` names it and its equation, `named` names it `vN`,
-`inline` keeps it in the env. `hv` is never `consuming`, which starts `stepConsuming`. -/
-syntax stepNames := (" with " ident (colGt !&"consuming" ident)?) <|> &" inline" <|> &" named"
+`inline` keeps it in the env. A named value stays folded in later steps unless `transparent`.
+`hv` is never `consuming`, which starts `stepConsuming`. -/
+syntax stepNames :=
+  (" with" (stepTransparent)? ppSpace ident (colGt !&"consuming" ident)?) <|>
+    &" inline" <|> (&" named" (stepTransparent)?)
 
 /-- Facts about the old state that are not carried over to the new one. -/
 syntax stepConsuming := &" consuming" (ppSpace colGt ident)+
 
-/-- `opaque`: do not unfold the values the instruction reads into their definitions. -/
+/-- `opaque`: do not unfold the unnamed values the instruction reads into their definitions; named
+ones never unfold. -/
 syntax stepOpaque := colGt &" opaque"
 
 /-- The arguments shared by the stepping tactics. -/
@@ -32,23 +39,33 @@ structure StepArgs where
   simpArgs : Syntax := mkNullNode
   consumed : Array Ident := #[]
   expand : Bool := true
+  /-- Tag the value's equation, so later steps keep it folded. -/
+  tag : Bool := false
+
+/-- The first atom in `s`, trimmed. -/
+private partial def firstAtom (s : Syntax) : String :=
+  match s with
+  | .atom _ v => v.trimAscii.toString
+  | .node _ _ args => args[0]?.map firstAtom |>.getD ""
+  | _ => ""
 
 /-- Read a `stepSimpArgs` node, and the optional `stepNames` and `stepConsuming` groups. Without
-names, the value is inlined, or named `vN` if `named` (loads, `alloca`). -/
+names, the value is inlined, or named `vN` if `named` (loads, `alloca`), untagged. -/
 def StepArgs.parse (simp names consuming sopaque : Syntax) (named := false) : StepArgs :=
-  let (value, hyp) : EnvName × EnvName :=
-    if names.isNone then if named then (.auto, .auto) else (.inline, .inline)
+  let (value, hyp, tag) : EnvName × EnvName × Bool :=
+    if names.isNone then if named then (.auto, .auto, false) else (.inline, .inline, false)
     else
-      -- `with v hv` parses as a `group`; `inline`/`named` are (non-atom) token nodes
       let alt := names[0][0]
-      if alt.isOfKind groupKind then
-        (.named ⟨alt[1]⟩, if alt[2].isNone then .auto else .named ⟨alt[2][0]⟩)
-      else
-        if alt.getAtomVal.endsWith "named" || alt[0].getAtomVal.endsWith "named" then (.auto, .auto)
-        else (.inline, .inline)
+      match firstAtom alt with
+      | "with" =>
+        -- `with (transparent)? v (hv)?`
+        (.named ⟨alt[2]⟩, if alt[3].isNone then .auto else .named ⟨alt[3][0]⟩, alt[1].isNone)
+      | "named" => (.auto, .auto, alt[1].isNone)
+      | _ => (.inline, .inline, false)
   {
     value,
     hyp,
+    tag,
     only := !simp[0].isNone,
     simpArgs := simp[1],
     consumed := if consuming.isNone then #[] else consuming[0][1].getArgs.map (⟨·⟩),

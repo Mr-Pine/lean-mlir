@@ -102,7 +102,7 @@ def clearStaleBodyFacts : TacticM Unit :=
     replaceMainGoal [g]
 
 def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool)
-    (keepNamed := false) : TacticM Unit :=
+    (tag := false) : TacticM Unit :=
   withMainContext do
     clearStaleBodyFacts
     -- a call writes its results with `writeMany`: unfold it into single writes (none for `void`)
@@ -122,8 +122,7 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
     let envWrite ← getEnvWrite runBodyFrom.env
     let env := envWrite.base
     let resultValue ←
-      simpValue only simpArgs envWrite.value env expand
-          keepNamed -- Let simp work on the newly written value
+      simpValue only simpArgs envWrite.value env expand -- Let simp work on the newly written value
     replaceMainGoal [← replaceBySimp g envWrite.value resultValue]
     -- If not `inline`, extract the value into a local variable with a hypothesis
     match value with
@@ -163,12 +162,11 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
         unless abstractionTarget.isFVar do
           let (_, g) ←
             g.withContext do
-                -- a value named with `with` stays folded where the state takes it
-                let named := value matches .named _
+                -- a tagged value stays folded where later steps and the state take it
                 generalizeOpaque g (hyps := #[]) abstractionTarget var_name
                     #[⟨hyp_name, fun x => do
                         let ty ← mkEq x abstractionTarget
-                        return if named then Tactic.tagNamed ty else ty,
+                        return if tag then Tactic.tagNamed ty else ty,
                         ← mkEqRefl abstractionTarget⟩]
           replaceMainGoal [g]
     -- Extract new `E`

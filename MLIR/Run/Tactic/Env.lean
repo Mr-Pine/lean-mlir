@@ -218,18 +218,18 @@ def stateFacts : MetaM (Array FVarId) := do
       return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
 
 /-- The equations `x = _` of the locals in `e`: the state `S = …` and the step values `v = …`
-it reads; with `keepNamed`, not those of values named with `with` (`tagNamed`); never a stack
-slot's, which its facts name. -/
-private def valueStateFacts (e : Expr) (keepNamed := false) : MetaM (Array FVarId) := do
+it reads, but not those of values named with `with` (`tagNamed`) or of stack slots, which stay
+folded. -/
+private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
   let xs := (collectFVars {} e).fvarSet
   (← getLCtx).foldlM (init := #[]) fun acc d => do
       if d.isImplementationDetail then
         return acc
       let ty ← instantiateMVars d.type
-      let some (_, .fvar x, v) := ty.consumeMData.eq? | return acc
+      let some (_, .fvar x, _) := ty.consumeMData.eq? | return acc
       unless xs.contains x do
         return acc
-      if isNamedEq ty && (keepNamed || v.isAppOf ``GlobalState.allocaPtr) then
+      if isNamedEq ty then
         return acc
       return acc.push d.fvarId
 
@@ -245,23 +245,33 @@ def readFacts : MetaM (Array FVarId) := do
       return if reads then acc.push d.fvarId else acc
 
 /-- `e` with each proof in it that mentions locals but proves a closed fact by `decide` (`x[0]`'s
-`0 < 8`, proved through the args fact), so sealing can clear those locals. Equal by proof
-irrelevance. -/
-def closeProofs (e : Expr) : MetaM Expr :=
+`0 < 8`, proved through the args fact), or a lane bound `↑i < n` of an `ofFn`'s `i : Fin n` by
+`i.isLt`, so sealing can clear those locals. Equal by proof irrelevance. -/
+def closeProofs (e : Expr) : MetaM Expr := do
+  let outer ← getLCtx
   Meta.transform e (pre := fun t => do
-    unless t.hasFVar do
-      return .done t
-    unless ← isProof t do
-      return .continue
-    -- beta-reduced: an `Eq.ndrec` motive's redex may mention locals the fact doesn't
-    let ty ← Core.betaReduce (← instantiateMVars (← inferType t))
-    if ty.hasFVar || ty.hasMVar then
-      return .continue
-    let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[ty])) | return .continue
-    unless
-      (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) ty inst)).isConstOf ``Bool.true do
-      return .continue
-    return .done (← mkDecideProof ty))
+      unless t.hasFVar do
+        return .done t
+      unless ← isProof t do
+        return .continue
+      -- beta-reduced: an `Eq.ndrec` motive's redex may mention locals the fact doesn't
+      let ty ← Core.betaReduce (← instantiateMVars (← inferType t))
+      if ty.hasMVar || ty.hasAnyFVar outer.contains then
+        return .continue
+      if ty.hasFVar then
+        -- only binders of `e` itself: a lane index's bound
+        let some (_, _, lhs, _) := ty.app4? ``LT.lt | return .continue
+        let some i := lhs.app2? ``Fin.val |>.map (·.2) | return .continue
+        let pf ← mkAppM ``Fin.isLt #[i]
+        unless ← isDefEq (← inferType pf) ty do
+          return .continue
+        return .done pf
+      let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[ty])) | return .continue
+      unless
+        (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) ty inst)).isConstOf
+          ``Bool.true do
+        return .continue
+      return .done (← mkDecideProof ty))
 
 /-- `e` with each literal vector that is a `mlir_const` constant's value as that constant: equal by
 unfolding it, so no proof. Both sides are literals, so comparing them is cheap. -/
@@ -291,8 +301,8 @@ def foldConsts (e : Expr) : MetaM Expr := do
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
-def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool)
-    (keepNamed := false) : TacticM Simp.Result := do
+def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool) :
+    TacticM Simp.Result := do
   let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
   let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
   let reads ← readFacts
@@ -301,11 +311,12 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then
-      valueStateFacts r.expr keepNamed
+      valueStateFacts r.expr
     else
       stateFacts
+  -- also without facts: the reads were resolved by `simp only`, the simp set not yet run
   let r ←
-    if facts.isEmpty then
+    if facts.isEmpty && only then
       pure r
     else
       r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts ++ reads))

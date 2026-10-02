@@ -21,9 +21,8 @@ def evalStepCall : Tactic := fun stx => do
         apply $thm <;> first
           | with_reducible assumption | ne_fact | fits_fact | transport_fact
           | simp [$(mkIdent `mlir_mem):ident, *]))
-  -- the arguments keep the values named with `with` (and stack slots), as the facts about them do
   runStepImpure args.value args.hyp args.only args.simpArgs args.expand innerDischarge args.consumed
-      (keepNamed := true)
+      args.tag
 
 end
 
