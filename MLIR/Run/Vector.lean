@@ -89,6 +89,29 @@ dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _
   let nE := mkNatLit m
   return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel β]) β nE arr (← mkEqRefl nE))
 
+open Lean Meta in
+/-- `xs.set k x` for a literal vector `xs` (or `Vector.replicate n a`, `n` a literal) and a literal
+`k`, to the literal: an `insertelement` chain to the vector it builds. -/
+dsimproc [mlir_operation]reduceVectorSet (Vector.set _ _ _ _) := fun e => do
+  let_expr Vector.set α n xs i x _ := e | return .continue
+  let some k := (← instantiateMVars i).nat? <|> (← instantiateMVars i).rawNatLit? |
+    return .continue
+  let lanes? : Option (List Expr) ←
+    match_expr xs with
+    | Vector.mk _ _ arr _ =>
+      pure <| match_expr arr with
+        | List.toArray _ l => l.listLit?.map (·.2)
+        | _ => none
+    | Vector.replicate _ m a =>
+      pure <| (m.nat? <|> m.rawNatLit?).map (List.replicate · a)
+    | _ =>
+      pure none
+  let some lanes := lanes? | return .continue
+  unless k < lanes.length do
+    return .continue
+  let arr ← mkAppM ``List.toArray #[← mkListLit α (lanes.set k x)]
+  return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel α]) α n arr (← mkEqRefl n))
+
 /-- `zipWith` as an `ofFn`, for `expandOfFn` to split into lanes. -/
 @[mlir_operation]
 theorem zipWith_eq_ofFn {f : α → β → γ} {as : Vector α n} {bs : Vector β n} :
