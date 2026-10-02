@@ -139,8 +139,7 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
 
 /-- Step a pure instruction, extending the env with the new value -/
 def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
-    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) (keepNamed := false) :
-    TacticM Unit :=
+    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) (tag : Bool) : TacticM Unit :=
   focus do
     Tactic.ensureStateEq
     withMainContext do
@@ -157,8 +156,8 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         let operation := op_run.appFn!.appFn!
         setGoals [runGoal] -- Makes the following simp work
         let resultValue ←
-          simpValue only simpArgs operation (← getRunBodyFrom goal).env expand
-              keepNamed -- Let simp work on the newly written value
+          simpValue only simpArgs operation (← getRunBodyFrom goal).env
+              expand -- Let simp work on the newly written value
         let runGoal ← replaceBySimp runGoal operation resultValue
         -- Apply runTactics to runGoal
         setGoals [runGoal]
@@ -167,7 +166,7 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
         let goals ← sealStep inState #[]
-        finishStep value hyp only simpArgs expand keepNamed
+        finishStep value hyp only simpArgs expand tag
         -- the consumed facts last: the value may read through them
         withMainContext do
             let mut g ← getMainGoal
@@ -178,7 +177,7 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
 
 /-- Step an effectful instruction, proving it with `tac`. -/
 def runStep (args : StepArgs) (tac : Syntax) : TacticM Unit :=
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand tac args.consumed
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand tac args.consumed args.tag
 
 @[tactic stepImpure]
 def evalStepImpure : Tactic := fun stx =>
@@ -242,23 +241,21 @@ def evalStepLoad : Tactic := fun stx => do
         `(tacticSeq|
         expect_values
         exact run_load (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
-      args.consumed (keepNamed := true)
+      args.consumed args.tag
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
   let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
-  -- the stored value keeps the values named with `with`: unfolded, they would inline into the state
   runStepImpure args.value args.hyp args.only args.simpArgs args.expand
       (←
         `(tacticSeq|
         expect_values
         exact run_store (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
-      args.consumed (keepNamed := true)
+      args.consumed args.tag
 
 @[tactic stepMemcpy]
 def evalStepMemcpy : Tactic := fun stx => do
   let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
-  -- the pointers keep the values named with `with`, as the facts about them do
   runStepImpure args.value args.hyp args.only args.simpArgs args.expand
       (←
         `(tacticSeq|
@@ -266,7 +263,7 @@ def evalStepMemcpy : Tactic := fun stx => do
         exact
             run_memcpy (by rfl) (by first | disjoint_fact | simp_all)
               (by first | fits_fact | simp_all) (by first | fits_fact | simp_all)))
-      args.consumed (keepNamed := true)
+      args.consumed args.tag
 
 end InstructionSpecific
 
