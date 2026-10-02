@@ -134,39 +134,43 @@ def closeRead (g : MVarId) : TacticM (List MVarId) :=
     g.assign (← mkEqTrans pf rest)
     return [rest.mvarId!]
 
-/-- `env_reads` closes `E.read r = v`, or a conjunction of such (`E ⊨ [r := v, …]`), through
-`E`'s writes as `step_loop` closes its reads; what remains, by `rfl`. -/
+/-- Close `E.read r = v`, or a conjunction of such (`E ⊨ [r := v, …]`), through `E`'s writes,
+assigning `v` where it is a metavariable; the rest by `rfl`, else returned. -/
+partial def closeReads (g : MVarId) : TacticM (List MVarId) := do
+  let ty ←
+    g.withContext do
+        whnfR (← instantiateMVars (← g.getType))
+  if let some (a, b) := ty.and? then
+    let ga ← g.withContext (mkFreshExprSyntheticOpaqueMVar a)
+    let gb ← g.withContext (mkFreshExprSyntheticOpaqueMVar b)
+    g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
+    return (← closeReads ga.mvarId!) ++ (← closeReads gb.mvarId!)
+  let mut open_ := []
+  for g' in ← closeRead g do
+    unless
+      ←
+        (do
+              g'.refl;
+              pure true) <|>
+            pure false do
+      open_ := open_ ++ [g']
+  return open_
+
+/-- Whether `g` is a read, or a conjunction of reads, of an env. -/
+partial def isReadGoal (ty : Expr) : Bool :=
+  match ty.and? with
+  | some (a, b) => isReadGoal a && isReadGoal b
+  | none => ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4)
+
+/-- `env_reads` closes `E.read r = v`, or `E ⊨ [r := v, …]`, through `E`'s writes as `step_loop`
+closes its reads; what remains, by `rfl`. -/
 elab "env_reads" : tactic => do
-  let mut todo := [← getMainGoal]
-  let mut rest := #[]
-  while true do
-    let g :: gs := todo | break
-    todo := gs
-    let ty ←
-      g.withContext do
-          whnfR (← instantiateMVars (← g.getType))
-    if let some (a, b) := ty.and? then
-      let ga ← g.withContext (mkFreshExprSyntheticOpaqueMVar a)
-      let gb ← g.withContext (mkFreshExprSyntheticOpaqueMVar b)
-      g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
-      todo := ga.mvarId! :: gb.mvarId! :: todo
-    else
-      rest := rest ++ (← closeRead g)
-  let mut open_ := #[]
-  for g in rest do
-    let closed ←
-      (do
-            g.refl;
-            pure true) <|>
-          pure false
-    unless closed do
-      open_ := open_.push g
-  replaceMainGoal open_.toList
+  replaceMainGoal (← closeReads (← getMainGoal))
 
 /-- `step_loop using h` closes a `runFrom E k S` goal, or `runFrom E k S >>= g`, with the loop
 lemma `h` (or the induction hypothesis at a back-edge), whose env is a write chain over a base: the
 base becomes `E`, and each write a goal `E.read r = v`. Those and `h`'s premises get
-`simp [*, mlir_env]`, or `omega`; what they cannot close stays open. A continuation premise is
+`simp [*, mlir_env]`, or `omega`; what they cannot close stays open, a run's as it was. A continuation premise is
 entered, as the last goal. -/
 syntax (name := stepLoop) "step_loop" " using " term : tactic
 
@@ -226,17 +230,33 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
       if (← whnfR d).isAppOf ``Env then
         conts := conts.push g
         continue
-    setGoals [g]
-    -- a fact, or `omega`, first: cheap, and `simp [*]` scans the whole context
-    evalTactic
-        (←
-          `(tactic|
-              first
-              | with_reducible assumption
-              | omega
-              | (simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident]; done)
-              | try simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident]))
-    open_ := open_ ++ (← getGoals)
+    -- reads through the env's writes first: `simp [*]` would assign their values from any fact;
+    -- what they leave has its values fixed, so `simp [*]` may close it
+    let gs ←
+      if isReadGoal (← instantiateMVars (← g.getType)) then
+        g.withContext (closeReads g)
+      else
+        pure [g]
+    for g in gs do
+      setGoals [g]
+      -- a fact, or `omega`, first: cheap, and `simp [*]` scans the whole context; a premise about
+      -- a run (a continuation like `(if c then runFrom … else …) = K`) stays as it is
+      let aboutRun := ((← instantiateMVars (← g.getType)).find? (·.isAppOf ``Func.runFrom)).isSome
+      evalTactic
+          (←
+            if aboutRun then
+              `(tactic|
+                  first
+                  | with_reducible assumption
+                  | skip)
+            else
+              `(tactic|
+                  first
+                  | with_reducible assumption
+                  | omega
+                  | (simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident]; done)
+                  | try simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident]))
+      open_ := open_ ++ (← getGoals)
   for g in conts do
     setGoals [g]
     enterContinuation g E

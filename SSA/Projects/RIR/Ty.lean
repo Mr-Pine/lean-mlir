@@ -159,6 +159,10 @@ theorem extractVecElem_packLanes {xs : Vector (BitVec _) l} :
 -- a vector rebuilt from its lanes: a load of a stored vector
 attribute [mlir_operation] Vector.ofFn_getElem
 
+-- a constant vector's lanes, and the identity adds they leave (`madd52`'s zero accumulator)
+attribute [mlir_operation] Vector.getElem_replicate BitVec.zero_add BitVec.add_zero
+  BitVec.toNat_ofNat
+
 def unflatten : (t : Ty) → BitVec t.width → ⟦t⟧
   | bv _, x => .value x
   | ptr, _ => .poison

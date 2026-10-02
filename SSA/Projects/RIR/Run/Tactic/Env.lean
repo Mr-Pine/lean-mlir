@@ -263,6 +263,31 @@ def closeProofs (e : Expr) : MetaM Expr :=
       return .continue
     return .done (← mkDecideProof ty))
 
+/-- `e` with each literal vector that is a `mlir_const` constant's value as that constant: equal by
+unfolding it, so no proof. Both sides are literals, so comparing them is cheap. -/
+def foldConsts (e : Expr) : MetaM Expr := do
+  let consts ← labelled `mlir_const
+  if consts.isEmpty then
+    return e
+  let mut cands : Array (Expr × Expr) := #[]
+  for n in consts do
+    let some v ←
+      (do
+            let c ← mkConstWithFreshMVarLevels n
+            return (← unfoldDefinition? c)) <|>
+          pure none | continue
+    cands := cands.push (mkConst n, v)
+  Meta.transform e (post := fun t => do
+      unless t.isAppOf ``Vector.mk || t.isAppOf ``Vector.set || t.isAppOf ``Vector.replicate do
+        return .continue
+      if t.hasFVar || t.hasMVar then
+        return .continue
+      for (c, v) in cands do
+        -- default transparency: numerals differ in spelling (`43#64`, `(43 : BitVec 64)`)
+        if v.getAppFn == t.getAppFn && (← withNewMCtxDepth (withDefault (isDefEq t v))) then
+          return .done c
+      return .continue)
+
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
 then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
@@ -288,7 +313,7 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   let ctx ← Simp.mkContext
   let (p, _) ← simp r.expr ctx (simprocs := #[← ({} : Simp.Simprocs).add ``pullWrap (post := true)])
   let r ← r.mkEqTrans p
-  return { r with expr := ← closeProofs r.expr }
+  return { r with expr := ← foldConsts (← closeProofs r.expr) }
 
 end ResolveReads
 

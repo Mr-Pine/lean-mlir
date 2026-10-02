@@ -147,7 +147,20 @@ def omegaFromFacts (facts : Array (Expr × Expr)) (g : MVarId) : MetaM Unit := d
 
 /-- `a ≠ b` from the facts: either way round, by a `[…].Nodup`, or by `decide` for closed terms
 (on locals it would only unfold them). -/
-def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
+partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
+  -- `(p.add k).id` is `p.id`: an offset stays in its block
+  let rec strip (e : Expr) : Expr :=
+    match e.app1? ``Pointer.id with
+    | some p =>
+      match p.app2? ``Pointer.add with
+      | some (q, _) => strip (mkApp (mkConst ``Pointer.id) q)
+      | none => e
+    | none => e
+  let (a', b') := (strip a, strip b)
+  if a' != a || b' != b then
+    if let some pf← neProof? facts a' b' then
+      return some (mkExpectedPropHint pf (← mkAppM ``Ne #[a, b]))
+    return none
   let ne ← mkAppM ``Ne #[a, b]
   if let some h← findFact? facts ne then
     return some h
