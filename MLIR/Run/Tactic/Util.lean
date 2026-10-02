@@ -32,29 +32,23 @@ def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName
         withReducible <|
             kabstract (← instantiateMVars (← g.getType)) e
               occs -- e abstracted as a loose bound variable
-      let tyNew ←
-        withLocalDeclD xName ty
-            (fun x => do
-              let mut expr := tgtAbstract.instantiate1 x
-              for ⟨name, mk, _⟩ in facts.reverse do -- reverse to get nesting order correct
-                let factTy ← mk x
-                let abstracted ←
-                  withLocalDeclD name factTy
-                      (fun h =>
-                        mkForallFVars #[h]
-                          expr -- Binds `h` (with name `name`) as universally quantified
-                        )
-                expr := abstracted
-              mkForallFVars #[x] expr)
-      -- no `isTypeCorrect`: it re-checks the whole goal each step (a third of a walk's time);
-      -- the kernel still checks the proof
-      let gNew ← mkFreshExprSyntheticOpaqueMVar tyNew (tag := ← g.getTag)
-      g.assign
-          (mkAppN gNew
-            (#[e] ++
-              facts.map
-                (GeneralizeFact.proof))) -- Close the old goal by the new goal closed with the abstracted expression and the fact proof
-      let (fvs, g) ← gNew.mvarId!.introNP (1 + facts.size) -- Intro the new variable and facts
+      -- the new goal under binders for `x` and the facts, applied to `e` and the proofs: the value
+      -- stays at this one place, where an `intro`ed goal would have it substituted into every later
+      -- step on instantiation
+      let (fvs, gNew) ←
+        withLocalDeclD xName ty fun x => do
+            let rec withFacts (i : Nat) (hs : Array Expr) : MetaM (Array FVarId × MVarId) := do
+              if h : i < facts.size then
+                withLocalDeclD facts[i].name (← facts[i].mkType x) fun hx =>
+                    withFacts (i + 1) (hs.push hx)
+              else
+                let body ←
+                  mkFreshExprSyntheticOpaqueMVar (tgtAbstract.instantiate1 x) (tag := ← g.getTag)
+                let lam ← mkLambdaFVars (#[x] ++ hs) body
+                g.assign (mkAppN lam (#[e] ++ facts.map (·.proof)))
+                return ((#[x] ++ hs).map (·.fvarId!), body.mvarId!)
+            withFacts 0 #[]
+      let g := gNew
       let (_, g) ← g.introNP reverted.size -- Revert reverting
       return (fvs, g)
 
