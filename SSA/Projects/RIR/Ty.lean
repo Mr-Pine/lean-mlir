@@ -99,6 +99,11 @@ theorem poisoned_bv : poisoned (bv w) = (.poison : PoisonOr (BitVec w)) := by rf
 @[simp]
 theorem poisoned_ptr : poisoned ptr = (.poison : PoisonOr Pointer) := by rfl
 
+/-- A poisoned vector is poison in every lane: an `insertelement` chain's start. -/
+@[simp, mlir_operation]
+theorem poisoned_vec : poisoned (vec l w) = Vector.replicate l (.poison : PoisonOr (BitVec w)) := by
+  rfl
+
 end
 
 public section FlattenUnflatten

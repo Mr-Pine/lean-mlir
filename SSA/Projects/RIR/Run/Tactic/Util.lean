@@ -143,7 +143,8 @@ def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
 /-- `a ≠ b` from `h : [...].Nodup`, when `a` and `b` are among the list's elements. -/
 def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
   let_expr List.Nodup _ l := ty | return none
-  let some xs := l.listLit? |>.map (·.2) | return none
+  -- a literal of more than 32 elements elaborates with `let`s
+  let some xs := (← zetaReduce l).listLit? |>.map (·.2) | return none
   let idx (e : Expr) : MetaM (Option Nat) := do
     for x in xs, k in [0:xs.length] do
       if ← withReducible (isDefEq e x) then
