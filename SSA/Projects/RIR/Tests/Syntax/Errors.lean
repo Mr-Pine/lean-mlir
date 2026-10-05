@@ -90,10 +90,10 @@ mlir_def unsupportedType := {
     "llvm.return"(%arg0) : (f32) -> ()
 }
 
-/-- error: %arg0: unsupported type !llvm.struct<(i64, i64)> -/
+/-- error: %arg0: cannot decode the type !llvm.struct<(i64, f32)> -/
 #guard_msgs in
 mlir_def unsupportedStruct := {
-  ^bb0(%arg0: !llvm.struct<(i64, i64)>):
+  ^bb0(%arg0: !llvm.struct<(i64, f32)>):
     "llvm.return"() : () -> ()
 }
 

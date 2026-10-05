@@ -83,10 +83,17 @@ structure Prog where
 
 /-! ## Printing, for error messages -/
 
-def Ty.toMLIR : Ty → String
+/-- `t` as spelled inside an `!llvm.` type: `ptr`, `array<…>`, `struct<…>` without the prefix. -/
+def Ty.toMLIRInner : Ty → String
   | .bv w => s!"i{w}"
-  | .ptr => "!llvm.ptr"
+  | .ptr => "ptr"
   | .vec l w => s!"vector<{l}xi{w}>"
+  | .array n t => s!"array<{n} x {t.toMLIRInner}>"
+  | .struct fs => s!"struct<({", ".intercalate (fs.map toMLIRInner)})>"
+
+def Ty.toMLIR : Ty → String
+  | t@.ptr | t@(.array ..) | t@(.struct _) => "!llvm." ++ t.toMLIRInner
+  | t => t.toMLIRInner
 
 def MLIR.Op.render (op : Op) : String :=
   let vals (vs : List TypedSSAVal) := ", ".intercalate (vs.map (s!"%{·.1}"))
@@ -101,21 +108,6 @@ def MLIR.Op.render (op : Op) : String :=
 
 namespace Translate
 
-def ty : MLIRType → Except String Ty
-  | .int w => return .bv w
-  | .undefined "llvm.ptr" => return .ptr
-  | .vector [l] [] (.int w) => return .vec l w
-  | t => throw s!"unsupported type {t}"
-
-/-- An LLVM type as `getelementptr`'s `elem_type` and `alloca`'s `elem_type` spell it. -/
-inductive AggTy where
-  | int (bits : Nat)
-  | ptr
-  | struct (fields : List AggTy)
-  | array (n : Nat) (elem : AggTy)
-  | vector (n : Nat) (elem : AggTy)
-  deriving Repr, Inhabited
-
 def takeNat (cs : List Char) : Option (Nat × List Char) :=
   let ds := cs.takeWhile Char.isDigit
   if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.dropWhile Char.isDigit)
@@ -125,21 +117,22 @@ def dropWs (cs : List Char) : List Char :=
 
 mutual
 /-- Decode one type from the head of `cs`. -/
-partial def parseAggTy : List Char → Option (AggTy × List Char)
-  | 'i' :: cs => (takeNat cs).map fun (w, rest) => (.int w, rest)
+partial def parseTy : List Char → Option (Ty × List Char)
+  | 'i' :: cs => (takeNat cs).map fun (w, rest) => (.bv w, rest)
   | 'p' :: 't' :: 'r' :: cs => some (.ptr, cs)
   | 'a' :: 'r' :: 'r' :: 'a' :: 'y' :: '<' :: cs => do
     let (n, cs) ← takeNat (dropWs cs)
     let 'x' :: cs := dropWs cs | none
-    let (t, cs) ← parseAggTy (dropWs cs)
+    let (t, cs) ← parseTy (dropWs cs)
     let '>' :: cs := dropWs cs | none
     return (.array n t, cs)
   | 'v' :: 'e' :: 'c' :: 't' :: 'o' :: 'r' :: '<' :: cs => do
     let (n, cs) ← takeNat (dropWs cs)
     let 'x' :: cs := dropWs cs | none
-    let (t, cs) ← parseAggTy (dropWs cs)
+    let (t, cs) ← parseTy (dropWs cs)
+    let .bv w := t | none
     let '>' :: cs := dropWs cs | none
-    return (.vector n t, cs)
+    return (.vec n w, cs)
   | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
     -- an optional `"name", `
     let cs ←
@@ -151,29 +144,28 @@ partial def parseAggTy : List Char → Option (AggTy × List Char)
       | cs =>
         pure cs
     let '(' :: cs := cs | none
-    let (fields, cs) ← parseAggFields (dropWs cs) []
+    let (fields, cs) ← parseTyFields (dropWs cs) []
     let '>' :: cs := dropWs cs | none
     return (.struct fields, cs)
   | _ => none
 /-- `t (, t)* )` -/
-partial def parseAggFields (cs : List Char) (acc : List AggTy) : Option (List AggTy × List Char) :=
-  do
-  let (t, cs) ← parseAggTy cs
+partial def parseTyFields (cs : List Char) (acc : List Ty) : Option (List Ty × List Char) := do
+  let (t, cs) ← parseTy cs
   match dropWs cs with
   | ',' :: cs =>
-    parseAggFields (dropWs cs) (t :: acc)
+    parseTyFields (dropWs cs) (t :: acc)
   | ')' :: cs =>
     return ((t :: acc).reverse, cs)
   | _ =>
     none
 end
 
-def aggTy : MLIRType → Except String AggTy
-  | .int w => return .int w
-  | .vector [n] [] (.int w) => return .vector n (.int w)
+def ty : MLIRType → Except String Ty
+  | .int w => return .bv w
+  | .vector [n] [] (.int w) => return .vec n w
   | .undefined "llvm.ptr" => return .ptr
   | t@(.undefined s) =>
-    match parseAggTy ((s.drop "llvm.".length).toString.toList) with
+    match parseTy ((s.drop "llvm.".length).toString.toList) with
     | some (a, []) => return a
     | _ => throw s!"cannot decode the type {t}"
   | t => throw s!"unsupported type {t}"
@@ -183,52 +175,52 @@ def alignTo (off a : Nat) : Nat :=
   ((off + a - 1) / a) * a
 
 /-- `(size, alignment)` in bytes, in LLVM's default data layout. -/
-partial def AggTy.sizeAlign : AggTy → Except String (Nat × Nat)
-  | .int bits =>
+partial def Ty.sizeAlign : Ty → Except String (Nat × Nat)
+  | .bv bits =>
     let sz := (bits + 7) / 8
     if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then return (sz, sz)
     else throw s!"unsupported integer size i{bits}"
   | .ptr => return (8, 8)
   | .array n t => do
-    let (s, a) ← t.sizeAlign
+    let (s, a) ← Ty.sizeAlign t
     return (n * alignTo s a, a)
-  | .vector n t => do
-    let (s, _) ← t.sizeAlign
+  | .vec n w => do
+    let (s, _) ← Ty.sizeAlign (.bv w)
     return (n * s, Nat.nextPowerOfTwo (n * s))
   | .struct fields => do
     let (off, al) ←
       fields.foldlM (init := (0, 1)) fun (off, al) f => do
-          let (s, a) ← f.sizeAlign
+          let (s, a) ← Ty.sizeAlign f
           return (alignTo off a + s, max al a)
     return (alignTo off al, al)
 
 /-- The padded size in bytes. -/
-def AggTy.size (t : AggTy) : Except String Nat := do
-  let (s, a) ← t.sizeAlign
+def Ty.size (t : Ty) : Except String Nat := do
+  let (s, a) ← Ty.sizeAlign t
   return alignTo s a
 
 /-- The byte offset of element `k` of `t`, and that element's type. -/
-def AggTy.index (k : Nat) : AggTy → Except String (Nat × AggTy)
+def Ty.index (k : Nat) : Ty → Except String (Nat × Ty)
   | .struct fields => do
     let some f := fields[k]? | throw s!"struct field index {k} out of range"
     let off ←
       (fields.take k).foldlM (init := 0) fun off f => do
-          let (s, a) ← f.sizeAlign
+          let (s, a) ← Ty.sizeAlign f
           return alignTo off a + s
-    return (alignTo off (← f.sizeAlign).2, f)
+    return (alignTo off (← Ty.sizeAlign f).2, f)
   | .array n t => do
     unless k < n do
       throw s!"array index {k} out of range"
-    return (k * (← t.size), t)
-  | .vector n t => do
+    return (k * (← Ty.size t), t)
+  | .vec n w => do
     unless k < n do
       throw s!"vector index {k} out of range"
-    return (k * (← t.sizeAlign).1, t)
+    return (k * (← Ty.sizeAlign (.bv w)).1, .bv w)
   | t => throw s!"cannot index into {repr t}"
 
 /-- The byte offset of constant `getelementptr` indices: the first steps over whole `t`s, the
 rest into `t`. -/
-def gepOffset (t : AggTy) : List Int → Except String Nat
+def gepOffset (t : Ty) : List Int → Except String Nat
   | [] => return 0
   | k₀ :: ks => do
     let natIdx (k : Int) : Except String Nat := do
@@ -238,8 +230,8 @@ def gepOffset (t : AggTy) : List Int → Except String Nat
         throw s!"negative index {k}"
       return k.toNat
     let (off, _) ←
-      ks.foldlM (init := ((← natIdx k₀) * (← t.size), t)) fun (off, t) k => do
-          let (step, t) ← t.index (← natIdx k)
+      ks.foldlM (init := ((← natIdx k₀) * (← Ty.size t), t)) fun (off, t) k => do
+          let (step, t) ← Ty.index (← natIdx k) t
           return (off + step, t)
     return off
 
@@ -545,7 +537,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless isOne do
         throw s!"the count %{count} must be the constant 1"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .alloca dst (← (← aggTy et).size)
+      return .alloca dst (← Ty.size (← ty et))
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
     do
       let [(p, .ptr)] := args | throw "expected one pointer operand"
@@ -563,8 +555,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
         throw "expected a pointer result"
       let [(p, .ptr)] := args | throw "only constant indices are supported"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .unop (.gepConst (← gepOffset (← aggTy et) (← arrayInts op "rawConstantIndices"))) dst
-          p
+      return .unop (.gepConst (← gepOffset (← ty et) (← arrayInts op "rawConstantIndices"))) dst p
   | "llvm.shufflevector" =>
     do
       let (dst, .vec l₂ wₒ) ← res | throw "expected vector output type"
