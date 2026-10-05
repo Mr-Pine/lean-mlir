@@ -80,6 +80,7 @@ inductive Instr (Γ : Ctx)
   | lifetimeEnd (p : Reg Γ .ptr) (bytes : Nat)
   /-- The semantics of the calle `f` should generally be `Func.call` -/
   | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
+  | addressof {t : Ty} (v : EffectM ⟦t⟧) (dst : Dst Γ .ptr)
 
 /-- A jump to block `target`, with one argument per parameter of the target (`blockTys target`). -/
 structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where
