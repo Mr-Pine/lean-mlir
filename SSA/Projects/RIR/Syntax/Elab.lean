@@ -399,6 +399,43 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
   for c in cmds do
     elabCommand c
 
+open MlirDef in
+/-- Define `x : GlobalInitializer` from a constant global's initializer region, as `mlir_def`
+defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. -/
+def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
+    (r : TSyntax `mlir_region) : CommandElabM Unit := do
+  let rgn ← liftCoreM (region r)
+  let p ← match Prog.ofRegion rgn with
+    | .ok p => pure p
+    | .error e => throwErrorAt r e
+  let [b] := p.blocks | throwErrorAt r "an initializer has exactly one block"
+  unless p.Γ.args.isEmpty do
+    throwErrorAt r "an initializer takes no arguments"
+  let [t] := p.tRets | throwErrorAt r "an initializer returns exactly one value"
+  if b.body.any (fun | .call .. | .addressof .. => true | _ => false) then
+    throwErrorAt r "an initializer neither calls nor takes addresses"
+  let name (s : Name) : Ident := mkIdent (x.getId ++ s)
+  let Γ := name `Γ
+  let tree := name `tree
+  let tys : ValTys := { hty := name `hty, vals := p.Γ.vals }
+  let d := depth p.Γ.n
+  let tStx ← tyStx t
+  let noSymbol (f : String) : TSyntax `term := mkIdent (.mkSimple f)
+  let body ← b.body.toArray.mapM (instrStx tys noSymbol noSymbol)
+  let cmds ← do
+    pure #[
+      -- the kernel checks the count: the elaborator would recurse once per value
+      ← `(abbrev $Γ : Ctx := ⟨$(num p.Γ.n), [], $(← tysStx p.Γ.vals), by decide +kernel⟩),
+      ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d p.Γ.vals))),
+      ← `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
+          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h),
+      ← `(def $(name `entry) : BasicBlock $Γ [$tStx] (fun _ : Fin 1 => []) :=
+          { body := [$body,*], exit := $(← exitStx tys b.exit) }),
+      ← `($[$doc?:docComment]? @[reducible] def $x : GlobalInitializer :=
+          { Γ := $Γ, hΓ := rfl, t := $tStx, block := $(name `entry) })]
+  for c in cmds do
+    elabCommand c
+
 end
 
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
@@ -409,6 +446,16 @@ syntax (name := mlirDef) (docComment)? "mlir_def " ident (ppSpace bracketedBinde
 elab_rules : command
   | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:mlir_region $[with $cs,*]?) =>
     elabMlirDef doc? x bs r ((cs.map (·.getElems)).getD #[])
+
+/-- `mlir_const_def X := { region }`: define `X : GlobalInitializer` and its pieces from a constant
+global's initializer region, in generic-form MLIR. -/
+syntax (name := mlirConstDef) (docComment)? "mlir_const_def " ident " := " mlir_region : command
+
+elab_rules : command
+  |
+  `(
+$[$doc?:docComment]?mlir_const_def $x:ident := $r:mlir_region) =>
+    elabMlirConstDef doc? x r
 
 /-- `mlir_region% { region }` is the region's AST, a `MLIR.Region`: `translate`'s input. -/
 elab "mlir_region% " r:mlir_region : term => do
