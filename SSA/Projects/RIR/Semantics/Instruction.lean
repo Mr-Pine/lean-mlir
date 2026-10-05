@@ -69,12 +69,18 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | memcpy dst src len => Operation.memcpy (env.read dst) (env.read src) (env.read len) env
   | alloca dst bytes =>
     modifyGetThe GlobalState fun s => (env.write dst (.value s.allocaPtr), s.alloca bytes)
-  | call f args rets => do
-    let vs ← f (args.read env)
-    pure (env.writeMany rets vs)
   -- more defined than LLVM, where a dead object's bytes are undefined: sound for programs
   -- that only touch live objects
   | lifetimeStart _ _ | lifetimeEnd _ _ => pure env
+  | call f args rets => do
+    let vs ← f (args.read env)
+    pure (env.writeMany rets vs)
+  | addressof (t := t) v dst => do
+    let .value v := t.flatten (← v) | throwUB
+    modifyGetThe GlobalState fun s =>
+        (env.write dst (.value s.allocaPtr),
+          let s' := s.alloca ((t.width + 7) / 8) -- Bits to bytes
+          { s' with mem := s'.mem.storeAt s.allocaPtr v })
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/

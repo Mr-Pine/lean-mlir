@@ -55,6 +55,7 @@ inductive PInstr
   | lifetimeEnd (p : RegRef) (bytes : Nat)
   /-- A call of the symbol `callee`, from argument types `ts` to result types `us`. -/
   | call (callee : String) (ts us : List Ty) (args : List RegRef) (rets : List Nat)
+  | addressof (global : String) (dst : Nat)
 
 /-- A jump to block `target` with arguments `args`. -/
 structure PJump where
@@ -621,6 +622,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
             return i
       let us ← op.res.mapM (ty ·.2)
       return .call callee (args.map (·.2)) us (args.map (·.1)) rets
+  | "llvm.mlir.addressof" =>
+    do
+      let some (.symbol global) := op.getAttr? "global_name" | throw "expected a `global_name` symbol"
+      let (dst, .ptr) ← res | throw "expected addressof target to be a `ptr`"
+      return .addressof global dst
   | name =>
     throw s!"unsupported operation '{name}'"
 
@@ -762,6 +768,10 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
 
 /-! ## Building the `Func` -/
 
+/-- A global's initializer, typically `G.value` for a `G : GlobalInitializer`. -/
+abbrev Global :=
+  Σ (t : Ty), EffectM ⟦t⟧
+
 /-- A callee's semantics, typically `g.call` for a `g : Func`. -/
 abbrev Callee :=
   Σ (ts us : List Ty), Vals ts → EffectM (Vals us)
@@ -800,7 +810,8 @@ def mkDsts : (ts : List Ty) → List Nat → Except String (Dsts Γ ts)
   | t :: ts, d :: ds => return .cons (← mkDst Γ t d) (← mkDsts ts ds)
   | _, _ => throw "wrong number of registers"
 
-def mkInstr (callees : String → Option Callee) : PInstr → Except String (Instr Γ)
+def mkInstr (callees : String → Option Callee) (globals : String → Option Global) :
+    PInstr → Except String (Instr Γ)
   | .const c d => return .const c.value (← mkDst Γ _ d)
   | .poison t d => return .poison (← mkDst Γ t d)
   | .unop op d a => return .unop op (← mkDst Γ _ d) (← mkReg Γ _ a)
@@ -822,6 +833,9 @@ def mkInstr (callees : String → Option Callee) : PInstr → Except String (Ins
       return .call (h.1 ▸ h.2 ▸ f) (← mkRegs Γ ts args) (← mkDsts Γ us rets)
     else
       throw s!"@{name} does not have the type the call site needs"
+  | .addressof name dst => do
+    let some ⟨_, v⟩ := globals name | throw s!"no global bound for @{name}"
+    return .addressof v (← mkDst Γ .ptr dst)
 
 variable {n : Nat} (blockTys : Fin n → List Ty)
 
@@ -843,8 +857,8 @@ def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
 end Prog
 
 /-- The `Func` of `p`, calling `callees name` for `@name`. -/
-def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none) :
-    Except String Func := do
+def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
+    (globals : String → Option Global := fun _ => none) : Except String Func := do
   let n := p.blocks.length
   let params ←
     p.blocks.toArray.mapM fun b => do
@@ -857,7 +871,7 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
       let blocks ←
         p.blocks.toArray.mapM fun b => do
             return ({
-                  body := ← b.body.mapM (mkInstr p.Γ callees)
+                  body := ← b.body.mapM (mkInstr p.Γ callees globals)
                   exit := ← mkExit p.Γ blockTys p.tRets b.exit } :
                 BasicBlock p.Γ p.tRets blockTys)
       if hs : blocks.size = n then
@@ -871,9 +885,9 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
     throw "no blocks"
 
 /-- Translate `reg` to a `Func`. -/
-def translate (reg : Region) (callees : String → Option Callee := fun _ => none) :
-    Except String Func := do
-  (← Prog.ofRegion reg).toFunc callees
+def translate (reg : Region) (callees : String → Option Callee := fun _ => none)
+    (globals : String → Option Global := fun _ => none) : Except String Func := do
+  (← Prog.ofRegion reg).toFunc callees globals
 
 end
 

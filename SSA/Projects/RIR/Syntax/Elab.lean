@@ -3,6 +3,7 @@ module
 public import SSA.Projects.RIR.Syntax.Parser
 public import SSA.Projects.RIR.Syntax.Translate
 public import SSA.Projects.RIR.Semantics.Func
+public import SSA.Projects.RIR.Semantics.GlobalInitializer
 public import SSA.Projects.RIR.TyTree
 public meta import SSA.Projects.RIR.Syntax.Parser
 public meta import SSA.Projects.RIR.Syntax.Translate
@@ -20,15 +21,18 @@ defines it in the shape of a hand lift:
 * one `def` per block: `X.entry` for a single block, else `X.bb0`, `X.bb1`, … by MLIR name;
 * `X : Func` (`@[reducible]`), and `X.args`, the argument vector.
 
-A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`, which may use the binders.
-Every called symbol needs a binding.
+A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`; an `llvm.mlir.addressof`
+of `@g` stores the value of the `GlobalInitializer` bound by `with @g := t` in a fresh block and
+returns its address. The terms may use the binders. Every called or addressed symbol needs a
+binding, and a symbol cannot be both.
 -/
 
 namespace LeanMLIR.RIR
 
 open Lean Elab Command Term MLIR
 
-/-- `@f := t`: calls to `@f` call the `Func` `t`. -/
+/-- `@f := t`: calls to `@f` call the `Func` `t`; addresses of `@f` are of the
+`GlobalInitializer` `t`'s value. -/
 public syntax calleeBinding := "@" ident " := " term
 
 public meta section
@@ -172,8 +176,8 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .splat l w v => do
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
 
-/-- The instruction, calling `callee f` for `@f`. -/
-def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
+/-- The instruction, calling `callee f` for `@f` or loading `global g` for `@g`. -/
+def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String → TSyntax `term) :
     PInstr → CommandElabM (TSyntax `term)
   | .const c d => do
     `(.const $(← constStx c) $(← dstStx tys d))
@@ -203,6 +207,8 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
   | .call f _ _ args rets => do
     `(.call $(callee f) $(← consStx (← args.mapM (regStx tys)))
           $(← consStx (← rets.mapM (dstStx tys))))
+  | .addressof g d => do
+    `(.addressof $(global g) $(← dstStx tys d))
 
 def jumpStx (tys : ValTys) (j : PJump) : CommandElabM (TSyntax `term) := do
   `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx tys)))⟩)
@@ -263,6 +269,17 @@ def checkCallee (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder)) (
           throwErrorAt t "@{name}: the call sites need a callee of type{indentExpr ty}\nbut \
         `{t}.call` has type{indentExpr ety}"
 
+/-- The `GlobalInitializer` bound to `@name`. -/
+def globalTerm (ref : Syntax) (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
+    (table : List (String × TSyntax `term)) (name : String) : CommandElabM (TSyntax `term) := do
+  let some t := table.lookup name
+    | throwErrorAt ref "addressof of @{name}: no global initializer bound; add `with @{name} := …`"
+  runTermElabM fun _ =>
+      Term.elabBinders binders fun _ => do
+        discard <| Term.elabTermEnsuringType t (mkConst ``GlobalInitializer)
+        Term.synthesizeSyntheticMVarsNoPostponing
+  return t
+
 end MlirDef
 
 open MlirDef in
@@ -288,16 +305,31 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       let t ← calleeTerm r table f
       checkCallee binders f t ts us
       terms := terms ++ [(f, ← `(($t).call))]
+
+  -- every global's term, checked to be a `GlobalInitializer`
+  let addrs := p.blocks.flatMap fun b => b.body.filterMap fun
+    | .addressof g _ => some g
+    | _ => none
+  let mut globals : List (String × TSyntax `term) := []
+  for g in addrs do
+    if (terms.lookup g).isSome then
+      throwErrorAt r "@{g} is both called and its address taken"
+    if (globals.lookup g).isNone then
+          let t ← globalTerm r binders table g
+          globals := globals ++ [(g, ← `(($t).value))]
+
   for (f, _) in table do
-    unless (terms.lookup f).isSome do
-      logWarning m!"@{f} is bound but never called"
+    unless (terms.lookup f).isSome || (globals.lookup f).isSome do
+      logWarning m!"@{f} is bound but never called or loaded"
   let callee (f : String) : TSyntax `term := (terms.lookup f).getD (mkIdent (.mkSimple f))
+  let global (g : String) : TSyntax `term := (globals.lookup g).getD (mkIdent (.mkSimple g))
   -- the binders each block needs: those its callees' terms mention
   let binderNames ← binders.mapM fun b => getBracketedBinderIds b
   let blockBinders (b : PBlock) :
       Array (TSyntax ``Lean.Parser.Term.bracketedBinder) × Array Ident :=
     let used := b.body.flatMap fun
       | .call f .. => (idents (callee f)).toList
+      | .addressof g .. => (idents (global g)).toList
       | _ => []
     let keep := (binders.zip binderNames).filter fun (_, ns) => ns.any used.contains
     (keep.map (·.1), keep.flatMap fun (_, ns) => ns.map mkIdent)
@@ -343,7 +375,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
             fun $alts:matchAlt*)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
-      let body ← b.body.toArray.mapM (instrStx tys callee)
+      let body ← b.body.toArray.mapM (instrStx tys callee global)
       `(def $(blockName b) $bs* : BasicBlock $Γ $tRets $blockTys :=
           { body := [$body,*], exit := $(← exitStx tys b.exit) })
     let blocksVal ←
