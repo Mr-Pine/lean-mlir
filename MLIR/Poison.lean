@@ -186,6 +186,46 @@ theorem toOption_getSome : (PoisonOr.value x).toOption.getD y = x := by rfl
 @[simp]
 theorem toOption_getNone : (PoisonOr.poison).toOption.getD y = y := by rfl
 
+theorem isPoisonFalse_eq_existsValue : isPoison v = false ↔ ∃ w, v = .value w := by
+  constructor
+  case mp t =>
+    intro h
+    let opt := v.toOption
+    have : v = { toOption := opt } := rfl
+    simp [isPoison, this] at h
+    obtain ⟨val, hval⟩ : ∃ val, opt = some val := by grind
+    refine ⟨val, ?_⟩
+    rw [hval] at this
+    simp [this]
+  case mpr t =>
+    intro ⟨w, h⟩
+    simp [h]
+
+theorem isPoisonTrue_eq_eqPoison : isPoison v = true ↔ v = .poison := by
+  constructor
+  case mp t =>
+    intro h
+    let opt := v.toOption
+    have : v = { toOption := opt } := rfl
+    simp [isPoison, this] at h
+    have hopt : opt = none := by grind
+    rw [hopt] at this
+    simp [this]
+  case mpr t =>
+    intro hv
+    simp [hv]
+
+theorem bind_eq_value : (x >>= f) = value b ↔ ∃ a, x = value a ∧ f a = value b := by
+  constructor <;> intro h
+  · cases hx : x
+    · simp [hx, PoisonOr.poison_ne_value] at h
+    case value a =>
+      refine ⟨a, ?_⟩
+      simp [hx] at h
+      simp [h]
+  · obtain ⟨a, ha, ha'⟩ := h
+    simp [ha, ha']
+
 end Lemmas
 
 end

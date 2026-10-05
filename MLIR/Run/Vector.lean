@@ -94,14 +94,14 @@ open Lean Meta in
 `k`, to the literal: an `insertelement` chain to the vector it builds. -/
 dsimproc [mlir_operation]reduceVectorSet (Vector.set _ _ _ _) := fun e => do
   let_expr Vector.set α n xs i x _ := e | return .continue
-  let some k := (← instantiateMVars i).nat? <|> (← instantiateMVars i).rawNatLit? |
-    return .continue
+  let some k := (← instantiateMVars i).nat? <|> (← instantiateMVars i).rawNatLit? | return .continue
   let lanes? : Option (List Expr) ←
     match_expr xs with
     | Vector.mk _ _ arr _ =>
-      pure <| match_expr arr with
-        | List.toArray _ l => l.listLit?.map (·.2)
-        | _ => none
+      pure <|
+          match_expr arr with
+          | List.toArray _ l => l.listLit?.map (·.2)
+          | _ => none
     | Vector.replicate _ m a =>
       pure <| (m.nat? <|> m.rawNatLit?).map (List.replicate · a)
     | _ =>

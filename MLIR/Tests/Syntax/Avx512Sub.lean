@@ -188,11 +188,6 @@ end Tests
 
 section Spec
 
-/-- `↑(k : Fin n)` of a literal, which `simp` leaves alone for `k > 2`. -/
-private theorem Fin.val_lit {n k : Nat} [NeZero n] :
-    ((no_index (OfNat.ofNat k : Fin n)) : Nat) = k % n :=
-  rfl
-
 /-- `sub` stores `spec a b` at `r` and returns `r`. `r` may alias `a` or `b`. -/
 public theorem fd_f25519_sub.call_eq (r a b : Pointer) (s : GlobalState) (hwf : s.WF)
     (hr : Fits s.mem r 512) (ha : Fits s.mem a 512) (hb : Fits s.mem b 512) :
@@ -217,9 +212,9 @@ public theorem fd_f25519_sub.call_eq (r a b : Pointer) (s : GlobalState) (hwf : 
   step_pure opaque
   step_pure opaque with sub_fast
   -- fold_signed
-  step_pure opaque named
-  step_pure opaque [hshift_amounts] named
-  step_pure [expandOfFn, Ty.wrap_vec] named
+  step_pure opaque named transparent
+  step_pure opaque [hshift_amounts] named transparent
+  step_pure [hrotl_idxs, hzero, expandOfFn, Ty.wrap_vec] named transparent
   step_pure opaque [heightteen] with multiplied
   step_pure opaque [hfirst_elem_mask, hmultiplied, expandOfFn, List.getElem_cons_zero, List.getElem_cons_succ, BitVec.and_zero] named
   step_pure
@@ -233,7 +228,7 @@ public theorem fd_f25519_sub.call_eq (r a b : Pointer) (s : GlobalState) (hwf : 
   apply Vector.ext
   intro i hi
   obtain _|_|_|_|_|_|_|_|i := i
-  all_goals try simp [spec, lanes, Ty.extractVecElem_eq, Fin.val_lit]
+  all_goals try simp [spec, lanes, Ty.extractVecElem_eq]
   all_goals try omega
   -- lane 0: `(c * 18) &&& -1 = 18 * c`
   rw [show (18446744073709551615#64) = BitVec.allOnes 64 by decide, BitVec.and_allOnes,

@@ -11,51 +11,156 @@ public inductive Ty
   | bv (w : Nat)
   | ptr
   | vec (l w : Nat)
+  | array (n : Nat) (t : Ty)
+  | struct (fields : List Ty)
 
 namespace Ty
 
 @[expose] public section
 
-deriving instance DecidableEq, Lean.ToExpr, Repr for Ty
+mutual
+def Ty.decEq : (a b : Ty) → Decidable (a = b)
+  | .bv w, .bv w' => if h : w = w' then isTrue (h ▸ rfl) else isFalse (fun e => h (Ty.bv.inj e))
+  | .ptr, .ptr => isTrue rfl
+  | .vec l w, .vec l' w' =>
+    if h : l = l' ∧ w = w' then isTrue (h.left ▸ (h.right ▸ rfl))
+    else isFalse (fun e => h (Ty.vec.inj e))
+  | .array n t, .array n' t' =>
+    haveI := decEq t t'
+    if h : n = n' ∧ t = t' then isTrue (h.left ▸ (h.right ▸ rfl))
+    else isFalse (fun e => h (Ty.array.inj e))
+  | .struct fields, .struct fields' =>
+    haveI := decEqList fields fields'
+    if h : fields = fields' then isTrue (h ▸ rfl) else isFalse (fun e => h (Ty.struct.inj e))
+  -- There seems to be no nicer way :(
+  | .bv _, .ptr | .bv _, .vec .. | .bv _, .array .. | .bv _, .struct _ | .ptr, .bv _ | .ptr,
+    .vec .. | .ptr, .array .. | .ptr, .struct _ | .vec .., .bv _ | .vec .., .ptr | .vec ..,
+    .array .. | .vec .., .struct _ | .array .., .bv _ | .array .., .ptr | .array .., .vec .. |
+    .array .., .struct _ | .struct _, .bv _ | .struct _, .ptr | .struct _, .vec .. | .struct _,
+    .array .. =>
+    isFalse
+      (by
+        intro e; cases e)
+def Ty.decEqList : (a b : List Ty) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | t :: ts, t' :: ts' =>
+    haveI := decEq t t'
+    haveI := decEqList ts ts'
+    if h : t = t' ∧ ts = ts' then isTrue (List.cons_eq_cons.mpr h)
+    else isFalse (fun e => h (List.cons_eq_cons.mp e))
+  | [], t :: ts | t :: ts, [] => isFalse (by simp)
+end
 
+deriving instance Lean.ToExpr, Repr for Ty
+
+instance : DecidableEq Ty :=
+  Ty.decEq
+
+mutual
 @[reducible]
-def denote_raw
+def denoteRaw : Ty → Type
   | bv w => BitVec w
   | ptr => Pointer
   | vec l w => Vector (BitVec w) l
+  | array n τ => Vector (denoteRaw τ) n
+  | struct fields => denoteFieldsRaw fields
+@[reducible]
+def denoteFieldsRaw : List Ty → Type
+  | [] => Unit
+  | [t] => denoteRaw t
+  | t :: ts => denoteRaw t × denoteFieldsRaw ts
+end
 
-notation "⟦" t "⟧ᵣ" => MLIR.Ty.denote_raw t
+notation "⟦" t "⟧ᵣ" => denoteRaw t
 
+mutual
 @[reducible]
 def denote
   | bv w => PoisonOr (BitVec w)
   | ptr => PoisonOr (Pointer)
   | vec l w => Vector (PoisonOr (BitVec w)) l
+  | array n τ => Vector (denote τ) n
+  | struct fields => denoteFields fields
+@[reducible]
+def denoteFields : List Ty → Type
+  | [] => Unit
+  | [t] => denote t
+  | t :: ts => denote t × denoteFields ts
+end
 
 /-- `⟦t⟧` is the `Type` of values of (MLIR) type `t` --/
 notation "⟦" t "⟧" => MLIR.Ty.denote t
 
-instance instDecidableEqDenoteRaw : {t : Ty} → DecidableEq ⟦t⟧
-  | .bv _ => inferInstanceAs (DecidableEq (PoisonOr (BitVec _)))
-  | .ptr => inferInstanceAs (DecidableEq (PoisonOr Pointer))
-  | .vec _ _ => inferInstanceAs (DecidableEq (Vector (PoisonOr (BitVec _)) _))
-
-instance instDecidableEqDenote : {t : Ty} → DecidableEq ⟦t⟧ᵣ
+mutual
+def decEqDenoteRaw : (t : Ty) → DecidableEq ⟦t⟧ᵣ
   | .bv _ => inferInstanceAs (DecidableEq (BitVec _))
   | .ptr => inferInstanceAs (DecidableEq Pointer)
   | .vec _ _ => inferInstanceAs (DecidableEq (Vector (BitVec _) _))
+  | .array _ t =>
+    haveI := decEqDenoteRaw t
+    inferInstanceAs (DecidableEq (Vector ⟦t⟧ᵣ _))
+  | .struct fs => decEqDenoteFieldsRaw fs
+def decEqDenoteFieldsRaw : (ts : List Ty) → DecidableEq (denoteFieldsRaw ts)
+  | [] => inferInstanceAs (DecidableEq Unit)
+  | [t] => decEqDenoteRaw t
+  | t :: t' :: ts =>
+    haveI := decEqDenoteRaw t
+    haveI := decEqDenoteFieldsRaw (t' :: ts)
+    inferInstanceAs (DecidableEq (⟦t⟧ᵣ × denoteFieldsRaw (t' :: ts)))
+end
 
+instance {t : Ty} : DecidableEq ⟦t⟧ᵣ :=
+  decEqDenoteRaw t
+
+mutual
+def decEqDenote : (t : Ty) → DecidableEq ⟦t⟧
+  | .bv _ => inferInstanceAs (DecidableEq (PoisonOr (BitVec _)))
+  | .ptr => inferInstanceAs (DecidableEq (PoisonOr Pointer))
+  | .vec _ _ => inferInstanceAs (DecidableEq (Vector (PoisonOr (BitVec _)) _))
+  | .array _ t =>
+    haveI := decEqDenote t
+    inferInstanceAs (DecidableEq (Vector ⟦t⟧ _))
+  | .struct fs => decEqDenoteFields fs
+def decEqDenoteFields : (ts : List Ty) → DecidableEq (denoteFields ts)
+  | [] => inferInstanceAs (DecidableEq Unit)
+  | [t] => decEqDenote t
+  | t :: t' :: ts =>
+    haveI := decEqDenote t
+    haveI := decEqDenoteFields (t' :: ts)
+    inferInstanceAs (DecidableEq (⟦t⟧ × denoteFields (t' :: ts)))
+end
+
+instance {t : Ty} : DecidableEq ⟦t⟧ :=
+  decEqDenote t
+
+mutual
 def wrap (v : ⟦t⟧ᵣ) : ⟦t⟧ :=
   match t with
   | bv _ => .value v
   | ptr => .value v
   | vec _ _ => Vector.map .value v
+  | array _ _ => Vector.map wrap v
+  | struct _ => wrapFields v
+def wrapFields : {fs : List Ty} → denoteFieldsRaw fs → denoteFields fs
+  | [], _ => ()
+  | [_], v => wrap v
+  | _ :: _ :: _, (v, vs) => (wrap v, wrapFields vs)
+end
 
+mutual
 def unwrap (v : ⟦t⟧) : PoisonOr ⟦t⟧ᵣ :=
   match t with
   | bv _ => v
   | ptr => v
   | vec _ _ => Vector.mapM id v
+  | array _ _ => Vector.mapM unwrap v
+  | struct _ => unwrapFields v
+def unwrapFields : {fs : List Ty} → denoteFields fs → PoisonOr (denoteFieldsRaw fs)
+  | [], _ => .value ()
+  | [_], v => unwrap v
+  | _ :: _ :: _, (v, vs) => do
+    return (← unwrap v, ← unwrapFields vs)
+end
 
 @[simp]
 theorem unwrap_bv {v : ⟦bv w⟧} : unwrap v = v :=
@@ -75,15 +180,32 @@ end
 
 public section
 
+mutual
 @[expose]
 def width : Ty → Nat
   | bv w => w
   | ptr => 64
   | vec l w => w * l
+  | array n t => t.width * n
+  | struct fields => fieldsWidth fields
+@[expose]
+def fieldsWidth : List Ty → Nat
+  | [] => 0
+  | [t] => t.width
+  | t :: ts => fieldsWidth ts + t.width
+end
 
+mutual
 def poisoned : (t : Ty) → ⟦t⟧
   | .bv _ | .ptr => PoisonOr.poison
   | .vec l _ => Vector.replicate l PoisonOr.poison
+  | .array n t => Vector.replicate n (t.poisoned)
+  | .struct fields => poisonedFields fields
+def poisonedFields : (ts : List Ty) → denoteFields ts
+  | [] => ()
+  | [t] => t.poisoned
+  | t :: t' :: ts => (t.poisoned, poisonedFields (t' :: ts))
+end
 
 @[simp]
 theorem width_bv : (bv w).width = w :=
@@ -141,13 +263,25 @@ theorem _root_.BitVec.extractLsb'_packLanes {we : Nat} :
 
 end BitVecs
 
+def allValues [Inhabited α] (v : Vector (PoisonOr α) n) : PoisonOr (Vector α n) :=
+  if ∀ i : Fin n, v[i].isPoison = false then .value (Vector.ofFn fun i => v[i].getValue)
+  else .poison
+
+mutual
 def flatten : (t : Ty) → ⟦t⟧ → PoisonOr (BitVec t.width)
   | bv _, x => x
   | ptr, _ => .poison
-  | vec l _, v =>
-    if ∀ i : Fin l, v[i] ≠ .poison then
-      .value (BitVec.packLanes (Vector.ofFn (n := l) fun i => v[i].getValue))
-    else .poison
+  | vec _ _, v => do
+    return BitVec.packLanes (← allValues v)
+  | array _ t, v => do
+    return BitVec.packLanes (← allValues (v.map (flatten t)))
+  | struct fields, v => flattenFields fields v
+def flattenFields : (ts : List Ty) → denoteFields ts → PoisonOr (BitVec (fieldsWidth ts))
+  | [], _ => .value 0#0
+  | [t], v => flatten t v
+  | t :: t' :: ts, (a, b) => do
+    return (← flattenFields (t' :: ts) b) ++ (← flatten t a)
+end
 
 def extractVecElem (l w : Nat) (i : Fin l) (x : BitVec (w * l)) :=
   x.extractLsb' (i.val * w) w
@@ -168,10 +302,21 @@ attribute [mlir_operation] Vector.ofFn_getElem
 attribute [mlir_operation] Vector.getElem_replicate BitVec.zero_add BitVec.add_zero
   BitVec.toNat_ofNat
 
+mutual
 def unflatten : (t : Ty) → BitVec t.width → ⟦t⟧
   | bv _, x => .value x
   | ptr, _ => .poison
   | vec _ w, x => Vector.ofFn (fun i => .value (extractVecElem _ w i x))
+  | array n t, x => Vector.ofFn (fun i => unflatten t (extractVecElem n (t.width) i x))
+  | struct fields, x => unflattenFields fields x
+def unflattenFields : (ts : List Ty) → BitVec (fieldsWidth ts) → denoteFields ts
+  | [], _ => ()
+  | [t], x => unflatten t x
+  | t :: t' :: ts, x =>
+    let v := x.extractLsb' 0 (t.width)
+    let vs := x.extractLsb' (t.width) (fieldsWidth (t' :: ts))
+    (unflatten t v, unflattenFields (t' :: ts) vs)
+end
 
 @[simp]
 theorem flatten_bv (x : ⟦bv w⟧) : flatten (bv w) x = x := by rfl
@@ -188,11 +333,36 @@ theorem unflatten_vec (b : BitVec (w * l)) :
 @[simp]
 theorem flatten_wrap_vec (v : ⟦vec l w⟧ᵣ) :
     flatten (vec l w) (wrap v) = .value (BitVec.packLanes v) := by
-  simp [flatten, wrap_vec, PoisonOr.value_ne_poison]
+  simp [flatten, wrap_vec, allValues]
 
 @[simp]
 theorem flatten_ptr (x : ⟦ptr⟧) : flatten ptr x = .poison := by rfl
 
+theorem allValues_eq_value [Inhabited α] (v : Vector (PoisonOr α) n) :
+    allValues v = .value w ↔ v = w.map .value := by
+  simp [allValues]
+  split
+  case isTrue h =>
+    simp
+    constructor
+    · intro h'
+      rw [← h']
+      ext i hi
+      simp
+      simp [PoisonOr.isPoisonFalse_eq_existsValue] at h
+      obtain ⟨w, hw⟩ := h ⟨i, hi⟩
+      simp [hw]
+    · intro h'
+      simp [h']
+  case isFalse h =>
+    simp at h
+    obtain ⟨i, hi⟩ := h
+    have : v[i.val] = .poison := PoisonOr.isPoisonTrue_eq_eqPoison.mp hi
+    simp [PoisonOr.poison_ne_value, Vector.ext_iff]
+    refine ⟨i, i.isLt, ?_⟩
+    simp [this, PoisonOr.poison_ne_value]
+
+mutual
 theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatten t v = .value b) :
     unflatten t b = v := by
   cases t with
@@ -201,31 +371,54 @@ theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatt
   | ptr => exact absurd h (PoisonOr.poison_ne_value b)
   | vec l w =>
     simp_all [flatten, unflatten, denote]
-    have : ∀ (i : Fin l), ¬v[↑i] = PoisonOr.poison := by
-      apply Decidable.by_contra; intro h'
-      rw [ite_eq_right] at h
-      · exact (PoisonOr.value_ne_poison b).symm h
-      · simp at *
-        assumption
-    dsimp at *
-    dsimp [width_vec] at b
-    rw [ite_eq_left] at h
-    · rw [PoisonOr.value_inj] at h
-      rw [← h]
+    cases h' : allValues v with
+    | poison =>
+      simp [h'] at h
+      have := PoisonOr.poison_ne_value b h
+      exfalso
+      exact this
+    | value w =>
+      simp [h'] at h
+      obtain rfl := PoisonOr.value_inj.mp h
+      simp [extractVecElem_packLanes]
       ext i hi
-      simp
-      rw [extractVecElem, BitVec.extractLsb'_packLanes (h := hi)]
-      replace this := this ⟨i, hi⟩
-      simp at this
-      obtain ⟨x, hx⟩ : ∃ x, v[i] = .value x := by
-        exists (v[i].getValue)
-        rotate_left
-        cases h : v[i]
-        · have := this h
-          simp at *
-        case value x => rfl
-      simp [hx]
-    exact this
+      simp [(allValues_eq_value v).mp h']
+  | array n t =>
+    simp only [flatten] at h
+    cases h' : allValues (v.map (t.flatten)) with
+    | poison =>
+      simp [h'] at h
+      have := PoisonOr.poison_ne_value b h
+      exfalso
+      exact this
+    | value w =>
+      simp [h'] at h
+      obtain rfl := PoisonOr.value_inj.mp h
+      have := (allValues_eq_value _).mp h'
+      ext i hi
+      simp [unflatten, extractVecElem_packLanes]
+      exact unflatten_flatten (by simpa using congrArg (·[i]) this)
+  | struct fields =>
+    simp [flatten, unflatten] at *
+    exact unflattenFields_flattenFields h
+theorem unflattenFields_flattenFields (h : flattenFields ts v = .value b) :
+    unflattenFields ts b = v := by
+  unfold unflattenFields
+  split
+  · simp
+  case h_2 ts flat_ts t flat_t =>
+    simp [flattenFields] at h
+    exact unflatten_flatten h
+  case h_3 a b t t' ts flat =>
+    simp
+    rw [flattenFields] at h
+    obtain ⟨bs, hbs, h⟩ := PoisonOr.bind_eq_value.mp h
+    obtain ⟨b, hb, h⟩ := PoisonOr.bind_eq_value.mp h
+    obtain rfl := PoisonOr.value_inj.mp h
+    clear h
+    simp [fieldsWidth, BitVec.extractLsb'_append_eq_right, BitVec.extractLsb'_append_eq_left]
+    simp [unflatten_flatten hb, unflattenFields_flattenFields hbs]
+end
 
 end FlattenUnflatten
 

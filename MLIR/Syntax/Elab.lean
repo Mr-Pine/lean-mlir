@@ -48,6 +48,11 @@ def tyStx : Ty → CommandElabM (TSyntax `term)
   | .bv w => `(.bv $(num w))
   | .ptr => `(.ptr)
   | .vec l w => `(.vec $(num l) $(num w))
+  | .array n t => do
+    `(.array $(num n) $(← tyStx t))
+  | .struct fields => do
+    let fs ← fields.attach.mapM fun ⟨f, _⟩ => tyStx f
+    `(.struct [$(fs.toArray),*])
 
 def tysStx (ts : List Ty) : CommandElabM (TSyntax `term) := do
   `([$(← ts.toArray.mapM tyStx),*])
