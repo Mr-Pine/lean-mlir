@@ -1,5 +1,11 @@
 # Agave lattice-hash conformance proof
 
+The separate [`MLIR/`](MLIR/README.md) development strengthens the connection
+to the implementation with compiler-produced LLVM-dialect MLIR and proofs of
+its SLLVM execution. The source-model results documented below remain a
+distinct layer: importing a kernel does not by itself connect the compiled
+batch loop to the public API theorem.
+
 This directory contains a kernel-checked equivalence proof for the manually
 transcribed semantics of Agave's width-one reference path, eight-lane AVX2
 path, and sixteen-lane AVX-512 path. For every finite legal public event
@@ -159,8 +165,10 @@ The remaining external trust is:
 The guarded axiom audits for the final theorems report only `propext`,
 `Classical.choice`, and `Quot.sound`. The development contains no custom
 axioms, `sorry`, `admit`, `native_decide`, or disabled kernel checking.
-It is a source-model proof, not a Rust extraction, LLVM refinement, or
-machine-code verification result.
+These public lifecycle theorems are source-model proofs. The separate MLIR
+development removes manual transcription for its imported kernel bodies;
+its checked execution theorems and remaining boundaries are documented
+in [`MLIR/README.md`](MLIR/README.md). Neither layer verifies machine code.
 
 ## Checking
 

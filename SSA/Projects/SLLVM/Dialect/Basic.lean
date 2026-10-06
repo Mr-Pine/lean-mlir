@@ -78,6 +78,8 @@ inductive SLLVMOp where
   /-- `llvm.select` at vector types: `l` lanes of `w` bits, chosen lane for
   lane by an `l`-lane mask. The scalar form is `Op.select`. -/
   | vselect (l w : Nat)
+  /-- Vector-valued `llvm.select` with one scalar condition for all lanes. -/
+  | vselectScalar (l w : Nat)
   /-- `llvm.icmp` at vector types: `l` lanes of `w` bits compared lane for
   lane under `c`, giving an `l`-lane mask. The scalar form is `Op.icmp`. -/
   | vicmp (l w : Nat) (c : LLVM.IntPred)
@@ -87,6 +89,10 @@ inductive SLLVMOp where
   have to parse for a region to stay verbatim. The `size` attribute is
   accepted and discarded. -/
   | lifetime (start : Bool)
+  /-- Alias-scope declaration metadata has no runtime effect in this model.
+  Preserve the module-local scope alias for printing; its declaration belongs
+  to the enclosing MLIR module. -/
+  | noaliasScopeDecl (scopeAlias : String)
   /-- `llvm.mlir.addressof`. The address comes from the state's symbol table
   (`GlobalState.globals`), which is what makes every `addressof` of a symbol --
   at any call depth -- name the same block, and so what makes a *mutable*
@@ -121,12 +127,26 @@ inductive SLLVMOp where
   (high) with `b` (low), shifts the `2w`-bit result right by `c mod w`, and
   keeps the low `w` bits. `fd_ulong_rotate_right` is `fshr x x n`. -/
   | fshr (w : Nat)
+  /-- Lane-wise integer vector funnel shifts, with per-lane poison. -/
+  | vfshl (l w : Nat)
+  | vfshr (l w : Nat)
   /-- `llvm.intr.bswap`: reverse the byte order of a `w`-bit integer, `w` a
   multiple of 8. `fd_ulong_bswap` is this at `i64`. -/
   | bswap (w : Nat)
   /-- `llvm.intr.smin`: the signed minimum of two `w`-bit integers.
   `fd_int_min` is this at `i32`. -/
   | smin (w : Nat)
+  /-- Unsigned integer minimum/maximum, scalar and lane-wise vector forms. -/
+  | umin (w : Nat)
+  | umax (w : Nat)
+  | vumin (l w : Nat)
+  | vumax (l w : Nat)
+  /-- Lane-wise freeze with the scalar model's deterministic poison choice. -/
+  | vfreeze (l w : Nat)
+  /-- Lane-wise casts reuse scalar poison and flag semantics. -/
+  | vzext (l w w' : Nat) (flag : LLVM.NonNegFlag)
+  | vsext (l w w' : Nat)
+  | vtrunc (l w w' : Nat) (flags : LLVM.NoWrapFlags)
   /-- `llvm.insertvalue` at a constant position. An aggregate in a register is
   modelled by its flat, in-memory layout (`bitvec` of the aggregate's padded
   size; see the parser's `mkArithTy`), so inserting a field is splicing the
@@ -382,6 +402,10 @@ def_signature for SLLVM
     (Ty.arith
       (.vector l (.bitvec 1)),Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
     Ty.arith (.vector l (.bitvec w))
+  | .noaliasScopeDecl _ => () -> []
+  | .vselectScalar l w =>
+    (bitvec 1,Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
+    Ty.arith (.vector l (.bitvec w))
   | .vicmp l w _ => (Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
     Ty.arith (.vector l (.bitvec 1))
   | .lifetime _ => (ptr) -[.impure]-> []
@@ -419,8 +443,18 @@ def_signature for SLLVM
   | SLLVMOp.ptrselect => (bitvec 1,Ty.ptr,Ty.ptr) -> Ty.ptr
   | SLLVMOp.fshl w => (bitvec w,bitvec w,bitvec w) -> bitvec w
   | SLLVMOp.fshr w => (bitvec w,bitvec w,bitvec w) -> bitvec w
+  | SLLVMOp.vfshl l w | SLLVMOp.vfshr l w =>
+    (Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w)),
+      Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w))
   | SLLVMOp.bswap w => (bitvec w) -> bitvec w
-  | SLLVMOp.smin w => (bitvec w,bitvec w) -> bitvec w
+  | SLLVMOp.smin w | SLLVMOp.umin w | SLLVMOp.umax w => (bitvec w,bitvec w) -> bitvec w
+  | SLLVMOp.vumin l w | SLLVMOp.vumax l w =>
+    (Ty.arith (.vector l (.bitvec w)),Ty.arith (.vector l (.bitvec w))) ->
+      Ty.arith (.vector l (.bitvec w))
+  | SLLVMOp.vfreeze l w =>
+    (Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w))
+  | SLLVMOp.vzext l w w' _ | SLLVMOp.vsext l w w' | SLLVMOp.vtrunc l w w' _ =>
+    (Ty.arith (.vector l (.bitvec w))) -> Ty.arith (.vector l (.bitvec w'))
   | Op.insertelement e l w => (Ty.arith (.vector l e),Ty.arith e,bitvec w) -> Ty.arith (.vector l e)
   | Op.extractelement e l w => (Ty.arith (.vector l e),bitvec w) -> Ty.arith e
   | Op.shufflevector e l mask => (Ty.arith (.vector l e),Ty.arith (.vector l e)) ->
@@ -466,7 +500,9 @@ def_denote for SLLVM
   | .memcpy => fun d s len => (fun _ => []ₕ) <$> SLLVM.memcpy d s len
   | .bitcast src dst => fun x => [SLLVM.bitcast src dst x]ₕ
   | .vselect _l _w => fun c x y => [SLLVM.vselect c x y]ₕ
+  | .vselectScalar _l _w => fun c x y => [SLLVM.vselectScalar c x y]ₕ
   | .vicmp _l _w c => fun x y => [SLLVM.vicmp c x y]ₕ
+  | .noaliasScopeDecl _ => []ₕ
   | .lifetime _ => fun _p => (pure []ₕ : EffectM _)
   | SLLVMOp.insertvalue _aggW off fieldTy => fun agg v =>
     [SLLVM.insertvalue off agg (InstCombine.LLVM.Ty.flatten fieldTy v)]ₕ
@@ -476,8 +512,18 @@ def_denote for SLLVM
   | SLLVMOp.ptrselect => fun c x y => [SLLVM.ptrselect c x y]ₕ
   | SLLVMOp.fshl _w => fun a b c => [SLLVM.fshl a b c]ₕ
   | SLLVMOp.fshr _w => fun a b c => [SLLVM.fshr a b c]ₕ
+  | SLLVMOp.vfshl _l _w => fun a b c => [SLLVM.vfshl a b c]ₕ
+  | SLLVMOp.vfshr _l _w => fun a b c => [SLLVM.vfshr a b c]ₕ
   | SLLVMOp.bswap _w => fun a => [SLLVM.bswap a]ₕ
   | SLLVMOp.smin _w => fun a b => [SLLVM.smin a b]ₕ
+  | SLLVMOp.umin _w => fun a b => [SLLVM.umin a b]ₕ
+  | SLLVMOp.umax _w => fun a b => [SLLVM.umax a b]ₕ
+  | SLLVMOp.vumin _l _w => fun a b => [SLLVM.vumin a b]ₕ
+  | SLLVMOp.vumax _l _w => fun a b => [SLLVM.vumax a b]ₕ
+  | SLLVMOp.vfreeze _l _w => fun a => [SLLVM.vfreeze a]ₕ
+  | SLLVMOp.vzext _l _w w' flag => fun a => [SLLVM.vzext w' a flag]ₕ
+  | SLLVMOp.vsext _l _w w' => fun a => [SLLVM.vsext w' a]ₕ
+  | SLLVMOp.vtrunc _l _w w' flags => fun a => [SLLVM.vtrunc w' a flags]ₕ
   -- LLVM operations with modified effect signature
   | Op.udiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.udiv x y flag
   | Op.sdiv _w flag => fun x y => ([·]ₕ) <$> SLLVM.sdiv x y flag
@@ -542,6 +588,7 @@ instance : DialectPrint SLLVM where
     | .gep2 .. => "llvm.getelementptr"
     | .alloca _w => "ptr.alloca"
     | .memset => "llvm.intr.memset"
+    | .noaliasScopeDecl _ => "llvm.intr.experimental.noalias.scope.decl"
     | .lifetime s => if s then "llvm.intr.lifetime.start" else "llvm.intr.lifetime.end"
     | .call .. => "llvm.call"
     | .insertvalue .. => "llvm.insertvalue"
@@ -550,14 +597,32 @@ instance : DialectPrint SLLVM where
     | .memcpy => "llvm.intr.memcpy"
     | .bitcast .. => "llvm.bitcast"
     | .vselect .. => "llvm.select"
+    | .vselectScalar .. => "llvm.select"
     | .vicmp .. => "llvm.icmp"
     | .ptricmp _ => "llvm.icmp"
     | .ptrselect => "llvm.select"
     | .fshl _ => "llvm.intr.fshl"
     | .fshr _ => "llvm.intr.fshr"
+    | .vfshl .. => "llvm.intr.fshl"
+    | .vfshr .. => "llvm.intr.fshr"
     | .bswap _ => "llvm.intr.bswap"
     | .smin _ => "llvm.intr.smin"
+    | .umin _ | .vumin .. => "llvm.intr.umin"
+    | .umax _ | .vumax .. => "llvm.intr.umax"
+    | .vfreeze .. => "llvm.freeze"
+    | .vzext .. => "llvm.zext"
+    | .vsext .. => "llvm.sext"
+    | .vtrunc .. => "llvm.trunc"
   printAttributes
+    | .noaliasScopeDecl scope => s!"<\{scope = #{scope}}>"
+    | Op.zext _ _ flag | .vzext _ _ _ flag =>
+        if flag.nneg then "<{nonNeg}>" else ""
+    | Op.trunc _ _ flags | .vtrunc _ _ _ flags =>
+        match flags with
+        | ⟨false, false⟩ => "<{overflowFlags = 0 : i32}>"
+        | ⟨true, false⟩ => "<{overflowFlags = 1 : i32}>"
+        | ⟨false, true⟩ => "<{overflowFlags = 2 : i32}>"
+        | ⟨true, true⟩ => "<{overflowFlags = 3 : i32}>"
     | .arith llvmOp => printAttributes llvmOp
     | .alloca w => s!"\{elem_type = i{w}}"
     | .gep sz off => s!"\{strideBytes = {sz}, offsetBytes = {off}}"

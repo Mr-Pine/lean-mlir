@@ -67,6 +67,8 @@ def targetE (Γ : Ctxt SLLVM.Ty) {succs : List (List SLLVM.Ty)} (t : Target Γ s
 
 def terminatorE (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
     Terminator Γ rets succs → Lean.Expr
+  | .unreachable =>
+    mkAppN (mkConst ``Terminator.unreachable) #[ctxtE Γ, tyListE rets, sigsE succs]
   | .ret vs =>
     mkAppN (mkConst ``Terminator.ret) #[ctxtE Γ, tyListE rets, sigsE succs, f.mapVarVec vs]
   | .br t => mkAppN (mkConst ``Terminator.br) #[ctxtE Γ, tyListE rets, sigsE succs, targetE Γ t]

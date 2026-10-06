@@ -243,7 +243,7 @@ syntax "[mlir_op_operand|" mlir_op_operand "]" : term
 macro_rules
   | `([mlir_op_operand| $$($q)]) => return q
   | `([mlir_op_operand| % $x:ident]) => `(SSAVal.name $(Lean.quote (x.getId.toString)))
-  | `([mlir_op_operand| % $n:num]) => `(SSAVal.name (IntToString $n))
+  | `([mlir_op_operand| % $n:num]) => `(SSAVal.name $(Lean.quote (toString n.getNat)))
 
 section Test
 
@@ -272,7 +272,7 @@ private def operand2 :=
 
 /--
 info: private def MLIR.EDSL.operand2 : SSAVal :=
-SSAVal.name (IntToString 0)
+SSAVal.name "0"
 -/
 #guard_msgs in
 #print operand2
@@ -928,8 +928,10 @@ macro_rules
     `(AttrValue.dense [mlir_attr_val|$v] [mlir_type|$t])
 
 syntax "array<" mlir_type ":" sepBy(mlir_attr_val, ",") ">" : mlir_attr_val
+syntax "array<" mlir_type ">" : mlir_attr_val
 
 macro_rules
+  | `([mlir_attr_val|array<$t:mlir_type>]) => `(AttrValue.array [mlir_type|$t] [])
   | `([mlir_attr_val|array<$t:mlir_type:$xs ,*>]) => do
     -- NOTE: fold from the right so the resulting list preserves source order;
     -- a left fold with `::` would reverse it (which e.g. flips shufflevector

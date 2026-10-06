@@ -1,0 +1,45 @@
+{
+  "agave_commit": "e818d643945cd82c7144013af58ccf82d31df2dd",
+  "arch_sha256": "6cef9f4897406efa5dfea7b3f16b799b0f71fb398cc017595351085ac4dc1ca0",
+  "source_prefix_bytes": 28249,
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "mlir_translate": "Ubuntu LLVM version 22.1.8\n  Optimized build.\n",
+  "commands": [
+    [
+      "/home/liam/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "--crate-type=lib",
+      "--crate-name=agave_lthash_extract",
+      "--emit=llvm-ir",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "panic=abort",
+      "-C",
+      "debug-assertions=no",
+      "-C",
+      "overflow-checks=no",
+      "-C",
+      "codegen-units=1",
+      "--target=x86_64-unknown-linux-gnu",
+      "/tmp/agave-lthash-mlir-tools/generated/harness.rs",
+      "-o",
+      "/tmp/agave-lthash-mlir-tools/generated/kernels.ll"
+    ],
+    [
+      "/tmp/agave-lthash-mlir-tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/tmp/agave-lthash-mlir-tools/generated/kernels.ll",
+      "-o",
+      "/tmp/agave-lthash-mlir-tools/generated/kernels.mlir"
+    ]
+  ],
+  "files_sha256": {
+    "arch.rs": "abd6e69d88f7d0742bc117d2f934bbd7b3a8bcfed1435dedeec837944935530e",
+    "harness.rs": "baf07a781fd42f5deb06c57707d7aeb55672d35a17f51ad294e4ee4ae60fc6a2",
+    "kernels.ll": "c8ded6c85a858a61359627db9737e92970045602864d1cda80109a90add06d44",
+    "kernels.mlir": "ea0109315ff6462d996abdaf3a6c535296ef0c20bc1dd08558e32114298d840c"
+  },
+  "boundary": "Verbatim pinned arch.rs compiled with appended wrappers and mirrored parent Batch/LtHash declarations; not a full Agave crate compilation or Rust/compiler correctness proof."
+}

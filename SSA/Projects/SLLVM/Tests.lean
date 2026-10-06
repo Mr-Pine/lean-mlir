@@ -15,3 +15,10 @@ import SSA.Projects.SLLVM.Tests.Smin
 import SSA.Projects.SLLVM.Tests.Null
 import SSA.Projects.SLLVM.Tests.PtrIcmp
 import SSA.Projects.SLLVM.Tests.Bitcast
+import SSA.Projects.SLLVM.Tests.VectorFunnel
+
+import SSA.Projects.SLLVM.Tests.Unreachable
+import SSA.Projects.SLLVM.Tests.LLVM22
+import SSA.Projects.SLLVM.Tests.VectorMinMaxFreeze
+import SSA.Projects.SLLVM.Tests.VectorCast
+import SSA.Projects.SLLVM.Tests.VectorSelect

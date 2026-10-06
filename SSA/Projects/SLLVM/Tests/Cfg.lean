@@ -290,7 +290,7 @@ def loopDom : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 32]) [SLLVM.Ty.bitvec 32] :=
 /-! ## Rejected shapes -/
 
 /--
-error: 'llvm.mlir.constant' is not a terminator -- every block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch
+error: 'llvm.mlir.constant' is not a terminator -- every block must end in llvm.return, llvm.unreachable, llvm.br, llvm.cond_br or llvm.switch
 -/
 #guard_msgs in
 def noTerminator : Cfg (Ctxt.ofList [SLLVM.Ty.bitvec 1]) [SLLVM.Ty.bitvec 32] :=

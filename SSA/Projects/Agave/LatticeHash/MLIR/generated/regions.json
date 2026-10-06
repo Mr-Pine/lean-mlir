@@ -1,0 +1,343 @@
+[
+  {
+    "symbol": "agave_add_u16_16",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "40e698296049cc5b9d59b12e1bd732e18866c9eaab8541bd72379116eb9f2072",
+    "operations": [
+      "llvm.add",
+      "llvm.load",
+      "llvm.return",
+      "llvm.store"
+    ]
+  },
+  {
+    "symbol": "agave_add_u16_8",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "96241496ec106f9c3bd8dbcb52dd73ca042519b0b4271acf68eb4efb7acb5903",
+    "operations": [
+      "llvm.add",
+      "llvm.load",
+      "llvm.return",
+      "llvm.store"
+    ]
+  },
+  {
+    "symbol": "agave_batch_16",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "2e8a7e3044e104b20fdf25ee8d6942ab105b22fe66356e9f6f70f417d03cccf3",
+    "operations": [
+      "llvm.add",
+      "llvm.alloca",
+      "llvm.bitcast",
+      "llvm.br",
+      "llvm.call",
+      "llvm.cond_br",
+      "llvm.extractelement",
+      "llvm.freeze",
+      "llvm.getelementptr",
+      "llvm.icmp",
+      "llvm.insertelement",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.intr.lifetime.end",
+      "llvm.intr.lifetime.start",
+      "llvm.intr.memcpy",
+      "llvm.intr.umin",
+      "llvm.load",
+      "llvm.lshr",
+      "llvm.mlir.addressof",
+      "llvm.mlir.constant",
+      "llvm.mlir.poison",
+      "llvm.or",
+      "llvm.return",
+      "llvm.select",
+      "llvm.shl",
+      "llvm.shufflevector",
+      "llvm.store",
+      "llvm.sub",
+      "llvm.trunc",
+      "llvm.unreachable",
+      "llvm.xor",
+      "llvm.zext"
+    ]
+  },
+  {
+    "symbol": "agave_batch_8",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "9c04ce80ce3f1f02cf4e914fc0ae559f56b76c94e97fb2796be24effa44a1556",
+    "operations": [
+      "llvm.add",
+      "llvm.alloca",
+      "llvm.bitcast",
+      "llvm.br",
+      "llvm.call",
+      "llvm.cond_br",
+      "llvm.extractelement",
+      "llvm.freeze",
+      "llvm.getelementptr",
+      "llvm.icmp",
+      "llvm.insertelement",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.intr.lifetime.end",
+      "llvm.intr.lifetime.start",
+      "llvm.intr.memcpy",
+      "llvm.intr.umin",
+      "llvm.load",
+      "llvm.lshr",
+      "llvm.mlir.addressof",
+      "llvm.mlir.constant",
+      "llvm.mlir.poison",
+      "llvm.or",
+      "llvm.return",
+      "llvm.select",
+      "llvm.sext",
+      "llvm.shl",
+      "llvm.shufflevector",
+      "llvm.store",
+      "llvm.sub",
+      "llvm.trunc",
+      "llvm.unreachable",
+      "llvm.xor",
+      "llvm.zext"
+    ]
+  },
+  {
+    "symbol": "agave_compress_pre_16",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "6a3f9b68950a6eb185ceb3b93f4935dfee688a3798f8dfed53121d0b62249e30",
+    "operations": [
+      "llvm.add",
+      "llvm.br",
+      "llvm.cond_br",
+      "llvm.getelementptr",
+      "llvm.icmp",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.mlir.addressof",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.xor"
+    ]
+  },
+  {
+    "symbol": "agave_compress_pre_8",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "d10a61a4f28253d6c35f45fa8604a2b1de43457a0771859afc04cfb0e613a5a8",
+    "operations": [
+      "llvm.add",
+      "llvm.br",
+      "llvm.cond_br",
+      "llvm.getelementptr",
+      "llvm.icmp",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.mlir.addressof",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.xor"
+    ]
+  },
+  {
+    "symbol": "agave_g_16",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "1b8836d3823bd6a7d3ca17ece835689b834034aee52ae634177aef607ab99771",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.xor"
+    ]
+  },
+  {
+    "symbol": "agave_g_8",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr"
+    ],
+    "region_sha256": "58479fc29094a9fa278d10c240602434747f65ac4452a80e952d3c71d93432ae",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.xor"
+    ]
+  },
+  {
+    "symbol": "agave_transpose_16",
+    "argument_types": [
+      "!llvm.ptr"
+    ],
+    "region_sha256": "a789dc99f3cec1205ee00194bae165cad4672a820f0e2ef3fb7960fed8d8395d",
+    "operations": [
+      "llvm.getelementptr",
+      "llvm.load",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.shufflevector",
+      "llvm.store"
+    ]
+  },
+  {
+    "symbol": "agave_transpose_8",
+    "argument_types": [
+      "!llvm.ptr"
+    ],
+    "region_sha256": "202aeee3e5cffa34af7ac82b000a67a2b2f16a23270c3d2f4371b706dd2dd83d",
+    "operations": [
+      "llvm.getelementptr",
+      "llvm.load",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.shufflevector",
+      "llvm.store"
+    ]
+  },
+  {
+    "symbol": "agave_portable_compress_pre",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "i8",
+      "i64",
+      "i8"
+    ],
+    "region_sha256": "d2450651ff1d552ddd97ea1279735626382283bf32af2361ca7a30f50f4d9778",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.lshr",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.trunc",
+      "llvm.xor",
+      "llvm.zext"
+    ]
+  },
+  {
+    "symbol": "agave_portable_g",
+    "argument_types": [
+      "!llvm.ptr",
+      "i32",
+      "i32"
+    ],
+    "region_sha256": "b30aeb4bad6de95191650fb870fec1570e1a08b338708b5e191690f58ad700b8",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.xor"
+    ]
+  },
+  {
+    "symbol": "agave_portable_compress_in_place",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "i8",
+      "i64",
+      "i8"
+    ],
+    "region_sha256": "199528554eacb4d6270c00a545fb8d9418b8f827cd3b84f2f4d8f4f56cccb475",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.lshr",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.trunc",
+      "llvm.xor",
+      "llvm.zext"
+    ]
+  },
+  {
+    "symbol": "agave_portable_compress_xof",
+    "argument_types": [
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "!llvm.ptr",
+      "i8",
+      "i64",
+      "i8"
+    ],
+    "region_sha256": "6be0af508cd00ec4bf6c5e0987b706233d7861ea2fd9d4b480edac63d3c8d225",
+    "operations": [
+      "llvm.add",
+      "llvm.getelementptr",
+      "llvm.intr.experimental.noalias.scope.decl",
+      "llvm.intr.fshl",
+      "llvm.load",
+      "llvm.lshr",
+      "llvm.mlir.constant",
+      "llvm.return",
+      "llvm.store",
+      "llvm.trunc",
+      "llvm.xor",
+      "llvm.zext"
+    ]
+  }
+]

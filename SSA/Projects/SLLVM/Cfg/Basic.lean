@@ -73,6 +73,7 @@ def SuccArgs.elim {α : Sort _} (t : SuccArgs []) : α :=
 block. -/
 inductive Terminator (Γ : Ctxt SLLVM.Ty) (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) :
     Type
+  | unreachable
   | ret (vs : HVector Γ.Var rets)
   | br (t : Target Γ succs)
   | condBr (c : Γ.Var (Ty.bitvec 1)) (tTrue tFalse : Target Γ succs)
@@ -150,6 +151,7 @@ def Target.denote (V : Γ.Valuation) (t : Target Γ all) : SuccArgs all :=
 branched to. Branching on poison is UB. -/
 def Terminator.denote :
     Terminator Γ rets succs → Γ.Valuation → EffectM (HVector toType rets ⊕ SuccArgs succs)
+  | .unreachable, _ => throwUB
   | .ret vs, V => return .inl (vs.map V)
   | .br t, V => return .inr (t.denote V)
   | .condBr c tTrue tFalse, V =>
@@ -331,6 +333,12 @@ variable {Γ : Ctxt SLLVM.Ty} {V : Γ.Valuation}
 theorem Target.denote_mk {ts : List SLLVM.Ty} {idx : Nat} {h : all[idx]? = some ts}
     {args : HVector Γ.Var ts} : Target.denote V ⟨idx, h, args⟩ = ⟨idx, h, args.map V⟩ :=
   rfl
+
+/-- Reaching LLVM `unreachable` is immediate undefined behavior. -/
+@[simp, simp_denote]
+theorem Terminator.denote_unreachable :
+    Terminator.denote (Γ := Γ) (rets := rets) (succs := succs) .unreachable V =
+      throwUB := rfl
 
 @[simp, simp_denote]
 theorem Terminator.denote_ret {vs : HVector Γ.Var rets} :

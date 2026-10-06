@@ -114,6 +114,24 @@ theorem fshr_value {w : Nat} (a b n : BitVec w) :
     fshr (.value a) (.value b) (.value n) = .value (fshrBV a b n) :=
   rfl
 
+/-- Vector funnel shifts apply the scalar operation independently to each lane.
+A poison operand poisons only its corresponding result lane. -/
+@[simp_sllvm]
+def vfshl {l w : Nat} (a b n : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW w) l :=
+  Vector.ofFn fun i => fshl a[i] b[i] n[i]
+
+@[simp_sllvm]
+def vfshr {l w : Nat} (a b n : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW w) l :=
+  Vector.ofFn fun i => fshr a[i] b[i] n[i]
+
+@[simp]
+theorem vfshl_getElem {l w : Nat} (a b n : Vector (LLVM.IntW w) l) (i : Fin l) :
+    (vfshl a b n)[i] = fshl a[i] b[i] n[i] := by simp [vfshl]
+
+@[simp]
+theorem vfshr_getElem {l w : Nat} (a b n : Vector (LLVM.IntW w) l) (i : Fin l) :
+    (vfshr a b n)[i] = fshr a[i] b[i] n[i] := by simp [vfshr]
+
 /-- Byte-reverse a `w`-bit value: byte `i` of the result is byte `k-1-i` of the
 input, where `k = w / 8`. A `w` that is not a multiple of 8 keeps only the whole
 bytes, which no producer emits and LLVM does not define either. -/
@@ -146,6 +164,87 @@ def smin {w : Nat} (a b : LLVM.IntW w) : LLVM.IntW w :=
 theorem smin_value {w : Nat} (a b : BitVec w) :
     smin (.value a) (.value b) = .value (if a.slt b then a else b) :=
   rfl
+
+/-- Unsigned minimum and maximum propagate poison from either operand. -/
+@[simp_sllvm]
+def umin {w : Nat} (a b : LLVM.IntW w) : LLVM.IntW w :=
+  match a, b with
+  | .value a, .value b => .value (if a.ult b then a else b)
+  | _, _ => .poison
+
+@[simp_sllvm]
+def umax {w : Nat} (a b : LLVM.IntW w) : LLVM.IntW w :=
+  match a, b with
+  | .value a, .value b => .value (if a.ult b then b else a)
+  | _, _ => .poison
+
+/-- Vector min/max apply unsigned comparison independently to each lane. -/
+def vumin {l w : Nat} (a b : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW w) l :=
+  Vector.ofFn fun i => umin a[i.val] b[i.val]
+
+def vumax {l w : Nat} (a b : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW w) l :=
+  Vector.ofFn fun i => umax a[i.val] b[i.val]
+
+/-- Vector freeze follows the existing scalar `LLVM.freeze` convention:
+a defined lane is unchanged, and a poison lane becomes the fixed value zero.
+This is a deterministic choice allowed by LLVM freeze, not an enumeration
+of every choice in LLVM's nondeterministic semantics. Separate uses of the
+result observe the same chosen value. -/
+def vfreeze {l w : Nat} (a : Vector (LLVM.IntW w) l) : Vector (LLVM.IntW w) l :=
+  a.map LLVM.freeze
+
+@[simp_sllvm]
+theorem vfreeze_lane {l w : Nat} (a : Vector (LLVM.IntW w) l) (i : Fin l) :
+    (vfreeze a)[i.val] = LLVM.freeze a[i.val] := by
+  simp only [vfreeze, Vector.getElem_map]
+
+@[simp_sllvm]
+theorem vfreeze_defined {l w : Nat} (a : Vector (BitVec w) l) :
+    vfreeze (a.map PoisonOr.value) = a.map PoisonOr.value := by
+  apply Vector.ext
+  intro i hi
+  simp only [vfreeze, Vector.getElem_map, LLVM.freeze]
+
+/-- A scalar condition selects the same arm for every vector lane. Poison in
+the unselected arm is ignored; a poison condition poisons every result lane. -/
+def vselectScalar {l w : Nat} (c : LLVM.IntW 1) (a b : Vector (LLVM.IntW w) l) :
+    Vector (LLVM.IntW w) l := Vector.ofFn fun i => LLVM.select c a[i] b[i]
+
+@[simp_sllvm]
+theorem vselectScalar_lane {l w : Nat} (c : LLVM.IntW 1)
+    (a b : Vector (LLVM.IntW w) l) (i : Fin l) :
+    (vselectScalar c a b)[i.val] = LLVM.select c a[i.val] b[i.val] := by
+  simp [vselectScalar]
+
+/-- Integer vector casts apply the scalar operation, including all flags,
+independently to each lane. -/
+def vzext {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l)
+    (flag : LLVM.NonNegFlag := {}) : Vector (LLVM.IntW w') l :=
+  a.map (fun x => LLVM.zext w' x flag)
+
+def vsext {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l) :
+    Vector (LLVM.IntW w') l := a.map (LLVM.sext w')
+
+def vtrunc {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l)
+    (flags : LLVM.NoWrapFlags := {}) : Vector (LLVM.IntW w') l :=
+  a.map (fun x => LLVM.trunc w' x flags)
+
+@[simp_sllvm]
+theorem vzext_lane {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l)
+    (flag : LLVM.NonNegFlag) (i : Fin l) :
+    (vzext w' a flag)[i.val] = LLVM.zext w' a[i.val] flag := by
+  simp only [vzext, Vector.getElem_map]
+
+@[simp_sllvm]
+theorem vsext_lane {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l) (i : Fin l) :
+    (vsext w' a)[i.val] = LLVM.sext w' a[i.val] := by
+  simp only [vsext, Vector.getElem_map]
+
+@[simp_sllvm]
+theorem vtrunc_lane {l w : Nat} (w' : Nat) (a : Vector (LLVM.IntW w) l)
+    (flags : LLVM.NoWrapFlags) (i : Fin l) :
+    (vtrunc w' a flags)[i.val] = LLVM.trunc w' a[i.val] flags := by
+  simp only [vtrunc, Vector.getElem_map]
 
 /-! ### div / rem -/
 

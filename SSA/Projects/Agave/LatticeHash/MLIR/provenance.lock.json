@@ -1,0 +1,42 @@
+{
+  "format_version": 2,
+  "trust_anchor": "Reviewed source-control snapshot; verifier never updates this file. Compiler outputs are additionally checked against three extraction manifests; Lean is regenerated in temporary storage. Original twelve regions retain their previously reviewed hashes.",
+  "files_sha256": {
+    "extract.py": "248954dd5c4d416fce7022f1117b20f66c7d7866f66af9cfee74d59600c8915b",
+    "extract_portable.py": "bbbcf9844314f9383230d6087797543cef32306a9f73a16fd86b9cfa7ce9b014",
+    "extract_portable_xof.py": "8b087fc63e6764ce9be93cbf1a823c8b4b8ad5563a98740c0d3dcd62eda69bc5",
+    "generated/manifest.json": "1850735f53c478aa83a08b77b946da0957868ff0f2ff4b7bdb5a3d22fe6374f7",
+    "generated/portable_manifest.json": "687987eb1fd2672a9c0a58c030f715af3711493830c227b4297aefadaf640ea3",
+    "generated/portable_xof_manifest.json": "78a75e408cd675bad9ca74b2ae3a1251d6984b263a2f795f1880105c1065b3e3",
+    "install_tools.py": "b9c118d2b4dac5062377a7d186b8666678dcb5cc2c46c86b4663d0cd6f98b9f3",
+    "lift.py": "fe6e1c401ce7f9739a797b0bbdd2564ed924fd646d51d432b9f80ab97f7d9c0d",
+    "test_verify.py": "8954c344711dca5b0e7075d341d6201baf63b153f6f65437a1a1e9f159315fed",
+    "verify.py": "85cf5e9c7ad4289d5cf2426a048c90f68ee9ecb0bcba6e7843244fa0d3814650"
+  },
+  "preserved_regions_sha256": {
+    "agave_add_u16_16.lean": "f74289fed456a75e64b7c99ad4fb4c3fca87fb36f4203ca71b0dbff238207460",
+    "generated/agave_add_u16_16.mlir": "55f33da5ccad8cff79ee84a20fec86b3ae35c79ee0b3cdda761b028995905e64",
+    "agave_add_u16_8.lean": "3837f7cd81a06ec757e0e0df3a2e1b913fdbba69bab9280cc926ee3e03b949b9",
+    "generated/agave_add_u16_8.mlir": "be27d52de94971dcb862976e257d8c7434c09ff8daa98dbd3af979490211f46b",
+    "agave_batch_16.lean": "0c6dea81ee45607544f79a9a5ff263ec39939ac468afe450d20296c06eb7c582",
+    "generated/agave_batch_16.mlir": "70b0f315cb0c2fffc49af2a1bc053efbf84d31c58704d8d4c311725429e67e2b",
+    "agave_batch_8.lean": "0c8504beead1dd9af6191407817764bb26b7873f609e3185e41e5fb77cda8410",
+    "generated/agave_batch_8.mlir": "a4d3cd68ced197795f961cc4411980778f1c88d47f7c07c4083ca0f7c1880f5d",
+    "agave_compress_pre_16.lean": "4f0d7a27bf37575cae6edded8f3500a4c84cd0358febdb3c8d4d3918ddbfd1a2",
+    "generated/agave_compress_pre_16.mlir": "7250fb132257929175c95bf523dab69999d74202c59b748c5bc20ee547971b6f",
+    "agave_compress_pre_8.lean": "ff86141940cf636751a66372825d9baddba2b3cbef99da6de18966749f77b981",
+    "generated/agave_compress_pre_8.mlir": "87e3d0a8a1a99cd0f7c83eb654bac6f829d11ec7b0e667c7ea0887323edab8dc",
+    "agave_g_16.lean": "ddd26de8ff867e8a0d6794ad8e1d08344c9b1f65d2db8f302f24a1d21bf66ff6",
+    "generated/agave_g_16.mlir": "dacd6bc7941ed32f2d5ea3e2b8a412cda164b6afb916ec990db5e588423fa999",
+    "agave_g_8.lean": "5683a8dcfcad1cba3a3f522fae36373500c802cdcefd3178fc374766899c6935",
+    "generated/agave_g_8.mlir": "4faebac3820e99ac391e5295f8e3c95b9d52207373315d491135b131413175cf",
+    "agave_transpose_16.lean": "f20c8afa168ef9b8902f934c88257f52f26afa54a4275d1a2b353bc2bf521c1b",
+    "generated/agave_transpose_16.mlir": "be40339e54c4df27130e1dbc945c881cdaafd67f35021d1a83d015ac5b8243b5",
+    "agave_transpose_8.lean": "d36af6cb34800b766313b678a8f1c93ad760bcaab0f6330c645f16781019dde3",
+    "generated/agave_transpose_8.mlir": "8844d50b491efc1d6c190c3134d81811bf35cbdd5e957e6a18fdfb305e31c1f9",
+    "agave_portable_compress_pre.lean": "ffe78941950a0b055cb8400f1656f35f6d7d54a10056b0d7ea2dedf113e3089c",
+    "generated/agave_portable_compress_pre.mlir": "623135d59e97394ec52bb03f9e8034c7103ecfb7375838c669b7815bd7ce118d",
+    "agave_portable_g.lean": "6dff84dcf4cda482066e6b4b54207ddc86f17e3264d0a12dc7c8f1f3e1aa96d3",
+    "generated/agave_portable_g.mlir": "cf7f5a2ef84a685517ce7276e1f6aebf6658671ef4e6395db5be07dd9c90cf36"
+  }
+}

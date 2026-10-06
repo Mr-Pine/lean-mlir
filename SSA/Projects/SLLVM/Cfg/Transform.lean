@@ -74,6 +74,7 @@ non-entry block, in order -- what its branches may target. -/
 def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) (all : List String)
     (Γ : Ctxt SLLVM.Ty) (opStx : Op 0) : ReaderM SLLVM (Terminator Γ rets succs) := do
   match opStx.name with
+  | "llvm.unreachable" => return .unreachable
   | "llvm.return" =>
     return .ret (← mkArgsHVector Γ opStx.args rets)
   | "llvm.br" =>
@@ -140,7 +141,7 @@ def mkTerminator (rets : List SLLVM.Ty) (succs : List (List SLLVM.Ty)) (all : Li
     throw <|
         .generic
           s!"'{name}' is not a terminator -- every block must end in \
-      llvm.return, llvm.br, llvm.cond_br or llvm.switch"
+      llvm.return, llvm.unreachable, llvm.br, llvm.cond_br or llvm.switch"
 
 /-- A built callee: its argument context, return types, and body. -/
 abbrev ParsedCfg : Type :=

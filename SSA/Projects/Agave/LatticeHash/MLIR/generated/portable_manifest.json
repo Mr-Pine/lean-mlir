@@ -1,0 +1,89 @@
+{
+  "source_hashes": {
+    "portable.rs": "85ed8cd8f601e6801c0a26358c7ac70e29759445cfe39c584f40af072a201601",
+    "lib.rs": "a187904c4b12ea7c100557c0f167cc91a034e391ddeb56c9db65f7d400a4b566",
+    "platform.rs": "954e3564bb976c333cfaa68fc672a8543afc2e021c8b89e8d9393816b0ad90d1"
+  },
+  "verbatim_spans": [
+    {
+      "file": "lib.rs",
+      "start_byte": 6185,
+      "end_byte": 6311,
+      "sha256": "38c125509ea6fa6ea7b1dd730855daa97672808b5f75473d846dad91dec7f9ed"
+    },
+    {
+      "file": "lib.rs",
+      "start_byte": 6313,
+      "end_byte": 6776,
+      "sha256": "740a028a006e659b9cff18e8353a0ec61b8f628d4d291ed4d1f491463cb87e8a"
+    },
+    {
+      "file": "lib.rs",
+      "start_byte": 7269,
+      "end_byte": 7327,
+      "sha256": "ea9d9ff6794d16fb22a2e5be005f6973c469c7234fd76a27745a19df153f24af"
+    },
+    {
+      "file": "lib.rs",
+      "start_byte": 7339,
+      "end_byte": 7406,
+      "sha256": "7c2ddfe5e4e7f970ae75583b74645a7e5dc11ecfa74967c42c0180c2562612ec"
+    },
+    {
+      "file": "platform.rs",
+      "start_byte": 16192,
+      "end_byte": 17487,
+      "sha256": "ea2376ae513721d8109e43c6bff3665d2624c17c5a3c6c8e10975bdf3dece04f"
+    },
+    {
+      "file": "portable.rs",
+      "start_byte": 144,
+      "end_byte": 673,
+      "sha256": "73eeadcd4939674bb76d92fb99077ad492ea7914a03d00d0f5079fe4a7caab51"
+    },
+    {
+      "file": "portable.rs",
+      "start_byte": 693,
+      "end_byte": 1420,
+      "sha256": "2e66bfff612ed84ce566b7dc742b0d529b2eef82b41a2a9f4169bcbd76e55be0"
+    },
+    {
+      "file": "portable.rs",
+      "start_byte": 1440,
+      "end_byte": 2255,
+      "sha256": "b3b907427c526f88e9b004084aa9301e950f259b9cf069e2e78a6f38b2bb127e"
+    }
+  ],
+  "commands": [
+    [
+      "/home/liam/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu/bin/rustc",
+      "--edition=2024",
+      "--crate-type=lib",
+      "--crate-name=agave_portable_extract",
+      "--emit=llvm-ir",
+      "-C",
+      "opt-level=3",
+      "-C",
+      "panic=abort",
+      "-C",
+      "debug-assertions=no",
+      "/tmp/agave-lthash-mlir-tools/generated/portable_harness.rs",
+      "-o",
+      "/tmp/agave-lthash-mlir-tools/generated/portable.ll"
+    ],
+    [
+      "/tmp/agave-lthash-mlir-tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/tmp/agave-lthash-mlir-tools/generated/portable.ll",
+      "-o",
+      "/tmp/agave-lthash-mlir-tools/generated/portable.mlir"
+    ]
+  ],
+  "artifacts": {
+    "portable_harness.rs": "dcbf7de64a084a9fba1a54899e6418285085f8a70046dedaa5bb7f85fe4a8320",
+    "portable.ll": "55e25eb9748f6fa7890043a633548a89ca88f9a1c772d57f9fd7f78868c43f4b",
+    "portable.mlir": "4093d2c9004e65959d5142c861dc0c579b44d4c621189b92a9a2cf6b3b7dfbbe"
+  },
+  "boundary": "Exact function bodies/constants extracted from locked source, supplied type aliases, inline(always) attributes and exported wrappers; not complete BLAKE3 crate compilation."
+}

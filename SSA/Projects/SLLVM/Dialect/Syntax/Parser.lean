@@ -108,9 +108,12 @@ partial def AggTy.sizeAlign : AggTy → ExceptM SLLVM (Nat × Nat)
   | .array n t => do
     let (s, a) ← t.sizeAlign
     return (n * alignTo s a, a)
-  -- Vectors are unpadded, and their alignment is the size rounded up to a
-  -- power of two (LLVM's default layout), not the element's.
+  -- Supported integer vectors have whole-byte elements. Rounding each lane
+  -- separately would give an incorrect stride for packed types such as <8 x i1>.
   | .vector n t => do
+    if let .int bits := t then
+      unless bits % 8 == 0 do
+        throw <| .generic s!"llvm.getelementptr: unsupported vector element size i{bits}; expected a multiple of 8 bits"
     let (s, _) ← t.sizeAlign
     let sz := n * s
     return (sz, Nat.nextPowerOfTwo sz)
@@ -327,6 +330,11 @@ def parseOverflowFlags (op : AST.Op 0) : MLIR.AST.ReaderM SLLVM LLVM.NoWrapFlags
   match op.getAttr? "overflowFlags" with
   | .none => return {}
   | .some y => match y with
+    -- LLVM 22's generic printer uses the integer encoding of this bit enum.
+    | .int 0 _ => return ⟨false, false⟩
+    | .int 1 _ => return ⟨true, false⟩
+    | .int 2 _ => return ⟨false, true⟩
+    | .int 3 _ => return ⟨true, true⟩
     | .opaque_ "llvm.overflow" "nsw" => return ⟨true, false⟩
     | .opaque_ "llvm.overflow" "nuw" => return ⟨false, true⟩
     | .opaque_ "llvm.overflow" "none" => return ⟨false, false⟩
@@ -383,6 +391,7 @@ instance : DialectParse SLLVM 0 where
         let t ← opStx.getTypeAttr "elem_type"
         let aggTy ← match t with
           | .int _ w => pure (AggTy.int w.toConcrete)
+          | .vector [l] [] (.int _ w) => pure (AggTy.vector l (AggTy.int w.toConcrete))
           | .undefined s =>
               match parseAggTy (s.toList.drop "llvm.".length) with
               | some (t, []) => pure t
@@ -499,28 +508,53 @@ instance : DialectParse SLLVM 0 where
         | .arith (LLVM.Ty.bitvec w) => mkExprOf <| Op.const w 0
         | _ => throw <| .generic "llvm.mlir.zero: only `!llvm.ptr` and integer \
             result types are supported"
-    -- Stack-coloring metadata: no semantics here, but part of the artifact, so
-    -- they parse (and denote to nothing) rather than having to be stripped.
-    -- `llvm.intr.fshl(hi, lo, amount)`, all three at the same integer type.
+    -- Alias-scope declarations constrain optimizations, with no runtime effect.
+    | "llvm.intr.experimental.noalias.scope.decl" => do
+        let .alias scope ← opStx.getAttr "scope"
+          | throw <| .generic "llvm.intr.experimental.noalias.scope.decl: expected a scope alias"
+        mkExprOf <| SLLVMOp.noaliasScopeDecl scope
+    -- `llvm.intr.fshl(hi, lo, amount)`, all three at the same integer or integer-vector type.
     | "llvm.intr.fshl" => do
         let args ← args.assumeArity 3
-        mkExprOf <| SLLVMOp.fshl (← getIntWidth args[0])
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            mkExprOf <| SLLVMOp.vfshl l w
+        | _ => mkExprOf <| SLLVMOp.fshl (← getIntWidth args[0])
     | "llvm.intr.fshr" => do
         let args ← args.assumeArity 3
-        mkExprOf <| SLLVMOp.fshr (← getIntWidth args[0])
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            mkExprOf <| SLLVMOp.vfshr l w
+        | _ => mkExprOf <| SLLVMOp.fshr (← getIntWidth args[0])
     | "llvm.intr.bswap" => do
         let args ← args.assumeArity 1
         mkExprOf <| SLLVMOp.bswap (← getIntWidth args[0])
     | "llvm.intr.smin" => do
         let args ← args.assumeArity 2
         mkExprOf <| SLLVMOp.smin (← getIntWidth args[0])
+    | "llvm.intr.umin" => do
+        let args ← args.assumeArity 2
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            mkExprOf <| SLLVMOp.vumin l w
+        | _ => mkExprOf <| SLLVMOp.umin (← getIntWidth args[0])
+    | "llvm.intr.umax" => do
+        let args ← args.assumeArity 2
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            mkExprOf <| SLLVMOp.vumax l w
+        | _ => mkExprOf <| SLLVMOp.umax (← getIntWidth args[0])
     | "llvm.intr.lifetime.start" => mkExprOf <| SLLVMOp.lifetime true
     | "llvm.intr.lifetime.end"   => mkExprOf <| SLLVMOp.lifetime false
     -- Ternary Operations
     | "llvm.select" => do
         let args ← args.assumeArity 3
         match args[1] with
-        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ => mkExprOf <| SLLVMOp.vselect l w
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            match args[0] with
+            | ⟨Ty.arith (.bitvec (.concrete 1)), _⟩ =>
+                mkExprOf <| SLLVMOp.vselectScalar l w
+            | _ => mkExprOf <| SLLVMOp.vselect l w
         | ⟨Ty.ptr, _⟩ => mkExprOf <| SLLVMOp.ptrselect
         | _ => mkExprOf <| Op.select (← getIntWidth args[1])
     -- Binary Operations
@@ -568,10 +602,35 @@ instance : DialectParse SLLVM 0 where
     | "llvm.not"    => mkExprOf <| Op.not (← unW)
     | "llvm.neg"    => mkExprOf <| Op.neg (← unW)
     | "llvm.copy"   => mkExprOf <| Op.copy (← unW)
-    | "llvm.freeze" => mkExprOf <| Op.freeze (← unW)
-    | "llvm.zext"   => mkExprOf <| Op.zext (← unW) (← getOutputWidth) ⟨ opStx.hasAttr "nonNeg" ⟩
-    | "llvm.sext"   => mkExprOf <| Op.sext (← unW) (← getOutputWidth)
-    | "llvm.trunc"  => mkExprOf <| Op.trunc (← unW) (← getOutputWidth) (← parseOverflowFlags opStx)
+    | "llvm.freeze" => do
+        let args ← args.assumeArity 1
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            mkExprOf <| SLLVMOp.vfreeze l w
+        | _ => mkExprOf <| Op.freeze (← unW)
+    | "llvm.zext" | "llvm.sext" | "llvm.trunc" => do
+        let args ← args.assumeArity 1
+        match args[0] with
+        | ⟨Ty.arith (.vector l (.bitvec (.concrete w))), _⟩ =>
+            let .vector l' (.bitvec (.concrete w')) ← getOutputArithTy opStx
+              | throw <| .generic s!"{opStx.name}: expected an integer-vector result"
+            unless l == l' do
+              throw <| .generic s!"{opStx.name}: input and result lane counts differ"
+            if opStx.name == "llvm.trunc" then
+              unless w' < w do
+                throw <| .generic s!"{opStx.name}: result element width must be smaller than input element width"
+            else
+              unless w < w' do
+                throw <| .generic s!"{opStx.name}: result element width must be larger than input element width"
+            match opStx.name with
+            | "llvm.zext" => mkExprOf <| SLLVMOp.vzext l w w' ⟨opStx.hasAttr "nonNeg"⟩
+            | "llvm.sext" => mkExprOf <| SLLVMOp.vsext l w w'
+            | _ => mkExprOf <| SLLVMOp.vtrunc l w w' (← parseOverflowFlags opStx)
+        | _ =>
+            match opStx.name with
+            | "llvm.zext" => mkExprOf <| Op.zext (← unW) (← getOutputWidth) ⟨opStx.hasAttr "nonNeg"⟩
+            | "llvm.sext" => mkExprOf <| Op.sext (← unW) (← getOutputWidth)
+            | _ => mkExprOf <| Op.trunc (← unW) (← getOutputWidth) (← parseOverflowFlags opStx)
     -- Poison
     | "llvm.mlir.poison" =>
       mkExprOf <| Op.poison (← getOutputArithTy opStx)
