@@ -1,6 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import SSA.Projects.Agave.LatticeHash.Equivalence
-import SSA.Projects.Agave.LatticeHash.Validation
+import SSA.Projects.Agave.LatticeHash.ExecutableCompression
 import SSA.Projects.Agave.LatticeHash.Forgotten
 
 set_option maxRecDepth 100000
@@ -10,12 +10,12 @@ set_option maxHeartbeats 1000000
 Concrete final-output witnesses for the forgotten-guard trace. Only the first
 u16 of each 2048-byte LtHash is needed to prove that the returned values differ.
 The vector implementation is used solely to make kernel reduction efficient;
-its equality with scalarCompress is itself proved in Validation.lean.
+its equality with scalarCompress is itself proved in ExecutableCompression.lean.
 No collision-freedom, cryptographic assumption, native evaluation, or
 long-message fallback correctness is used.
 -/
 namespace AgaveForgotten
-open Blake3Compression.Validation
+open Blake3Compression.Executable
 
 theorem concrete_zc_first (longHash : AgaveConcrete.Message → AgaveConcrete.Value) :
     AgaveConcrete.hash longHash [90, 67] 0 = 27344#16 := by

@@ -9,5 +9,5 @@ import SSA.Projects.Agave.LatticeHash.Blake3Reference
 import SSA.Projects.Agave.LatticeHash.Conformance
 import SSA.Projects.Agave.LatticeHash.SerialStreaming
 import SSA.Projects.Agave.LatticeHash.Forgotten
-import SSA.Projects.Agave.LatticeHash.Validation
+import SSA.Projects.Agave.LatticeHash.ExecutableCompression
 import SSA.Projects.Agave.LatticeHash.ForgottenOutput

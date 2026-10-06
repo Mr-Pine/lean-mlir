@@ -116,8 +116,12 @@ as represented by `longHash`.
   public output-log theorem.
 - `SerialStreaming.lean` proves identical spill/update call traces agree for
   an otherwise arbitrary deterministic streaming hasher.
+- `ExecutableCompression.lean` provides materialized BLAKE3 evaluators and
+  proves their equality with the scalar model, without running fixture tests.
 - `Validation.lean` checks 11 independent single-block fixtures and seven
   multi-block fixtures of 2048 output bytes each, covering XOF counters 0–31.
+  `Tests.lean` is the test entry point; the core aggregator excludes these
+  fixtures.
 - `Forgotten.lean` and `ForgottenOutput.lean` formalize the necessary
   lifecycle boundary and its concrete unequal outputs.
 
@@ -160,6 +164,7 @@ machine-code verification result.
 
 ```sh
 lake build SSA.Projects.Agave.LatticeHash
+lake build SSA.Projects.Agave.LatticeHash.Tests
 lake env lean SSA/Projects/Agave/LatticeHash/Conformance.lean
 lake env lean SSA/Projects/Agave/LatticeHash/Blake3Reference.lean
 lake env lean SSA/Projects/Agave/LatticeHash/OutputLog.lean
