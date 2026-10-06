@@ -33,7 +33,7 @@ namespace LeanMLIR.RIR
 open Lean Elab Command Term MLIR
 
 /-- `@f := t`: calls to `@f` call the `Func` `t`. -/
-public syntax calleeBinding := "@" ident " := " term
+public syntax calleeBinding := "@" (ident <|> str) " := " term
 
 public meta section
 
@@ -313,9 +313,11 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
     | .error e => throwErrorAt r e
   let table ← callees.toList.mapM fun (c : TSyntax ``calleeBinding) => match c with
     | `(calleeBinding| @$f:ident := $t) => pure (f.getId.toString, t)
+    | `(calleeBinding| @$f:str := $t) => pure (f.getString, t)
     | c => throwErrorAt c "malformed callee binding"
   let globalTable ← globals.toList.mapM fun (c : TSyntax ``calleeBinding) => match c with
     | `(calleeBinding| @$f:ident := $t) => pure (f.getId.toString, t)
+    | `(calleeBinding| @$f:str := $t) => pure (f.getString, t)
     | c => throwErrorAt c "malformed global address binding"
   unless (globalTable.map Prod.fst).eraseDups.length == globalTable.length do
     throwErrorAt r "duplicate global address binding"

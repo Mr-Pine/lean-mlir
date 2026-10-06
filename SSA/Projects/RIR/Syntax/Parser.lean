@@ -21,20 +21,36 @@ open Lean Parser PrettyPrinter
 
 public meta section
 
-/-- Consume up to the `>` closing the `<` at the start; the node's atom is the text read. -/
-partial def balancedBracketsFnAux (startPos i : String.Pos.Raw) (depth : Nat) : ParserFn :=
+/-- Consume a balanced payload, preserving quoted strings and all interior source text. -/
+partial def balancedBracketsFnAux (startPos i : String.Pos.Raw) (closes : List Char)
+    (quoted escaped : Bool) : ParserFn :=
   fun c s =>
   if c.atEnd i then s.mkError "found EOF"
+  else if quoted then
+    let ch := c.get i
+    balancedBracketsFnAux startPos (c.next i) closes
+      (escaped || ch != '"') (!escaped && ch == '\\') c s
   else
     match c.get i with
-    | '(' | '[' | '<' | '{' => balancedBracketsFnAux startPos (c.next i) (depth + 1) c s
+    | '"' => balancedBracketsFnAux startPos (c.next i) closes true false c s
+    | '(' => balancedBracketsFnAux startPos (c.next i) (')' :: closes) false false c s
+    | '[' => balancedBracketsFnAux startPos (c.next i) (']' :: closes) false false c s
+    | '<' => balancedBracketsFnAux startPos (c.next i) ('>' :: closes) false false c s
+    | '{' => balancedBracketsFnAux startPos (c.next i) ('}' :: closes) false false c s
     | ')' | ']' | '>' | '}' =>
-      if depth == 1 then mkNodeToken `balanced_brackets startPos true c (s.setPos (c.next i))
-      else balancedBracketsFnAux startPos (c.next i) (depth - 1) c s
-    | _ => balancedBracketsFnAux startPos (c.next i) depth c s
+      let ch := c.get i
+      match closes with
+      | close :: rest =>
+        if ch != close then s.mkErrorAt s!"expected '{close}'" i
+        else if rest.isEmpty then
+          mkNodeToken `balanced_brackets startPos true c (s.setPos (c.next i))
+        else balancedBracketsFnAux startPos (c.next i) rest false false c s
+      | [] => s.mkErrorAt "unexpected closing bracket" i
+    | _ => balancedBracketsFnAux startPos (c.next i) closes false false c s
 
 def balancedBracketsFn : ParserFn := fun c s =>
-  if c.get s.pos == '<' then balancedBracketsFnAux s.pos s.pos 0 c s else s.mkError "'<'"
+  if c.get s.pos == '<' then balancedBracketsFnAux s.pos s.pos [] false false c s
+  else s.mkError "'<'"
 
 /-- A `<…>` payload with nested brackets, as raw text: `vector<8xi64>`'s `<8xi64>`. -/
 def balancedBrackets : Parser :=
@@ -107,7 +123,15 @@ syntax "@" (ident <|> str) : mlir_attr_val
 
 syntax "#" ident : mlir_attr_val
 
-syntax "#" ident "<" mlir_attr_val,* ">" : mlir_attr_val
+/-- Dialect bodies need not be comma-separated attributes (e.g. LLVM memory effects). -/
+syntax "#" ident balancedBrackets : mlir_attr_val
+
+/-- The enum/string list form already interpreted by RIR, including overflow flags. -/
+declare_syntax_cat dialect_attr_enums
+
+syntax dialect_attr_enum := ident <|> str
+
+syntax dialect_attr_enum,* : dialect_attr_enums
 
 syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
 
@@ -221,6 +245,21 @@ def intValue (n : TSyntax ``signedNum) : Int :=
   | #[n] => n.isNatLit?.getD 0
   | _ => 0
 
+/-- Keep the existing enum/list representation where it applies; otherwise retain the
+entire dialect body verbatim. The translator remains responsible for known attributes. -/
+def dialectAttr (dialect body : String) : CoreM AttrValue := do
+  let rawValue := AttrValue.opaque_ dialect body
+  let .ok stx := Parser.runParserCategory (← getEnv) `dialect_attr_enums body
+    | return rawValue
+  let `(dialect_attr_enums| $vs:dialect_attr_enum,*) := stx | return rawValue
+  let vs := vs.getElems.toList.map fun v =>
+    match leaves v.raw with
+    | #[x] => AttrValue.opaque_ dialect ((x.isStrLit?).getD x.getId.toString)
+    | _ => rawValue
+  return match vs with
+    | [v] => v
+    | vs => .list vs
+
 mutual
 
 partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
@@ -230,18 +269,9 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
   | `(mlir_attr_val| @ $x:ident) => return .symbol x.getId.toString
   | `(mlir_attr_val| @ $s:str) => return .symbol s.getString
   | `(mlir_attr_val| # $x:ident) => return .alias x.getId.toString
-  | `(mlir_attr_val| # $d:ident < $vs,* >) => do
-    let dialect := d.getId.toString
-    let vs ← vs.getElems.toList.mapM fun (v : TSyntax `mlir_attr_val) => do
-      match leaves v.raw with
-      | #[x] =>
-        if x.isIdent then return AttrValue.opaque_ dialect x.getId.toString
-        if let some s := x.isStrLit? then return AttrValue.opaque_ dialect s
-        throwErrorAt v "unsupported contents of '#{dialect}<…>'"
-      | _ => throwErrorAt v "unsupported contents of '#{dialect}<…>'"
-    match vs with
-    | [v] => return v
-    | vs => return .list vs
+  | `(mlir_attr_val| # $d:ident $b:balancedBrackets) => do
+    let body := bracketsText b
+    dialectAttr d.getId.toString (String.ofList ((body.toList.drop 1).dropLast))
   | `(mlir_attr_val| dense< $v > : $t) => return .dense (← attrVal v) (← mlirType t)
   | `(mlir_attr_val| array< $t $[: $vs,*]? >) => do
     let vs : Array (TSyntax `mlir_attr_val) := (vs.map (·.getElems)).getD #[]
