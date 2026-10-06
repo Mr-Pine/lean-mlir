@@ -1,5 +1,5 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
-import SSA.Projects.Agave.LatticeHash.OutputLog
+import SSA.Projects.Agave.LatticeHash.Equivalence
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 500000
@@ -491,25 +491,6 @@ theorem simdUpdate_eq_portableReference {n : Nat} (hn : 0 < n)
   simp only [portableLtHash_eq_oneChunk _ (hm _), Option.getD_some]
   exact AgaveConcrete.simdUpdate_eq_fold hn hp ms hm a
 
-/-- End-to-end source-shaped statement: any chronological event sequence
-    accepted by the portable-reference specification has retained-memory
-    executions at widths 1, 8 and 16, and all three produce exactly the same
-    complete output log `out`. The sole premise is public API legality. -/
-theorem every_legal_portable_trace (longHash : Message → AgaveConcrete.Value)
-    (events : List AgaveOutputLog.Event) {r : AgaveMixed.Spec}
-    {out : List AgaveConcrete.Value}
-    (legal : AgaveOutputLog.specEval
-      (fun m => referenceHash longHash (AgaveConcrete.toBytes m)) events = some (r, out)) :
-    (∃ p s, AgaveOutputLog.Run longHash 1 (by decide) AgaveLattice.labels
-      events p s r out) ∧
-    (∃ p s, AgaveOutputLog.Run longHash 8 (by decide)
-      (AgaveLattice.transpose8 AgaveLattice.labels) events p s r out) ∧
-    (∃ p s, AgaveOutputLog.Run longHash 16 (by decide)
-      (AgaveLattice.transpose16 AgaveLattice.labels) events p s r out) := by
-  apply AgaveOutputLog.every_legal_trace longHash events
-  rw [publicHash_eq_portableReference longHash]
-  exact legal
-
 /-- info: 'AgaveBlake3Reference.portableLtHash_eq_oneChunk' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms portableLtHash_eq_oneChunk
 /-- info: 'AgaveBlake3Reference.referenceHash_eq_scalarHash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
@@ -518,7 +499,5 @@ theorem every_legal_portable_trace (longHash : Message → AgaveConcrete.Value)
 #guard_msgs in #print axioms publicHash_eq_portableReference
 /-- info: 'AgaveBlake3Reference.simdUpdate_eq_portableReference' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms simdUpdate_eq_portableReference
-/-- info: 'AgaveBlake3Reference.every_legal_portable_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms every_legal_portable_trace
 
 end AgaveBlake3Reference

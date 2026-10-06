@@ -102,7 +102,7 @@ as represented by `longHash`.
 - `Equivalence.lean` composes the concrete compression, control, transpose,
   reduction, and lifecycle results and constructs proved backend instances.
 - `Blake3Reference.lean` independently models the locked portable BLAKE3
-  one-chunk path and composes it with the complete public output-log theorem.
+  one-chunk path and proves it equal to the scalar short-message model.
 - `PhysicalStaging.lean` refines the logical staging model to retained finite
   byte storage, including stale data, zero padding, spills, scalar tails, and
   direct full-batch kernel reads.
@@ -112,6 +112,8 @@ as represented by `longHash`.
 - `OutputLog.lean` records every actual drain result, proves the whole log
   equal at all three widths, and constructs executions for every legal event
   sequence.
+- `Conformance.lean` composes the portable BLAKE3 refinement with the complete
+  public output-log theorem.
 - `SerialStreaming.lean` proves identical spill/update call traces agree for
   an otherwise arbitrary deterministic streaming hasher.
 - `Validation.lean` checks 11 independent single-block fixtures and seven
@@ -158,6 +160,7 @@ machine-code verification result.
 
 ```sh
 lake build SSA.Projects.Agave.LatticeHash
+lake env lean SSA/Projects/Agave/LatticeHash/Conformance.lean
 lake env lean SSA/Projects/Agave/LatticeHash/Blake3Reference.lean
 lake env lean SSA/Projects/Agave/LatticeHash/OutputLog.lean
 lake env lean SSA/Projects/Agave/LatticeHash/PhysicalMixed.lean
