@@ -1,0 +1,239 @@
+{
+  "Wrapper": {
+    "source": "generated/agave_ed25519_verify.mlir",
+    "source_sha256": "d804d37deea3f28dddf53385bff94b1959e41bb1df666bc748739123dd916da1",
+    "region_sha256": "0331e85b3ccd64c0ae0c3e8c501b24081d01a213c144450225f3911d18f0de51",
+    "region_lines": 31,
+    "callees": {
+      "_RNvXs8_NtNtCsjK63O35OHGN_14solana_ed255197ed_sigs16verification_keyNtB5_15VerificationKeyINtNtCsgxBkk5gSRhY_4core7convert7TryFromNtB5_20VerificationKeyBytesE8try_from": {
+        "field": "keyFromBytes",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMCsgDXCIgPwL6d_7ed25519NtB2_9Signature10from_bytes": {
+        "field": "signatureFromBytes",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMsc_NtNtCsjK63O35OHGN_14solana_ed255197ed_sigs16verification_keyNtB5_15VerificationKey12verify_dalek": {
+        "field": "verifyDalek",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [],
+    "normalizations": []
+  },
+  "Dalek": {
+    "source": "generated/agave_verify_dalek.mlir",
+    "source_sha256": "80ba82848dfd9eef165767e3bd5c4144287ad6b4bd6ab38e162428d03a8bef64",
+    "region_sha256": "582f55cc622454d9be57e2ba3ba18c37f0a384970289dd02b42e3e5e3aa6b49f",
+    "region_lines": 149,
+    "callees": {
+      "_RNvMsc_NtNtCsjK63O35OHGN_14solana_ed255197ed_sigs16verification_keyNtB5_15VerificationKey16challenge_scalar": {
+        "field": "challengeScalar",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": []
+      },
+      "_RNvMsx_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_12EdwardsPoint12mul_by_pow_2": {
+        "field": "pointMulByPow2",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 32"
+        ],
+        "returns": []
+      },
+      "_RNvXsd_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_12EdwardsPointNtCsh8VEmffyqhs_6subtle14ConstantTimeEq5ct_eq": {
+        "field": "pointConstantTimeEq",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      },
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_18CompressedEdwardsY10decompress": {
+        "field": "decompress",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      },
+      "_RNvMso_NtCsjK63O35OHGN_14solana_ed255196scalarNtB5_6Scalar6reduce": {
+        "field": "scalarReduce",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519": {
+        "field": "bytesConstantTimeEq",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      },
+      "_RNvNvNtNvNtCsjK63O35OHGN_14solana_ed255197backend20get_selected_backend10cpuid_avx28init_get10init_inner": {
+        "field": "initializeAvx2Cache",
+        "args": [],
+        "returns": [
+          ".bv 1"
+        ]
+      },
+      "_RNvNtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial10scalar_mul19vartime_double_base3mul": {
+        "field": "serialDoubleBase",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvNvNtNtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector10scalar_mul19vartime_double_base9spec_avx23mul9__impl_mul": {
+        "field": "avx2DoubleBase",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMsg_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_12EdwardsPoint8compress": {
+        "field": "compressPoint",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "bcmp": {
+        "field": "compareBytes",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": [
+          ".bv 32"
+        ]
+      }
+    },
+    "globals": [
+      "alloc_d6091242425a18f93aa551ed73483e0d",
+      "_RNvNtNvNtCsjK63O35OHGN_14solana_ed255197backend20get_selected_backend10cpuid_avx27STORAGE"
+    ],
+    "normalizations": []
+  },
+  "Key": {
+    "source": "generated/agave_verification_key_from_bytes.mlir",
+    "source_sha256": "ed649cde6272acf749eb829a323791dff5ed12c4bba1bebe63afbb0a32d886df",
+    "region_sha256": "1a75ab18a832c8825ae5304ff574511483fc077a149ecc245e6c7243852c0fa8",
+    "region_lines": 109,
+    "callees": {
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_18CompressedEdwardsY10decompress": {
+        "field": "decompress",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      }
+    },
+    "globals": [],
+    "normalizations": []
+  },
+  "Challenge": {
+    "source": "generated/agave_verifier_challenge_scalar.mlir",
+    "source_sha256": "c8fe297ee56fee608c42bd0d019eabe4c38d465d1d424158f6bd0d01afb4ce1c",
+    "region_sha256": "3e18b70142f3af51e3229757f2a9f2ba630153282661d57618f8bd7c09c65916",
+    "region_lines": 100,
+    "callees": {
+      "_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512": {
+        "field": "sha512Compress",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": []
+      },
+      "_RNvNtCsjK63O35OHGN_14solana_ed255197ed_sigs18scalar_from_sha512": {
+        "field": "scalarFromSha512",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      }
+    },
+    "globals": [
+      "anon.2688bd6af3b9e90d4f6e608faea972d6.1"
+    ],
+    "normalizations": [
+      {
+        "symbol_quoting": "anon.2688bd6af3b9e90d4f6e608faea972d6.1"
+      }
+    ]
+  },
+  "byteGlobals": [
+    {
+      "symbol": "alloc_d6091242425a18f93aa551ed73483e0d",
+      "length": 40,
+      "alignment": 8,
+      "bytes_hex": "01000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "b68f593141969cfeddf2011667ccdca92d2d22b414194bdf4ccbaa2833c85be2",
+      "source": "agave_verify_dalek.mlir",
+      "lean_name": "identityOne"
+    },
+    {
+      "symbol": "anon.2688bd6af3b9e90d4f6e608faea972d6.1",
+      "length": 64,
+      "alignment": 16,
+      "bytes_hex": "08c9bcf367e6096a3ba7ca8485ae67bb2bf894fe72f36e3cf1361d5f3af54fa5d182e6ad7f520e511f6c3e2b8c68059b6bbd41fbabd9831f79217e1319cde05b",
+      "sha256": "3b721fb05904288533a0c3f44162aa4631530bcfebd22c3e57dbc4994e38f83d",
+      "source": "agave_verifier_challenge_scalar.mlir",
+      "lean_name": "sha512InitialState"
+    }
+  ],
+  "import_inputs_sha256": {
+    "MLIR/import_verifier.py": "49f3c2ca0b6d67024adb1bfc9231ba519abf045f6e1db2d9996893e8ca2ba45a",
+    "Proof/Verifier/ExecutionElab.lean": "a1a8061029b6cde8219a323c21d41412298640e06dfbf94ee2033b042083a6d2"
+  }
+}
