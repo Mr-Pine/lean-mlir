@@ -1,0 +1,33 @@
+{
+  "upstream_repository": "https://github.com/saymrwulf/anza-ed25519-verified",
+  "upstream_commit": "cb0f1efc27db15f7896fce9423dfc76b4a69d1fa",
+  "upstream_license": "No LICENSE, COPYING, or NOTICE file or explicit license grant in tracked snapshot. No license inferred.",
+  "upstream_claimed_rust_base": "anza-xyz/cryptography@0a54cca",
+  "upstream_claimed_patched_rust": "saymrwulf/anza-cryptography-source@5f8e70e",
+  "current_crate": "solana-ed25519 0.2.4",
+  "current_crate_vcs": "33f07b22cb2fba719645052fdfc31d23bc917596",
+  "current_crate_license": "BSD-3-Clause",
+  "upstream_sha256": {
+    "verification/Proofs/P25519.lean": "b8d5d3063276fbe94bd3b837a4e2b3b12543ab86cf7e5fb24788d61d7d728aa9",
+    "verification/Proofs/ToBytesMath.lean": "44535a5b137a8d4d1d2731f28665ebb3cf636ea09f09937e73e218a109f3ba45",
+    "verification/Proofs/EdCurve.lean": "677b0ef53e9160c9c936dc28ab4179475597d2ed38e97d5a7c95e341e330825e",
+    "verification/Proofs/PointEqSpec.lean": "a7f2ed5da1f34565b7c6d312dc4c70acac760868790b73148a65633e6b8c488b",
+    "verification/Proofs/ScalarDenote.lean": "73b090160147f52e373c1c8b8aaee06a769f3280abc0cf3a44e32fd8d3984aca",
+    "verification/Proofs/SigApexSpec.lean": "4412c0cd76790861ffcfa4fe78956313811cf4d88c350fd6847ad172efcaa0f3",
+    "verification/Proofs/DecompressMain.lean": "4675b23e229ad6b01ae5b40a5b3aa392f8268a0ae084f9731f2a8f4194833b36",
+    "verification/gen/CurveField/Funs.lean": "6aebc152991c3b82fd2b7b576d59ab1524d8ff3e9002264dc84a74b379b3ba74",
+    "README.md": "51d68af3dbc1a21fa116bab78bab5b1650f9ddad359a1437a5a8455db41a657d",
+    "TRUSTED-BASE.md": "48da3a648b58c43c8e4a3a11392b3063df0af1550ba7fd20c784c6bfc6ba228c"
+  },
+  "current_crate_sha256": {
+    "src/backend/serial/u64/field.rs": "1b408fc85e2695d9466185678362de3f2693ecc310fe7d71e5e82a4fea1b3def",
+    "src/backend/serial/u64/constants.rs": "285e15d3696628dbd05712af0ce6fea88b100ca25c3f783a114abb45a4234711",
+    "src/scalar.rs": "083b5620acd3307745bf576c6be341299574fbed2da77b8eee8b0422690e3e83",
+    "src/edwards.rs": "521d9dd7d80af6108ac8e30f5ede802b199ca3c9a782050234e3e8f984389612",
+    "src/edwards/affine.rs": "63a4e8b94351d95702e328e2ae1d5858969577c24006c5866a859b091ca51998",
+    "src/ed_sigs/verification_key.rs": "6e84532003e0606b316d1145b7d43e511d235abe8ac3421c6f98e30e0bc5eadb",
+    "Cargo.toml": "8f63a798b2584c2640fc7e83364f29ca5d2dbcf2f69e0d4bf1a28f9299dba3f7",
+    ".cargo_vcs_info.json": "71f3df3d421c59f68432d8573c70e9b55e1c67b82c9d96d9728160d32a378425"
+  },
+  "incorporation": "Research references only; no upstream source code or comments incorporated. Local proofs independently written."
+}
