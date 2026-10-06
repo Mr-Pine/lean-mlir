@@ -1,0 +1,14 @@
+{
+  "agave_scalar_naf5": {
+    "source": "MLIR/generated/agave_scalar_naf5.mlir",
+    "source_sha256": "cc65c20cf2919a9bf1fd13aa2ef10f6378380d2e101da0427601e490d2e1de13",
+    "region_sha256": "bc8ba11a8751afbb95c9905e597010b382024806d02386c97d9cbbb32bd60959",
+    "normalizations": []
+  },
+  "agave_scalar_naf8": {
+    "source": "MLIR/generated/agave_scalar_naf8.mlir",
+    "source_sha256": "05395abe7348ddbcc4f26ab750ed2de953709b240d471ac1ff33450a5e34bb36",
+    "region_sha256": "07334a48d469a33e8c2b3882f3b6300eba2c98812d6b28e39dfde0f978583b21",
+    "normalizations": []
+  }
+}
