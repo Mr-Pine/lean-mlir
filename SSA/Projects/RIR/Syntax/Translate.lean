@@ -488,19 +488,26 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.trunc" | "llvm.zext" | "llvm.sext" =>
     do
       let (dst, t) ← res
-      let [(a, .bv w)] := args | throw "expected one integer operand"
-      let .bv w' := t | throw "expected an integer result"
-      if op.name == "llvm.trunc" then
-        unless w' < w do
-          throw "the result must be narrower"
-        return .unop (.trunc (w := w) (w' := w') (← overflowFlags op)) dst a
-      else
-        unless w < w' do
-          throw "the result must be wider"
-        if op.name == "llvm.zext" then
-          return .unop (.zext (w := w) (w' := w') (op.hasAttr "nonNeg")) dst a
+      let [(a, t₁)] := args | throw "expected one integer or integer-vector operand"
+      let cast (w w' : Nat) : Except String (UnOp (.bv w) (.bv w')) := do
+        if op.name == "llvm.trunc" then
+          unless w' < w do
+            throw "the result must be narrower"
+          return .trunc (← overflowFlags op)
         else
-          return .unop (.sext (w := w) (w' := w')) dst a
+          unless w < w' do
+            throw "the result must be wider"
+          if op.name == "llvm.zext" then
+            return .zext (op.hasAttr "nonNeg")
+          else
+            return .sext
+      match t₁, t with
+      | .bv w, .bv w' => return .unop (← cast w w') dst a
+      | .vec l w, .vec l' w' =>
+        unless l == l' do
+          throw "the result has another lane count"
+        return .unop (.vector (l := l) (← cast w w')) dst a
+      | _, _ => throw "expected scalar integers or integer vectors with matching lane counts"
   | "llvm.load" =>
     do
       checkNotAtomic

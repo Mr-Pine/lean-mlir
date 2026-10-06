@@ -24,6 +24,8 @@ inductive UnOp : Ty → (out : Ty) → Type
   | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
+  /-- Apply a scalar operation independently, preserving lane-local poison. -/
+  | vector {l w w' : Nat} (op : UnOp (.bv w) (.bv w')) : UnOp (.vec l w) (.vec l w')
   | bswap {w : Nat} : UnOp (.bv w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
 

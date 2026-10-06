@@ -20,6 +20,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
   | sext => Operation.sext
+  | vector op => fun a => Vector.ofFn (fun i => op.compute a[i])
   | bswap => Operation.bswap
   | bitcast h => Operation.bitcast h
 
