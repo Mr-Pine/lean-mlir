@@ -1,0 +1,33 @@
+{
+  "SHA512Finalization": {
+    "source": "generated/agave_scalar_from_sha512.mlir",
+    "source_sha256": "9347f348f8e230b88bec68eb7393caa3800e70e5161184bed3face4d7bb216e3",
+    "region_sha256": "1c282409c33ade036c97030976437086d5d25fe9bce314754137da1431a1c1ce",
+    "region_lines": 623,
+    "callees": {
+      "_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512": {
+        "field": "sha512Compress",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": []
+      },
+      "_RNvMNtCsjK63O35OHGN_14solana_ed255196scalarNtB2_6Scalar25from_bytes_mod_order_wide": {
+        "field": "reduceWide",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      }
+    },
+    "globals": [],
+    "normalizations": []
+  },
+  "import_inputs_sha256": {
+    "MLIR/import_sha512.py": "cf1306313cda983c2d13e5ab330e8f65f5108652216a4542f8f7ecf5404a48e3",
+    "Proof/Verifier/ExecutionElab.lean": "56a1fe6cb964c965b0120861d5cdb54e312bfea4d19bea58dd614f13e3da2bce"
+  }
+}
