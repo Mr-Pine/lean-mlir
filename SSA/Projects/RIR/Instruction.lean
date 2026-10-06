@@ -44,6 +44,8 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
+  /-- Three-way integer comparison, with an independently typed result width. -/
+  | cmp (signed : Bool) {w wr : Nat} : BinOp (.bv w) (.bv w) (.bv wr)
   |
   vector {l w₁ w₂ w : Nat} (op : BinOp (.bv w₁) (.bv w₂) (.bv w)) :
     BinOp (.vec l w₁) (.vec l w₂) (.vec l w)
@@ -77,6 +79,8 @@ inductive Instr (Γ : Ctx)
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
   /-- `llvm.mlir.poison`. -/
   | poison (dst : Dst Γ τ)
+  /-- `llvm.assume`: a false or poison condition causes immediate undefined behavior. -/
+  | assume (cond : Reg Γ (.bv 1))
   | unop (op : UnOp t₁ t) (dst : Dst Γ t) (a : Reg Γ t₁)
   | binop (op : BinOp t₁ t₂ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
@@ -100,6 +104,8 @@ structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where
 
 inductive Exit (Γ : Ctx) (tRets : List Ty) (blockTys : Fin n → List Ty)
   | ret (vs : Regs Γ tRets)
+  /-- Reaching `llvm.unreachable` is immediate undefined behavior. -/
+  | unreachable
   | br (target : Jump Γ blockTys)
   | condBr (cond : Reg Γ (.bv 1)) (ttrue : Jump Γ blockTys) (tfalse : Jump Γ blockTys)
   |

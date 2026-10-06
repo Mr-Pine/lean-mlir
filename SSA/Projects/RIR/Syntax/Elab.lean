@@ -154,6 +154,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .ashr e => do
     `((.ashr $(← boolStx e)))
   | .smin => `(.smin)
+  | .cmp signed => do
+    `((.cmp $(← boolStx signed)))
   | .icmp p => do
     `((.icmp $(← predStx p)))
   | .vector op => do
@@ -195,6 +197,8 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
     `(.gep $(← dstStx tys d) $(← regStx tys p) [$indices,*])
   | .const c d => do
     `(.const $(← constStx c) $(← dstStx tys d))
+  | .assume c => do
+    `(.assume $(← regStx tys c))
   | .poison _ d => do
     `(.poison $(← dstStx tys d))
   | .unop op d a => do
@@ -226,6 +230,7 @@ def jumpStx (tys : ValTys) (j : PJump) : CommandElabM (TSyntax `term) := do
   `(⟨$(num j.target), $(← consStx (← j.args.mapM (regStx tys)))⟩)
 
 def exitStx (tys : ValTys) : PExit → CommandElabM (TSyntax `term)
+  | .unreachable => `(.unreachable)
   | .ret vs => do
     `(.ret $(← consStx (← vs.mapM (regStx tys))))
   | .br j => do

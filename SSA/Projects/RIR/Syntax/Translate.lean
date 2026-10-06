@@ -49,6 +49,7 @@ inductive PInstr
   | gep (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | const (c : ConstLit) (dst : Nat)
   | poison (t : Ty) (dst : Nat)
+  | assume (cond : RegRef)
   | unop {t₁ t : Ty} (op : UnOp t₁ t) (dst : Nat) (a : RegRef)
   | binop {t₁ t₂ t : Ty} (op : BinOp t₁ t₂ t) (dst : Nat) (a b : RegRef)
   | ternop {t₁ t₂ t₃ t : Ty} (op : TernOp t₁ t₂ t₃ t) (dst : Nat) (a b c : RegRef)
@@ -69,6 +70,7 @@ structure PJump where
 
 inductive PExit
   | ret (vs : List RegRef)
+  | unreachable
   | br (j : PJump)
   | condBr (c : RegRef) (t f : PJump)
   | switch (w : Nat) (v : RegRef) (dflt : PJump) (cases : List (Int × PJump))
@@ -262,6 +264,14 @@ def overflowFlags (op : Op) : Except String OverflowFlags :=
     | s => throw s!"unknown overflow flag `{s}`"
   match op.getAttr? "overflowFlags" with
   | none => return {}
+  -- LLVM 22 generic MLIR prints the bit enum as its i32 storage attribute.
+  | some (.int bits (.int 32)) =>
+    match bits with
+    | 0 => return {}
+    | 1 => return { nsw := true }
+    | 2 => return { nuw := true }
+    | 3 => return { nsw := true, nuw := true }
+    | _ => throw s!"unknown overflow flag bits `{bits}`"
   | some (.opaque_ "llvm.overflow" s) => flag s
   | some (.list fs) =>
     fs.foldlM (init := {}) fun acc f => do
@@ -493,6 +503,17 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     do
       let (dst, t) ← res
       return .poison t dst
+  | "llvm.intr.assume" =>
+    do
+      let [(c, .bv 1)] := args | throw "expected one i1 condition"
+      unless op.res.isEmpty do
+        throw "assume has no results"
+      match op.getAttr? "op_bundle_tags", op.getAttr? "op_bundle_sizes" with
+      | none, none | some (.list []), some (.array _ []) => pure ()
+      | _, _ => throw "assume operand bundles are not supported"
+      return .assume c
+  | "llvm.freeze" =>
+    throw "freeze requires nondeterministic semantics and is not supported"
   | "llvm.and" =>
     arith .and (← res) args
   | "llvm.or" =>
@@ -540,6 +561,23 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     arith (.ashr (op.hasAttr "isExact")) (← res) args
   | "llvm.intr.smin" =>
     arith .smin (← res) args
+  | "llvm.intr.scmp" | "llvm.intr.ucmp" =>
+    do
+      let (dst, t) ← res
+      let [(a, t₁), (b, t₂)] := args | throw "expected two integer operands"
+      unless t₁ == t₂ do
+        throw "the operand types differ"
+      let signed := name == "llvm.intr.scmp"
+      match t₁, t with
+      | .bv w, .bv wr =>
+        unless 2 ≤ wr do
+          throw "three-way comparison requires at least two result bits"
+        return .binop (.cmp (w := w) (wr := wr) signed) dst a b
+      | .vec l w, .vec lr wr =>
+        unless l == lr && 2 ≤ wr do
+          throw "three-way comparison requires matching lane counts and at least two result bits"
+        return .binop (.vector (l := l) (.cmp (w := w) (wr := wr) signed)) dst a b
+      | _, _ => throw "expected scalar integers or integer vectors with matching lane counts"
   | "llvm.icmp" =>
     do
       let (dst, t) ← res
@@ -751,6 +789,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
 
 def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit := do
   match op.name, op.successors with
+  | "llvm.unreachable", [] =>
+    do
+      unless op.args.isEmpty && op.res.isEmpty do
+        throw "unreachable has no operands or results"
+      return .unreachable
   | "llvm.return", [] =>
     return .ret ((← op.args.mapM (operand E)).map (·.1))
   | "llvm.br", [s] =>
@@ -799,19 +842,20 @@ def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit :
             let j ← jump E blockTys s (pending.take n.toNat)
             return (cs ++ [(c, j)], pending.drop n.toNat)
       return .switch w v dflt cs
-  | "llvm.return", _ | "llvm.br", _ | "llvm.cond_br", _ | "llvm.switch", _ =>
+  | "llvm.return", _ | "llvm.br", _ | "llvm.cond_br", _ | "llvm.switch", _
+  | "llvm.unreachable", _ =>
     throw s!"wrong number of successors"
   | name, _ =>
     throw
         s!"'{name}' is not a terminator; a block must end in llvm.return, llvm.br, \
-    llvm.cond_br or llvm.switch"
+    llvm.cond_br, llvm.switch or llvm.unreachable"
 
 /-- `f`, with errors prefixed by the operation. -/
 def atOp {α : Type} (blk : String) (op : Op) (f : Except String α) : Except String α :=
   f.mapError fun e => s!"^{blk}: {op.render}: {e}"
 
 def isTerminator (name : String) : Bool :=
-  name ∈ ["llvm.return", "llvm.br", "llvm.cond_br", "llvm.switch"]
+  name ∈ ["llvm.return", "llvm.br", "llvm.cond_br", "llvm.switch", "llvm.unreachable"]
 
 end Translate
 
@@ -933,6 +977,7 @@ def mkInstr (callees : String → Option Callee) : PInstr → Except String (Ins
     return .gep (← mkDst Γ .ptr d) (← mkReg Γ .ptr p) indices
   | .const c d => return .const c.value (← mkDst Γ _ d)
   | .poison t d => return .poison (← mkDst Γ t d)
+  | .assume c => return .assume (← mkReg Γ (.bv 1) c)
   | .unop op d a => return .unop op (← mkDst Γ _ d) (← mkReg Γ _ a)
   | .binop op d a b => return .binop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b)
   | .ternop op d a b c =>
@@ -963,6 +1008,7 @@ def mkJump (j : PJump) : Except String (Jump Γ blockTys) := do
 
 def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
   | .ret vs => return .ret (← mkRegs Γ tRets vs)
+  | .unreachable => return .unreachable
   | .br j => return .br (← mkJump Γ blockTys j)
   | .condBr c t f =>
     return .condBr (← mkReg Γ (.bv 1) c) (← mkJump Γ blockTys t) (← mkJump Γ blockTys f)

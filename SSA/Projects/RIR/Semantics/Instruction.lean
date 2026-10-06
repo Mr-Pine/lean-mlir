@@ -39,6 +39,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | ashr exact => Operation.ashr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p
+  | cmp signed => Operation.cmp signed
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm
@@ -69,6 +70,9 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
     pure (env.write dst (Operation.gepUnflagged (env.read base) (indices.map (·.offset env))))
   | const v dst => pure (env.write dst (Ty.wrap v))
   | poison dst => pure (env.write dst (Ty.poisoned _))
+  | assume cond => do
+    let .value c := env.read cond | throwUB
+    if c == 1#1 then pure env else throwUB
   | unop op dst a => pure (env.write dst (op.compute (env.read a)))
   | binop op dst a b => pure (env.write dst (op.compute (env.read a) (env.read b)))
   | ternop op dst a b c => pure (env.write dst (op.compute (env.read a) (env.read b) (env.read c)))
@@ -101,6 +105,7 @@ def switchTarget {bt : Fin n → List Ty} (x : ⟦t⟧ᵣ) (default : Jump Γ bt
 def Exit.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (blockTys k)) (env : ⟪Γ⟫) :
     Exit Γ tRets blockTys → EffectM (⟪Γ⟫ × (Vals tRets ⊕ Fin n))
   | ret regs => pure (env, .inl (regs.read env))
+  | unreachable => throwUB
   | br target => pure (target.run params env)
   | condBr cond ttrue tfalse => do
     let .value cond := env.read cond | throwUB

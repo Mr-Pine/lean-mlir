@@ -182,7 +182,7 @@ mlir_def calleeBinder (k : Nat) := {
 example (k : Nat) : (calleeBinder k).blocks 0 = calleeBinder.entry k := rfl
 
 /--
-error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch
+error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.br, llvm.cond_br, llvm.switch or llvm.unreachable
 -/
 #guard_msgs in
 mlir_def notTerminated := {

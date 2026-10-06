@@ -131,6 +131,14 @@ def icmp {w : Nat} (pred : IntPred) (x y : IntW w) : IntW 1 := do
     | .uge => b.ule a
   return BitVec.ofBool result
 
+/-- LLVM scmp/ucmp: -1, 0, or 1; both operands propagate poison. The translator
+requires a result width of at least two bits, as required by LLVM. -/
+@[mlir_operation]
+def cmp (signed : Bool) {w wr : Nat} (x y : IntW w) : IntW wr := do
+  let a ← x
+  let b ← y
+  return if (if signed then a.slt b else a.ult b) then -1 else if a == b then 0 else 1
+
 end BVBinOp
 
 section Intrinsics
