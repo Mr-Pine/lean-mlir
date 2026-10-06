@@ -23,6 +23,7 @@ import SSA.Projects.Scf.ScfFunctor
 import SSA.Projects.LeanMlirCommon.LeanMlirCommon
 import SSA.Projects.SLLVM.SLLVM
 import SSA.Projects.Firedancer.Firedancer
+import SSA.Projects.Agave.LatticeHash
 
 
 -- EXPERIMENTAL
