@@ -28,16 +28,20 @@ inductive RegRef
   | val (i : Nat)
   deriving DecidableEq, Repr
 
-/-- A constant, as written: a scalar, a vector's lanes, or one lane for all (`dense<c>`). -/
+/-- A constant, as written: a scalar, a vector's lanes or an integer array's elements, or one for
+all (`dense<c>`). -/
 inductive ConstLit
   | bv (w : Nat) (v : Int)
   | vec (l w : Nat) (vs : List Int)
   | splat (l w : Nat) (v : Int)
+  | array (n w : Nat) (vs : List Int)
+  | arraySplat (n w : Nat) (v : Int)
   deriving Repr
 
 def ConstLit.ty : ConstLit → Ty
   | .bv w _ => .bv w
   | .vec l w _ | .splat l w _ => .vec l w
+  | .array n w _ | .arraySplat n w _ => .array n (.bv w)
 
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
@@ -396,6 +400,14 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           unless vs.length == l do
             throw s!"{vs.length} elements for {l} lanes"
           return .const (.vec l w vs) dst
+      | .array n (.bv w), some (.dense v _) =>
+        match ← denseInts v with
+        | .inr v =>
+          return .const (.arraySplat n w v) dst
+        | .inl vs =>
+          unless vs.length == n do
+            throw s!"{vs.length} elements for {n} array elements"
+          return .const (.array n w vs) dst
       | t, _ =>
         throw s!"unsupported constant of type {t.toMLIR}"
   -- `undef` as poison: less defined, so what holds with poison holds for every undef
@@ -624,7 +636,8 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       return .call callee (args.map (·.2)) us (args.map (·.1)) rets
   | "llvm.mlir.addressof" =>
     do
-      let some (.symbol global) := op.getAttr? "global_name" | throw "expected a `global_name` symbol"
+      let some (.symbol global) :=
+        op.getAttr? "global_name" | throw "expected a `global_name` symbol"
       let (dst, .ptr) ← res | throw "expected addressof target to be a `ptr`"
       return .addressof global dst
   | name =>
@@ -780,6 +793,8 @@ def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
   | .bv w v => BitVec.ofInt w v
   | .vec l w vs => Vector.ofFn fun i : Fin l => BitVec.ofInt w (vs[i]?.getD 0)
   | .splat l w v => Vector.replicate l (BitVec.ofInt w v)
+  | .array n w vs => Vector.ofFn fun i : Fin n => BitVec.ofInt w (vs[i]?.getD 0)
+  | .arraySplat n w v => Vector.replicate n (BitVec.ofInt w v)
 
 namespace Prog
 
