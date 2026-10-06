@@ -1,12 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Util.ConcreteOrMVar
-import LeanMLIR.Util.Poison
+module
 
-import Mathlib.Data.Vector.Basic
-import Cli
-import Lean
+public import LeanMLIR.Util.ConcreteOrMVar
+public import LeanMLIR.Util.Poison
+
+public import Mathlib.Data.Vector.Basic
+public import Cli
+public import Lean
+
+@[expose] public section
 
 @[simp]
 def uncurry (f : α → β → γ) (pair : α × β) : γ :=

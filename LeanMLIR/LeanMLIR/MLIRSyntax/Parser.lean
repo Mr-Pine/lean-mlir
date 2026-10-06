@@ -1,6 +1,10 @@
-import LeanMLIR.MLIRSyntax.AST
-import LeanMLIR.MLIRSyntax.EDSL
-import Lean
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+public import LeanMLIR.MLIRSyntax.EDSL
+public import Lean
+
+@[expose] public section
 
 /- Parse  a raw file into `MLIR.AST.*` constructs. -/
 open Lean
@@ -27,11 +31,11 @@ unsafe def elabIntoTermTactic {α : Type} (expectedType : Expr) (stx : Lean.Synt
 namespace Lean.Elab.Tactic
 
 @[inline]
-private def TacticM.runCore (x : TacticM α) (ctx : Context) (s : State) : TermElabM (α × State) :=
+def TacticM.runCore (x : TacticM α) (ctx : Context) (s : State) : TermElabM (α × State) :=
   x ctx |>.run s
 
 @[inline]
-private def TacticM.runCore' (x : TacticM α) (ctx : Context) (s : State) : TermElabM α :=
+def TacticM.runCore' (x : TacticM α) (ctx : Context) (s : State) : TermElabM α :=
   Prod.fst <$> x.runCore ctx s
 
 end Lean.Elab.Tactic
@@ -103,7 +107,7 @@ def mkParseFun (syntaxcat : Name) (ntparser : Syntax → EIO ParseError ParseOut
   | .ok syn =>
     ntparser syn
 
-private def mkNonTerminalParser (syntaxcat : Name) (ntparser : Syntax → EIO ParseError ParseOutput)
+def mkNonTerminalParser (syntaxcat : Name) (ntparser : Syntax → EIO ParseError ParseOutput)
     (env : Environment) (s : String) : EIO ParseError ParseOutput :=
   let parseFun := mkParseFun syntaxcat ntparser
   parseFun s env
@@ -112,7 +116,7 @@ private def mkNonTerminalParser (syntaxcat : Name) (ntparser : Syntax → EIO Pa
 def regionParser : @ParseFun (MLIR.AST.Region 0) := fun env : Lean.Environment =>
   mkNonTerminalParser `mlir_region (elabRegion env) env
 
-private def parseFile (env : Lean.Environment) (parser : @ParseFun ParseOutput)
+def parseFile (env : Lean.Environment) (parser : @ParseFun ParseOutput)
     (filepath : System.FilePath) : IO (Option ParseOutput) := do
   let lines ← IO.FS.lines filepath
   let fileStr := "\n".intercalate lines.toList
@@ -124,7 +128,7 @@ private def parseFile (env : Lean.Environment) (parser : @ParseFun ParseOutput)
     IO.println s!"Error parsing {filepath}:\n{msg}";
     return none
 
-private def isFile (p : System.FilePath) : IO Bool := do
+def isFile (p : System.FilePath) : IO Bool := do
   return (← p.metadata).type == IO.FS.FileType.file
 
 def runParser (parser : @ParseFun ParseOutput) (fileName : String) : IO (Option ParseOutput) := do

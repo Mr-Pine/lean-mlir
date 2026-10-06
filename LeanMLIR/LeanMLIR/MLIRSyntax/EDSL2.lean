@@ -1,9 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax.GenericParser
-import LeanMLIR.MLIRSyntax.Transform
-import LeanMLIR.Framework.ToExpr
+module
+
+public import LeanMLIR.MLIRSyntax.GenericParser
+public import LeanMLIR.MLIRSyntax.Transform
+public import LeanMLIR.Framework.ToExpr
 
 /-!
 # MLIR Dialect Domain Specific Language (v2)
@@ -51,6 +53,8 @@ elab "[FooDialect| " reg:mlir_region "]" : term => do
 
 -/
 
+@[expose] public section
+
 namespace SSA
 
 open Qq Lean Meta Elab Term
@@ -58,6 +62,7 @@ open MLIR.AST
 
 private unsafe def evalExprOfTypeRegionAux (φ : Nat) : Q(Region $φ) → MetaM (Region φ) :=
   evalExpr (Region φ) q(Region $φ)
+
 /-
 SAFETY: the `implemented_by` is safe, *assuming* that `Region φ` and `q(Region φ)`
   are the same; this means we trust Qq to construct the right `Expr`.
@@ -66,23 +71,18 @@ SAFETY: the `implemented_by` is safe, *assuming* that `Region φ` and `q(Region 
 partial def evalExprOfTypeRegion (φ : Nat) : Q(Region $φ) → MetaM (Region φ) :=
   default
 
-def elabIntoComObj (region : TSyntax `mlir_region) (d : Dialect) {φ : Nat}
+/-- Build a `Com` from an AST `Region` that has already been evaluated.
+
+Split out of `elabIntoComObj` so that a dialect can construct the AST itself --
+`[sllvm| … with @f := …]` rewrites calls to carry their callee's region before
+parsing, and there is no way to express that through the syntax, since region
+antiquotations do not elaborate (see `GenericParser.lean`). -/
+def elabIntoComObjOfRegion (ast : MLIR.AST.Region φ) (d : Dialect)
     [DialectSignature d] [Repr d.Ty]
-    [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
-    TermElabM (Σ Γ eff ty, Com d Γ eff ty) := withRef region <| do
-  withTraceNode `LeanMLIR.Elab (return m!"{exceptEmoji ·} elaborating MLIR DSL") <| do
-  trace[LeanMLIR.Elab] "syntax: {region}"
-
-  let ast : Region φ ←
-    withTraceNode `LeanMLIR.Elab (return m!"{exceptEmoji ·} evaluating AST expression") <| do
-    let stx  ← `([mlir_region| $region])
-    let expr ← elabTermEnsuringTypeQ stx q(Region $φ)
-    synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
-    let reg ← evalExprOfTypeRegion φ expr
-    trace[LeanMLIR.Elab] "{repr reg}"
-    pure reg
-
+    [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ]
+    (check : MLIR.AST.Region φ → Except String Unit := fun _ => .ok ()) :
+    TermElabM (Σ Γ eff ty, Com d Γ eff ty) := do
+  if let .error e := check ast then throwError e
   withTraceNode `LeanMLIR.Elab (return m!"{exceptEmoji ·} parsing AST") <| do
     let res ← match mkCom ast with
       | .error (e : TransformError) => throwError (repr e)
@@ -90,12 +90,39 @@ def elabIntoComObj (region : TSyntax `mlir_region) (d : Dialect) {φ : Nat}
     trace[LeanMLIR.Elab] "context: {repr res.1}"
     pure res
 
-def elabIntoCom' (region : TSyntax `mlir_region) (d : Dialect) {φ : Nat}
-    [ToExpr d.Op] [ToExpr d.Ty] [DialectToExpr d]
-    [DialectSignature d] [Repr d.Ty]
-    [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
-    TermElabM Expr := withRef region <| do
-  let ⟨_Γ, _eff, _ty, com⟩ ← elabIntoComObj region d
+def elabIntoComObj (region : TSyntax `mlir_region) (d : Dialect) {φ : Nat} [DialectSignature d]
+    [Repr d.Ty] [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ]
+    (pre : MLIR.AST.Region φ → MLIR.AST.Region φ := id)
+    (check : MLIR.AST.Region φ → Except String Unit := fun _ => .ok ()) :
+    TermElabM (Σ Γ eff ty, Com d Γ eff ty) :=
+  withRef region <| do
+    withTraceNode `LeanMLIR.Elab (return m!"{exceptEmoji ·} elaborating MLIR DSL") <| do
+        trace[LeanMLIR.Elab] "syntax: {region}"
+        let ast : Region φ ←
+          withTraceNode `LeanMLIR.Elab (return m!"{exceptEmoji ·} evaluating AST expression") <| do
+              let stx ← `([mlir_region|$region])
+              let expr ← elabTermEnsuringTypeQ stx q(Region $φ)
+              synthesizeSyntheticMVarsNoPostponing
+              let expr ← instantiateMVars expr
+              let reg ← evalExprOfTypeRegion φ expr
+              trace[LeanMLIR.Elab] "{repr reg}"
+              pure reg
+        elabIntoComObjOfRegion (pre ast) d (check := check)
+
+def elabIntoCom' (region : TSyntax `mlir_region) (d : Dialect) {φ : Nat} [ToExpr d.Op] [ToExpr d.Ty]
+    [DialectToExpr d] [DialectSignature d] [Repr d.Ty] [TransformTy d φ] [TransformExpr d φ]
+    [TransformReturn d φ] (pre : MLIR.AST.Region φ → MLIR.AST.Region φ := id)
+    (check : MLIR.AST.Region φ → Except String Unit := fun _ => .ok ()) : TermElabM Expr :=
+  withRef region <| do
+    let ⟨_Γ, _eff, _ty, com⟩ ← elabIntoComObj region d (pre := pre) (check := check)
+    com.toExprM
+
+/-- `elabIntoCom'`, from an already-evaluated `Region` rather than syntax. -/
+def elabIntoCom'OfRegion (ast : MLIR.AST.Region φ) (d : Dialect) [ToExpr d.Op] [ToExpr d.Ty]
+    [DialectToExpr d] [DialectSignature d] [Repr d.Ty] [TransformTy d φ] [TransformExpr d φ]
+    [TransformReturn d φ] (check : MLIR.AST.Region φ → Except String Unit := fun _ => .ok ()) :
+    TermElabM Expr := do
+  let ⟨_Γ, _eff, _ty, com⟩ ← elabIntoComObjOfRegion ast d (check := check)
   com.toExprM
 
 end SSA

@@ -1,4 +1,6 @@
-import LeanMLIR.Util.Poison
+module
+
+public import LeanMLIR.Util.Poison
 
 /-!
 # HasUB typeclass
@@ -6,6 +8,8 @@ import LeanMLIR.Util.Poison
 This file defines an `HasUB m` typeclass, which can be used to indicate that a
 monad `m` has a UB side-effect.
 -/
+
+@[expose] public section
 
 namespace LeanMLIR
 

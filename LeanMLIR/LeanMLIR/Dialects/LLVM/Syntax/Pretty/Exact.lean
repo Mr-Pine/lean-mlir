@@ -1,4 +1,8 @@
-import LeanMLIR.MLIRSyntax.PrettyEDSL
+module
+
+public import LeanMLIR.MLIRSyntax.PrettyEDSL
+
+@[expose] public section
 
 open Lean
 

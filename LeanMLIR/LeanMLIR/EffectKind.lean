@@ -1,6 +1,10 @@
-import LeanMLIR.Tactic.SimpSet
-import Lean
-import Mathlib.Order.Lattice
+module
+
+public import LeanMLIR.Tactic.SimpSet
+public import Lean
+public import Mathlib.Order.Lattice
+
+@[expose] public section
 
 /- Kinds of effects, either pure or impure -/
 inductive EffectKind

@@ -1,11 +1,14 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
-import LeanMLIR.Util.Poison
-import SSA.Projects.SLLVM.Tactic.SimpSet
-import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
-import SSA.Projects.SLLVM.Dialect.Semantics.Memory
+public import LeanMLIR.Util.Poison
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+public import SSA.Projects.SLLVM.Dialect.Semantics.HasUB
+public import SSA.Projects.SLLVM.Dialect.Semantics.Memory
+
+@[expose] public section
 
 namespace LeanMLIR
 
@@ -37,23 +40,26 @@ instance : LawfulMonad EffectM := by
 instance : MonadStateOf GlobalState EffectM := by
   unfold EffectM; infer_instance
 
+-- NOTE: `globals` is threaded through untouched here and in every other
+-- rebuild of a `GlobalState`: the symbol table is write-once, installed by
+-- `GlobalState.ofGlobals` and only ever read.
 instance : MonadStateOf AllocState EffectM where
   get := do
     return (← getThe GlobalState).alloc
   set alloc := modifyThe GlobalState ({ · with alloc })
   modifyGet f :=
-    modifyGetThe GlobalState fun { mem, alloc } =>
+    modifyGetThe GlobalState fun { mem, alloc, globals } =>
       let ⟨x, alloc⟩ := f alloc
-      ⟨x, { mem, alloc }⟩
+      ⟨x, { mem, alloc, globals }⟩
 
 instance : MonadStateOf MemoryState EffectM where
   get := do
     return (← getThe GlobalState).mem
   set mem := modifyThe GlobalState ({ · with mem })
   modifyGet f :=
-    modifyGetThe GlobalState fun { mem, alloc } =>
+    modifyGetThe GlobalState fun { mem, alloc, globals } =>
       let ⟨x, mem⟩ := f mem
-      ⟨x, { mem, alloc }⟩
+      ⟨x, { mem, alloc, globals }⟩
 
 /-! ## Constructors -/
 
@@ -123,10 +129,43 @@ instance : MonadStateOf MemoryState MemorySSAM := by
   unfold MemorySSAM; infer_instance
 
 instance : MonadLift MemorySSAM EffectM where
-  monadLift x := fun { mem, alloc } =>
+  monadLift x := fun { mem, alloc, globals } =>
     match x mem with
     | .poison => .poison
-    | .value ⟨y, mem⟩ => .value ⟨y, { mem, alloc }⟩
+    | .value ⟨y, mem⟩ => .value ⟨y, { mem, alloc, globals }⟩
 
 instance : HasUB MemorySSAM where
   throwUB := StateT.lift PoisonOr.poison
+
+/-! ### Lemmas
+
+The same `run` lemmas `EffectM` has above; without them, `simp` cannot see
+through a `do`-block of memory operations. -/
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_pure {α} (x : α) (m) : StateT.run (pure x : MemorySSAM α) m = .value (x, m) :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_ub {α} (m) : StateT.run (throwUB : MemorySSAM α) m = .poison :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_bind {α β} (x : MemorySSAM α) (f : α → MemorySSAM β) (m) :
+    StateT.run (x >>= f : MemorySSAM β) m = StateT.run x m >>= (fun p => StateT.run (f p.1) p.2) :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_map {α β} (f : α → β) (x : MemorySSAM α) (m) :
+    StateT.run (f <$> x : MemorySSAM β) m = (fun p => (f p.1, p.2)) <$> StateT.run x m :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_getThe (m : MemoryState) :
+    StateT.run (getThe MemoryState : MemorySSAM MemoryState) m = .value (m, m) :=
+  rfl
+
+@[simp, simp_denote, simp_sllvm]
+lemma run_modifyThe (f : MemoryState → MemoryState) (m : MemoryState) :
+    StateT.run (modifyThe MemoryState f : MemorySSAM PUnit) m = .value (⟨⟩, f m) :=
+  rfl

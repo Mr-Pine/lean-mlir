@@ -1,9 +1,16 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework.Basic
-import LeanMLIR.Framework.Trace
-import LeanMLIR.Tactic.SimpSet
+module
+
+public import LeanMLIR.Framework.Basic
+public import LeanMLIR.Framework.Trace
+public import LeanMLIR.Tactic.SimpSet
+public import LeanMLIR.HVector
+-- module: the elaborators below are `meta`, so their dependencies need meta imports too
+public meta import LeanMLIR.Framework.Basic
+public meta import LeanMLIR.Framework.Trace
+public meta import LeanMLIR.HVector
 
 /-! ## `def_signature` elaborator
 This file defines `def_signature` elaborator that makes it easier to define the
@@ -24,10 +31,17 @@ when using regular arrows (->) is that the operations is pure. We just used the
 other arrow to showcase the syntax.
 
 -/
+
+@[expose] public section
+
 open Lean
 
 namespace LeanMLIR.Parser
+
 open Lean.Parser
+
+-- module: parsers and elaborators are elaboration-time only
+meta section
 
 /-!
 ## Syntax parsers
@@ -41,21 +55,33 @@ a `ParserDescr`, but we choose rather to define our signature syntax in
 lower-level primitives that directly give a `Parser`.
 -/
 
-def plainArrow := leading_parser unicodeSymbol " → " " -> "
-def effectArrow := leading_parser " -[" >> termParser >> "]-> "
-def arrow := leading_parser plainArrow <|> effectArrow
+def plainArrow :=
+  leading_parser unicodeSymbol " → " " -> "
+
+def effectArrow :=
+  leading_parser " -[" >> termParser >> "]-> "
+
+def arrow :=
+  leading_parser plainArrow <|> effectArrow
 
 def concreteArgumentList : Parser :=
   leading_parser "(" >> (sepBy termParser ",") >> ")"
+
 def antiquotArgumentList : Parser :=
   leading_parser "$" >> checkNoWsBefore >> "{" >> termParser >> "}"
+
 def argumentList : Parser :=
   leading_parser concreteArgumentList <|> antiquotArgumentList
 
 /-- An mlir function type: `( term,* ) → term`,
-with optional effect annotation on the arrow -/
+with optional effect annotation on the arrow.
+
+The return position admits the same `${…}` antiquotation as the argument list,
+for an operation whose *return arity* is not fixed -- a `term` in return
+position is a single type (wrapped into a singleton list), where `${ts}` is a
+term of type `List Ty`, used as the return type list verbatim. -/
 def function : Parser :=
-  leading_parser argumentList >> arrow >> termParser
+  leading_parser argumentList >> arrow >> (antiquotArgumentList <|> termParser)
 
 /-- An mlir function type: `( term,* ) → term`, without effect annotation. -/
 def plainFunction : Parser :=
@@ -68,13 +94,19 @@ def region : Parser :=
 def signature : Parser :=
   leading_parser optional (region >> plainArrow) >> function
 
-def matchAltSig : Parser := Lean.Parser.Term.matchAlt signature
-def matchAltsSig : Parser := Lean.Parser.Term.matchAlts signature
+def matchAltSig : Parser :=
+  Lean.Parser.Term.matchAlt signature
 
-protected def matchAltsExpr : Parser := Lean.Parser.Term.matchAlts
+def matchAltsSig : Parser :=
+  Lean.Parser.Term.matchAlts signature
+
+protected def matchAltsExpr : Parser :=
+  Lean.Parser.Term.matchAlts
+
 instance : Coe (TSyntax ``Parser.matchAltsExpr) (TSyntax ``Lean.Parser.Term.matchAlts) where
   coe x := ⟨x.raw⟩
 
+end
 end Parser
 
 /-!
@@ -82,6 +114,10 @@ end Parser
 -/
 
 namespace Elab
+
+-- module: elaboration-time only
+meta section
+
 open Qq
 open LeanMLIR.Parser
 open Lean.Parser.Term (matchAltExpr)
@@ -101,13 +137,16 @@ Returns `none` if `e` does not reduce to a sequence of `List` constructors. -/
 partial def listExprToArray : Expr → MetaM (Option <| Array Expr) :=
   go #[]
 where go (es : Array Expr) (e : Expr) : (OptionT MetaM _) := do
-  let e ← whnf e
-  match_expr e with
-  | List.cons _ a as => do
-      let es := es.push a
-      go es as
-  | List.nil _  => return es
-  | _           => OptionT.fail
+    let e ← whnf e
+    match_expr e with
+    | List.cons _ a as =>
+      do
+        let es := es.push a
+        go es as
+    | List.nil _ =>
+      return es
+    | _ =>
+      OptionT.fail
 
 /--
 Given `e` a Lean expression of type `List α`, return an array of
@@ -126,28 +165,20 @@ def ctxtExprToArray (e : Expr) : MetaM (Option <| Array Expr) := do
 
 /-- Given `stx` a match-expression, return its alternatives. -/
 -- Based on `Lean.Elab.Match.getMatchAlts` and `expandMatchAlt`
-private def getMatchAlts (alts : TSyntax ``matchAltsSig) :
+def getMatchAlts (alts : TSyntax ``matchAltsSig) :
     Array (MatchAltView ``Parser.signature) :=
   let alts := alts.raw[0].getArgs
   alts.flatMap fun
     | ref@`(matchAltSig| | $[$patss,*]|* => $rhs) =>
-        patss.map fun patterns => {
-            ref := ref,
-            patterns := patterns.getElems,
-            rhs := rhs
-          }
+      patss.map fun patterns => { ref := ref, patterns := patterns.getElems, rhs := rhs }
     | stx => #[⟨.missing, #[], ⟨.missing⟩⟩]
 
-private def getMatchAltsExpr (alts : TSyntax ``LeanMLIR.Parser.matchAltsExpr) :
+def getMatchAltsExpr (alts : TSyntax ``LeanMLIR.Parser.matchAltsExpr) :
     Array (MatchAltView `term) :=
   let alts := alts.raw[0].getArgs
   alts.flatMap fun
     | ref@`(matchAltExpr| | $[$patss,*]|* => $rhs) =>
-        patss.map fun patterns => {
-            ref := ref,
-            patterns := patterns.getElems,
-            rhs := rhs
-          }
+      patss.map fun patterns => { ref := ref, patterns := patterns.getElems, rhs := rhs }
     | stx => #[⟨.missing, #[], ⟨.missing⟩⟩]
 
 variable {m} [Monad m] [MonadRef m] [MonadQuotation m] [MonadError m]
@@ -156,11 +187,12 @@ variable {m} [Monad m] [MonadRef m] [MonadQuotation m] [MonadError m]
     assuming that the rhs of each match arm is a `Term`.  -/
 protected def mkMatchAltsExpr (alts : Array (MatchAltView `term)) :
     m (TSyntax ``LeanMLIR.Parser.matchAltsExpr) := do
-  let alts ← alts.mapM fun view => do
-    let patterns : Syntax.TSepArray [`term] "," :=
-      ⟨(Syntax.SepArray.ofElems (sep := ",") view.patterns).elemsAndSeps⟩
-    let rhs : Term := ⟨view.rhs⟩
-    `(Parser.Term.matchAltExpr| | $patterns,* => $rhs)
+  let alts ←
+    alts.mapM fun view => do
+        let patterns : Syntax.TSepArray [`term] "," :=
+          ⟨(Syntax.SepArray.ofElems (sep := ",") view.patterns).elemsAndSeps⟩
+        let rhs : Term := ⟨view.rhs⟩
+        `(Parser.Term.matchAltExpr| | $patterns,* => $rhs)
   `(LeanMLIR.Parser.matchAltsExpr| $alts:matchAlt*)
 
 /-- Generic error to be used for fallback match patterns that should be unreachable.
@@ -169,66 +201,73 @@ def throwUnexpectedSyntax (stx : Syntax) : m α :=
   throwErrorAt stx "Unexpected syntax: {stx}\nThis is an internal bug"
 
 def parseSignature (ref : TSyntax ``LeanMLIR.Parser.signature) : m Term :=
-  withRef ref <| match ref with
-  | `(signature| { $regions,* } → $fn:function ) => do
-      let regions ← regions.getElems.mapM fun fn => withRef fn do
-        let `(plainFunction| $args → $outTy) := fn
-          | throwUnexpectedSyntax fn
-        let args ← parseRegionArgumentList args
-        `(⟨$args, $outTy⟩)
+  withRef ref <|
+    match ref with
+    | `(signature| { $regions,* } → $fn:function ) => do
+      let regions ←
+        regions.getElems.mapM fun fn =>
+            withRef fn do
+              let `(plainFunction| $args → $outTy) := fn
+                | throwUnexpectedSyntax fn
+              let args ← parseRegionArgumentList args
+              `(⟨$args, $outTy⟩)
       parseFunction regions fn
-  | `(signature| $fn:function) => parseFunction #[] fn
-  | ref => throwUnexpectedSyntax ref
-  where
-    parseRegionArgumentList : TSyntax ``argumentList → m Term
-      | `(argumentList| ${$args})  => pure args
-      | `(argumentList| ($args,*)) => `(⟨[$args,*]⟩)
-      | ref => throwUnexpectedSyntax ref
-    parseArgumentList : TSyntax ``argumentList → m Term
-      | `(argumentList| ${$args})  => pure args
-      | `(argumentList| ($args,*)) => `([$args,*])
-      | ref => throwUnexpectedSyntax ref
-
-    isListLiteral (e : Term) : Bool :=
-      e.raw.isOfKind `«term[_]»
-    mkReturnType (ret : Term) : m Term := do
+    | `(signature| $fn:function) => parseFunction #[] fn
+    | ref => throwUnexpectedSyntax ref
+where
+  parseRegionArgumentList : TSyntax ``argumentList → m Term
+    | `(argumentList| ${$args}) => pure args
+    | `(argumentList| ($args,*)) => `(⟨[$args,*]⟩)
+    | ref => throwUnexpectedSyntax ref
+  parseArgumentList : TSyntax ``argumentList → m Term
+    | `(argumentList| ${$args}) => pure args
+    | `(argumentList| ($args,*)) => `([$args,*])
+    | ref => throwUnexpectedSyntax ref
+  isListLiteral (e : Term) : Bool := e.raw.isOfKind `«term[_]»
+  mkReturnType (ret : Syntax) : m Term := do
+    if ret.isOfKind ``antiquotArgumentList then
+      -- `-> ${ts}`: the antiquoted term is the return type list itself.
+      return ⟨ret[2]⟩
+    else
+      let ret : Term := ⟨ret⟩
       if isListLiteral ret then
         return ret
       else
         `([$ret])
-
-    mkSignature (argumentTypes : TSyntax ``argumentList) (regions : Array Term)
-        (returnType : Term) (effectKind : Term) :
-        m Term := do
-      let argumentTypes ← parseArgumentList argumentTypes
-      let returnType ← mkReturnType returnType
-      `(_root_.Signature.mkEffectful $argumentTypes [$regions,*] $returnType $effectKind)
-    parseFunction (regions : Array Term)
-        (ref : TSyntax ``LeanMLIR.Parser.function) :
-        m Term := withRef ref <| do
+  mkSignature (argumentTypes : TSyntax ``argumentList) (regions : Array Term) (returnType : Syntax)
+    (effectKind : Term) : m Term := do
+    let argumentTypes ← parseArgumentList argumentTypes
+    let returnType ← mkReturnType returnType
+    `(_root_.Signature.mkEffectful $argumentTypes [$regions,*] $returnType $effectKind)
+  parseFunction (regions : Array Term) (ref : TSyntax ``LeanMLIR.Parser.function) : m Term :=
+    withRef ref <| do
       match ref with
       | `(function| $argumentTypes -[$effectKind]-> $returnType) =>
-          mkSignature argumentTypes regions returnType effectKind
-      | `(function| $argumentTypes → $returnType) => do
+        mkSignature argumentTypes regions returnType effectKind
+      | `(function| $argumentTypes → $returnType) =>
+        do
           let effectKind ← `(_root_.EffectKind.pure)
           mkSignature argumentTypes regions returnType effectKind
-      | _ => throwUnexpectedSyntax ref
+      | _ =>
+        throwUnexpectedSyntax ref
 
 def elabDefSignatureFor (dialect : Term) (alts : TSyntax ``matchAltsSig) : CommandElabM Unit := do
   let msg := (return m!"{exceptEmoji ·} Defining operation signature for {dialect} dialect")
   withTraceNode `LeanMLIR.Elab msg (collapsed := false) <| do
-    let alts := getMatchAlts alts
-    let alts ← do
-      alts.mapM fun view => do
-        trace[LeanMLIR.Elab] m!"Parsing match alternative with\n\
+      let alts := getMatchAlts alts
+      let alts ←
+        do
+          alts.mapM fun view => do
+              trace[LeanMLIR.Elab] m!"Parsing match alternative with\n\
           \tpatterns: {view.patterns}\n\
           \tsignature: {view.rhs}"
-        let rhs ← parseSignature view.rhs
-        return { view with rhs }
-
-    -- Define instance
-    let matchAlts ← Elab.mkMatchAltsExpr alts
-    elabCommand <|← `(command|
+              let rhs ← parseSignature view.rhs
+              return { view with rhs }
+      -- Define instance
+      let matchAlts ← Elab.mkMatchAltsExpr alts
+      elabCommand <|
+          ←
+            `(command|
       instance : DialectSignature $dialect where
         signature := fun op => match op with $matchAlts:matchAlts
     )
@@ -257,6 +296,7 @@ elab "def_signature" " for " dialects:term,* (" where ")? alts:matchAltsSig : co
 /-!
 ## `def_denote`
 -/
+
 open Parser (matchAltsExpr)
 open Qq
 
@@ -279,7 +319,6 @@ uncurried type from a term of the constructed curried type.
 structure CurriedArrow where
   (args : Array CurriedArgs)
   (returnType : Expr)
-  deriving Inhabited
 
 /-- `CurriedArgs` represents a single *uncurried* argument in a `CurriedArrow`.
 In particular, it generally represents an `HVector` or `Ctxt.Valuation`, but may
@@ -311,8 +350,10 @@ inductive CurriedArgs
 
 end
 
-mutual
+-- module: `deriving Inhabited` does not produce `meta` auxiliaries, so spell it out
+instance : Inhabited CurriedArrow := ⟨{ args := #[], returnType := default }⟩
 
+mutual
 /-- Parse an expression of type `Type` into a `CurriedArrow` -/
 partial def CurriedArrow.ofExpr (e : Expr) (argsArray : Array CurriedArgs := #[]) :
     MetaM CurriedArrow := do
@@ -332,10 +373,8 @@ partial def CurriedArrow.ofExpr (e : Expr) (argsArray : Array CurriedArgs := #[]
       else
         break
     return {
-      args := argsArray
-      returnType := e
-    }
-
+        args := argsArray
+        returnType := e }
 /-- Construct a `CurriedArgs` from a type expression such as `HVector ?f ?as`
 or `Ctxt.Valuation ?Γ`.
 -/
@@ -346,20 +385,23 @@ partial def CurriedArgs.ofTypeExpr (argTy : Expr) (argName : Option Name := none
   -- TODO: add better tracing, that explains when an argument type is left uncurried
   match_expr argTy with
   | HVector α f as =>
-      match ← listExprToArray as with
-      | some as => do
-          let args ← as.mapM (CurriedArrow.ofExpr <| .app f ·)
-          return .vector name α f as args
-      | none => return .other name argTy
+    match ← listExprToArray as with
+    | some as =>
+      do
+        let args ← as.mapM (CurriedArrow.ofExpr <| .app f ·)
+        return .vector name α f as args
+    | none =>
+      return .other name argTy
   | Ctxt.Valuation Ty inst Γ =>
-      match ← ctxtExprToArray Γ with
-      | some Γ =>
-          let toType := mkApp2 (.const ``TyDenote.toType []) Ty inst
-          let args ← Γ.mapM (CurriedArrow.ofExpr <| .app toType ·)
-          return .valuation name Ty inst Γ args
-      | none => return .other name argTy
-  | _ => return .other name argTy
-
+    match ← ctxtExprToArray Γ with
+    | some Γ =>
+      let toType := mkApp2 (.const ``TyDenote.toType []) Ty inst
+      let args ← Γ.mapM (CurriedArrow.ofExpr <| .app toType ·)
+      return .valuation name Ty inst Γ args
+    | none =>
+      return .other name argTy
+  | _ =>
+    return .other name argTy
 end
 
 def CurriedArgs.ofArgExpr (arg : Expr) : MetaM CurriedArgs := do
@@ -368,10 +410,8 @@ def CurriedArgs.ofArgExpr (arg : Expr) : MetaM CurriedArgs := do
   ofTypeExpr argTy name
 
 mutual
-
 partial def CurriedArrow.toExpr : CurriedArrow → Expr
   | ⟨args, returnType⟩ => args.foldr (·.foldForallType ·) returnType
-
 /--
 Given some expression `body` of type `Type _`, return the curried type expression
   `$args[0] → … → $args[n] → $body`
@@ -381,30 +421,26 @@ if not
 -/
 partial def CurriedArgs.foldForallType (body : Expr) : CurriedArgs → Expr
   | .other name e => Expr.forallE name e body .default
-  | .valuation name _Ty _inst _Γ args
-  | .vector name _ _f _as args =>
-      args.foldr (init := body) fun binderType type =>
-        Expr.forallE name binderType.toExpr type .default
-
+  | .valuation name _Ty _inst _Γ args | .vector name _ _f _as args =>
+    args.foldr (init := body) fun binderType type =>
+      Expr.forallE name binderType.toExpr type .default
 end
 
 def _root_.List.mkOfElems (u : Level) (α : Expr) (elems : Array Expr) : Expr :=
-  elems.foldr (init := mkApp (.const ``List.nil [u]) α) <|
-    mkApp3 (.const ``List.cons [u]) α
+  elems.foldr (init := mkApp (.const ``List.nil [u]) α) <| mkApp3 (.const ``List.cons [u]) α
 
 /-- Return an array of expression, each being a single *curried* argument type. -/
 def CurriedArgs.toCurriedExprs : CurriedArgs → Array Expr
   | .other _ e => #[e]
-  | .valuation _ _ _ _ args
-  | .vector _ _ _ _ args => args.map (·.toExpr)
+  | .valuation _ _ _ _ args | .vector _ _ _ _ args => args.map (·.toExpr)
 
 /-- Return the *uncurried* argument type expression. -/
 def CurriedArgs.toUncurriedExpr : CurriedArgs → Expr
-  | .other _ e              => e
+  | .other _ e => e
   | .vector _ α f as _ =>
       let as := List.mkOfElems 0 α as
       mkApp3 (.const ``HVector [0, 0]) α f as
-  | .valuation _ Ty inst Γ _  =>
+  | .valuation _ Ty inst Γ _ =>
       let Γ := List.mkOfElems 0 Ty Γ
       mkApp3 (.const ``Ctxt.Valuation []) Ty inst Γ
 
@@ -412,85 +448,78 @@ def CurriedArgs.name : CurriedArgs → Name
   | .other name _ | .vector name .. | .valuation name .. => name
 
 mutual
-
 /--
 Given an expression `fn` of the uncurried type used represented by `arrow`,
 return an expression of the curried type returned by `arrow.toExpr`.
 -/
 partial def CurriedArrow.curry (fn : Expr) (arrow : CurriedArrow) : MetaM Expr :=
-  withTraceNode `LeanMLIR.Elab (fun _ => pure m!"currying `{fn}`") <|
-    go fn arrow.args.toSubarray
-where
-  go (fn : Expr) (args : Subarray CurriedArgs) : MetaM Expr := do
+  withTraceNode `LeanMLIR.Elab (fun _ => pure m!"currying `{fn}`") <| go fn arrow.args.toSubarray
+where go (fn : Expr) (args : Subarray CurriedArgs) : MetaM Expr := do
     let some (arg, args) := args.popHead?
       | return fn
-    let decls ← arg.toCurriedExprs.mapM fun argTy => do
-      return (← mkFreshUserName arg.name, argTy)
+    let decls ←
+      arg.toCurriedExprs.mapM fun argTy => do
+          return (← mkFreshUserName arg.name, argTy)
     withLocalDeclsDND decls <| fun fvars => do
-      let fn := mkApp fn (← arg.mkVector fvars)
-      let fn ← go fn args
-      let fn ← mkLambdaFVars fvars fn
-      trace[LeanMLIR.Elab] "curried to: `{fn}`"
-      return fn
-
-/--
+        let fn := mkApp fn (← arg.mkVector fvars)
+        let fn ← go fn args
+        let fn ← mkLambdaFVars fvars fn
+        trace[LeanMLIR.Elab] "curried to: `{fn}`"
+        return fn
+  /--
 Given an expression `fn` of the curried type returned by `arrow.toExpr`,
 return an expression of the original uncurried type.
 -/
-partial def CurriedArrow.uncurry (fn : Expr) (arrow : CurriedArrow) : MetaM Expr :=
-  withTraceNode `LeanMLIR.Elab (fun _ => pure m!"uncurrying `{fn}`") <| do
-    let args := arrow.args
-    let decls ← args.mapM fun arg => do
-      return (← mkFreshUserName arg.name, arg.toUncurriedExpr)
-    withLocalDeclsDND decls <| fun fvars => do
-      let fn ← (args.zip fvars).foldlM (init := fn) fun fn (arg, x) => do
-        return mkAppN fn (← arg.getElems x)
-      let fn ← mkLambdaFVars fvars fn
-      trace[LeanMLIR.Elab] "uncurried to: `{fn}`"
-      return fn
-
+  partial def CurriedArrow.uncurry (fn : Expr) (arrow : CurriedArrow) : MetaM Expr :=
+    withTraceNode `LeanMLIR.Elab (fun _ => pure m!"uncurrying `{fn}`") <| do
+      let args := arrow.args
+      let decls ←
+        args.mapM fun arg => do
+            return (← mkFreshUserName arg.name, arg.toUncurriedExpr)
+      withLocalDeclsDND decls <| fun fvars => do
+          let fn ←
+            (args.zip fvars).foldlM (init := fn) fun fn (arg, x) => do
+                return mkAppN fn (← arg.getElems x)
+          let fn ← mkLambdaFVars fvars fn
+          trace[LeanMLIR.Elab] "uncurried to: `{fn}`"
+          return fn
 /--
 Given an expression `vec` of the uncurried type `args` was constructed from,
 return an array of expressions, where each expression is a single element of the
 vector/valuation.
 -/
 partial def CurriedArgs.getElems (vec : Expr) : CurriedArgs → MetaM (Array Expr)
-  | .other ..      => return #[vec]
+  | .other .. => return #[vec]
   | .valuation _ (Ty : Q(Type)) _ Γ arrows => do
-      let Γe : Q(Ctxt $Ty) := List.mkOfElems 0 Ty Γ
-      (Γ.zip arrows).mapIdxM fun i (t, arr) => do
+    let Γe : Q(Ctxt $Ty) := List.mkOfElems 0 Ty Γ
+    (Γ.zip arrows).mapIdxM fun i (t, arr) => do
         let var := Ctxt.mkVar Ty Γe t (toExpr i)
         let arg := mkApp2 vec t var
         arr.curry arg
   | .vector _ α f as arrows => do
-      let asE := List.mkOfElems 0 α as
-      let n : Nat := arrows.size
-      arrows.mapIdxM fun (i : Nat) arr => do
+    let asE := List.mkOfElems 0 α as
+    let n : Nat := arrows.size
+    arrows.mapIdxM fun (i : Nat) arr => do
         let inBoundsProof ← mkDecideProof q($i < $n)
         let idxExpr := mkApp3 (.const ``Fin.mk []) (toExpr n) (toExpr i) inBoundsProof
         let arg := mkApp5 (.const ``HVector.get [0, 0]) α f asE vec idxExpr
         arr.curry arg
-
 /--
 Given an array of curried function arguments, construct an expression of the
 uncurried vector/valuation type represented by `args`
 -/
 partial def CurriedArgs.mkVector (elems : Array Expr) : CurriedArgs → MetaM Expr
-  | .other ..      =>
-      if h : elems.size = 1 then
-        return elems[0]
-      else
-        throwError "Expected exactly 1 element, found:\n{elems}"
+  | .other .. =>
+    if h : elems.size = 1 then return elems[0]
+    else throwError "Expected exactly 1 element, found:\n{elems}"
   | .valuation _ (Ty : Q(Type)) inst Γ arrows => do
-      let elems ← (arrows.zip elems).mapM fun (arr, elem) => arr.uncurry elem
-      let toType := mkApp2 (.const ``TyDenote.toType []) Ty inst
-      let vec ← HVector.mkOfElems 0 0 Ty toType (Γ.zip elems)
-      return mkAppN (.const ``Ctxt.Valuation.ofHVector [])
-        #[Ty, inst, (List.mkOfElems 0 Ty Γ), vec]
+    let elems ← (arrows.zip elems).mapM fun (arr, elem) => arr.uncurry elem
+    let toType := mkApp2 (.const ``TyDenote.toType []) Ty inst
+    let vec ← HVector.mkOfElems 0 0 Ty toType (Γ.zip elems)
+    return mkAppN (.const ``Ctxt.Valuation.ofHVector []) #[Ty, inst, (List.mkOfElems 0 Ty Γ), vec]
   | .vector _ α f as arrows => do
-      let elems ← (arrows.zip elems).mapM fun (arr, elem) => arr.uncurry elem
-      HVector.mkOfElems 0 0 α f (as.zip elems)
-
+    let elems ← (arrows.zip elems).mapM fun (arr, elem) => arr.uncurry elem
+    HVector.mkOfElems 0 0 α f (as.zip elems)
 end
 
 /--
@@ -505,11 +534,9 @@ See `CurriedFun` for details.
 -/
 local elab "hvectorFun(" fn:term ")" : term <= expectedType => do
   trace[LeanMLIR.Elab] "Original expected type:\n{expectedType}"
-
   let arrow ← CurriedArrow.ofExpr expectedType
   if arrow.returnType.hasLooseBVars then
     throwError "Expected a non-dependent type, found:\n\t{expectedType}"
-
   let fn ← elabTermEnsuringType fn arrow.toExpr
   let fn ← arrow.uncurry fn
   trace[LeanMLIR.Elab] m!"desugared: {fn}"
@@ -528,15 +555,15 @@ encoding.
 -/
 elab "def_denote" " for " dialect:term (" where ")? alts:matchAltsExpr : command => do
   let matchAlts := getMatchAltsExpr alts
-  let matchAlts ← matchAlts.mapM fun altView => withRef altView.rhs <| do
-    return { altView with
-      rhs := ←`(hvectorFun($altView.rhs))
-    }
+  let matchAlts ←
+    matchAlts.mapM fun altView =>
+        withRef altView.rhs <| do
+          return { altView with rhs := ← `(hvectorFun($altView.rhs)) }
   -- Re-assemble match alternatives
   let matchAlts ← Elab.mkMatchAltsExpr matchAlts
-
-  elabCommand <|← `(
-    @[simp_denote]
-    instance : DialectDenote $dialect where
-      denote := fun op => match op with $matchAlts:matchAlts
-  )
+  elabCommand <|
+      ←
+        `(
+@[simp_denote]
+instance : DialectDenote $dialect where
+denote := fun op => match op with$matchAlts:matchAlts)

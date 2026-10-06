@@ -1,10 +1,14 @@
-import LeanMLIR.MLIRSyntax.AST
-import LeanMLIR.MLIRSyntax.Transform
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+public import LeanMLIR.MLIRSyntax.Transform
 
 /-!
 This file defines a set of helper functions on `AST` objects that
 are usefull to implementors of `Transform` typeclasses
 -/
+
+@[expose] public section
 
 namespace MLIR.AST
 
@@ -40,7 +44,7 @@ def getBoolAttr (attr : String) : Except TransformError Bool := do
     .error <|
         .generic
           s!"Expected attribute `{attr}` to be of type Bool, but found:\n\
-        \t{attr}"
+        \t{repr <| op.getAttr attr}"
   return b
 
 /--
@@ -63,7 +67,7 @@ def getIntAttr (attr : String) (coeBool : Bool := true) :
     .error <|
         .generic
           s!"Expected attribute `{attr}` to be of type Int, but found:\n\
-        \t{attr}"
+        \t{repr attrVal}"
   return (val, ty)
 
 /--
@@ -77,7 +81,7 @@ def getTypeAttr (attr : String) : Except TransformError (MLIRType φ) := do
     .error <|
         .generic
           s!"Expected attribute `{attr}` to be a type, but found a:\n\
-        \t{attr}"
+        \t{repr <| op.getAttr attr}"
   return (ty)
 
 /-! ## Arguments -/
@@ -224,7 +228,8 @@ class DialectParse (d : Dialect) (φ : outParam Nat) [DialectSignature d] [Decid
   -/
   --
   mkExpr [TransformTy d φ] :
-    (Γ : Ctxt d.Ty) → (opStx : Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
+    (Γ : Ctxt d.Ty) →
+      (opStx : Op φ) → (regions : List (ParsedRegion d)) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
 
 variable {d}
 variable [DialectParse d φ]

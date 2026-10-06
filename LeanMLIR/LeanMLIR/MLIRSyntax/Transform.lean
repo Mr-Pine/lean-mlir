@@ -2,11 +2,13 @@
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 -- should replace with Lean import once Pure is upstream
-import LeanMLIR.MLIRSyntax.AST
-import LeanMLIR.MLIRSyntax.Transform.NameMapping
-import LeanMLIR.MLIRSyntax.Transform.TransformError
-import LeanMLIR.Framework
-import LeanMLIR.ErasedContext
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+public import LeanMLIR.MLIRSyntax.Transform.NameMapping
+public import LeanMLIR.MLIRSyntax.Transform.TransformError
+public import LeanMLIR.Framework
+public import LeanMLIR.ErasedContext
 
 /-!
 # `Transform*` typeclasses
@@ -15,6 +17,8 @@ which dictate how generic MLIR syntax (as defined in `MLIRSyntax.AST`) can be tr
 an instance of `Com` or `Expr` for a specific dialect.
 -/
 
+@[expose] public section
+
 universe u
 
 namespace MLIR.AST
@@ -22,9 +26,9 @@ namespace MLIR.AST
 open Ctxt
 
 instance {d : Dialect} [DialectSignature d] {t} {Γ : Ctxt d.Ty} {Γ' : DerivedCtxt Γ} :
-    Coe (Expr d Γ eff t) (Expr d Γ'.ctxt eff t) where
+    Coe (Expr d Γ eff t) (Expr d Γ'.ctxt eff t)
+    where
   coe e := e.changeVars Γ'.diff.toHom
-
 
 section Monads
 
@@ -35,18 +39,25 @@ section Monads
   errors.
 -/
 
-abbrev ExceptM  (_ : Dialect) := Except TransformError
-abbrev BuilderM (d : Dialect) := StateT NameMapping (ExceptM d)
-abbrev ReaderM  (d : Dialect) := ReaderT NameMapping (ExceptM d)
+abbrev ExceptM (_ : Dialect) :=
+  Except TransformError
+
+abbrev BuilderM (d : Dialect) :=
+  StateT NameMapping (ExceptM d)
+
+abbrev ReaderM (d : Dialect) :=
+  ReaderT NameMapping (ExceptM d)
 
 instance : Inhabited (ReaderT NameMapping (ExceptM d) α) where
   default := throw <| .generic ""
 
 instance {d : Dialect} : MonadLift (ReaderM d) (BuilderM d) where
-  monadLift x := do (ReaderT.run x (←get) : ExceptM ..)
+  monadLift x := do
+    (ReaderT.run x (← get) : ExceptM ..)
 
 instance {d : Dialect} : MonadLift (ExceptM d) (ReaderM d) where
-  monadLift x := do return ←x
+  monadLift x := do
+    return ← x
 
 def BuilderM.runWithEmptyMapping (k : BuilderM d α) : ExceptM d α :=
   Prod.fst <$> StateT.run k []
@@ -67,11 +78,25 @@ end Monads
           It would be nice to not have to spell out the three different classes
           in, e.g., `mkCom` -/
 
-class TransformTy (d : Dialect) (φ : outParam Nat) [DialectSignature d]  where
-  mkTy   : MLIRType φ → ExceptM d d.Ty
+class TransformTy (d : Dialect) (φ : outParam Nat) [DialectSignature d] where
+  mkTy : MLIRType φ → ExceptM d d.Ty
 
-class TransformExpr (d : Dialect) (φ : outParam Nat) [DialectSignature d] [TransformTy d φ]  where
-  mkExpr   : (Γ : Ctxt d.Ty) → (opStx : AST.Op φ) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
+/-- A region of an operation, already transformed into a `Com`.
+
+`mkExpr` receives these ready-made rather than a callback that builds them,
+for two reasons. Termination: a callback passed through this (opaque) class
+field could be applied to anything, so nothing could be proven to decrease,
+whereas `mkComHelper` recursing directly into `opStx.regions` is structurally
+smaller. And totality: `mkCom` cannot be `partial`, because the `whnf`-based
+elaborator in `MLIRSyntax/EDSL.lean` -- still used by FHE, ModArith and RISCV64
+-- has to unfold it. -/
+abbrev ParsedRegion (d : Dialect) [DialectSignature d] : Type :=
+  Σ (Γ : Ctxt d.Ty) (eff : EffectKind) (ty : List d.Ty), Com d Γ eff ty
+
+class TransformExpr (d : Dialect) (φ : outParam Nat) [DialectSignature d] [TransformTy d φ] where
+  mkExpr :
+    (Γ : Ctxt d.Ty) →
+      (opStx : AST.Op φ) → (regions : List (ParsedRegion d)) → ReaderM d (Σ eff ty, Expr d Γ eff ty)
 
 /-- NOTE: You probably don't wan't to implement this class directly, consider
 implementing `LeanMLIR.DialectParse` instead! -/
@@ -89,7 +114,7 @@ variable {d φ} [DialectSignature d] [DecidableEq d.Ty] [DecidableEq d.Op]
 -/
 def addValToMapping (Γ : Ctxt d.Ty) (name : String) (ty : d.Ty) :
     BuilderM d (Σ (Γ' : DerivedCtxt Γ), Ctxt.Var Γ'.ctxt ty) := do
-  let some nm := (←get).add name
+  let some nm := (← get).add name
     | throw <| .nameAlreadyDeclared name
   set nm
   return ⟨DerivedCtxt.ofCtxt Γ |>.cons ty, Ctxt.Var.last ..⟩
@@ -104,7 +129,7 @@ variable [ToString d.Ty]
 -/
 def getValFromCtxt (Γ : Ctxt d.Ty) (name : String) (expectedType : d.Ty) :
     ReaderM d (Ctxt.Var Γ expectedType) := do
-  let index := (←read).lookup name
+  let index := (← read).lookup name
   let some index := index | throw <| .undeclaredName name
   let n := Γ.length
   if h : index >= n then
@@ -114,9 +139,7 @@ def getValFromCtxt (Γ : Ctxt d.Ty) (name : String) (expectedType : d.Ty) :
   else
     let t := Γ.toList[index]'(Nat.lt_of_not_le h)
     if h : t = expectedType then
-      return ⟨index, by
-        simp [← h, t, Ctxt.getElem?_eq_toList_getElem?]
-      ⟩
+      return ⟨index, by simp [← h, t, Ctxt.getElem?_eq_toList_getElem?]⟩
     else
       throw <| .typeError (toString expectedType) (toString t)
 
@@ -135,9 +158,9 @@ def TypedSSAVal.mkTy [TransformTy d φ] : TypedSSAVal φ → ExceptM d d.Ty
 
 /-- Translate a `TypedSSAVal` (a name with an expected type), to a variable in the context.
     This expects the name to have already been declared before -/
-def TypedSSAVal.mkVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) : TypedSSAVal φ →
-    ReaderM d (Σ (ty : d.Ty), Ctxt.Var Γ ty)
-| (.name valStx, tyStx) => do
+def TypedSSAVal.mkVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) :
+    TypedSSAVal φ → ReaderM d (Σ (ty : d.Ty), Ctxt.Var Γ ty)
+  | (.name valStx, tyStx) => do
     let ty ← instTransformTy.mkTy tyStx
     let var ← getValFromCtxt Γ valStx ty
     return ⟨ty, var⟩
@@ -146,60 +169,97 @@ def TypedSSAVal.mkVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) : Ty
     instead of using the typeclass `TransformDialect`.
     This is useful when trying to implement an instance of `TransformDialect` itself,
     to cut infinite regress. -/
-def TypedSSAVal.mkVal' [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) : TypedSSAVal φ →
-    ReaderM d (Σ (ty : d.Ty), Ctxt.Var Γ ty)
-| (.name valStx, tyStx) => do
+def TypedSSAVal.mkVal' [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) :
+    TypedSSAVal φ → ReaderM d (Σ (ty : d.Ty), Ctxt.Var Γ ty)
+  | (.name valStx, tyStx) => do
     let ty ← instTransformTy.mkTy tyStx
     let var ← getValFromCtxt Γ valStx ty
     return ⟨ty, var⟩
 
 /-- Declare a new variable,
     by adding the passed name to the name mapping stored in the monad state -/
-def TypedSSAVal.newVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) : TypedSSAVal φ →
-    BuilderM d (Σ (Γ' : DerivedCtxt Γ) (ty : d.Ty), Ctxt.Var Γ'.ctxt ty)
-| (.name valStx, tyStx) => do
+def TypedSSAVal.newVal [instTransformTy : TransformTy d φ] (Γ : Ctxt d.Ty) :
+    TypedSSAVal φ → BuilderM d (Σ (Γ' : DerivedCtxt Γ) (ty : d.Ty), Ctxt.Var Γ'.ctxt ty)
+  | (.name valStx, tyStx) => do
     let ty ← instTransformTy.mkTy tyStx
     let ⟨Γ, var⟩ ← addValToMapping Γ valStx ty
     return ⟨Γ, ty, var⟩
 
 /-- Given a list of `TypedSSAVal`s, treat each as a binder and declare a new variable with the
     given name and type -/
-private def declareBindings [TransformTy d φ] (Γ : Ctxt d.Ty) (vals : List (TypedSSAVal φ)) :
+def declareBindings [TransformTy d φ] (Γ : Ctxt d.Ty) (vals : List (TypedSSAVal φ)) :
     BuilderM d (DerivedCtxt Γ) := do
-  vals.foldlM (fun Γ' ssaVal => do
-    let ⟨Γ'', _⟩ ← TypedSSAVal.newVal Γ'.ctxt ssaVal
-    return Γ''
-  ) (.ofCtxt Γ)
+  vals.foldlM
+      (fun Γ' ssaVal => do
+        let ⟨Γ'', _⟩ ← TypedSSAVal.newVal Γ'.ctxt ssaVal
+        return Γ'')
+      (.ofCtxt Γ)
 
-private def mkComHelper
-  [TransformTy d φ] [instTransformExpr : TransformExpr d φ] [instTransformReturn :
-    TransformReturn d φ]
-  (Γ : Ctxt d.Ty) :
+/-- Build a region into a `Com`. Passed to `mkComHelper` as ordinary data
+rather than being called through the `TransformExpr` instance: that keeps the
+recursion below *structural*, which matters because `mkCom` has to reduce under
+`whnf` for the elaborator in `MLIRSyntax/EDSL.lean` (used by FHE, ModArith and
+RISCV64). Neither `partial` nor well-founded recursion reduces there. -/
+abbrev MkRegion (d : Dialect) [DialectSignature d] (φ : Nat) : Type :=
+  MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
+
+def mkRegions [TransformTy d φ] (mkRegion : MkRegion d φ) :
+    List (MLIR.AST.Region φ) → ExceptM d (List (ParsedRegion d))
+  | [] => return []
+  | r :: rs => do
+    let r ← mkRegion r
+    let rs ← mkRegions mkRegion rs
+    return r :: rs
+
+def mkComHelper [TransformTy d φ] [instTransformExpr : TransformExpr d φ]
+    [instTransformReturn : TransformReturn d φ] (mkRegion : MkRegion d φ) (Γ : Ctxt d.Ty) :
     List (MLIR.AST.Op φ) → BuilderM d (Σ eff ty, Com d Γ eff ty)
   | [retStx] => do
-      instTransformReturn.mkReturn Γ retStx
-  | var::rest => do
-    let ⟨_eff₁, ty₁, expr⟩ ← (instTransformExpr.mkExpr Γ var)
+    instTransformReturn.mkReturn Γ retStx
+  | var :: rest => do
+    let regions ← mkRegions mkRegion var.regions
+    let ⟨_eff₁, ty₁, expr⟩ ← (instTransformExpr.mkExpr Γ var regions)
     let numExpectedReturns := ty₁.length
     if var.res.length != numExpectedReturns then
-      throw <| .generic
-        s!"Expected {numExpectedReturns} return variables, but found {var.res.length}"
+      throw <|
+          .generic s!"Expected {numExpectedReturns} return variables, but found {var.res.length}"
     else
-      let _ ← (var.res.zip ty₁).foldlM (init:=Γ) fun Γ ⟨var, ty⟩ => do
-        let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
-        return Γ'
-      let ⟨_eff₂, ty₂, body⟩ ← mkComHelper (ty₁ ++ Γ) rest
+      let _ ←
+        (var.res.zip ty₁).foldlM (init := Γ) fun Γ ⟨var, ty⟩ => do
+            let ⟨Γ', _⟩ ← addValToMapping Γ (SSAValToString var.1) ty
+            return Γ'
+      let ⟨_eff₂, ty₂, body⟩ ← mkComHelper mkRegion (ty₁ ++ Γ) rest
       return ⟨_, ty₂, Com.letSup expr body⟩
   | [] => throw <| .generic "Ill-formed (empty) block"
 
-def mkCom [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ]
-  (reg : MLIR.AST.Region φ) :
-  ExceptM d (Σ (Γ : Ctxt d.Ty) (eff : EffectKind) (ty : _), Com d Γ eff ty) :=
-  match reg.ops with
-  | [] => throw <| .generic "Ill-formed region (empty)"
-  | coms => BuilderM.runWithEmptyMapping <| do
-    let Γ ← declareBindings ∅ reg.args
-    let com ← mkComHelper Γ coms
-    return ⟨Γ, com⟩
+/-- `mkCom`, with an explicit bound on how deeply regions may nest.
+
+The bound is what keeps this structurally recursive, and so reducible. It is
+not a real restriction: MLIR nesting is a handful of levels at most, and
+exceeding it is a clear error rather than a wrong answer. -/
+def mkComAux [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] :
+    Nat → MLIR.AST.Region φ → ExceptM d (ParsedRegion d)
+  | 0, _ => throw <| .generic "Region nesting is too deep"
+  | fuel + 1, reg =>
+    match reg.blocks with
+    | _ :: _ =>
+      throw <|
+        .generic "multi-block region: not representable as a Com -- use the SLLVM CFG quotation"
+    | [] =>
+      match reg.ops with
+      | [] => throw <| .generic "Ill-formed region (empty)"
+      | coms =>
+        BuilderM.runWithEmptyMapping <| do
+          let Γ ← declareBindings ∅ reg.args
+          let com ← mkComHelper (mkComAux fuel) Γ coms
+          return ⟨Γ, com⟩
+
+/-- The maximum region nesting depth `mkCom` will accept. -/
+def maxRegionDepth : Nat :=
+  64
+
+def mkCom [TransformTy d φ] [TransformExpr d φ] [TransformReturn d φ] (reg : MLIR.AST.Region φ) :
+    ExceptM d (Σ (Γ : Ctxt d.Ty) (eff : EffectKind) (ty : _), Com d Γ eff ty) :=
+  mkComAux maxRegionDepth reg
 
 end MLIR.AST

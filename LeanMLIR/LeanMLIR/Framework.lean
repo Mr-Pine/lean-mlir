@@ -1,11 +1,13 @@
-import LeanMLIR.Framework.Basic
-import LeanMLIR.Framework.Dialect
-import LeanMLIR.Framework.ExprRefinement
-import LeanMLIR.Framework.Macro
-import LeanMLIR.Framework.Print
-import LeanMLIR.Framework.Refinement
-import LeanMLIR.Framework.ToExpr
-import LeanMLIR.Framework.Trace
+module
+
+public import LeanMLIR.Framework.Basic
+public import LeanMLIR.Framework.Dialect
+public import LeanMLIR.Framework.ExprRefinement
+public import LeanMLIR.Framework.Macro
+public import LeanMLIR.Framework.Print
+public import LeanMLIR.Framework.Refinement
+public import LeanMLIR.Framework.ToExpr
+public import LeanMLIR.Framework.Trace
 
 /-
 TODO: we would like to import `Zipper` here as well, but that introduces

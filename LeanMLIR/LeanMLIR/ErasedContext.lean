@@ -1,9 +1,13 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Data.Fintype.Basic
+module
 
-import LeanMLIR.HVector
+public import Mathlib.Data.Fintype.Basic
+
+public import LeanMLIR.HVector
+
+@[expose] public section
 
 /--
   Typeclass for a `baseType` which is a Gödel code of Lean types.
@@ -483,7 +487,7 @@ instance [DecidableEq Ty] {Γ : Ctxt Ty} {t : Ty} : Fintype (Γ.Var t) where
     refine Finset.mem_mk.mpr (Multiset.mem_coe.mpr (List.mem_filterMap.mpr ⟨v.val, ?_, ?_⟩))
     · exact List.mem_range.mpr v.val_lt
     · rcases v with ⟨i, hi⟩
-      rw [dite_eq_left hi]
+      rw [dif_pos hi]
 
 /-! ### Var Fin Helpers -/
 
@@ -760,6 +764,18 @@ theorem Valuation.cons_toCons {t t' : Ty} (s : Γ.Valuation) (x : toType t) (v :
     (s.cons x) v.toCons = s v :=
   rfl
 
+/-- `cons_toCons` in the shape a lifted program presents: a variable whose
+index is a *numeral*, so the `Var.toCons` pattern never matches syntactically.
+Peels one `cons` off both the valuation and the index -- what a proof needs
+whenever a block reads an ambient value past its own block arguments.
+
+Not `@[simp]`: matching a numeral against `?i + 1` pulls against the `Nat`
+literal simprocs, so apply it explicitly (`rw [Valuation.cons_succ]`, or in a
+`simp only [...]` list). -/
+theorem Valuation.cons_succ {ty t : Ty} (s : Γ.Valuation) (x : toType ty) (i : Nat)
+    (h : (Ctxt.cons ty Γ)[i + 1]? = some t) : (s.cons x) ⟨i + 1, h⟩ = s ⟨i, h⟩ :=
+  rfl
+
 @[simp] theorem Valuation.cons_inj {t : Ty} {x y : ⟦t⟧} :
     (x ::ᵥ V) = (y ::ᵥ V) ↔ x = y where
   mpr := by rintro rfl; rfl
@@ -1012,12 +1028,12 @@ theorem Valuation.reassignVars_eq [DecidableEq Ty] (V : Γ.Valuation) :
       subst this
       have := h_eq.to_eq
       subst this
-      simp only [HVector.idxOf?]
+      simp only [HVector.idxOf?, dif_pos (show ∃ h : t = t, w = h ▸ w from ⟨rfl, rfl⟩)]
       rfl
     · unfold Var.eq at h_eq
       simp only [HVector.idxOf?, h_eq, ↓reduceDIte, List.get_eq_getElem, List.length_cons,
         HVector.map_cons]
-      split at ih <;> simp_all
+      split at ih <;> simp_all [HVector.map_cons] <;> exact ih
 
 @[simp]
 theorem Valuation.comap_with [DecidableEq Ty] {Γ Δ : Ctxt Ty} {V : Valuation Γ} {map : Δ.Hom Γ}
@@ -1088,7 +1104,10 @@ def Valuation.equivHVector {Γ : List Ty} : Valuation ⟨Γ⟩ ≃ HVector toTyp
     case nil => rfl
     case cons t Γ v vs ih =>
       simp [HVector.ofFn, ofHVector, -ofHVector_apply]
-      exact ih
+      first
+      | exact ih
+      | (trace "B"; exact ⟨rfl, ih⟩)
+      | (trace "C"; simp [ih])
 
 end Valuation
 

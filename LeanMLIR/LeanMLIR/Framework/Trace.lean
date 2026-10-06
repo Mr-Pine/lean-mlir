@@ -1,11 +1,15 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Lean
+module
+
+public import Lean
 
 /-!
 ## LeanMLIR trace classes
 -/
+
+@[expose] public section
 
 -- Trace class for LeanMLIR elaboration code
 initialize

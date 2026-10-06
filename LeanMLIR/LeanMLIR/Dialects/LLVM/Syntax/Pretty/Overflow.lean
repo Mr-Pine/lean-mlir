@@ -1,4 +1,8 @@
-import LeanMLIR.MLIRSyntax.PrettyEDSL
+module
+
+public import LeanMLIR.MLIRSyntax.PrettyEDSL
+
+@[expose] public section
 
 open Lean
 
@@ -20,7 +24,17 @@ declare_syntax_cat MLIR.Pretty.overflow_op
 
 declare_syntax_cat MLIR.Pretty.overflow_int_cast_op
 
-syntax no_wrap_flag := "nsw" <|> "nuw"
+/-- The flags are *non-reserved* symbols (`&"…"`), so they parse here without
+becoming global tokens.
+
+With plain `"nsw"`, Lean reserves the token everywhere, including inside the
+*generic* form where `nsw` is an ordinary attribute identifier -- so
+`#llvm.overflow<nsw>`, which is exactly what `mlir-opt --mlir-print-op-generic`
+emits, failed to parse in any quotation with `unexpected token 'nsw'`. Lifted
+code then had to be rewritten to `#llvm.overflow<"nsw">` before it could be
+quoted, which is a deviation from the artifact it is supposed to reproduce
+verbatim. -/
+syntax no_wrap_flag := &"nsw" <|> &"nuw"
 
 syntax (mlir_op_operand " = ")? MLIR.Pretty.overflow_op mlir_op_operand,*
   (" overflow<" no_wrap_flag,* "> ")? (" : " mlir_type)? : mlir_op

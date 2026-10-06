@@ -1,4 +1,6 @@
-import LeanMLIR.MLIRSyntax.GenericParser
+module
+
+public import LeanMLIR.MLIRSyntax.GenericParser
 
 /-!
 # Pretty MLIR Syntax
@@ -6,6 +8,8 @@ import LeanMLIR.MLIRSyntax.GenericParser
 This file buils some common functionality that dialects can use to define pretty syntax.
 Note that since pretty syntax is just defined as Lean macros, none of this is *required*.
 -/
+
+@[expose] public section
 
 namespace MLIR.EDSL.Pretty
 
@@ -19,7 +23,7 @@ declare_syntax_cat MLIR.Pretty.uniform_op
 
 /-- Given syntax which consists of just a node with a single atom (as expected by `uniform_op`),
 extract the name of the operation and return it as a string literal syntax. -/
-def extractOpName : Syntax → Option (TSyntax `str)
+meta def extractOpName : Syntax → Option (TSyntax `str)
   | .node _ _ ⟨.atom _ name :: _⟩ => some <| Syntax.mkStrLit name
   | _ => none
 

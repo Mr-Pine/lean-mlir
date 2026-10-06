@@ -1,15 +1,19 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Util.Poison
-import LeanMLIR.Util.ForStd
-import LeanMLIR.Dialects.LLVM.SimpSet
+module
+
+public import LeanMLIR.Util.Poison
+public import LeanMLIR.Util.ForStd
+public import LeanMLIR.Dialects.LLVM.SimpSet
 
 --TODO: are any of these imports actually needed in this file?
-import Mathlib.Tactic.Cases
-import Mathlib.Tactic.SplitIfs
-import Mathlib.Tactic.Tauto
-import Aesop
+public import Mathlib.Tactic.Cases
+public import Mathlib.Tactic.SplitIfs
+public import Mathlib.Tactic.Tauto
+public import Aesop
+
+@[expose] public section
 
 namespace InstCombine
 
@@ -56,7 +60,7 @@ having to duplicate that API for `LLVM.IntW`.
 theorem isRefinedBy_iff (x y : LLVM.IntW w) :
     x ⊑ y ↔ @HRefinement.IsRefinedBy (PoisonOr _) (PoisonOr _) _ x y := by
   -- v4.34: `simp` no longer unfolds the instance; the `dite` branch is all this needs
-  exact iff_of_eq (dite_eq_left rfl)
+  exact iff_of_eq (dif_pos rfl)
 
 @[simp, simp_llvm]
 theorem isRefinedBy_iff_of_width_neq {x : LLVM.IntW w} {y : LLVM.IntW v} (h : w ≠ v) :
@@ -461,6 +465,29 @@ instance : ToString IntPred where
     | .sge => "sge"
     | .slt => "slt"
     | .sle => "sle"
+
+/-- The condition code of MLIR's `llvm.icmp`, which carries it as an integer
+attribute (`<{predicate = 6 : i64}>`) rather than in the operation's name.
+
+The numbering is MLIR's own `ICmpPredicate`, which is **not** the numbering of
+LLVM IR's `CmpInst::Predicate` that this inductive follows: MLIR is 0-based and
+orders the signed comparisons before the unsigned ones, where LLVM starts at 32
+and puts the unsigned ones first. So the two have to be mapped, not cast.
+Verified by compiling all ten comparisons through
+`clang | mlir-translate --import-llvm | mlir-opt --mlir-print-op-generic`; the
+round trip is pinned in `SLLVM/Tests/Icmp.lean`. -/
+def IntPred.ofMLIRPredicate? : Int → Option IntPred
+  | 0 => some .eq
+  | 1 => some .ne
+  | 2 => some .slt
+  | 3 => some .sle
+  | 4 => some .sgt
+  | 5 => some .sge
+  | 6 => some .ult
+  | 7 => some .ule
+  | 8 => some .ugt
+  | 9 => some .uge
+  | _ => none
 
 /--
 The ‘icmp’ instruction takes three operands.

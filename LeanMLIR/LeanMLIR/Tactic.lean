@@ -1,14 +1,20 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.Framework
-import LeanMLIR.Util
-import LeanMLIR.Tactic.SimpSet
+module
 
-import Qq
-import Mathlib.Tactic.FinCases
-import Lean.Meta.KAbstract
-import Lean.Elab.Tactic.ElabTerm
+public import LeanMLIR.Framework
+public import LeanMLIR.Util
+public import LeanMLIR.Tactic.SimpSet
+
+public import Qq
+public import Mathlib.Tactic.FinCases
+public import Lean.Meta.KAbstract
+public import Lean.Elab.Tactic.ElabTerm
+-- module: the simproc helpers below are `meta`
+public meta import Mathlib.Lean.Expr.Basic
+
+@[expose] public section
 
 variable [DialectSignature d] [TyDenote d.Ty] [DialectDenote d] [Monad d.m] [LawfulMonad d.m] in
 @[simp_denote]
@@ -25,9 +31,8 @@ open Ctxt (Var Valuation DerivedCtxt Hom)
 open Lean Elab Tactic Meta
 
 /-- Unfolds `Valuation.instAppendHVector`, which v4.34 `simp` no longer unfolds itself. -/
-theorem _root_.Ctxt.Valuation.hvectorAppend_eq {Ty : Type} [TyDenote Ty] {Γ : Ctxt Ty}
-    {ts : List Ty} (vals : HVector toType ts) (V : Valuation Γ) :
-    vals ++ V = Valuation.ofHVector vals ++ V :=
+theorem _root_.Ctxt.Valuation.hvectorAppend_eq {Ty : Type} [TyDenote Ty] {Γ : Ctxt Ty} {ts : List Ty}
+    (vals : HVector toType ts) (V : Valuation Γ) : vals ++ V = Valuation.ofHVector vals ++ V :=
   rfl
 
 attribute [simp_denote] Int.ofNat_eq_coe DerivedCtxt.cons DerivedCtxt.ofCtxt
@@ -41,8 +46,11 @@ attribute [simp_denote] Int.ofNat_eq_coe DerivedCtxt.cons DerivedCtxt.ofCtxt
   /- `castPureToEff` -/
   Com.letPure Expr.denote_castPureToEff Expr.denote_castPureToEff
   /- Unfold denotation -/
-  Com.ret Com.denote_var Com.denote_rets Expr.denoteOp HVector.denote Expr.op_mk Expr.args_mk
+  Com.ret Com.denote_var Com.denote_rets Expr.denoteOp Regions.denote Expr.op_mk Expr.args_mk
   Expr.regArgs_mk Expr.op_castPureToEff Expr.args_castPureToEff
+  /- `toPure`: a pure operation sitting in an impure `Com`, as every
+     instruction of a region that ends in a store does -/
+  Expr.op_toPure Expr.args_toPure Expr.regArgs_toPure
   /- Effect massaging -/
   EffectKind.liftEffect_rfl Id.pure_eq' Id.bind_eq' id_eq pure_bind cast_eq
   -- Valuation append & accesses
@@ -81,15 +89,14 @@ variable {d : Dialect} {instSig : DialectSignature d} {instTyDenote : TyDenote d
   {instDenote : DialectDenote d} {instMonad : Monad d.m}
 
 @[simp_denote]
-theorem HVector.denote_nil'
-    (T : HVector (fun (t : Ctxt d.Ty × List d.Ty) => Com d t.1 .impure t.2) []) :
-    HVector.denote T = HVector.nil := by
-  cases T; simp [HVector.denote]
+theorem Regions.denote_nil' {eff : EffectKind} (T : Regions d eff []) :
+    Regions.denote T = HVector.nil := by
+  cases T; simp [Regions.denote]
 
 @[simp_denote]
-theorem HVector.denote_cons' (t : Ctxt d.Ty × List d.Ty) (ts : List (Ctxt d.Ty × List d.Ty))
-    (a : Com d t.1 .impure t.2) (as : HVector (fun t => Com d t.1 .impure t.2) ts) :
-    HVector.denote (.cons a as) = .cons (a.denote) (as.denote) := by simp [HVector.denote]
+theorem Regions.denote_cons' {eff : EffectKind} (t : Ctxt d.Ty × List d.Ty)
+    (ts : List (Ctxt d.Ty × List d.Ty)) (a : Com d t.1 eff t.2) (as : Regions d eff ts) :
+    Regions.denote (.cons a as) = .cons (a.denote) (as.denote) := by simp [Regions.denote]
 
 end
 
@@ -134,14 +141,14 @@ simproc [simp_denote]elimValuation (∀ (_ : Ctxt.Valuation _), _) := fun e => d
 
 section SimpValuationApply
 
-/-- Return all statically known elements at the *end* of the valuation.
-That is, in `V ::ₕ x ::ₕ y` with `V` a free variable, return `#[y, x]`. -/
-private partial def valuationElements (e : Expr) (elems : Array Expr := #[]) : Array Expr :=
+/-- Split a valuation into the statically known elements at its *end* and the rest.
+That is, `V ::ₕ x ::ₕ y` with `V` a free variable gives `(#[y, x], V)`. -/
+private meta partial def valuationElements (e : Expr) (elems : Array Expr := #[]) : Array Expr × Expr :=
   match_expr e with
   | Valuation.cons _Ty _instTyDenote _Γ _t x V => valuationElements V (elems.push x)
-  | _ => elems
+  | _ => (elems, e)
 
-private partial def varToIndex (e : Expr) : Option Nat :=
+private meta partial def varToIndex (e : Expr) : Option Nat :=
   match_expr e with
   | Var.mk _Ty _Γ _t i _hi => Expr.numeral? i
   | Subtype.mk _α _p i _hi => Expr.numeral? i
@@ -150,28 +157,34 @@ private partial def varToIndex (e : Expr) : Option Nat :=
   | _ => none
 
 /--
-`simpValuationApply` rewrites applications of *fully-concrete* valuations to
-*fully-concrete* variables.
+`simpValuationApply` rewrites a valuation applied to a *fully-concrete* variable
+to the element, or, past the statically known elements, to the rest of the
+valuation at the shifted variable. It runs before rewrite lemmas (`↓`):
+`Valuation.cons_eval` matches the same terms and walks one `cons` per rewrite.
 -/
-dsimproc [simp_denote]simpValuationApply ((Valuation.cons _ _) _) := fun e => do
-  let mkApp2 V _t v := e
+dsimproc ↓[simp_denote]simpValuationApply ((Valuation.cons _ _) _) := fun e => do
+  let mkApp2 V t v := e
     | return .continue
   withTraceNode `LeanMLIR.Elab (fun _ => pure m!"Simplifying access of variable: …") <| do
       trace[LeanMLIR.Elab] "Valuation: {V}"
       trace[LeanMLIR.ELab] "Variable: {v}"
-      let Velems := valuationElements V
+      let (Velems, Vrest) := valuationElements V
       let some i := varToIndex v
         |
         trace[LeanMLIR.Elab] "{Lean.crossEmoji} Expected a fully concrete variable, but found: {v}"
         return .continue
       if let some x := Velems[i]? then
         return .visit x
-      else
-        trace[LeanMLIR.Elab] "{Lean.crossEmoji} Variable with index #{i} is out-of-range \
-        for static elements array:\n\t{Velems}\nderived from valuation expression:\
-          \n\t{V}"
-        Meta.check e
-        return .continue
+      -- `⟨i - Velems.size, h⟩` into `Vrest`; `h` has that type up to defeq
+      let_expr Subtype.mk _α _p _i h := v
+        | return .continue
+      let .forallE _ _ body _ ← whnfD (← inferType Vrest) | return .continue
+      let varTy ← whnfD (body.instantiate1 t).bindingDomain!
+      let_expr Subtype α p := varTy
+        | return .continue
+      let v' :=
+        mkApp4 (.const ``Subtype.mk varTy.getAppFn.constLevels!) α p (mkNatLit (i - Velems.size)) h
+      return .visit (mkApp2 Vrest t v')
 
 end SimpValuationApply
 
@@ -188,7 +201,7 @@ Return `some i` if `e` is one of the following
 - `Fin.succ j`, where `j` is a `finNumeral`
 - `OfNat.ofNat e`, where `isNumeral e`
 -/
-partial def finNumeral? (e : Lean.Expr) : Option Nat :=
+meta partial def finNumeral? (e : Lean.Expr) : Option Nat :=
   match_expr e with
   | Fin.mk _ i _h => Expr.numeral? i
   | Fin.succ _ i => (· + 1) <$> finNumeral? i

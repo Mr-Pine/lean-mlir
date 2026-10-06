@@ -1,7 +1,11 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import LeanMLIR.MLIRSyntax.AST
+module
+
+public import LeanMLIR.MLIRSyntax.AST
+
+@[expose] public section
 
 namespace MLIR.AST
 
@@ -16,25 +20,27 @@ inductive TransformError
   | unsupportedUnaryOp
   | unsupportedBinaryOp (error : String)
   | unsupportedOp (error : String)
-  | unsupportedType
+  | unsupportedType {φ} (type : Option (MLIRType φ))
   | generic (error : String)
 
 namespace TransformError
 
 instance : Repr (TransformError) where
-  reprPrec err _ := match err with
+  reprPrec err _ :=
+    match err with
     | nameAlreadyDeclared var => f!"Already declared {var}, shadowing is not allowed"
     | undeclaredName name => f!"Undeclared name '{name}'"
     | indexOutOfBounds name index len =>
-        f!"Index of '{name}' out of bounds of the given context " ++
+      f!"Index of '{name}' out of bounds of the given context " ++
         f!"(index was {index}, but context has length {len})"
     | typeError expected got =>
-        f!"Type mismatch: expected '{repr expected}', but 'name' has type '{repr got}'"
+      f!"Type mismatch: expected '{repr expected}', but 'name' has type '{repr got}'"
     | widthError expected got => f!"Type mismatch: {expected} ≠ {got}"
     | unsupportedUnaryOp => f!"Unsupported unary operation"
-    | unsupportedBinaryOp err => f!"Unsupported binary operation 's!{err}'"
-    | unsupportedOp err => f!"Unsupported operation 's!{err}'"
-    | unsupportedType => f!"Unsupported type"
+    | unsupportedBinaryOp err => f!"Unsupported binary operation '{err}'"
+    | unsupportedOp err => f!"Unsupported operation '{err}'"
+    | unsupportedType (some t) => f!"Unsupported type: {repr t}"
+    | unsupportedType none => f!"Unsupported type"
     | generic err => err
 
 end TransformError

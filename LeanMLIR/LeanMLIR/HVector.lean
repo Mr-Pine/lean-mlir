@@ -1,8 +1,12 @@
 /-
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
-import Mathlib.Tactic.TypeStar
-import Qq
+module
+
+public import Mathlib.Tactic.TypeStar
+public import Qq
+
+@[expose] public section
 
 /-- An heterogeneous vector -/
 inductive HVector {α : Type*} (f : α → Type*) : List α → Type _
@@ -219,6 +223,10 @@ theorem cons_get_succ {A : α → Type*} {a : α} {as : List α} {e : A a} {vec 
 /-! ## map -/
 
 @[simp]
+theorem map_nil {A B : α → Type u} {f : (a : α) → A a → B a} : map f (nil : HVector A []) = nil :=
+  rfl
+
+@[simp]
 theorem map_cons {A B : α → Type u} {as : List α} {f : (a : α) → A a → B a} {x : A a}
     {xs : HVector A as} : map f (cons x xs) = cons (f _ x) (map f xs) := by
   induction xs <;> simp_all [map]
@@ -358,6 +366,85 @@ theorem nil_append : nil (f := A) ++ ys = ys :=
 theorem cons_append : (x::ₕxs) ++ ys = (x::ₕ(xs ++ ys)) :=
   rfl
 
+/-! ## Reverse
+
+Needed because block arguments enter a `Ctxt` in reverse declaration order: an
+operand list in source order has to be reversed before it can become a
+valuation of the callee's context.
+
+`reverse` is defined by accumulation, `List.reverseAux`-style, rather than as
+`reverse xs ++ [x]`: the latter needs a cast through `List.reverse_cons` at
+every element, which `whnf` has to push back through the `append`s, and which
+made deciding a nine-operand call's argument valuation by `isDefEq` take over a
+minute. `(x ::ₕ xs).reverseAux acc` is `xs.reverseAux (x ::ₕ acc)` by
+definition, so nothing is cast. `reverse_cons_eqRec` recovers the old
+recursion. -/
+
+/-- `List.reverseAux` on an `HVector`: `xs` reversed onto the accumulator `acc`. -/
+def reverseAux :
+    {as : List α} → HVector A as → {bs : List α} → HVector A bs → HVector A (as.reverseAux bs)
+  | _, .nil, _, acc => acc
+  | _, .cons x xs, _, acc => reverseAux xs (x::ₕacc)
+
+@[simp]
+theorem reverseAux_nil {bs} (acc : HVector A bs) : reverseAux (.nil : HVector A []) acc = acc :=
+  rfl
+
+@[simp]
+theorem reverseAux_cons {a as bs} (x : A a) (xs : HVector A as) (acc : HVector A bs) :
+    reverseAux (x::ₕxs) acc = reverseAux xs (x::ₕacc) :=
+  rfl
+
+/-- Reverse an `HVector`, reversing its type-level index list with it. -/
+def reverse {as : List α} (xs : HVector A as) : HVector A as.reverse :=
+  reverseAux xs .nil
+
+@[simp]
+theorem reverse_nil : reverse (.nil : HVector A []) = .nil :=
+  rfl
+
+@[simp]
+theorem reverse_cons {a as} (x : A a) (xs : HVector A as) :
+    reverse (x::ₕxs) = reverseAux xs (x::ₕ.nil) :=
+  rfl
+
+/-! `HEq` congruences for the index-changing operations, for relating
+`reverseAux` to `reverse` and `append`, whose indices agree only
+propositionally. -/
+
+theorem cons_heq_cons {a : α} {l₁ l₂ : List α} (h : l₁ = l₂) {t₁ : HVector A l₁} {t₂ : HVector A l₂}
+    (ht : HEq t₁ t₂) (x : A a) : HEq (x::ₕt₁) (x::ₕt₂) := by
+  subst h; cases ht; rfl
+
+theorem append_heq_left {l₁ l₂ cs : List α} (h : l₁ = l₂) {t₁ : HVector A l₁} {t₂ : HVector A l₂}
+    (ht : HEq t₁ t₂) (zs : HVector A cs) : HEq (t₁ ++ zs) (t₂ ++ zs) := by
+  subst h; cases ht; rfl
+
+theorem append_assoc_heq {cs} (xs : HVector A as) (ys : HVector A bs) (zs : HVector A cs) :
+    HEq ((xs ++ ys) ++ zs) (xs ++ (ys ++ zs)) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih => exact cons_heq_cons (List.append_assoc ..) ih x
+
+/-- `reverseAux` is `reverse` followed by `append`, up to the index. -/
+theorem reverseAux_heq (xs : HVector A as) (acc : HVector A bs) :
+    HEq (reverseAux xs acc) (reverse xs ++ acc) := by
+  induction xs generalizing bs acc with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [reverseAux_cons, reverse_cons]
+    refine (ih (x::ₕacc)).trans ?_
+    refine (append_assoc_heq (reverse xs) (x::ₕ.nil) acc).symm.trans ?_
+    exact append_heq_left List.reverseAux_eq.symm (ih (x::ₕ.nil)).symm acc
+
+/-- **The old definition of `reverse`**, as a theorem: `reverse (x ::ₕ xs)` is
+`reverse xs ++ [x]`, cast along `List.reverse_cons`. -/
+theorem reverse_cons_eqRec {a as} (x : A a) (xs : HVector A as) :
+    reverse (x::ₕxs) = (List.reverse_cons ..) ▸ (reverse xs).append (.cons x .nil) := by
+  apply eq_of_heq
+  rw [reverse_cons]
+  exact (reverseAux_heq xs (x::ₕ.nil)).trans (eqRec_heq _ _).symm
+
 end Append
 
 /-
@@ -466,7 +553,7 @@ structure HVectorLiteral where
 /-- Given a Lean expression of type `HVector _ _`, try to decompose it into an
 array of element expressions.
 Returns `none` if the passed expression is not a recognized literal. -/
-def litExpr? : Expr → (Option HVectorLiteral)
+meta def litExpr? : Expr → (Option HVectorLiteral)
   | mkApp6 (.const ``HVector.cons _) _α _A _as a x xs => do
     let ret ← litExpr? xs
     some { ret with elems := ret.elems.push ⟨a, x⟩ }

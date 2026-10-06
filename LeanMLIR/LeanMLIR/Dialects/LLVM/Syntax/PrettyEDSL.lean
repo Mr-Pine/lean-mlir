@@ -1,9 +1,13 @@
-import LeanMLIR.MLIRSyntax.PrettyEDSL
+module
 
-import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Overflow
-import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Exact
-import LeanMLIR.Dialects.LLVM.Syntax.Pretty.NonNeg
-import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Disjoint
+public import LeanMLIR.MLIRSyntax.PrettyEDSL
+
+public import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Overflow
+public import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Exact
+public import LeanMLIR.Dialects.LLVM.Syntax.Pretty.NonNeg
+public import LeanMLIR.Dialects.LLVM.Syntax.Pretty.Disjoint
+
+@[expose] public section
 
 open Lean
 

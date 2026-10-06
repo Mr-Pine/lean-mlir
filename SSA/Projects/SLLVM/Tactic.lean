@@ -1,6 +1,10 @@
-import SSA.Projects.InstCombine.Tactic
-import SSA.Projects.InstCombine.Tactic.SimpLLVM
-import SSA.Projects.SLLVM.Tactic.SimpSet
+module
+
+public import SSA.Projects.InstCombine.Tactic
+public import SSA.Projects.InstCombine.Tactic.SimpLLVM
+public import SSA.Projects.SLLVM.Tactic.SimpSet
+
+@[expose] public section
 
 macro "simp_sllvm" : tactic =>
   `(tactic| (simp -failIfUnchanged only [simp_sllvm, simp_llvm, simp_llvm_option]))
@@ -31,7 +35,7 @@ attribute [simp_sllvm]
   Valuation.instAppendHVector Valuation.ofHVector_nil Valuation.ofHVector_cons
   SSA.simpValuationApply
   -- Other general simp lemmas
-  reduceIte bind_assoc
+  bind_assoc
 
 -- attribute [simp_sllvm_split(low)]
 --   PoisonOr.ite_isRefinedBy_iff
@@ -130,3 +134,7 @@ macro "simp_sllvm_split" : tactic => `(tactic|(
 /-! ## `simp_sllvm_case_bash` -/
 
 macro "simp_sllvm_case_bash" : tactic => `(tactic| simp_alive_case_bash <;> simp_sllvm)
+
+-- the builtin `reduceIte` is not `meta`, so a module adds it to the simp set through its own simproc
+set_option compiler.relaxedMetaCheck true in
+simproc ↓ [simp_sllvm] sllvmReduceIte (ite _ _ _) := reduceIte
