@@ -28,6 +28,33 @@ theorem avx2_mask_select (active : Bool) (a b : BitVec 32) :
     rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (show 16 = 8 + 8 by rfl)]
     exact BitVec.extractLsb'_append_extractLsb'
 
+-- Reconstruct an arbitrary-width mask from its first `n` bits.
+def bitMaskFold {w : Nat} (active : BitVec w) (n : Nat) : BitVec w :=
+  (List.range n).foldl (fun acc i =>
+    acc ||| ((BitVec.ofBool (active.getLsbD i)).setWidth w <<< i)) 0#w
+
+theorem getLsbD_bitMaskFold {w : Nat} (active : BitVec w) (n i : Nat) (hi : i < w) :
+    (bitMaskFold active n).getLsbD i = (decide (i < n) && active.getLsbD i) := by
+  induction n with
+  | zero => simp [bitMaskFold]
+  | succ n ih =>
+    simp only [bitMaskFold, List.range_succ, List.foldl_append,
+      List.foldl_cons, List.foldl_nil, BitVec.getLsbD_or] at *
+    rw [ih]
+    by_cases h : i < n
+    · simp [h, Nat.lt_succ_of_lt h, hi]
+    · by_cases heq : i = n
+      · subst i
+        simp [hi]
+      · have hsub : i - n ≠ 0 := by omega
+        have hsucc : ¬i < n + 1 := by omega
+        simp [h, hsub, hsucc, hi]
+
+theorem bitMaskFold_exact {w : Nat} (active : BitVec w) :
+    bitMaskFold active w = active := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [getLsbD_bitMaskFold active w i hi, hi, decide_true, Bool.true_and]
 
 def mask16 (active : BitVec 16) : BitVec 16 :=
   (BitVec.ofBool (active.getLsbD 0)).setWidth 16 |||
@@ -48,11 +75,9 @@ def mask16 (active : BitVec 16) : BitVec 16 :=
   ((BitVec.ofBool (active.getLsbD 15)).setWidth 16 <<< 15)
 
 theorem mask16_exact (active : BitVec 16) : mask16 active = active := by
-  ext i hi
-  have hcases : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 ∨ i = 5 ∨ i = 6 ∨ i = 7 ∨ i = 8 ∨ i = 9 ∨ i = 10 ∨ i = 11 ∨ i = 12 ∨ i = 13 ∨ i = 14 ∨ i = 15 := by omega
-  rcases hcases with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  all_goals simp [mask16]
-
+  simpa only [bitMaskFold, List.range_succ, List.range_zero, List.foldl_append,
+    List.foldl_cons, List.foldl_nil, BitVec.zero_or, BitVec.shiftLeft_zero, mask16] using
+    (bitMaskFold_exact active)
 
 theorem avx512_mask_select (active : BitVec 16) (i : Fin 16) (a b : BitVec 32) :
     (if (mask16 active).getLsbD i then b else a) = (if active.getLsbD i then b else a) := by
