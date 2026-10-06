@@ -1,0 +1,107 @@
+{
+  "crate": "solana-ed25519",
+  "version": "0.2.4",
+  "registry_package_sha256": "ff4c7caf3fe3d70815869a5838ee45b4d2b009eaacea1790ef3cd9b3c89edbbd",
+  "registry_vcs": {
+    "git": {
+      "sha1": "33f07b22cb2fba719645052fdfc31d23bc917596"
+    },
+    "path_in_vcs": "curve25519/solana-ed25519"
+  },
+  "primary_manifest_sha256": "a5df0990047876600f4644a4ef6754f2d11a1c348e204d5a82515d71efb24277",
+  "source_manifest_sha256": "ca61eeb8262f8f01308fcfd28e8a610d8706ee506769e53aa1d355a19371a93b",
+  "cfg_manifest_sha256": "bb86c16ff106f1404bed44c5a2e25d2959a9ce1673663e9b71c056661ea45405",
+  "script_sha256": "d7ec1a24e93838c4b6733cbed6c62069cd1e4c90cc79c08ce8f1f5f6aa7574cc",
+  "crate_llvm_ir_sha256": "2ea5bd097be748ddb48c0361700c0dacb5ee7146c87f29543001e78261c82dcc",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "mlir_translate": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+  "tool_files_sha256": {
+    "llvm-extract": "566f462f3a7bbf99a66269ae71d1b72535a9d228f9603cf7c2ba769655ccd425",
+    "opt": "20353e9fbd1286802950c40bd2b73ba508ad277f3669ae3f90af858aa22aeb97",
+    "mlir-translate": "972ca49580e4c6bc8b77338ecc0e74ba0ee4ec3d3c236463282c07c68024d100"
+  },
+  "tool_environment": {
+    "LD_LIBRARY_PATH": "/tmp/ed25519-rir-extract/tools/root/usr/lib/x86_64-linux-gnu"
+  },
+  "commands": [
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvXs0_NtCsjK63O35OHGN_14solana_ed255196windowINtB5_15NafLookupTable5NtNtNtNtB7_7backend6serial12curve_models20ProjectiveNielsPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtB7_7edwards12EdwardsPointE4from",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_serial_table5.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvXs0_NtCsjK63O35OHGN_14solana_ed255196windowINtB5_15NafLookupTable5NtNtNtNtB7_7backend6serial12curve_models20ProjectiveNielsPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtB7_7edwards12EdwardsPointE4from",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_serial_table5.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_serial_table5.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_serial_table5.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_serial_table5.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvXNvXsk_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx27edwardsINtNtBg_6window15NafLookupTable5NtB8_11CachedPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtBg_7edwards12EdwardsPointE4fromB1c_NtB2_13___Impl_from__10__impl_from",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_avx2_table5.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvXNvXsk_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx27edwardsINtNtBg_6window15NafLookupTable5NtB8_11CachedPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtBg_7edwards12EdwardsPointE4fromB1c_NtB2_13___Impl_from__10__impl_from",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_avx2_table5.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_avx2_table5.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_avx2_table5.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_avx2_table5.mlir"
+    ]
+  ],
+  "kernels": {
+    "agave_serial_table5": {
+      "target_symbol": "_RNvXs0_NtCsjK63O35OHGN_14solana_ed255196windowINtB5_15NafLookupTable5NtNtNtNtB7_7backend6serial12curve_models20ProjectiveNielsPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtB7_7edwards12EdwardsPointE4from",
+      "signature": [
+        ".ptr",
+        ".ptr"
+      ],
+      "llvm_inlining_applied": false,
+      "llvm_definition_count": 1
+    },
+    "agave_avx2_table5": {
+      "target_symbol": "_RNvXNvXsk_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx27edwardsINtNtBg_6window15NafLookupTable5NtB8_11CachedPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtBg_7edwards12EdwardsPointE4fromB1c_NtB2_13___Impl_from__10__impl_from",
+      "signature": [
+        ".ptr",
+        ".ptr"
+      ],
+      "llvm_inlining_applied": false,
+      "llvm_definition_count": 1
+    }
+  },
+  "files_sha256": {
+    "agave_serial_table5.ll": "bdc87c62e80374192f3cf047d9ffc198ca676f50ecb4c117abee984b235d938c",
+    "agave_serial_table5.mlir": "7576ae143fc0570099b0542a4827a0bd1f1325e04188c30c9af48d9deb60ddd3",
+    "agave_avx2_table5.ll": "08eb81dd4ae2ac608296c366cfcc60fd20cc081e7ac9120b3c71010434573e61",
+    "agave_avx2_table5.mlir": "cef7be63725a63c2926d2b7d17cecf2ae1ce1c205f2abb731a430fe40533066c"
+  },
+  "boundary": "Same crate LLVM IR as the primary pinned extraction. LLVM extraction, dead-global elimination and MLIR import are trusted. Constructor bodies are not inlined, optimized or rewritten; their external callees still require independent execution contracts."
+}

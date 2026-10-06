@@ -1,0 +1,55 @@
+{
+  "extraction_manifest_sha256": "7e9143ed9e2f96f3cdd7ce2d3f7e833dc258d19089d44caa611362e758f5b74f",
+  "generator_sha256": "9a0cf3846857c1dc51595102dea3b0862ba3a1950b14cbf03311fd81ccab5bd9",
+  "constructors": {
+    "serial": {
+      "symbol": "_RNvXs0_NtCsjK63O35OHGN_14solana_ed255196windowINtB5_15NafLookupTable5NtNtNtNtB7_7backend6serial12curve_models20ProjectiveNielsPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtB7_7edwards12EdwardsPointE4from",
+      "source": "MLIR/generated/agave_serial_table5.mlir",
+      "source_sha256": "7576ae143fc0570099b0542a4827a0bd1f1325e04188c30c9af48d9deb60ddd3",
+      "region_sha256": "343219fb624a8bb8a4bca3280bf88c63046e4d1c5435b07fafb2a173b193d377",
+      "region_lines": 260,
+      "blocks": 3,
+      "callees": {
+        "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "_RNvMsa_NtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial12curve_modelsNtB5_15ProjectivePoint6double": [
+          ".ptr",
+          ".ptr"
+        ],
+        "_RNvXsb_NtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial12curve_modelsRNtNtBb_7edwards12EdwardsPointINtNtNtCsgxBkk5gSRhY_4core3ops5arith3AddRNtB5_20ProjectiveNielsPointE3add": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ]
+      },
+      "globals": [
+        "alloc_6e6f5bdc2dd4f9d83a28bc96071152e7"
+      ],
+      "normalizations": []
+    },
+    "avx2": {
+      "symbol": "_RNvXNvXsk_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx27edwardsINtNtBg_6window15NafLookupTable5NtB8_11CachedPointEINtNtCsgxBkk5gSRhY_4core7convert4FromRNtNtBg_7edwards12EdwardsPointE4fromB1c_NtB2_13___Impl_from__10__impl_from",
+      "source": "MLIR/generated/agave_avx2_table5.mlir",
+      "source_sha256": "cef7be63725a63c2926d2b7d17cecf2ae1ce1c205f2abb731a430fe40533066c",
+      "region_sha256": "d92372c9ccf594af19ce1829bd76e90f2c2301bae5c5e9bb9c1ee5f329cdf8d3",
+      "region_lines": 1135,
+      "blocks": 3,
+      "callees": {
+        "_RNvXNvMsb_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx25fieldNtB8_18FieldElement2625x419square_and_negate_DB1a_NtB2_28___Impl_square_and_negate_D__25__impl_square_and_negate_D": [
+          ".ptr",
+          ".ptr"
+        ],
+        "_RNvXNvXsf_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx25fieldRNtB8_18FieldElement2625x4NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mulB1a_NtB2_12___Impl_mul__9__impl_mul": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ]
+      },
+      "globals": [],
+      "normalizations": []
+    }
+  }
+}
