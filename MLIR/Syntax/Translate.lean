@@ -606,6 +606,23 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless t == .bv w do
         throw "the result must be the vector's lane type"
       return .binop (.extractelement (l := l) (w := w) (wi := wi)) dst v i
+  | "llvm.insertvalue" =>
+    do
+      let (dst, t) ← res
+      let [(c, tCont), (v, tVal)] := args | throw "expected a container and a value"
+      unless t == tCont do
+        throw "the result type must match the first argument"
+      let indices ←
+        ((← arrayInts op "position").mapM
+            (fun i : Int => do
+              let some i := i.toNat? | throw "negative position"
+              return i))
+      if h : tCont.memberType indices == some tVal then
+        do
+          return .binop (.insertvalue indices tCont tVal h) dst c v
+      else
+        do
+          throw "the value type must match the containers element"
   | "x86vector.avx512.intr.vpermi2var.q.512" =>
     do
       let (dst, t) ← res

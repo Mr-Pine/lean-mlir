@@ -8,6 +8,7 @@ public import MLIR.Semantics.Regs
 public import MLIR.Semantics.Operations.Scalar
 public import MLIR.Semantics.Operations.Memory
 public import MLIR.Semantics.Operations.Vector
+public import MLIR.Semantics.Operations.Container
 public import MLIR.SimpSets
 
 namespace MLIR
@@ -39,6 +40,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm
+  | insertvalue indices tCont tElem h => Operation.insertvalue indices tCont tElem h
 
 @[mlir_instr]
 def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
