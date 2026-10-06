@@ -56,6 +56,15 @@ deriving instance Lean.ToExpr, Repr for Ty
 instance : DecidableEq Ty :=
   Ty.decEq
 
+def memberType : List Nat → Ty → Option Ty
+  | [], t => some t
+  | _, bv _ => none
+  | _, ptr => none
+  | [i], vec l w => if i < l then some (bv w) else none
+  | _, vec .. => none
+  | i :: is, array n t => if i < n then memberType is t else none
+  | i :: is, struct fields => if h : i < fields.length then memberType is fields[i] else none
+
 mutual
 @[reducible]
 def denoteRaw : Ty → Type

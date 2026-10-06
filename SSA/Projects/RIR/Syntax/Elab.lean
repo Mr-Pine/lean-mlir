@@ -156,6 +156,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
           | some k => `(some $(num k.val))
           | none => `(none)
     `((.shufflevector (#v[$lanes,*] : Vector (Option (Fin (2 * $(num l₁)))) $(num l₂))))
+  | .insertvalue indices tCont tVal h => do
+    `((.insertvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) (by decide)))
 
 def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .select => `(.select)

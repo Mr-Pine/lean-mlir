@@ -8,6 +8,7 @@ public import SSA.Projects.RIR.Semantics.Regs
 public import SSA.Projects.RIR.Semantics.Operations.Scalar
 public import SSA.Projects.RIR.Semantics.Operations.Memory
 public import SSA.Projects.RIR.Semantics.Operations.Vector
+public import SSA.Projects.RIR.Semantics.Operations.Container
 public import SSA.Projects.RIR.SimpSets
 
 namespace LeanMLIR.RIR
@@ -39,6 +40,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm
+  | insertvalue indices tCont tElem h => Operation.insertvalue indices tCont tElem h
 
 @[mlir_instr]
 def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t₃⟧ → ⟦t⟧
