@@ -361,6 +361,31 @@ def vec3 (resTy : Ty) : List (RegRef × Ty) → Except String (Nat × Nat × Reg
     return (l, w, a, b, c)
   | _ => throw "expected three vector operands"
 
+/-- Resolve a structure index without admitting an out-of-bounds selector. -/
+def fieldIndex : (fs : List Ty) → Nat → Except String ((t : Ty) × FieldIndex fs t)
+  | [], _ => throw "structure index out of range"
+  | t :: _, 0 => pure ⟨t, .head⟩
+  | _ :: ts, i + 1 => do
+    let ⟨t, index⟩ ← fieldIndex ts i
+    return ⟨t, .tail index⟩
+
+/-- Check every index and determine the selected type. -/
+def aggregatePath (s : Ty) : List Int → Except String ((t : Ty) × AggregatePath s t)
+  | [] => pure ⟨s, .here⟩
+  | i :: rest => do
+    unless 0 ≤ i do throw "negative aggregate index"
+    match hs : s with
+    | .array n elem =>
+      if h : i.toNat < n then
+        let ⟨t, path⟩ ← aggregatePath elem rest
+        return ⟨t, hs.symm ▸ .array ⟨i.toNat, h⟩ path⟩
+      else throw "array index out of range"
+    | .struct fs =>
+      let ⟨elem, index⟩ ← fieldIndex fs i.toNat
+      let ⟨t, path⟩ ← aggregatePath elem rest
+      return ⟨t, hs.symm ▸ .field index path⟩
+    | _ => throw "aggregate index requires a structure or array"
+
 def instr (E : Env) (op : Op) : Except String PInstr := do
   let args ← op.args.mapM (operand E)
   let res := result op
@@ -508,6 +533,23 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           throw "the result has another lane count"
         return .unop (.vector (l := l) (← cast w w')) dst a
       | _, _ => throw "expected scalar integers or integer vectors with matching lane counts"
+  | "llvm.extractvalue" => do
+      let (dst, out) ← res
+      let [(a, agg)] := args | throw "expected one aggregate operand"
+      let indices ← arrayInts op "position"
+      unless !indices.isEmpty do throw "aggregate position must be nonempty"
+      let ⟨selected, path⟩ ← aggregatePath agg indices
+      unless selected == out do throw "selected aggregate type does not match result type"
+      return .unop (.extractvalue path) dst a
+  | "llvm.insertvalue" => do
+      let (dst, out) ← res
+      let [(a, agg), (v, valueTy)] := args | throw "expected aggregate and inserted value operands"
+      unless agg == out do throw "aggregate operand and result types must agree"
+      let indices ← arrayInts op "position"
+      unless !indices.isEmpty do throw "aggregate position must be nonempty"
+      let ⟨selected, path⟩ ← aggregatePath agg indices
+      unless selected == valueTy do throw "selected aggregate type does not match inserted value type"
+      return .binop (.insertvalue path) dst a v
   | "llvm.load" =>
     do
       checkNotAtomic

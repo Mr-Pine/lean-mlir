@@ -111,7 +111,17 @@ def predStx : IntPred → CommandElabM (TSyntax `term)
   | .ugt => `(.ugt)
   | .uge => `(.uge)
 
+def fieldIndexStx : FieldIndex fs t → CommandElabM (TSyntax `term)
+  | .head => `(.head)
+  | .tail i => do `(.tail $(← fieldIndexStx i))
+
+def aggregatePathStx : AggregatePath s t → CommandElabM (TSyntax `term)
+  | .here => `(.here)
+  | .array i rest => do `(.array ⟨$(num i.val), by decide⟩ $(← aggregatePathStx rest))
+  | .field i rest => do `(.field $(← fieldIndexStx i) $(← aggregatePathStx rest))
+
 def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
+  | .extractvalue path => do `(.extractvalue $(← aggregatePathStx path))
   | .gepConst n => `((.gepConst $(num n)))
   | .trunc f => do
     `((.trunc $(← flagsStx f)))
@@ -126,6 +136,7 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
 
 def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
+  | .insertvalue path => do `(.insertvalue $(← aggregatePathStx path))
   | .and => `(.and)
   | .or d => do
     `((.or $(← boolStx d)))

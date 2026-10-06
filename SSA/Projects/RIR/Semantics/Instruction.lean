@@ -16,6 +16,7 @@ namespace LeanMLIR.RIR
 
 @[mlir_instr]
 def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
+  | extractvalue path => path.get
   | gepConst byteOff => Operation.gep (.value byteOff)
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
@@ -26,6 +27,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
+  | insertvalue path => path.set
   | and => Operation.and
   | or disjoint => Operation.or disjoint
   | xor => Operation.xor
