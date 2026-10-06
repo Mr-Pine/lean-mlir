@@ -1,0 +1,154 @@
+import SSA.Projects.Agave.Ed25519.Proof.Tables.Dynamic
+import SSA.Projects.RIR.Global
+
+/-! Exact little-endian initializers from the extracted LLVM globals. The
+closed certificates below are checked by the Lean kernel. They validate every
+entry, including the serial affine-cache and SIMD cached-coordinate formats.
+The generator is an untrusted convenience: all mathematical claims are proved. -/
+namespace Agave.Ed25519.Tables
+open PointArithmetic
+open _root_.Ed25519
+
+set_option maxRecDepth 10000
+set_option maxHeartbeats 0
+
+-- LLVM symbol: alloc_eaf951945d20f8425ce4c25607db196f
+-- Initializer SHA-256: c067dc2994b2b279214014401d5f77cac11a96c0188acbd06ce31438a634025b
+def serialBaseBytes : BitVec 61440 := @@SERIAL_BITS@@
+
+-- LLVM symbol: _RNvNtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx29constants26BASEPOINT_ODD_LOOKUP_TABLE
+-- Initializer SHA-256: 957eb520c46c6cc08f6069d2c2621cec3a51324af9cff85b05a53aa3192b1fd4
+def avx2BaseBytes : BitVec 81920 := @@AVX2_BITS@@
+
+def serialBaseGlobal : LeanMLIR.RIR.ByteGlobal :=
+  ⟨"alloc_eaf951945d20f8425ce4c25607db196f", 7680, serialBaseBytes, 8, by decide⟩
+
+def avx2BaseGlobal : LeanMLIR.RIR.ByteGlobal :=
+  ⟨"_RNvNtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6vector4avx29constants26BASEPOINT_ODD_LOOKUP_TABLE", 10240, avx2BaseBytes, 32, by decide⟩
+
+def serialBaseWord (k : Fin 64) (c : Fin 3) (i : Fin 5) : Nat :=
+  (serialBaseBytes.extractLsb' (64 * (15 * k.val + 5 * c.val + i.val)) 64).toNat
+
+def serialBaseCoordinate (k : Fin 64) (c : Fin 3) : F :=
+  ∑ i : Fin 5, (serialBaseWord k c i : F) * 2 ^ (51 * i.val)
+
+def serialBaseCache (k : Fin 64) : Extended F :=
+  ⟨serialBaseCoordinate k 1, serialBaseCoordinate k 0, 1, serialBaseCoordinate k 2⟩
+
+def avx2BaseWord (k : Fin 64) (i : Fin 5) (lane : Fin 8) : Nat :=
+  (avx2BaseBytes.extractLsb' (32 * (40 * k.val + 8 * i.val + lane.val)) 32).toNat
+
+def avx2BaseCoordinate (k : Fin 64) (lo hi : Fin 8) : F :=
+  ∑ i : Fin 5, ((avx2BaseWord k i lo : F) + 2 ^ 26 * avx2BaseWord k i hi) *
+    2 ^ (51 * i.val)
+
+def avx2BaseCache (k : Fin 64) : Extended F :=
+  ⟨avx2BaseCoordinate k 0 2, avx2BaseCoordinate k 1 3,
+    avx2BaseCoordinate k 4 6, avx2BaseCoordinate k 5 7⟩
+
+def serialBasePoint : Fin 64 → Extended F :=
+  @@SERIAL_POINTS@@
+
+def avx2BaseScale : Fin 64 → F :=
+  @@AVX2_SCALES@@
+
+def avx2BasePoint (k : Fin 64) : Extended F :=
+  scale (avx2BaseScale k) (serialBasePoint k)
+
+theorem serialBaseCache_correct (k : Fin 64) :
+    serialBaseCache k = serialCache d (serialBasePoint k) := by
+  fin_cases k <;> decide +kernel
+
+theorem avx2BaseCache_correct (k : Fin 64) :
+    avx2BaseCache k = avx2Cache (avx2BasePoint k) := by
+  fin_cases k <;> decide +kernel
+
+theorem avx2BaseScale_ne_zero (k : Fin 64) : avx2BaseScale k ≠ 0 := by
+  fin_cases k <;> decide +kernel
+
+/-- All static table entries are related, with exact source-byte certificates. -/
+theorem baseTable_related (k : Fin 64) :
+    Related (serialBasePoint k) (avx2BasePoint k) :=
+  ⟨avx2BaseScale k, avx2BaseScale_ne_zero k, rfl⟩
+
+theorem baseCache_related (k : Fin 64) :
+    CachedRelated (serialBaseCache k) (avx2BaseCache k) := by
+  rw [serialBaseCache_correct, avx2BaseCache_correct]
+  exact cached_related d d_spec (by decide) (baseTable_related k)
+
+theorem serialBasePoint_zero : serialBasePoint 0 = fromFD basePoint := by
+  decide +kernel
+
+def serialBaseAdvance (k : Fin 63) : Extended F :=
+  serialAdd d (serialDouble (serialBasePoint 0)) (serialBasePoint k.castSucc)
+
+theorem serialBaseAdvance_certificate (k : Fin 63) :
+    (serialBaseAdvance k).Z ≠ 0 ∧
+    serialBasePoint k.succ =
+      scale ((serialBaseAdvance k).Z)⁻¹ (serialBaseAdvance k) := by
+  fin_cases k <;> decide +kernel
+
+theorem serialBaseAdvance_related (k : Fin 63) :
+    Related (serialBaseAdvance k) (serialBasePoint k.succ) :=
+  ⟨_, inv_ne_zero (serialBaseAdvance_certificate k).1,
+    (serialBaseAdvance_certificate k).2⟩
+
+def baseGroup : Edwards.Point curve := basePoint.toAffine wellFormed_basePoint
+
+theorem serialBasePoint_represents (k : Fin 64) :
+    Represents (serialBasePoint k) ((2*k.val+1) • baseGroup) := by
+  induction k using Fin.induction with
+  | zero =>
+    rw [serialBasePoint_zero]
+    refine ⟨wellFormed_basePoint, ?_⟩
+    simp [baseGroup]
+  | succ k ih =>
+    have hbase : Represents (serialBasePoint 0) baseGroup := by
+      rw [serialBasePoint_zero]
+      exact ⟨wellFormed_basePoint, rfl⟩
+    have hstep := represents_serialAdd (represents_serialDouble hbase) ih
+    have he : baseGroup + baseGroup + (2*k.val+1) • baseGroup =
+        (2*(k.val+1)+1) • baseGroup := by
+      rw [← two_nsmul, ← add_nsmul]
+      congr 1
+      omega
+    exact represents_related (he ▸ hstep) (serialBaseAdvance_related k)
+
+theorem avx2BasePoint_represents (k : Fin 64) :
+    Represents (avx2BasePoint k) ((2*k.val+1) • baseGroup) :=
+  represents_related (serialBasePoint_represents k) (baseTable_related k)
+
+/-- Actual width-5 constructor plus certified static width-8 table. -/
+def serialDoubleBaseTable (A : Extended F) : Fin 8 ⊕ Fin 64 → Extended F
+  | .inl k => serialWidth5 d A k
+  | .inr k => serialBasePoint k
+
+def avx2DoubleBaseTable (A : Extended F) : Fin 8 ⊕ Fin 64 → Extended F
+  | .inl k => avx2Width5 A k
+  | .inr k => avx2BasePoint k
+
+/-- No table-correctness hypothesis remains in this algebraic endpoint. -/
+theorem doubleBaseTable_related {A A' : Extended F} (hA : Related A A')
+    (k : Fin 8 ⊕ Fin 64) :
+    Related (serialDoubleBaseTable A k) (avx2DoubleBaseTable A' k) := by
+  cases k with
+  | inl k => exact width5_related d d_spec (by decide) hA k
+  | inr k => exact baseTable_related k
+
+theorem doubleBase_schedule_related {A A' P P' : Extended F}
+    (hA : Related A A') (hP : Related P P')
+    (ops : List (Operation (Fin 8 ⊕ Fin 64))) :
+    Related (ops.foldl (serialStep d (serialDoubleBaseTable A)) P)
+      (ops.foldl (avx2Step (avx2DoubleBaseTable A')) P') :=
+  schedule_related d d_spec (by decide) _ _ (doubleBaseTable_related hA) ops hP
+
+theorem doubleBase_schedule_compress_eq {Bytes : Type*} (encode : F × F → Bytes)
+    {A A' P P' : Extended F} (hA : Related A A') (hP : Related P P')
+    (ops : List (Operation (Fin 8 ⊕ Fin 64))) :
+    compressWith encode (ops.foldl (avx2Step (avx2DoubleBaseTable A')) P') =
+      compressWith encode (projectiveAsExtended
+        (ops.foldl (serialStep d (serialDoubleBaseTable A)) P)) :=
+  schedule_compress_eq encode d d_spec (by decide) _ _
+    (doubleBaseTable_related hA) ops hP
+
+end Agave.Ed25519.Tables
