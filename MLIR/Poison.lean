@@ -226,6 +226,40 @@ theorem bind_eq_value : (x >>= f) = value b ↔ ∃ a, x = value a ∧ f a = val
   · obtain ⟨a, ha, ha'⟩ := h
     simp [ha, ha']
 
+theorem list_mapM_eq_value {f : α → PoisonOr β} :
+    ∀ {l : List α} {r : List β}, l.mapM f = .value r →
+      ∃ h : l.length = r.length, ∀ i (hi : i < l.length), f l[i] = .value r[i]
+  | [], r, h => by
+    simp at h
+    subst h; exact ⟨rfl, by simp⟩
+  | a :: l, r, h => by
+    rw [List.mapM_cons, bind_eq_value] at h
+    obtain ⟨b, hb, h⟩ := h
+    rw [bind_eq_value] at h
+    obtain ⟨bs, hbs, h⟩ := h
+    simp only [pure_def, value_inj] at h
+    subst h
+    obtain ⟨hl, hi⟩ := list_mapM_eq_value hbs
+    refine ⟨by simp [hl], fun i h => ?_⟩
+    cases i with
+    | zero => simpa using hb
+    | succ i => simpa using hi i (by simpa using h)
+
+theorem vector_mapM_eq_value {f : α → PoisonOr β} {v : Vector α n} {r : Vector β n}
+    (h : v.mapM f = .value r) (i : Nat) (hi : i < n) : f v[i] = .value r[i] := by
+  have h' : v.toList.mapM f = .value r.toList := by
+    have := congrArg (Vector.toArray <$> ·) h
+    simp [Vector.toArray_mapM, Array.mapM_eq_mapM_toList] at this
+    change List.mapM f v.toArray.toList = _
+    cases hl : List.mapM f v.toArray.toList using PoisonOr.casesOn' with
+    | poison => simp [hl] at this; exact absurd this (poison_ne_value _)
+    | value l =>
+      simp [hl] at this
+      exact congrArg PoisonOr.value (congrArg Array.toList this)
+  obtain ⟨_, h⟩ := list_mapM_eq_value h'
+  have := h i (by simpa using hi)
+  rwa [Vector.getElem_toList, Vector.getElem_toList] at this
+
 end Lemmas
 
 end

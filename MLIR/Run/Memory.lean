@@ -33,6 +33,17 @@ theorem run_alloca {Γ : Ctx} {env : ⟪Γ⟫} {dst : Dst Γ .ptr} {s : GlobalSt
       .value (env.write dst (.value s.allocaPtr), s.alloca bytes) :=
   rfl
 
+theorem run_addressof {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧} {x : ⟦t⟧}
+    {b : BitVec t.width} {dst : Dst Γ .ptr} (hv : v s = .value (x, s))
+    (hb : t.flatten x = .value b) :
+    Instr.run env (.addressof v dst) s =
+      .value
+        (env.write dst (.value s.allocaPtr),
+          let s' := s.alloca ((t.width + 7) / 8)
+          { s' with mem := s'.mem.storeAt s.allocaPtr b }) := by
+  simp only [Instr.run, EffectM.bind_eq, hv, PoisonOr.value_bind, hb]
+  rfl
+
 @[mlir_operation]
 theorem gep_value {ptr} (h : ¬ptr.offset.uaddOverflow off) :
     Operation.gep (.value off) (.value ptr) = .value (ptr.add off) := by simp [Operation.gep, h]
