@@ -1,0 +1,91 @@
+[package]
+name = "solana-ed25519"
+version = "0.2.4"
+edition = "2024"
+rust-version = "1.85.0"
+authors = [
+    "Isis Lovecruft <isis@patternsinthevoid.net>",
+    "Henry de Valence <hdevalence@hdevalence.ca>",
+    "Anza Maintainers <maintainers@anza.xyz>",
+]
+readme = "README.md"
+license = "BSD-3-Clause"
+categories = ["cryptography", "no-std"]
+keywords = ["cryptography", "crypto", "ristretto", "curve25519", "ristretto255"]
+description = "A pure-Rust implementation of group operations on ristretto255 and Curve25519, with HEEA scalar decomposition (forked from curve25519-dalek)"
+exclude = ["**/.gitignore", ".gitignore"]
+repository = { workspace = true }
+homepage = { workspace = true }
+
+[package.metadata.docs.rs]
+rustdoc-args = [
+    "--html-in-header",
+    "docs/assets/rustdoc-include-katex-header.html",
+    "--cfg",
+    "docsrs",
+]
+all-features = true
+
+[dev-dependencies]
+bincode.workspace = true
+color-eyre.workspace = true
+criterion.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+once_cell.workspace = true
+proptest.workspace = true
+rand.workspace = true
+
+[build-dependencies]
+rustc_version.workspace = true
+
+[[bench]]
+name = "dalek_benchmarks"
+harness = false
+required-features = ["alloc", "digest", "group", "rand_core"]
+
+[dependencies]
+cfg-if.workspace = true
+ed25519.workspace = true
+ff = { workspace = true, optional = true }
+group = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
+rand = { version = "0.10.2", optional = true, default-features = false, features = ["sys_rng"] }
+digest = { workspace = true, optional = true }
+hashbrown.workspace = true
+der = { workspace = true, optional = true }
+pkcs8 = { workspace = true, optional = true }
+sha2.workspace = true
+subtle = { workspace = true, features = ["const-generics"] }
+serde = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
+
+# Only needed by the AVX2 vector backend, which `curve25519_backend="serial"`
+# compiles out.
+[target.'cfg(all(target_arch = "x86_64", not(curve25519_backend = "serial")))'.dependencies]
+cpufeatures = { workspace = true }
+curve25519-dalek-derive = { workspace = true }
+
+[features]
+default = ["alloc", "precomputed-tables", "zeroize", "rand_core", "digest"]
+alloc = ["zeroize?/alloc"]
+precomputed-tables = []
+legacy_compatibility = []
+rand_core = ["dep:rand_core", "dep:rand"]
+std = ["alloc"]
+group = ["dep:group", "rand_core"]
+group-bits = ["group", "ff/bits"]
+digest = ["dep:digest"]
+serde = ["dep:serde", "serde/derive"]
+lizard = ["digest"]
+pkcs8 = ["dep:pkcs8", "pkcs8/alloc", "ed25519/pkcs8", "alloc"]
+pem = ["pkcs8", "dep:der", "ed25519/pem", "zeroize"]
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(allow_unused_unsafe)',
+    'cfg(curve25519_backend, values("simd", "serial"))',
+    'cfg(curve25519_diagnostics, values("build"))',
+    'cfg(curve25519_bits, values("64"))',
+]

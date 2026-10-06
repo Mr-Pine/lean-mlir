@@ -1,0 +1,918 @@
+{
+  "baseline": "2c71edf3d319f4506a45dffd3a31156325f12fef",
+  "translator_sha256": "ac35c44bf65c00533b091bee2d84b1de48aa607780664af6df6b41d55fd1a079",
+  "scope": "Only the selected executable function body is compared, excluding module/global initializer operations. Operation-name recognition is not a proof of importability; operand types, flags, and semantics require separate validation. Integer overflow flags, vector width casts, and SSA GEP indices are reported separately.",
+  "kernels": {
+    "agave_avx2_double_base": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl",
+        "llvm.intr.scmp",
+        "llvm.mlir.addressof",
+        "llvm.unreachable"
+      ],
+      "gep_with_ssa_index_count": 115,
+      "gep_with_nonconstant_ssa_index_count": 12,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        3
+      ],
+      "vector_width_cast_count": 12
+    },
+    "agave_avx2_field_mul": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 12,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_mul_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_mul_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_mul_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_mul_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_mul_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_new": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 20,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 5
+    },
+    "agave_avx2_field_reduce": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 8,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 13,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce64_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_reduce_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 43,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 8
+    },
+    "agave_avx2_field_split_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_10": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_11": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_12": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_13": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_14": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_15": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_16": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_17": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_18": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_19": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_5": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_6": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_7": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_8": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_split_observe_9": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 8,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_field_square_negate_d_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_add_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_add_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_add_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_add_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_add_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_sub_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_sub_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_sub_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_sub_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_cached_sub_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_double_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_double_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_double_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_double_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_avx2_point_double_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_ed25519_verify": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 1,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        2
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_point_compress": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 43,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_scalar_naf5": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 4,
+      "gep_with_nonconstant_ssa_index_count": 2,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_scalar_naf8": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 4,
+      "gep_with_nonconstant_ssa_index_count": 2,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_double_base": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl",
+        "llvm.intr.scmp",
+        "llvm.mlir.addressof",
+        "llvm.unreachable"
+      ],
+      "gep_with_ssa_index_count": 38,
+      "gep_with_nonconstant_ssa_index_count": 12,
+      "integer_overflow_flag_values": [
+        0,
+        1,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_from_bytes_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_from_bytes_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 2,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_from_bytes_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 2,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_from_bytes_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 2,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_from_bytes_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 12,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_mul_observe_4": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_square": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 8,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_to_bytes_observe_0": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_to_bytes_observe_1": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_to_bytes_observe_2": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_field_to_bytes_observe_3": {
+      "unknown_operation_names": [],
+      "gep_with_ssa_index_count": 0,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        2,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_point_affine_add": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 56,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_point_affine_sub": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 56,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_point_cached_add": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 57,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_point_cached_sub": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 57,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    },
+    "agave_serial_point_double": {
+      "unknown_operation_names": [
+        "llvm.intr.experimental.noalias.scope.decl"
+      ],
+      "gep_with_ssa_index_count": 43,
+      "gep_with_nonconstant_ssa_index_count": 0,
+      "integer_overflow_flag_values": [
+        0,
+        3
+      ],
+      "vector_width_cast_count": 0
+    }
+  }
+}
