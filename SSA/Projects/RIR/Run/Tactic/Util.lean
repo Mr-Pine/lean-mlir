@@ -81,10 +81,10 @@ def reduceIndex (g : MVarId) : MetaM MVarId :=
           mkAppM ``HAdd.hAdd #[base, mkNatLit k]
     if lit == idx then
       return g
-    let body ← kabstract goal idx
-    let motive := Expr.lam `pos (mkConst ``Nat) body .default
-    let proof := mkExpectedPropHint (← mkEqRefl idx) (← mkEq idx lit)
-    g.replaceTargetEq (body.instantiate1 lit) (← mkCongrArg motive proof)
+    -- This is a definitional normalization, not generalization over an arbitrary
+    -- position. Abstracting `idx` by definitional equality can also capture
+    -- unrelated finite type indices in the block, producing an ill-typed motive.
+    g.replaceTargetDefEq (goal.replace fun e => if e == idx then some lit else none)
 
 def finNLit? (n : Expr) : MetaM (Option Nat) := do
   if let some k← (Meta.evalNat (← mkAppM ``Fin.val #[n])).run then
