@@ -72,6 +72,7 @@ def GepIndex.inboundsOffset (env : ⟪Γ⟫) : GepIndex Γ → PoisonOr Int
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | noaliasScopeDecl _ => pure env
+  | fenceSingleThread => pure env
   | gep dst base indices =>
     pure (env.write dst (Operation.gepUnflagged (env.read base) (indices.map (·.offset env))))
   | gepInbounds dst base indices => do
@@ -107,6 +108,10 @@ https://llvm.org/docs/LangRef.html#llvm-experimental-noalias-scope-decl-intrinsi
 @[simp, mlir_instr]
 theorem Instr.run_noaliasScopeDecl (env : ⟪Γ⟫) (scope : String) (s : GlobalState) :
     Instr.run env (.noaliasScopeDecl scope) s = .value (env, s) := rfl
+
+/-- A single-thread fence is state preserving in the sequential memory model. -/
+theorem Instr.run_fenceSingleThread (env : ⟪Γ⟫) (s : GlobalState) :
+    Instr.run env .fenceSingleThread s = .value (env, s) := rfl
 
 /-- The monotonic byte load has ordinary load values and UB conditions in RIR's
 sequential memory model. No concurrent LLVM refinement is asserted here. -/

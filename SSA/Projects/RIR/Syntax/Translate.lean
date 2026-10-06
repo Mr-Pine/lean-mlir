@@ -48,6 +48,7 @@ inductive PGepIndex
 inductive PInstr
   | globalAddr (symbol : String) (dst : Nat)
   | noaliasScopeDecl (scope : String)
+  | fenceSingleThread
   | gep (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | gepInbounds (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | const (c : ConstLit) (dst : Nat)
@@ -536,6 +537,14 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.alias scope) := op.getAttr? "scope"
         | throw "noalias.scope.decl requires a scope metadata alias"
       return .noaliasScopeDecl scope
+  | "llvm.fence" => do
+      unless op.args.isEmpty && op.res.isEmpty do
+        throw "fence has no operands or results"
+      unless (← ordering) == 7 do
+        throw "only seq_cst singlethread fences are supported"
+      match op.getAttr? "syncscope" with
+      | some (.str "singlethread") => return .fenceSingleThread
+      | _ => throw "only seq_cst singlethread fences are supported"
   | "llvm.intr.assume" =>
     do
       let [(c, .bv 1)] := args | throw "expected one i1 condition"
@@ -1052,6 +1061,7 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Po
     let some ptr := globals symbol | throw s!"no global address bound for @{symbol}"
     return .const ptr (← mkDst Γ .ptr dst)
   | .noaliasScopeDecl scope => return .noaliasScopeDecl scope
+  | .fenceSingleThread => return .fenceSingleThread
   | .gepInbounds d p indices => do
     let indices ← indices.mapM fun
       | .constant off => pure (GepIndex.constant off)

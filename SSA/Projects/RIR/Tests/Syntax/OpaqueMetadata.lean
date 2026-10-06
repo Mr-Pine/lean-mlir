@@ -57,13 +57,13 @@ example : attr "global_name" =
 -- The raw payload parser rejects mismatched/unterminated brackets and strings.
 run_elab do
   let env ← Lean.getEnv
-  match Lean.Parser.runParserCategory env `mlir_attr_val
+  match Lean.Parser.runParserCategory env `rir_mlir_attr_val
       "#test.metadata<text = \"quoted >\">" with
   | .ok _ => pure ()
   | .error e => throwError "rejected balanced dialect attribute: {e}"
   for input in ["#test.metadata<(]>", "#test.metadata<[x>",
       "#test.metadata<text = \"unterminated>"] do
-    match Lean.Parser.runParserCategory env `mlir_attr_val input with
+    match Lean.Parser.runParserCategory env `rir_mlir_attr_val input with
     | .error _ => pure ()
     | .ok _ => throwError "accepted malformed dialect attribute: {input}"
 

@@ -238,12 +238,22 @@ syntax "%" numLit : mlir_op_operand
 
 syntax "%" ident : mlir_op_operand
 
+-- RIR's register syntax reserves `%arg` as one token in a mixed import graph.
+syntax mlir_arg_suffix := num <|> ident
+syntax "%arg" (noWs mlir_arg_suffix)? : mlir_op_operand
+
 syntax "[mlir_op_operand|" mlir_op_operand "]" : term
 
 macro_rules
   | `([mlir_op_operand| $$($q)]) => return q
   | `([mlir_op_operand| % $x:ident]) => `(SSAVal.name $(Lean.quote (x.getId.toString)))
   | `([mlir_op_operand| % $n:num]) => `(SSAVal.name (IntToString $n))
+  | `([mlir_op_operand| %arg $[$suffix:mlir_arg_suffix]?]) => do
+    let suffix := (suffix.map fun s =>
+      match s.raw[0].isNatLit? with
+      | some n => toString n
+      | none => s.raw[0].getId.toString).getD ""
+    `(SSAVal.name $(Lean.quote ("arg" ++ suffix)))
 
 section Test
 
@@ -309,17 +319,24 @@ declare_syntax_cat mlir_op_successor_arg -- bb argument
 
 syntax "^" mlir_suffix_id : mlir_op_successor_arg -- bb argument with no operands
 
+-- RIR's block syntax likewise reserves the combined `^bb` prefix.
+syntax "^bb" (noWs mlir_suffix_id)? : mlir_op_successor_arg
+
 -- syntax "^" ident ":" "(" mlir_op_operand","* ")" : mlir_op_successor_arg
 
 /-- The block name a successor refers to, e.g. `"bb9"` for `^bb9`. -/
 meta def getSuccessorName : TSyntax `mlir_op_successor_arg → String
   | `(mlir_op_successor_arg| ^ $x:mlir_suffix_id) => getSuffixId x
-  | _ => "" -- Should never happen: `mlir_op_successor_arg` has one production
+  | `(mlir_op_successor_arg| ^bb $[$x:mlir_suffix_id]?) =>
+    "bb" ++ (x.map getSuffixId).getD ""
+  | _ => "" -- Should never happen: all productions are handled above
 
 syntax "[mlir_op_successor_arg|" mlir_op_successor_arg "]" : term
 
 macro_rules
   | `([mlir_op_successor_arg|^$x:mlir_suffix_id]) => `(BBName.mk $(Lean.quote (getSuffixId x)))
+  | `([mlir_op_successor_arg| ^bb $[$x:mlir_suffix_id]?]) =>
+    `(BBName.mk $(Lean.quote ("bb" ++ (x.map getSuffixId).getD "")))
 
 section Test
 
@@ -796,6 +813,9 @@ end
 syntax "^" mlir_suffix_id ("(" sepBy(mlir_bb_operand, ",") ")")? ":" (mlirComment)? mlir_ops :
   mlir_bb
 
+syntax "^bb" (noWs mlir_suffix_id)? ("(" sepBy(mlir_bb_operand, ",") ")")? ":"
+  (mlirComment)? mlir_ops : mlir_bb
+
 -- A region is either one or more labeled blocks (the first is the entry
 -- block), or a single headerless op list.
 syntax "{" mlir_bb+ "}" : mlir_region
@@ -817,6 +837,15 @@ meta def elabMlirBb (blk : TSyntax `mlir_bb) :
   | `(mlir_bb| ^ $name:mlir_suffix_id : $[$_cmt]? $ops:mlir_ops) => do
     let opsList ← `([mlir_ops| $ops])
     return (getSuffixId name, ← `([]), opsList)
+  | `(mlir_bb| ^bb $[$name:mlir_suffix_id]? ( $operands,* ) : $[$_cmt]? $ops:mlir_ops) => do
+    let initList ← `(@List.nil (MLIR.AST.SSAVal × MLIR.AST.MLIRType _))
+    let argsList ← operands.getElems.foldrM (init := initList) fun x xs =>
+        `([mlir_bb_operand| $x] :: $xs)
+    let opsList ← `([mlir_ops| $ops])
+    return ("bb" ++ (name.map getSuffixId).getD "", argsList, opsList)
+  | `(mlir_bb| ^bb $[$name:mlir_suffix_id]? : $[$_cmt]? $ops:mlir_ops) => do
+    let opsList ← `([mlir_ops| $ops])
+    return ("bb" ++ (name.map getSuffixId).getD "", ← `([]), opsList)
   | _ => Macro.throwUnsupported
 
 macro_rules

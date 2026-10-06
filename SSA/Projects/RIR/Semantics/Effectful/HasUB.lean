@@ -28,12 +28,14 @@ end LeanMLIR.RIR
 
 /-! ## Helpers on core types -/
 
+namespace LeanMLIR.RIR
+
 section CoreHelpers
 
-open LeanMLIR.RIR
 variable {m} [Pure m] [HasUB m]
 
-/-- `x.getOrUB` raises UB if `x` is poison. -/
+/-- `x.getOrUB` raises UB if `x` is poison.
+This helper belongs to RIR's poison type and UB effect, independently of SLLVM's. -/
 def PoisonOr.getOrUB : PoisonOr α → m α
   | .value x => pure x
   | .poison => throwUB
@@ -50,8 +52,6 @@ end Lemmas
 end CoreHelpers
 
 /-! ## Instances -/
-
-namespace LeanMLIR.RIR
 
 -- PoisonOr is the canonical monad with UB semantics
 instance : HasUB PoisonOr where

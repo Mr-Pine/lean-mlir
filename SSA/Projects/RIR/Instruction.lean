@@ -76,6 +76,10 @@ inductive GepIndex (Γ : Ctx)
 inductive Instr (Γ : Ctx)
   /-- A noalias scope declaration is metadata, with no runtime effect. -/
   | noaliasScopeDecl (scope : String)
+  /-- `fence syncscope("singlethread") seq_cst`, retained explicitly.
+  In sequential RIR it changes no registers or memory. This is not a model
+  of inter-thread synchronization, signal handlers, or volatile event traces. -/
+  | fenceSingleThread
   /-- Unflagged GEP: signed indices and wrapping pointer-index arithmetic. -/
   | gep (dst : Dst Γ .ptr) (base : Reg Γ .ptr) (indices : List (GepIndex Γ))
   /-- `inbounds nusw nuw` on the explicit live-allocation subset. -/

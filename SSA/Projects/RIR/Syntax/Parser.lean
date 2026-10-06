@@ -88,19 +88,25 @@ def comment.parenthesizer : Parenthesizer :=
 
 end
 
-/-! ## Grammar -/
+/-! ## Grammar
+
+Syntax categories are global even inside a Lean namespace. Keep RIR's categories
+separate from `LeanMLIR.MLIRSyntax.GenericParser`: both parsers must be importable
+when relating RIR programs to SLLVM semantics. The public `mlir_def` and
+`mlir_region%` syntax is unchanged.
+-/
 
 public section
 
-declare_syntax_cat mlir_type
+declare_syntax_cat rir_mlir_type
 
-declare_syntax_cat mlir_attr_val
+declare_syntax_cat rir_mlir_attr_val
 
-declare_syntax_cat mlir_op
+declare_syntax_cat rir_mlir_op
 
-declare_syntax_cat mlir_bb
+declare_syntax_cat rir_mlir_bb
 
-declare_syntax_cat mlir_region
+declare_syntax_cat rir_mlir_region
 
 /-- `%arg0` or `%7`. `%arg` is a token of its own once `Run.Tactic` is imported. -/
 syntax ssaValue := ("%arg" noWs num) <|> ("%" noWs (num <|> ident))
@@ -108,23 +114,23 @@ syntax ssaValue := ("%arg" noWs num) <|> ("%" noWs (num <|> ident))
 syntax bbId := num <|> ident
 
 /-- `i64`, `index`, `vector<8xi64>`. -/
-syntax ident (balancedBrackets)? : mlir_type
+syntax ident (balancedBrackets)? : rir_mlir_type
 
 /-- `!llvm.ptr`, `!llvm.array<5 x i64>`. -/
-syntax "!" ident (balancedBrackets)? : mlir_type
+syntax "!" ident (balancedBrackets)? : rir_mlir_type
 
 syntax signedNum := "-"? num
 
-syntax signedNum (":" mlir_type)? : mlir_attr_val
+syntax signedNum (":" rir_mlir_type)? : rir_mlir_attr_val
 
-syntax str : mlir_attr_val
+syntax str : rir_mlir_attr_val
 
-syntax "@" (ident <|> str) : mlir_attr_val
+syntax "@" (ident <|> str) : rir_mlir_attr_val
 
-syntax "#" ident : mlir_attr_val
+syntax "#" ident : rir_mlir_attr_val
 
 /-- Dialect bodies need not be comma-separated attributes (e.g. LLVM memory effects). -/
-syntax "#" ident balancedBrackets : mlir_attr_val
+syntax "#" ident balancedBrackets : rir_mlir_attr_val
 
 /-- The enum/string list form already interpreted by RIR, including overflow flags. -/
 declare_syntax_cat dialect_attr_enums
@@ -133,35 +139,35 @@ syntax dialect_attr_enum := ident <|> str
 
 syntax dialect_attr_enum,* : dialect_attr_enums
 
-syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
+syntax "dense<" rir_mlir_attr_val ">" ":" rir_mlir_type : rir_mlir_attr_val
 
-syntax "array<" mlir_type (":" mlir_attr_val,*)? ">" : mlir_attr_val
+syntax "array<" rir_mlir_type (":" rir_mlir_attr_val,*)? ">" : rir_mlir_attr_val
 
-syntax "[" mlir_attr_val,* "]" : mlir_attr_val
+syntax "[" rir_mlir_attr_val,* "]" : rir_mlir_attr_val
 
-syntax mlir_type : mlir_attr_val
+syntax rir_mlir_type : rir_mlir_attr_val
 
-syntax attrEntry := (ident <|> str) (" = " mlir_attr_val)?
+syntax attrEntry := (ident <|> str) (" = " rir_mlir_attr_val)?
 
 syntax attrDict := "<"? "{" attrEntry,* "}" ">"?
 
-syntax attrDict : mlir_attr_val
+syntax attrDict : rir_mlir_attr_val
 
 /-- `^bb0` or `^name`. `^bb` is a token of its own once `Func` is imported. -/
 syntax bbLabel := ("^bb" noWs (num <|> ident)) <|> ("^" bbId)
 
-syntax resultTypes := ("(" mlir_type,* ")") <|> mlir_type
+syntax resultTypes := ("(" rir_mlir_type,* ")") <|> rir_mlir_type
 
 syntax (ssaValue,+ " = ")? str "(" ssaValue,* ")" ("[" bbLabel,* "]")? (attrDict)? ":" "("
-  mlir_type,* ")" "->" resultTypes : mlir_op
+  rir_mlir_type,* ")" "->" resultTypes : rir_mlir_op
 
-syntax bbArg := ssaValue ":" mlir_type
+syntax bbArg := ssaValue ":" rir_mlir_type
 
-syntax bbLabel ("(" bbArg,* ")")? ":" (comment)? mlir_op* : mlir_bb
+syntax bbLabel ("(" bbArg,* ")")? ":" (comment)? rir_mlir_op* : rir_mlir_bb
 
-syntax "{" mlir_bb+ "}" : mlir_region
+syntax "{" rir_mlir_bb+ "}" : rir_mlir_region
 
-syntax "{" mlir_op* "}" : mlir_region
+syntax "{" rir_mlir_op* "}" : rir_mlir_region
 
 end
 
@@ -219,8 +225,8 @@ partial def vectorDims (cs : List Char) (fixed scalable : List Nat) :
 def intType? (s : String) : Option MLIRType :=
   if s.startsWith "i" then ((s.drop 1).toString.toNat?).map .int else none
 
-def mlirType : TSyntax `mlir_type → CoreM MLIRType
-  | `(mlir_type| $x:ident $[$b]?) => do
+def mlirType : TSyntax `rir_mlir_type → CoreM MLIRType
+  | `(rir_mlir_type| $x:ident $[$b]?) => do
     let s := x.getId.toString
     match s, b with
     | "index", none => return .index
@@ -235,7 +241,7 @@ def mlirType : TSyntax `mlir_type → CoreM MLIRType
       let some t := intType? s | throwErrorAt x "unsupported MLIR type '{s}'"
       return t
     | s, some b => throwErrorAt x "unsupported MLIR type '{s}{bracketsText b}'"
-  | `(mlir_type| ! $x:ident $[$b]?) =>
+  | `(rir_mlir_type| ! $x:ident $[$b]?) =>
     return .undefined (x.getId.toString ++ (b.map (bracketsText ·.raw)).getD "")
   | stx => throwErrorAt stx "malformed MLIR type"
 
@@ -262,29 +268,29 @@ def dialectAttr (dialect body : String) : CoreM AttrValue := do
 
 mutual
 
-partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
-  | `(mlir_attr_val| $n:signedNum $[: $t]?) => do
+partial def attrVal : TSyntax `rir_mlir_attr_val → CoreM AttrValue
+  | `(rir_mlir_attr_val| $n:signedNum $[: $t]?) => do
     return .int (intValue n) (← match t with | some t => mlirType t | none => pure (.int 64))
-  | `(mlir_attr_val| $s:str) => return .str s.getString
-  | `(mlir_attr_val| @ $x:ident) => return .symbol x.getId.toString
-  | `(mlir_attr_val| @ $s:str) => return .symbol s.getString
-  | `(mlir_attr_val| # $x:ident) => return .alias x.getId.toString
-  | `(mlir_attr_val| # $d:ident $b:balancedBrackets) => do
+  | `(rir_mlir_attr_val| $s:str) => return .str s.getString
+  | `(rir_mlir_attr_val| @ $x:ident) => return .symbol x.getId.toString
+  | `(rir_mlir_attr_val| @ $s:str) => return .symbol s.getString
+  | `(rir_mlir_attr_val| # $x:ident) => return .alias x.getId.toString
+  | `(rir_mlir_attr_val| # $d:ident $b:balancedBrackets) => do
     let body := bracketsText b
     dialectAttr d.getId.toString (String.ofList ((body.toList.drop 1).dropLast))
-  | `(mlir_attr_val| dense< $v > : $t) => return .dense (← attrVal v) (← mlirType t)
-  | `(mlir_attr_val| array< $t $[: $vs,*]? >) => do
-    let vs : Array (TSyntax `mlir_attr_val) := (vs.map (·.getElems)).getD #[]
+  | `(rir_mlir_attr_val| dense< $v > : $t) => return .dense (← attrVal v) (← mlirType t)
+  | `(rir_mlir_attr_val| array< $t $[: $vs,*]? >) => do
+    let vs : Array (TSyntax `rir_mlir_attr_val) := (vs.map (·.getElems)).getD #[]
     return .array (← mlirType t) (← vs.toList.mapM attrVal)
-  | `(mlir_attr_val| [ $vs,* ]) => return .list (← vs.getElems.toList.mapM attrVal)
-  | `(mlir_attr_val| $t:mlir_type) => do
+  | `(rir_mlir_attr_val| [ $vs,* ]) => return .list (← vs.getElems.toList.mapM attrVal)
+  | `(rir_mlir_attr_val| $t:rir_mlir_type) => do
     match leaves t.raw with
     | #[x] =>
       if x.isIdent && x.getId.toString == "true" then return .bool true
       if x.isIdent && x.getId.toString == "false" then return .bool false
       return .type (← mlirType t)
     | _ => return .type (← mlirType t)
-  | `(mlir_attr_val| $d:attrDict) => return .dict (← attrDictVal d)
+  | `(rir_mlir_attr_val| $d:attrDict) => return .dict (← attrDictVal d)
   | stx => throwErrorAt stx "malformed MLIR attribute"
 
 partial def attrDictVal : TSyntax ``attrDict → CoreM AttrDict
@@ -301,7 +307,7 @@ partial def attrDictVal : TSyntax ``attrDict → CoreM AttrDict
   | stx => throwErrorAt stx "malformed MLIR attribute dictionary"
 
 /-- A dictionary entry's value; a bare key is `unit`. -/
-partial def attrValOrUnit : Option (TSyntax `mlir_attr_val) → CoreM AttrValue
+partial def attrValOrUnit : Option (TSyntax `rir_mlir_attr_val) → CoreM AttrValue
   | some v => attrVal v
   | none => return .unit
 
@@ -309,7 +315,7 @@ end
 
 def resTypes : TSyntax ``resultTypes → CoreM (List MLIRType)
   | `(resultTypes| ( $ts,* )) => ts.getElems.toList.mapM mlirType
-  | `(resultTypes| $t:mlir_type) => return [← mlirType t]
+  | `(resultTypes| $t:rir_mlir_type) => return [← mlirType t]
   | stx => throwErrorAt stx "malformed result types"
 
 /-- Names paired with their types. -/
@@ -319,8 +325,8 @@ def typed (ref : Syntax) (what : String) (vs : List SSAVal) (ts : List MLIRType)
     throwErrorAt ref "{vs.length} {what}, but {ts.length} types"
   return vs.zip ts
 
-def op : TSyntax `mlir_op → CoreM Op
-  | stx@`(mlir_op| $[$res,* =]? $name:str ( $args,* ) $[[ $succs,* ]]? $[$attrs]?
+def op : TSyntax `rir_mlir_op → CoreM Op
+  | stx@`(rir_mlir_op| $[$res,* =]? $name:str ( $args,* ) $[[ $succs,* ]]? $[$attrs]?
       : ( $argTys,* ) -> $resTys) => do
     let res : Array (TSyntax ``ssaValue) := (res.map (·.getElems)).getD #[]
     let succs : Array (TSyntax ``bbLabel) := (succs.map (·.getElems)).getD #[]
@@ -338,17 +344,17 @@ def bbArgVal : TSyntax ``bbArg → CoreM TypedSSAVal
   | `(bbArg| $v : $t) => return (← valueName v, ← mlirType t)
   | a => throwErrorAt a "malformed block argument"
 
-def block : TSyntax `mlir_bb → CoreM Block
-  | `(mlir_bb| $name:bbLabel $[( $args,* )]? : $[$_]? $ops*) => do
+def block : TSyntax `rir_mlir_bb → CoreM Block
+  | `(rir_mlir_bb| $name:bbLabel $[( $args,* )]? : $[$_]? $ops*) => do
     let args : Array (TSyntax ``bbArg) := (args.map (·.getElems)).getD #[]
     return { name := bbName name, args := ← args.toList.mapM bbArgVal,
              ops := ← ops.toList.mapM op }
   | stx => throwErrorAt stx "malformed MLIR block"
 
 /-- The region `stx`; a region without block headers is one block `^bb0` without arguments. -/
-def region : TSyntax `mlir_region → CoreM Region
-  | `(mlir_region| { $bs:mlir_bb* }) => return ⟨← bs.toList.mapM block⟩
-  | `(mlir_region| { $ops:mlir_op* }) =>
+def region : TSyntax `rir_mlir_region → CoreM Region
+  | `(rir_mlir_region| { $bs:rir_mlir_bb* }) => return ⟨← bs.toList.mapM block⟩
+  | `(rir_mlir_region| { $ops:rir_mlir_op* }) =>
     return ⟨[{ name := "bb0", args := [], ops := ← ops.toList.mapM op }]⟩
   | stx => throwErrorAt stx "malformed MLIR region"
 

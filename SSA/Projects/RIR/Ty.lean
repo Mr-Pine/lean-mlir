@@ -1,6 +1,7 @@
 module
 
 public import SSA.Projects.RIR.SimpSets
+public import LeanMLIR.Util.BitVecLanes
 public import SSA.Projects.RIR.Poison
 public import SSA.Projects.RIR.Memory.Pointer
 public import Lean.ToExpr
@@ -229,39 +230,6 @@ theorem poisoned_vec : poisoned (vec l w) = Vector.replicate l (.poison : Poison
 end
 
 public section FlattenUnflatten
-
-section BitVecs
-
-/-- Pack a Vector of BitVectors into one. -/
-def _root_.BitVec.packLanes {we : Nat} : {n : Nat} → Vector (BitVec we) n → BitVec (we * n)
-  | 0, _ => 0#(we * 0)
-  | _ + 1, v => BitVec.packLanes v.tail ++ v[0]
-
-/-- Lane `i` of a packed bitvector is the `i`-th input lane. -/
-theorem _root_.BitVec.extractLsb'_packLanes {we : Nat} :
-    ∀ {n : Nat} (v : Vector (BitVec we) n) (i : Nat) (h : i < n),
-      (BitVec.packLanes v).extractLsb' (i * we) we = v[i]
-  | 0, _, _, h => absurd h (by omega)
-  | _ + 1, v, 0, _ => by
-    simpa [BitVec.packLanes] using
-      (BitVec.extractLsb'_append_eq_right (a := BitVec.packLanes v.tail) (b := v[0]))
-  | n + 1, v, i + 1, h => by
-    have hi : i < n := by omega
-    have key :
-      (BitVec.packLanes v).extractLsb' ((i + 1) * we) we =
-        (BitVec.packLanes v.tail).extractLsb' (i * we) we := by
-      have hunfold :
-        (BitVec.packLanes v).extractLsb' ((i + 1) * we) we =
-          (BitVec.packLanes v.tail ++ v[0]).extractLsb' ((i + 1) * we) we :=
-        rfl
-      rw [hunfold, show (i + 1) * we = i * we + we from Nat.succ_mul i we,
-        BitVec.extractLsb'_append_eq_of_le (Nat.le_add_left we (i * we))]
-      congr 1
-      omega
-    rw [key, BitVec.extractLsb'_packLanes v.tail i hi]
-    simp [Nat.add_comm]
-
-end BitVecs
 
 def allValues [Inhabited α] (v : Vector (PoisonOr α) n) : PoisonOr (Vector α n) :=
   if ∀ i : Fin n, v[i].isPoison = false then .value (Vector.ofFn fun i => v[i].getValue)

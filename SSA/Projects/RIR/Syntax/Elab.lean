@@ -196,6 +196,7 @@ def instrStx (tys : ValTys) (callee global : String → TSyntax `term) :
     PInstr → CommandElabM (TSyntax `term)
   | .globalAddr symbol d => do
     `(.const ($(global symbol) : Pointer) $(← dstStx tys d))
+  | .fenceSingleThread => `(.fenceSingleThread)
   | .noaliasScopeDecl scope => do
     `(.noaliasScopeDecl $(quote scope))
   | .gepInbounds d p indices => do
@@ -319,7 +320,7 @@ open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
 def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
-    (r : TSyntax `mlir_region) (callees globals : Array (TSyntax ``calleeBinding)) :
+    (r : TSyntax `rir_mlir_region) (callees globals : Array (TSyntax ``calleeBinding)) :
     CommandElabM Unit := do
   let rgn ← liftCoreM (region r)
   let p ← match Prog.ofRegion rgn with
@@ -437,15 +438,15 @@ end
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
 generic-form MLIR region. -/
 syntax (name := mlirDef) (docComment)? "mlir_def " ident (ppSpace bracketedBinder)* " := "
-  mlir_region (" with " calleeBinding,+)? (" globals " calleeBinding,+)? : command
+  rir_mlir_region (" with " calleeBinding,+)? (" globals " calleeBinding,+)? : command
 
 elab_rules : command
-  | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:mlir_region $[with $cs,*]? $[globals $gs,*]?) =>
+  | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:rir_mlir_region $[with $cs,*]? $[globals $gs,*]?) =>
     elabMlirDef doc? x bs r ((cs.map (·.getElems)).getD #[])
       ((gs.map (·.getElems)).getD #[])
 
 /-- `mlir_region% { region }` is the region's AST, a `MLIR.Region`: `translate`'s input. -/
-elab "mlir_region% " r:mlir_region : term => do
+elab "mlir_region% " r:rir_mlir_region : term => do
   return toExpr (← MLIR.region r)
 
 end LeanMLIR.RIR

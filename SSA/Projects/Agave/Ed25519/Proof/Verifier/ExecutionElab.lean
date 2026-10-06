@@ -31,7 +31,7 @@ open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
 def elabExecutionDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
-    (r : TSyntax `mlir_region) (callees globalMap : Array (TSyntax ``calleeBinding)) :
+    (r : TSyntax `rir_mlir_region) (callees globalMap : Array (TSyntax ``calleeBinding)) :
     CommandElabM Unit := do
   let rgn ← liftCoreM (region r)
   let p ← match Prog.ofRegion rgn with
@@ -153,10 +153,10 @@ end
 
 /-- Import the exact region with raw, exactly typed external effects. -/
 syntax (name := executionDef) (docComment)? "execution_def " ident (ppSpace bracketedBinder)* " := "
-  mlir_region (" with " calleeBinding,+)? (" globals " calleeBinding,+)? : command
+  rir_mlir_region (" with " calleeBinding,+)? (" globals " calleeBinding,+)? : command
 
 elab_rules : command
-  | `($[$doc?:docComment]? execution_def $x:ident $bs* := $r:mlir_region $[with $cs,*]? $[globals $gs,*]?) =>
+  | `($[$doc?:docComment]? execution_def $x:ident $bs* := $r:rir_mlir_region $[with $cs,*]? $[globals $gs,*]?) =>
     elabExecutionDef doc? x bs r ((cs.map (·.getElems)).getD #[])
       ((gs.map (·.getElems)).getD #[])
 
