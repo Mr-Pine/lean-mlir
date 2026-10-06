@@ -89,6 +89,11 @@ inductive Instr (Γ : Ctx)
   | binop (op : BinOp t₁ t₂ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
+  /-- An LLVM monotonic atomic byte load, retaining its source ordering marker.
+  RIR models the value read in one sequential execution. Relating this instruction
+  to LLVM requires exclusive access to the byte during the execution; this is not
+  a model of concurrent atomic histories or inter-thread synchronization. -/
+  | loadMonotonic (dst : Dst Γ (.bv 8)) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
   | memset (dst : Reg Γ .ptr) (val : Reg Γ (.bv 8)) (len : Reg Γ (.bv w))
   | memcpy (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))

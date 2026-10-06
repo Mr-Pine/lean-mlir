@@ -223,6 +223,8 @@ def instrStx (tys : ValTys) (callee global : String → TSyntax `term) :
           $(← regStx tys c))
   | .load _ d p => do
     `(.load $(← dstStx tys d) $(← regStx tys p))
+  | .loadMonotonic d p => do
+    `(.loadMonotonic $(← dstStx tys d) $(← regStx tys p))
   | .store _ p v => do
     `(.store $(← regStx tys p) $(← regStx tys v))
   | .memset _ dst v l => do

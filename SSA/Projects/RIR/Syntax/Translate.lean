@@ -57,6 +57,8 @@ inductive PInstr
   | binop {t₁ t₂ t : Ty} (op : BinOp t₁ t₂ t) (dst : Nat) (a b : RegRef)
   | ternop {t₁ t₂ t₃ t : Ty} (op : TernOp t₁ t₂ t₃ t) (dst : Nat) (a b c : RegRef)
   | load (t : Ty) (dst : Nat) (p : RegRef)
+  /-- The extracted monotonic atomic byte load; its marker survives translation. -/
+  | loadMonotonic (dst : Nat) (p : RegRef)
   | store (t : Ty) (p v : RegRef)
   | memset (w : Nat) (p v l : RegRef)
   | memcpy (w : Nat) (dst src l : RegRef)
@@ -477,10 +479,14 @@ def aggregatePath (s : Ty) : List Int → Except String ((t : Ty) × AggregatePa
 def instr (E : Env) (op : Op) : Except String PInstr := do
   let args ← op.args.mapM (operand E)
   let res := result op
+  let ordering : Except String Int :=
+    match op.getAttr? "ordering" with
+    | none => pure 0
+    | some (.int o _) => pure o
+    | some _ => throw "expected an integer `ordering` attribute"
   let checkNotAtomic : Except String Unit := do
-    if let some o := intAttr? op "ordering" then
-      unless o == 0 do
-        throw "atomic accesses are not supported"
+    unless (← ordering) == 0 do
+      throw "atomic accesses are not supported"
   -- the intrinsics' direct calls, as the x86vector dialect spells them
   let name :=
     match op.name, op.getAttr? "callee" with
@@ -683,10 +689,18 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       return .binop (.insertvalue path) dst a v
   | "llvm.load" =>
     do
-      checkNotAtomic
       let (dst, t) ← res
       let [(p, .ptr)] := args | throw "expected one pointer operand"
-      return .load t dst p
+      match ← ordering with
+      | 0 => return .load t dst p
+      | 2 =>
+        unless t == .bv 8 do throw "monotonic atomic load requires an i8 result"
+        if op.hasAttr "volatile_" || op.hasAttr "volatile" || op.hasAttr "syncscope" then
+          throw "monotonic atomic load modifiers are not supported"
+        return .loadMonotonic dst p
+      | _ => throw "only monotonic atomic byte loads are supported"
+  | "llvm.atomicrmw" | "llvm.cmpxchg" =>
+      throw "atomic read-modify-write operations are not supported"
   | "llvm.store" =>
     do
       checkNotAtomic
@@ -1056,6 +1070,7 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Po
   | .ternop op d a b c =>
     return .ternop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b) (← mkReg Γ _ c)
   | .load t d p => return .load (← mkDst Γ t d) (← mkReg Γ .ptr p)
+  | .loadMonotonic d p => return .loadMonotonic (← mkDst Γ (.bv 8) d) (← mkReg Γ .ptr p)
   | .store t p v => return .store (← mkReg Γ .ptr p) (← mkReg Γ t v)
   | .memset w dst v l =>
     return .memset (← mkReg Γ .ptr dst) (← mkReg Γ (.bv 8) v) (← mkReg Γ (.bv w) l)

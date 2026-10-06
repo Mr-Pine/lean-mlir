@@ -106,11 +106,11 @@ mlir_def allocaCount := {
     "llvm.return"() : () -> ()
 }
 
-/-- error: ^bb0: %0 = "llvm.load"(%arg0) : (!llvm.ptr) -> i64: atomic accesses are not supported -/
+/-- error: ^bb0: %0 = "llvm.load"(%arg0) : (!llvm.ptr) -> i64: only monotonic atomic byte loads are supported -/
 #guard_msgs in
 mlir_def atomic := {
   ^bb0(%arg0: !llvm.ptr):
-    %0 = "llvm.load"(%arg0) <{ordering = 2 : i64}> : (!llvm.ptr) -> i64
+    %0 = "llvm.load"(%arg0) <{ordering = 4 : i64}> : (!llvm.ptr) -> i64
     "llvm.return"(%0) : (i64) -> ()
 }
 
