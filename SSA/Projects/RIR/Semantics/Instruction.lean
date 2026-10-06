@@ -66,6 +66,7 @@ def GepIndex.offset (env : ⟪Γ⟫) : GepIndex Γ → PoisonOr (BitVec 64)
 
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
+  | noaliasScopeDecl _ => pure env
   | gep dst base indices =>
     pure (env.write dst (Operation.gepUnflagged (env.read base) (indices.map (·.offset env))))
   | const v dst => pure (env.write dst (Ty.wrap v))
@@ -88,6 +89,14 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   -- more defined than LLVM, where a dead object's bytes are undefined: sound for programs
   -- that only touch live objects
   | lifetimeStart _ _ | lifetimeEnd _ _ => pure env
+
+/-- Scope declarations carry no values and change neither registers nor memory. This does not
+justify aliasing assumptions: LLVM's `alias.scope`/`noalias` promises still belong in the
+source-to-RIR validity contract.
+https://llvm.org/docs/LangRef.html#llvm-experimental-noalias-scope-decl-intrinsic -/
+@[simp, mlir_instr]
+theorem Instr.run_noaliasScopeDecl (env : ⟪Γ⟫) (scope : String) (s : GlobalState) :
+    Instr.run env (.noaliasScopeDecl scope) s = .value (env, s) := rfl
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/

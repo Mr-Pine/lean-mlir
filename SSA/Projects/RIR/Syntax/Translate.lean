@@ -46,6 +46,8 @@ inductive PGepIndex
 
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
+  | globalAddr (symbol : String) (dst : Nat)
+  | noaliasScopeDecl (scope : String)
   | gep (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | const (c : ConstLit) (dst : Nat)
   | poison (t : Ty) (dst : Nat)
@@ -503,6 +505,21 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     do
       let (dst, t) ← res
       return .poison t dst
+  | "llvm.mlir.addressof" =>
+    do
+      let (dst, t) ← res
+      unless t == .ptr && args.isEmpty do
+        throw "addressof requires no operands and a pointer result"
+      let some (.symbol symbol) := op.getAttr? "global_name"
+        | throw "addressof requires a global_name symbol"
+      return .globalAddr symbol dst
+  | "llvm.intr.experimental.noalias.scope.decl" =>
+    do
+      unless op.args.isEmpty && op.res.isEmpty do
+        throw "noalias.scope.decl has no runtime operands or results"
+      let some (.alias scope) := op.getAttr? "scope"
+        | throw "noalias.scope.decl requires a scope metadata alias"
+      return .noaliasScopeDecl scope
   | "llvm.intr.assume" =>
     do
       let [(c, .bv 1)] := args | throw "expected one i1 condition"
@@ -969,7 +986,12 @@ def mkDsts : (ts : List Ty) → List Nat → Except String (Dsts Γ ts)
   | t :: ts, d :: ds => return .cons (← mkDst Γ t d) (← mkDsts ts ds)
   | _, _ => throw "wrong number of registers"
 
-def mkInstr (callees : String → Option Callee) : PInstr → Except String (Instr Γ)
+def mkInstr (callees : String → Option Callee) (globals : String → Option Pointer) :
+    PInstr → Except String (Instr Γ)
+  | .globalAddr symbol dst => do
+    let some ptr := globals symbol | throw s!"no global address bound for @{symbol}"
+    return .const ptr (← mkDst Γ .ptr dst)
+  | .noaliasScopeDecl scope => return .noaliasScopeDecl scope
   | .gep d p indices => do
     let indices ← indices.mapM fun
       | .constant off => pure (GepIndex.constant off)
@@ -1019,8 +1041,8 @@ def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
 end Prog
 
 /-- The `Func` of `p`, calling `callees name` for `@name`. -/
-def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none) :
-    Except String Func := do
+def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
+    (globals : String → Option Pointer := fun _ => none) : Except String Func := do
   let n := p.blocks.length
   let params ←
     p.blocks.toArray.mapM fun b => do
@@ -1033,7 +1055,7 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
       let blocks ←
         p.blocks.toArray.mapM fun b => do
             return ({
-                  body := ← b.body.mapM (mkInstr p.Γ callees)
+                  body := ← b.body.mapM (mkInstr p.Γ callees globals)
                   exit := ← mkExit p.Γ blockTys p.tRets b.exit } :
                 BasicBlock p.Γ p.tRets blockTys)
       if hs : blocks.size = n then
@@ -1047,9 +1069,9 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
     throw "no blocks"
 
 /-- Translate `reg` to a `Func`. -/
-def translate (reg : Region) (callees : String → Option Callee := fun _ => none) :
-    Except String Func := do
-  (← Prog.ofRegion reg).toFunc callees
+def translate (reg : Region) (callees : String → Option Callee := fun _ => none)
+    (globals : String → Option Pointer := fun _ => none) : Except String Func := do
+  (← Prog.ofRegion reg).toFunc callees globals
 
 end
 

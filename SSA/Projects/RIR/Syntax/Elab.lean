@@ -22,6 +22,10 @@ defines it in the shape of a hand lift:
 
 A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`, which may use the binders.
 Every called symbol needs a binding.
+
+`globals @table := ptr` binds an `llvm.mlir.addressof` symbol to a stable `Pointer`. The binding
+does not initialize memory: callers must supply the exact `ByteGlobal.Present` / `GlobalsWF`
+contract and prove writes preserve it. Unbound global symbols are rejected.
 -/
 
 namespace LeanMLIR.RIR
@@ -188,8 +192,12 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
 
 /-- The instruction, calling `callee f` for `@f`. -/
-def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
+def instrStx (tys : ValTys) (callee global : String → TSyntax `term) :
     PInstr → CommandElabM (TSyntax `term)
+  | .globalAddr symbol d => do
+    `(.const ($(global symbol) : Pointer) $(← dstStx tys d))
+  | .noaliasScopeDecl scope => do
+    `(.noaliasScopeDecl $(quote scope))
   | .gep d p indices => do
     let indices ← indices.toArray.mapM fun
       | .constant off => do `(.constant $(← intLit off))
@@ -292,7 +300,7 @@ open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
 def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
-    (r : TSyntax `mlir_region) (callees : Array (TSyntax ``calleeBinding)) :
+    (r : TSyntax `mlir_region) (callees globals : Array (TSyntax ``calleeBinding)) :
     CommandElabM Unit := do
   let rgn ← liftCoreM (region r)
   let p ← match Prog.ofRegion rgn with
@@ -301,6 +309,18 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
   let table ← callees.toList.mapM fun (c : TSyntax ``calleeBinding) => match c with
     | `(calleeBinding| @$f:ident := $t) => pure (f.getId.toString, t)
     | c => throwErrorAt c "malformed callee binding"
+  let globalTable ← globals.toList.mapM fun (c : TSyntax ``calleeBinding) => match c with
+    | `(calleeBinding| @$f:ident := $t) => pure (f.getId.toString, t)
+    | c => throwErrorAt c "malformed global address binding"
+  unless (globalTable.map Prod.fst).eraseDups.length == globalTable.length do
+    throwErrorAt r "duplicate global address binding"
+  for b in p.blocks do
+    for instr in b.body do
+      if let .globalAddr symbol _ := instr then
+        unless (globalTable.lookup symbol).isSome do
+          throwErrorAt r "llvm.mlir.addressof @{symbol}: no address bound; add `globals @{symbol} := …`"
+  let global (f : String) : TSyntax `term :=
+    (globalTable.lookup f).getD (mkIdent (.mkSimple f))
   -- every callee's term, checked against its call sites
   let calls := p.blocks.flatMap fun b => b.body.filterMap fun
     | .call f ts us _ _ => some (f, ts, us)
@@ -321,6 +341,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       Array (TSyntax ``Lean.Parser.Term.bracketedBinder) × Array Ident :=
     let used := b.body.flatMap fun
       | .call f .. => (idents (callee f)).toList
+      | .globalAddr f _ => (idents (global f)).toList
       | _ => []
     let keep := (binders.zip binderNames).filter fun (_, ns) => ns.any used.contains
     (keep.map (·.1), keep.flatMap fun (_, ns) => ns.map mkIdent)
@@ -366,7 +387,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
             fun $alts:matchAlt*)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
-      let body ← b.body.toArray.mapM (instrStx tys callee)
+      let body ← b.body.toArray.mapM (instrStx tys callee global)
       `(def $(blockName b) $bs* : BasicBlock $Γ $tRets $blockTys :=
           { body := [$body,*], exit := $(← exitStx tys b.exit) })
     let blocksVal ←
@@ -395,11 +416,12 @@ end
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
 generic-form MLIR region. -/
 syntax (name := mlirDef) (docComment)? "mlir_def " ident (ppSpace bracketedBinder)* " := "
-  mlir_region (" with " calleeBinding,+)? : command
+  mlir_region (" with " calleeBinding,+)? (" globals " calleeBinding,+)? : command
 
 elab_rules : command
-  | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:mlir_region $[with $cs,*]?) =>
+  | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:mlir_region $[with $cs,*]? $[globals $gs,*]?) =>
     elabMlirDef doc? x bs r ((cs.map (·.getElems)).getD #[])
+      ((gs.map (·.getElems)).getD #[])
 
 /-- `mlir_region% { region }` is the region's AST, a `MLIR.Region`: `translate`'s input. -/
 elab "mlir_region% " r:mlir_region : term => do

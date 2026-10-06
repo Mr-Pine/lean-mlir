@@ -74,6 +74,8 @@ inductive GepIndex (Γ : Ctx)
   | scaled {w : Nat} (stride : Nat) (index : Reg Γ (.bv w))
 
 inductive Instr (Γ : Ctx)
+  /-- A noalias scope declaration is metadata, with no runtime effect. -/
+  | noaliasScopeDecl (scope : String)
   /-- Unflagged GEP: signed indices and wrapping pointer-index arithmetic. -/
   | gep (dst : Dst Γ .ptr) (base : Reg Γ .ptr) (indices : List (GepIndex Γ))
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
