@@ -270,6 +270,18 @@ partial def idents (stx : Syntax) : Array Name :=
   | .node _ _ args => args.flatMap idents
   | _ => #[]
 
+/-- A projection such as `p.mul` mentions the binder `p`. -/
+def binderUsed (used : List Name) (binder : Name) : Bool :=
+  used.any fun name => binder.eraseMacroScopes.isPrefixOf name
+
+/-- Exhaustive dependent elimination of a finite block index. Using `Fin.cases`
+avoids relying on coverage checking for numeric constructor patterns. -/
+def finCases (values : Array (TSyntax `term)) : CommandElabM (TSyntax `term) := do
+  let mut result ← `(fun impossible => Fin.elim0 impossible)
+  for value in values.reverse do
+    result ← `(Fin.cases $value $result)
+  return result
+
 /-- The `Func` bound to `@name`. -/
 def calleeTerm (ref : Syntax) (table : List (String × TSyntax `term)) (name : String) :
     CommandElabM (TSyntax `term) := do
@@ -350,7 +362,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       | .call f .. => (idents (callee f)).toList
       | .globalAddr f _ => (idents (global f)).toList
       | _ => []
-    let keep := (binders.zip binderNames).filter fun (_, ns) => ns.any used.contains
+    let keep := (binders.zip binderNames).filter fun (_, ns) => ns.any (binderUsed used)
     (keep.map (·.1), keep.flatMap fun (_, ns) => ns.map mkIdent)
   let n := p.blocks.length
   let name (s : Name) : Ident := mkIdent (x.getId ++ s)
@@ -387,11 +399,11 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
       if n == 1 then
         `(abbrev $blockParams : (k : Fin 1) → Dsts $Γ ($blockTys k) := fun _ => .nil)
       else
-        let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
-          let ds ← consStx (← b.params.mapM (dstStx tys))
-          `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $ds)
+        let values ← p.blocks.toArray.mapM fun b => do
+          consStx (← b.params.mapM (dstStx tys))
+        let body ← finCases values
         `(abbrev $blockParams : (k : Fin $(num n)) → Dsts $Γ ($blockTys k) :=
-            fun $alts:matchAlt*)
+            $body)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
       let body ← b.body.toArray.mapM (instrStx tys callee global)
@@ -400,10 +412,10 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
     let blocksVal ←
       if let [b] := p.blocks then `(fun _ => $(blockName b) $((blockBinders b).2)*)
       else
-        let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
+        let values ← p.blocks.toArray.mapM fun b => do
           let (_, args) := blockBinders b
-          `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $(blockName b) $args*)
-        `(fun $alts:matchAlt*)
+          `($(blockName b) $args*)
+        finCases values
     let funcDef ←
       `($[$doc?:docComment]? @[reducible] def $x $binders* : Func :=
           { Γ := $Γ, tRets := $tRets, n := $(num n), blockTys := $blockTys,
