@@ -175,6 +175,10 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
     `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num l)))
   | .splat l w v => do
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
+  | .array n w vs => do
+    `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num n)))
+  | .arraySplat n w v => do
+    `((.replicate $(num n) $(← intLit v) : Vector (BitVec $(num w)) $(num n)))
 
 /-- The instruction, calling `callee f` for `@f` or loading `global g` for `@g`. -/
 def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String → TSyntax `term) :

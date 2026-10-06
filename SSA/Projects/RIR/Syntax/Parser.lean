@@ -207,6 +207,8 @@ def mlirType : TSyntax `mlir_type → CoreM MLIRType
       let some elem := intType? elem
         | throwErrorAt b "unsupported vector element type '{elem}'"
       return .vector fixed scalable elem
+    -- only as a `dense<…>` attribute's shape: kept as text, never a register's type
+    | "tensor", some b => return .undefined ("tensor" ++ bracketsText b)
     | s, none =>
       let some t := intType? s | throwErrorAt x "unsupported MLIR type '{s}'"
       return t
