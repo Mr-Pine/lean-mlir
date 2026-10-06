@@ -49,6 +49,7 @@ inductive PInstr
   | globalAddr (symbol : String) (dst : Nat)
   | noaliasScopeDecl (scope : String)
   | gep (dst : Nat) (base : RegRef) (indices : List PGepIndex)
+  | gepInbounds (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | const (c : ConstLit) (dst : Nat)
   | poison (t : Ty) (dst : Nat)
   | assume (cond : RegRef)
@@ -391,6 +392,15 @@ def gepHasFlags (op : Op) : Bool :=
   | some (.int 0 _) => false
   | _ => true
 
+/-- The exact LLVM 22 flag combination emitted for the double-base kernels.
+Additional provenance/range qualifiers are never silently discarded. -/
+def gepAllNoWrapFlags (op : Op) : Bool :=
+  !(op.hasAttr "inrange" || op.hasAttr "inrangeStart" || op.hasAttr "inrangeEnd" ||
+    op.hasAttr "nuw" || op.hasAttr "nusw" || op.hasAttr "inbounds") &&
+  match op.getAttr? "noWrapFlags" with
+  | some (.int 7 (.int 32)) => true
+  | _ => false
+
 def result (op : Op) : Except String (Nat × Ty) := do
   let [(v, t)] := op.res | throw s!"expected one result, found {op.res.length}"
   let some i := v.toNat? | throw s!"unsupported result name %{v}"
@@ -711,13 +721,32 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
     do
       let [(p, .ptr)] := args | throw "expected one pointer operand"
-      let some size := intAttr? op "size" | throw "expected a `size` attribute"
-      unless 0 ≤ size do
-        throw "negative `size`"
+      -- LLVM 22's lifetime intrinsics describe the entire allocated object and
+      -- omit the size operand. Infer only the exact object size of a direct
+      -- alloca already supported by this importer; never guess for a GEP,
+      -- function argument, PHI or arbitrary pointer.
+      let size ← match intAttr? op "size" with
+        | some size => do
+          unless 0 ≤ size do throw "negative `size`"
+          pure size.toNat
+        | none => do
+          let [(name, _)] := op.args | throw "expected one pointer operand"
+          let some alloc := E.defs.lookup name
+            | throw "missing lifetime size: pointer is not a direct alloca"
+          unless alloc.name == "llvm.alloca" do
+            throw "missing lifetime size: pointer is not a direct alloca"
+          let [(count, _)] := alloc.args | throw "expected one alloca count operand"
+          let some countDef := E.defs.lookup count
+            | throw "missing lifetime size: alloca count must be the constant 1"
+          unless countDef.name == "llvm.mlir.constant" && intAttr? countDef "value" == some 1 do
+            throw "missing lifetime size: alloca count must be the constant 1"
+          let some (.type et) := alloc.getAttr? "elem_type"
+            | throw "expected an alloca `elem_type` attribute"
+          Ty.size (← ty et)
       if op.name == "llvm.intr.lifetime.start" then
-        return .lifetimeStart p size.toNat
+        return .lifetimeStart p size
       else
-        return .lifetimeEnd p size.toNat
+        return .lifetimeEnd p size
   | "llvm.getelementptr" =>
     do
       let (dst, t) ← res
@@ -733,6 +762,22 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       if let some ks := constants then
         if let .ok off := gepOffset elem ks then
           return .unop (.gepConst off) dst p
+      if gepAllNoWrapFlags op then
+        -- Folding constants must not hide a failed signed/unsigned truncation.
+        for index in indices do
+          if let .constant k := index then
+            unless 0 ≤ k && k < 2^63 do
+              throw "inbounds GEP constant indices must be nonnegative and fit signed i64"
+        let steps ← gepSteps elem indices
+        for step in steps do
+          match step with
+          | .scaled _ stride _ =>
+            unless stride < 2^63 do
+              throw "inbounds GEP stride must fit signed i64"
+          | .constant off =>
+            unless 0 ≤ off && off < 2^63 do
+              throw "inbounds GEP constant byte offset must be nonnegative and fit signed i64"
+        return .gepInbounds dst p steps
       if gepHasFlags op then
         throw "dynamic or signed GEP with inbounds/nusw/nuw/inrange is not supported"
       return .gep dst p (← gepSteps elem indices)
@@ -992,6 +1037,11 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Po
     let some ptr := globals symbol | throw s!"no global address bound for @{symbol}"
     return .const ptr (← mkDst Γ .ptr dst)
   | .noaliasScopeDecl scope => return .noaliasScopeDecl scope
+  | .gepInbounds d p indices => do
+    let indices ← indices.mapM fun
+      | .constant off => pure (GepIndex.constant off)
+      | .scaled w stride r => return .scaled stride (← mkReg Γ (.bv w) r)
+    return .gepInbounds (← mkDst Γ .ptr d) (← mkReg Γ .ptr p) indices
   | .gep d p indices => do
     let indices ← indices.mapM fun
       | .constant off => pure (GepIndex.constant off)

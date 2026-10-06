@@ -198,6 +198,11 @@ def instrStx (tys : ValTys) (callee global : String → TSyntax `term) :
     `(.const ($(global symbol) : Pointer) $(← dstStx tys d))
   | .noaliasScopeDecl scope => do
     `(.noaliasScopeDecl $(quote scope))
+  | .gepInbounds d p indices => do
+    let indices ← indices.toArray.mapM fun
+      | .constant off => do `(.constant $(← intLit off))
+      | .scaled _ stride r => do `(.scaled $(num stride) $(← regStx tys r))
+    `(.gepInbounds $(← dstStx tys d) $(← regStx tys p) [$indices,*])
   | .gep d p indices => do
     let indices ← indices.toArray.mapM fun
       | .constant off => do `(.constant $(← intLit off))

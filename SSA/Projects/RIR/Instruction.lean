@@ -78,6 +78,8 @@ inductive Instr (Γ : Ctx)
   | noaliasScopeDecl (scope : String)
   /-- Unflagged GEP: signed indices and wrapping pointer-index arithmetic. -/
   | gep (dst : Dst Γ .ptr) (base : Reg Γ .ptr) (indices : List (GepIndex Γ))
+  /-- `inbounds nusw nuw` on the explicit live-allocation subset. -/
+  | gepInbounds (dst : Dst Γ .ptr) (base : Reg Γ .ptr) (indices : List (GepIndex Γ))
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
   /-- `llvm.mlir.poison`. -/
   | poison (dst : Dst Γ τ)

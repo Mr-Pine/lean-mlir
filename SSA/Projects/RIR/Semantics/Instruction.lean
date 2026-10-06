@@ -7,6 +7,7 @@ public import SSA.Projects.RIR.Semantics.Env
 public import SSA.Projects.RIR.Semantics.Regs
 public import SSA.Projects.RIR.Semantics.Operations.Scalar
 public import SSA.Projects.RIR.Semantics.Operations.Memory
+public import SSA.Projects.RIR.Semantics.Operations.InboundsGep
 public import SSA.Projects.RIR.Semantics.Operations.Vector
 public import SSA.Projects.RIR.SimpSets
 
@@ -64,11 +65,19 @@ def GepIndex.offset (env : ⟪Γ⟫) : GepIndex Γ → PoisonOr (BitVec 64)
   | .constant off => .value (BitVec.ofInt 64 off)
   | .scaled stride index => Operation.gepIndex stride (env.read index)
 
+def GepIndex.inboundsOffset (env : ⟪Γ⟫) : GepIndex Γ → PoisonOr Int
+  | .constant off => .value off
+  | .scaled stride index => Operation.gepInboundsIndex stride (env.read index)
+
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | noaliasScopeDecl _ => pure env
   | gep dst base indices =>
     pure (env.write dst (Operation.gepUnflagged (env.read base) (indices.map (·.offset env))))
+  | gepInbounds dst base indices => do
+    let state ← get
+    pure (env.write dst (Operation.gepInboundsLive state.mem (env.read base)
+      (indices.map (·.inboundsOffset env))))
   | const v dst => pure (env.write dst (Ty.wrap v))
   | poison dst => pure (env.write dst (Ty.poisoned _))
   | assume cond => do
