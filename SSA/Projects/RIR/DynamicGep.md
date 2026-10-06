@@ -17,11 +17,12 @@ data layouts remain outside this importer.
 
 The importer resolves `rawConstantIndices` dynamic sentinels against SSA
 operands. An operand defined by `llvm.mlir.constant` is folded using its declared
-signed integer width. If the resulting index list is accepted by the existing
-`gepOffset`, it uses the existing `UnOp.gepConst` path. This preserves existing
-constant-GEP lifts and their proof contracts. In particular, this is **not** a
-repair or a new soundness claim for the legacy constant GEP handling of flags
-or overflow.
+signed integer width. Flags are checked before any constant folding. Supported
+flagged constants use `Instr.gepInbounds`, retaining all allocation and overflow
+checks; unsupported flag combinations reject even when every index is constant.
+Only genuinely unflagged indices accepted by `gepOffset` use the existing
+`UnOp.gepConst` path. This preserves those legacy unflagged lifts; it is not a
+new soundness claim for their overflow behavior.
 
 ## Rejected forms and proof boundary
 

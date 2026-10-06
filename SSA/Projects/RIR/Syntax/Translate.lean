@@ -756,12 +756,8 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
       let elem ← ty et
       let indices ← gepOperands E (← arrayInts op "rawConstantIndices") (op.args.drop 1)
-      -- Keep the legacy constant lift byte-for-byte, including when the LLVM importer
-      -- encodes its constants as SSA operands rather than rawConstantIndices.
-      let constants := indices.mapM fun | .constant k => some k | _ => none
-      if let some ks := constants then
-        if let .ok off := gepOffset elem ks then
-          return .unop (.gepConst off) dst p
+      -- Flag handling precedes folding: even a constant address calculation must
+      -- retain its allocation and overflow obligations.
       if gepAllNoWrapFlags op then
         -- Folding constants must not hide a failed signed/unsigned truncation.
         for index in indices do
@@ -779,7 +775,12 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
               throw "inbounds GEP constant byte offset must be nonnegative and fit signed i64"
         return .gepInbounds dst p steps
       if gepHasFlags op then
-        throw "dynamic or signed GEP with inbounds/nusw/nuw/inrange is not supported"
+        throw "GEP flag combination is not supported"
+      -- Only genuinely unflagged constants may use the legacy constant lift.
+      let constants := indices.mapM fun | .constant k => some k | _ => none
+      if let some ks := constants then
+        if let .ok off := gepOffset elem ks then
+          return .unop (.gepConst off) dst p
       return .gep dst p (← gepSteps elem indices)
   | "llvm.shufflevector" =>
     do

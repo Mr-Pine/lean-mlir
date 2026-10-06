@@ -191,7 +191,7 @@ mlir_def notTerminated := {
 }
 
 /--
-error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: dynamic or signed GEP with inbounds/nusw/nuw/inrange is not supported
+error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: GEP flag combination is not supported
 -/
 #guard_msgs in
 mlir_def gepDynamic := {

@@ -25,11 +25,11 @@ mlir_def nested := {
     "llvm.return"(%0) : (!llvm.ptr) -> ()
 }
 
--- SSA constants produced by llvm-import are still the existing constant lift.
+-- Unflagged SSA constants produced by llvm-import retain the legacy constant lift.
 mlir_def folded := {
   ^bb0(%arg0: !llvm.ptr):
     %0 = "llvm.mlir.constant"() <{value = 3 : i64}> : () -> i64
-    %1 = "llvm.getelementptr"(%arg0, %0) <{elem_type = i64, inbounds, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %1 = "llvm.getelementptr"(%arg0, %0) <{elem_type = i64, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
     "llvm.return"(%1) : (!llvm.ptr) -> ()
 }
 
@@ -86,7 +86,7 @@ private def flagOp (value : MLIR.AttrValue) : MLIR.Op :=
 #guard Translate.gepHasFlags (flagOp (.opaque_ "llvm.GEPNoWrapFlags" "nuw"))
 #guard !Translate.gepHasFlags (flagOp (.opaque_ "llvm.GEPNoWrapFlags" "none"))
 
-/-- error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: dynamic or signed GEP with inbounds/nusw/nuw/inrange is not supported -/
+/-- error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: GEP flag combination is not supported -/
 #guard_msgs in
 mlir_def rejectInbounds := {
   ^bb0(%arg0: !llvm.ptr, %arg1: i64):
