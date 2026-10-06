@@ -1,0 +1,432 @@
+{
+  "base_manifest_sha256": "a5df0990047876600f4644a4ef6754f2d11a1c348e204d5a82515d71efb24277",
+  "crate_llvm_ir_sha256": "2ea5bd097be748ddb48c0361700c0dacb5ee7146c87f29543001e78261c82dcc",
+  "extraction_script_sha256": "9a1cdea9d2c78c0e0edccc25acfd997269a0e2fd0f94b8ea8bc8744f72fb79a1",
+  "reachable_calls": {
+    "agave_point_decompress": [
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519",
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement5112sqrt_ratio_i",
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul",
+      "llvm.experimental.noalias.scope.decl",
+      "llvm.lifetime.end.p0",
+      "llvm.lifetime.start.p0",
+      "llvm.memcpy.p0.p0.i64",
+      "llvm.memset.p0.i64"
+    ],
+    "agave_field_sqrt_ratio_i": [
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519",
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement518pow22501",
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement518to_bytes",
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul",
+      "_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519",
+      "llvm.experimental.noalias.scope.decl",
+      "llvm.lifetime.end.p0",
+      "llvm.lifetime.start.p0",
+      "llvm.memcpy.p0.p0.i64"
+    ],
+    "agave_field_pow22501": [
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul",
+      "llvm.lifetime.end.p0",
+      "llvm.lifetime.start.p0",
+      "llvm.memcpy.p0.p0.i64"
+    ],
+    "agave_field_pow2k": [],
+    "agave_field_to_bytes": [],
+    "agave_subtle_black_box": [],
+    "agave_subtle_bytes_eq": [
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519"
+    ]
+  },
+  "existing_proved_kernel_calls": [
+    "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul"
+  ],
+  "tools": {
+    "llvm-extract": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+    "opt": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n  Default target: x86_64-pc-linux-gnu\n  Host CPU: meteorlake\n",
+    "mlir-translate": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n"
+  },
+  "commands": [
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_18CompressedEdwardsY10decompress",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_point_decompress.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_18CompressedEdwardsY10decompress",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_point_decompress.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_point_decompress.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_point_decompress.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_point_decompress.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement5112sqrt_ratio_i",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_sqrt_ratio_i.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement5112sqrt_ratio_i",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_sqrt_ratio_i.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_sqrt_ratio_i.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_sqrt_ratio_i.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_sqrt_ratio_i.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement518pow22501",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow22501.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement518pow22501",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow22501.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow22501.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow22501.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow22501.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow2k.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow2k.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow2k.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow2k.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_pow2k.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement518to_bytes",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_to_bytes.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement518to_bytes",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_to_bytes.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_to_bytes.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_to_bytes.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_field_to_bytes.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_black_box.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_black_box.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_black_box.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_black_box.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_black_box.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_bytes_eq.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_bytes_eq.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_bytes_eq.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_bytes_eq.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_subtle_bytes_eq.mlir"
+    ]
+  ],
+  "kernels": {
+    "agave_point_decompress": {
+      "target_symbol": "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255197edwardsNtB5_18CompressedEdwardsY10decompress",
+      "original_definition_sha256": "281c799278a9b3f1d57937a74a6fdef33456d9c8ce1f32e5cc3720db0eba17ff",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.add": 10,
+        "llvm.alloca": 10,
+        "llvm.and": 14,
+        "llvm.br": 1,
+        "llvm.call": 5,
+        "llvm.cond_br": 1,
+        "llvm.extractelement": 3,
+        "llvm.func": 5,
+        "llvm.getelementptr": 26,
+        "llvm.icmp": 1,
+        "llvm.insertelement": 1,
+        "llvm.intr.experimental.noalias.scope.decl": 11,
+        "llvm.intr.lifetime.end": 10,
+        "llvm.intr.lifetime.start": 10,
+        "llvm.intr.memcpy": 7,
+        "llvm.intr.memset": 1,
+        "llvm.load": 17,
+        "llvm.lshr": 11,
+        "llvm.mlir.addressof": 1,
+        "llvm.mlir.constant": 28,
+        "llvm.mlir.global": 1,
+        "llvm.mlir.poison": 1,
+        "llvm.module_flags": 1,
+        "llvm.mul": 2,
+        "llvm.return": 1,
+        "llvm.shufflevector": 3,
+        "llvm.store": 16,
+        "llvm.sub": 5,
+        "llvm.xor": 6,
+        "llvm.zext": 1
+      },
+      "files_sha256": {
+        "agave_point_decompress.ll": "dccfc152cd7a71c91417c8693fc09f15f55d8ef285651ea3390893443a8e41c4",
+        "agave_point_decompress.mlir": "f73bbe85d6c8c9630527eb133bac4ac13431b3eb994a8754a5033308af5f990a"
+      }
+    },
+    "agave_field_sqrt_ratio_i": {
+      "target_symbol": "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement5112sqrt_ratio_i",
+      "original_definition_sha256": "3742a4f151951b21be2123d73a0e1a961bbf4aa238c691e3e7c7a0aef10b3254",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.add": 76,
+        "llvm.alloca": 22,
+        "llvm.and": 57,
+        "llvm.call": 21,
+        "llvm.extractelement": 11,
+        "llvm.func": 7,
+        "llvm.getelementptr": 170,
+        "llvm.insertelement": 2,
+        "llvm.intr.experimental.noalias.scope.decl": 6,
+        "llvm.intr.lifetime.end": 21,
+        "llvm.intr.lifetime.start": 21,
+        "llvm.intr.memcpy": 2,
+        "llvm.load": 23,
+        "llvm.lshr": 195,
+        "llvm.mlir.addressof": 1,
+        "llvm.mlir.constant": 60,
+        "llvm.mlir.global": 1,
+        "llvm.mlir.poison": 1,
+        "llvm.module_flags": 1,
+        "llvm.mul": 11,
+        "llvm.or": 18,
+        "llvm.return": 1,
+        "llvm.shl": 16,
+        "llvm.shufflevector": 3,
+        "llvm.store": 166,
+        "llvm.sub": 10,
+        "llvm.trunc": 129,
+        "llvm.xor": 12,
+        "llvm.zext": 2
+      },
+      "files_sha256": {
+        "agave_field_sqrt_ratio_i.ll": "7e1e4c83cae4fe58048d1fbc98d96ca2e475dfeb4b8dca1af7faa4bdb36663a1",
+        "agave_field_sqrt_ratio_i.mlir": "63ab31706f1107ba6759c0ae15bd8671a5fd83ebd4aba4ecf38528772cd55793"
+      }
+    },
+    "agave_field_pow22501": {
+      "target_symbol": "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement518pow22501",
+      "original_definition_sha256": "ab7161228b24d7e1084fb39f24ccafd63faf5ed2d972d2955502bcd921e1bc9b",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.alloca": 20,
+        "llvm.call": 21,
+        "llvm.func": 3,
+        "llvm.getelementptr": 1,
+        "llvm.intr.lifetime.end": 20,
+        "llvm.intr.lifetime.start": 20,
+        "llvm.intr.memcpy": 1,
+        "llvm.mlir.constant": 7,
+        "llvm.module_flags": 1,
+        "llvm.return": 1
+      },
+      "files_sha256": {
+        "agave_field_pow22501.ll": "a3a2018dbd1ce0554539b2f4cbcb04b09978df70ac5031e9f9a9f8a765371566",
+        "agave_field_pow22501.mlir": "9a71e2a1c0ee64f82a9154a85ebb863c1d68748d6f0b3f7d0e5be142df472137"
+      }
+    },
+    "agave_field_pow2k": {
+      "target_symbol": "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k",
+      "original_definition_sha256": "3ebb40f7b975c93676b534cfdd9f075f7e27e2442f7091a36551bef2400427b5",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.add": 17,
+        "llvm.and": 10,
+        "llvm.br": 1,
+        "llvm.cond_br": 1,
+        "llvm.func": 1,
+        "llvm.getelementptr": 8,
+        "llvm.icmp": 1,
+        "llvm.load": 5,
+        "llvm.lshr": 6,
+        "llvm.mlir.constant": 12,
+        "llvm.module_flags": 1,
+        "llvm.mul": 18,
+        "llvm.return": 1,
+        "llvm.shl": 5,
+        "llvm.store": 5,
+        "llvm.trunc": 6,
+        "llvm.zext": 7
+      },
+      "files_sha256": {
+        "agave_field_pow2k.ll": "20707feb02ee18fb0ab7ba035b8754085d735c9a77ef52d01420b90b8b60e50f",
+        "agave_field_pow2k.mlir": "6aaefcfb7c8e5992c4fd2ad1c55756d99d724b72c684671591b7f7a490e40890"
+      }
+    },
+    "agave_field_to_bytes": {
+      "target_symbol": "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement518to_bytes",
+      "original_definition_sha256": "8adda12eded54a45dae350b174f7e6f6cf52e2bcfcdc8567d1c78e0d70d07a4f",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.add": 15,
+        "llvm.and": 10,
+        "llvm.func": 1,
+        "llvm.getelementptr": 35,
+        "llvm.load": 5,
+        "llvm.lshr": 45,
+        "llvm.mlir.constant": 45,
+        "llvm.module_flags": 1,
+        "llvm.mul": 2,
+        "llvm.or": 4,
+        "llvm.return": 1,
+        "llvm.shl": 4,
+        "llvm.store": 32,
+        "llvm.trunc": 32
+      },
+      "files_sha256": {
+        "agave_field_to_bytes.ll": "62c30c0365a74d4306093a2f9e9a5cccbed9fea8326d27c75b1a8d359fbba86b",
+        "agave_field_to_bytes.mlir": "8d9166188332bf189f93a25a310ade7ef44b40979c4355b6df40639c41571736"
+      }
+    },
+    "agave_subtle_black_box": {
+      "target_symbol": "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519",
+      "original_definition_sha256": "288ac76af4ff45bcf1d292807ad851ebfbf70446ea9a3b8596c98bb40e127939",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.alloca": 1,
+        "llvm.func": 1,
+        "llvm.load": 1,
+        "llvm.mlir.constant": 1,
+        "llvm.module_flags": 1,
+        "llvm.return": 1,
+        "llvm.store": 1
+      },
+      "files_sha256": {
+        "agave_subtle_black_box.ll": "6f7c930f68a134dcf607f0e47ffb1c8c90c08ca37042a1839d54438744178907",
+        "agave_subtle_black_box.mlir": "282bf15f46d46070a6aa6019e0de823618fc59ec0d120a5d2e0f1874a1d69618"
+      }
+    },
+    "agave_subtle_bytes_eq": {
+      "target_symbol": "_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519",
+      "original_definition_sha256": "8c5923f7f32291c3fc091d38e679e0eb444ee6627439c494b1f3f3476cd439b9",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.and": 32,
+        "llvm.call": 33,
+        "llvm.func": 3,
+        "llvm.getelementptr": 62,
+        "llvm.icmp": 32,
+        "llvm.load": 64,
+        "llvm.mlir.constant": 32,
+        "llvm.module_flags": 1,
+        "llvm.return": 1,
+        "llvm.zext": 32
+      },
+      "files_sha256": {
+        "agave_subtle_bytes_eq.ll": "ed3321552b98f1fed094a9dea105436ea76a777018b0952c379310c3d7fface9",
+        "agave_subtle_bytes_eq.mlir": "678567a6d97d52ca6cb4fa369a930ec2b16d50149951fccc423acf0c839eaf8c"
+      }
+    }
+  },
+  "boundary": "Original pinned Rust definitions selected from the identical complete crate LLVM artifact. No body rewrite or further inlining. Compilation and MLIR import remain trusted. External declarations retain explicit proof obligations."
+}

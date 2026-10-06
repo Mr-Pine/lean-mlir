@@ -1,0 +1,220 @@
+{
+  "Program": {
+    "source": "generated/agave_point_decompress.mlir",
+    "source_sha256": "f73bbe85d6c8c9630527eb133bac4ac13431b3eb994a8754a5033308af5f990a",
+    "region_sha256": "1707d7ff87042b95428510da474e28727c6d22aef382132a69d8dd91a67892d8",
+    "region_lines": 206,
+    "callees": {
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k": {
+        "field": "pow2k",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 32"
+        ],
+        "returns": []
+      },
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul": {
+        "field": "mul",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement5112sqrt_ratio_i": {
+        "field": "sqrtRatio",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [
+      "alloc_781589f30b7aca1e8db8c1d787298044"
+    ],
+    "normalizations": [],
+    "output_sha256": "6069840cd38040eae06983bd12bcea08e729e4ce6b81bd654ad43d82b628b1ab"
+  },
+  "SqrtRatioProgram": {
+    "source": "generated/agave_field_sqrt_ratio_i.mlir",
+    "source_sha256": "63ab31706f1107ba6759c0ae15bd8671a5fd83ebd4aba4ecf38528772cd55793",
+    "region_sha256": "7b61420f81391001cacdf82b9583edfd70f4d4ec4039cdf9a03887622ec91a40",
+    "region_lines": 1058,
+    "callees": {
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k": {
+        "field": "pow2k",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 32"
+        ],
+        "returns": []
+      },
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul": {
+        "field": "mul",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMs2_NtCsjK63O35OHGN_14solana_ed255195fieldNtNtNtNtNtB7_7backend6serial3u645field14FieldElement518pow22501": {
+        "field": "pow22501",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement518to_bytes": {
+        "field": "toBytes",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519": {
+        "field": "bytesEq",
+        "args": [
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      },
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [
+      "alloc_4a840e2d409aa262ab906382f915ac1f"
+    ],
+    "normalizations": [],
+    "output_sha256": "ac2205a2d81b8345ac00a9d3284b797013a52bd8faac4bb3c279b92bd12d07e4"
+  },
+  "Pow22501Program": {
+    "source": "generated/agave_field_pow22501.mlir",
+    "source_sha256": "9a71e2a1c0ee64f82a9154a85ebb863c1d68748d6f0b3f7d0e5be142df472137",
+    "region_sha256": "e6f22250fc388215ea68eb1481125a270ca2f98c5fba3fcddadb5eea38f1829f",
+    "region_lines": 92,
+    "callees": {
+      "_RNvMs8_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldNtB5_14FieldElement515pow2k": {
+        "field": "pow2k",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 32"
+        ],
+        "returns": []
+      },
+      "_RNvXs5_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u645fieldRNtB5_14FieldElement51NtNtNtCsgxBkk5gSRhY_4core3ops5arith3Mul3mul": {
+        "field": "mul",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      }
+    },
+    "globals": [],
+    "normalizations": [],
+    "output_sha256": "78bf94c1217ec9d4d4c81a17969fcc684ff3ef6455d34df29b4baa504da426b4"
+  },
+  "Pow2kProgram": {
+    "source": "generated/agave_field_pow2k.mlir",
+    "source_sha256": "6aaefcfb7c8e5992c4fd2ad1c55756d99d724b72c684671591b7f7a490e40890",
+    "region_sha256": "249be7ea33ef18ee4c53f6cf88ffa34fc99827cad5cf528396037e947420ee9d",
+    "region_lines": 106,
+    "callees": {},
+    "globals": [],
+    "normalizations": [],
+    "output_sha256": "7401cc21d735251734b5b37cd8c497bce1b2e2e729140117e0b65cf0bed1cc3a"
+  },
+  "ToBytesProgram": {
+    "source": "generated/agave_field_to_bytes.mlir",
+    "source_sha256": "8d9166188332bf189f93a25a310ade7ef44b40979c4355b6df40639c41571736",
+    "region_sha256": "2cd5640d81370c8b06b4ae959f59439be1da97173b36119d255fdc1061073892",
+    "region_lines": 231,
+    "callees": {},
+    "globals": [],
+    "normalizations": [],
+    "output_sha256": "a12aac2bcc2df1d200cb5ac33321bd50b13ae42ab7ca890516f8ee8ece6dc14e"
+  },
+  "BlackBoxProgram": {
+    "source": "generated/agave_subtle_black_box.mlir",
+    "source_sha256": "282bf15f46d46070a6aa6019e0de823618fc59ec0d120a5d2e0f1874a1d69618",
+    "region_sha256": "2156bc98be126d6a7d5526601e4c510f6ff13be13ba2b72d3f5be77d5f644110",
+    "region_lines": 6,
+    "callees": {},
+    "globals": [],
+    "normalizations": [],
+    "output_sha256": "b137bc7175f1e97e0d168bc9e852a68c8b76efd6fe5ec8ebbfca6ec8a933962e"
+  },
+  "BytesEqProgram": {
+    "source": "generated/agave_subtle_bytes_eq.mlir",
+    "source_sha256": "678567a6d97d52ca6cb4fa369a930ec2b16d50149951fccc423acf0c839eaf8c",
+    "region_sha256": "7cc3cc11e6e716d6063b724ba74cac13f9f6e29025165ffa5a2e4fdfd1c1fae2",
+    "region_lines": 289,
+    "callees": {
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [],
+    "normalizations": [],
+    "output_sha256": "f3e4dbd60cb0df7aeb7a273fe323a27888b436c0ab263d2f43744d783b980f3e"
+  },
+  "byteGlobals": [
+    {
+      "symbol": "alloc_781589f30b7aca1e8db8c1d787298044",
+      "length": 40,
+      "alignment": 8,
+      "bytes_hex": "a3785913ca4d0300bd6e153b28a8010029c00160a2e70500bb3ca063c6390700ffb6e2ce36200500",
+      "sha256": "c96d6af49253ecfceee68a826689b320ac7ca28218ebc06151f59d4afb5871ea",
+      "source": "agave_point_decompress.mlir",
+      "lean_name": "curveD"
+    },
+    {
+      "symbol": "alloc_4a840e2d409aa262ab906382f915ac1f",
+      "length": 40,
+      "alignment": 8,
+      "bytes_hex": "b0a00e4a271b06009d188ffca5d50000600cbd9c5eef07009e4c80a6958507001dfc044832b80200",
+      "sha256": "6056bce51c6c9c641736211d7f290c9c299b9316a881cc04bf60af6ca11f4f55",
+      "source": "agave_field_sqrt_ratio_i.mlir",
+      "lean_name": "sqrtM1"
+    }
+  ],
+  "import_inputs_sha256": {
+    "MLIR/import_decompress.py": "0b524b0af928a7448a1f76c0b5a0d7c9634c000a55c841143467e7033460a4c4",
+    "Proof/Verifier/ExecutionElab.lean": "a1a8061029b6cde8219a323c21d41412298640e06dfbf94ee2033b042083a6d2"
+  }
+}
