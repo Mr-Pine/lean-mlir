@@ -39,8 +39,14 @@ def ConstLit.ty : ConstLit → Ty
   | .bv w _ => .bv w
   | .vec l w _ | .splat l w _ => .vec l w
 
+/-- One checked offset in a GEP. -/
+inductive PGepIndex
+  | constant (byteOff : Int)
+  | scaled (w stride : Nat) (index : RegRef)
+
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
+  | gep (dst : Nat) (base : RegRef) (indices : List PGepIndex)
   | const (c : ConstLit) (dst : Nat)
   | poison (t : Ty) (dst : Nat)
   | unop {t₁ t : Ty} (op : UnOp t₁ t) (dst : Nat) (a : RegRef)
@@ -312,6 +318,66 @@ def operand (E : Env) (v : TypedSSAVal) : Except String (RegRef × Ty) := do
   unless t == t' do
     throw s!"%{v.1} has type {t.toMLIR} but is used at {t'.toMLIR}"
   return (r, t)
+
+inductive GepOperand
+  | constant (index : Int)
+  | dynamic (w : Nat) (reg : RegRef)
+
+/-- Resolve the MLIR dynamic-index sentinel, including SSA integer constants.
+The declared integer width matters: i8 255 is index -1, not index 255. -/
+def gepOperands (E : Env) : List Int → List TypedSSAVal → Except String (List GepOperand)
+  | [], [] => return []
+  | [], _ => throw "unused GEP index operands"
+  | k :: ks, args => do
+    if k != -2147483648 then
+      return .constant k :: (← gepOperands E ks args)
+    let a :: rest := args | throw "missing GEP index operand"
+    let (r, .bv w) ← operand E a | throw "GEP indices must be scalar integers"
+    unless 0 < w do throw "GEP index has zero width"
+    let index :=
+      match E.defs.lookup a.1 with
+      | some op =>
+        if op.name == "llvm.mlir.constant" then
+          match intAttr? op "value" with
+          | some v => GepOperand.constant (BitVec.ofInt w v).toInt
+          | none => .dynamic w r
+        else .dynamic w r
+      | none => .dynamic w r
+    return index :: (← gepOperands E ks rest)
+
+def GepOperand.scaled (stride : Nat) : GepOperand → PGepIndex
+  | .constant k => .constant (k * stride)
+  | .dynamic w r => .scaled w stride r
+
+/-- LLVM allows sequential (array/vector) indices outside the static type's length;
+only structure selectors must be in range and constant. -/
+def gepStepsTail : Ty → List GepOperand → Except String (List PGepIndex)
+  | _, [] => return []
+  | t, k :: ks => do
+    match t with
+    | .struct _ =>
+      let .constant k := k | throw "structure GEP index must be constant"
+      unless 0 ≤ k do throw "negative structure GEP index"
+      let (off, elem) ← Ty.index k.toNat t
+      return .constant off :: (← gepStepsTail elem ks)
+    | .array _ elem =>
+      return k.scaled (← Ty.size elem) :: (← gepStepsTail elem ks)
+    | .vec _ w =>
+      return k.scaled (← Ty.sizeAlign (.bv w)).1 :: (← gepStepsTail (.bv w) ks)
+    | _ => throw s!"cannot index into {repr t}"
+
+def gepSteps (t : Ty) : List GepOperand → Except String (List PGepIndex)
+  | [] => return []
+  | k :: ks => return k.scaled (← Ty.size t) :: (← gepStepsTail t ks)
+
+def gepHasFlags (op : Op) : Bool :=
+  op.hasAttr "inbounds" || op.hasAttr "inrange" || op.hasAttr "inrangeStart" ||
+  op.hasAttr "inrangeEnd" || op.hasAttr "nuw" || op.hasAttr "nusw" ||
+  match op.getAttr? "noWrapFlags" with
+  | none => false
+  | some (.opaque_ "llvm.GEPNoWrapFlags" "none") => false
+  | some (.int 0 _) => false
+  | _ => true
 
 def result (op : Op) : Except String (Nat × Ty) := do
   let [(v, t)] := op.res | throw s!"expected one result, found {op.res.length}"
@@ -602,9 +668,19 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let (dst, t) ← res
       unless t == .ptr do
         throw "expected a pointer result"
-      let [(p, .ptr)] := args | throw "only constant indices are supported"
+      let (p, .ptr) :: _ := args | throw "expected a pointer base operand"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .unop (.gepConst (← gepOffset (← ty et) (← arrayInts op "rawConstantIndices"))) dst p
+      let elem ← ty et
+      let indices ← gepOperands E (← arrayInts op "rawConstantIndices") (op.args.drop 1)
+      -- Keep the legacy constant lift byte-for-byte, including when the LLVM importer
+      -- encodes its constants as SSA operands rather than rawConstantIndices.
+      let constants := indices.mapM fun | .constant k => some k | _ => none
+      if let some ks := constants then
+        if let .ok off := gepOffset elem ks then
+          return .unop (.gepConst off) dst p
+      if gepHasFlags op then
+        throw "dynamic or signed GEP with inbounds/nusw/nuw/inrange is not supported"
+      return .gep dst p (← gepSteps elem indices)
   | "llvm.shufflevector" =>
     do
       let (dst, .vec l₂ wₒ) ← res | throw "expected vector output type"
@@ -850,6 +926,11 @@ def mkDsts : (ts : List Ty) → List Nat → Except String (Dsts Γ ts)
   | _, _ => throw "wrong number of registers"
 
 def mkInstr (callees : String → Option Callee) : PInstr → Except String (Instr Γ)
+  | .gep d p indices => do
+    let indices ← indices.mapM fun
+      | .constant off => pure (GepIndex.constant off)
+      | .scaled w stride r => return .scaled stride (← mkReg Γ (.bv w) r)
+    return .gep (← mkDst Γ .ptr d) (← mkReg Γ .ptr p) indices
   | .const c d => return .const c.value (← mkDst Γ _ d)
   | .poison t d => return .poison (← mkDst Γ t d)
   | .unop op d a => return .unop op (← mkDst Γ _ d) (← mkReg Γ _ a)

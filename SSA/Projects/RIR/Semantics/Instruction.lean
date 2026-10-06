@@ -59,8 +59,14 @@ def Env.writeMany (env : ⟪Γ⟫) : Dsts Γ ts → Vals ts → ⟪Γ⟫
   | .nil, .nil => env
   | .cons d ds, .cons v vs => (env.write d v).writeMany ds vs
 
+def GepIndex.offset (env : ⟪Γ⟫) : GepIndex Γ → PoisonOr (BitVec 64)
+  | .constant off => .value (BitVec.ofInt 64 off)
+  | .scaled stride index => Operation.gepIndex stride (env.read index)
+
 @[mlir_instr]
 def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
+  | gep dst base indices =>
+    pure (env.write dst (Operation.gepUnflagged (env.read base) (indices.map (·.offset env))))
   | const v dst => pure (env.write dst (Ty.wrap v))
   | poison dst => pure (env.write dst (Ty.poisoned _))
   | unop op dst a => pure (env.write dst (op.compute (env.read a)))

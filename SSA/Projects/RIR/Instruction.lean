@@ -66,7 +66,14 @@ inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   vector {l w₁ w₂ w₃ w : Nat} (op : TernOp (.bv w₁) (.bv w₂) (.bv w₃) (.bv w)) :
     TernOp (.vec l w₁) (.vec l w₂) (.vec l w₃) (.vec l w)
 
+/-- A byte offset or a scaled, signed LLVM GEP index. Pointer index width is 64. -/
+inductive GepIndex (Γ : Ctx)
+  | constant (byteOff : Int)
+  | scaled {w : Nat} (stride : Nat) (index : Reg Γ (.bv w))
+
 inductive Instr (Γ : Ctx)
+  /-- Unflagged GEP: signed indices and wrapping pointer-index arithmetic. -/
+  | gep (dst : Dst Γ .ptr) (base : Reg Γ .ptr) (indices : List (GepIndex Γ))
   | const (v : ⟦τ⟧ᵣ) (dst : Dst Γ τ)
   /-- `llvm.mlir.poison`. -/
   | poison (dst : Dst Γ τ)

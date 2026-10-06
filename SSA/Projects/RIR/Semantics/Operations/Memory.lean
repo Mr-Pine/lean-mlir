@@ -51,6 +51,19 @@ def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Poi
     .poison
   return ptr.add off
 
+/-- LLVM GEP without no-wrap flags. Sign extension/truncation happens before scaling;
+all offset arithmetic wraps at the (64-bit) pointer index width. Unlike the legacy
+`gep` helper, wrapping is defined here, including when a negative index moves backwards. -/
+def gepUnflagged (ptr : PoisonOr Pointer) (offsets : List (PoisonOr (BitVec 64))) :
+    PoisonOr Pointer := do
+  let ptr ← ptr
+  let off ← offsets.foldlM (fun acc step => return acc + (← step)) 0
+  return ptr.add off
+
+def gepIndex (stride : Nat) (index : PoisonOr (BitVec w)) : PoisonOr (BitVec 64) := do
+  let index ← index
+  return BitVec.ofInt 64 index.toInt * BitVec.ofNat 64 stride
+
 def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let .value (dst, val, len) := do
     return (← dst, ← val, (← len).toNat) | throwUB

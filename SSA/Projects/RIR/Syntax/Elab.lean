@@ -188,6 +188,11 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
 /-- The instruction, calling `callee f` for `@f`. -/
 def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
     PInstr → CommandElabM (TSyntax `term)
+  | .gep d p indices => do
+    let indices ← indices.toArray.mapM fun
+      | .constant off => do `(.constant $(← intLit off))
+      | .scaled _ stride r => do `(.scaled $(num stride) $(← regStx tys r))
+    `(.gep $(← dstStx tys d) $(← regStx tys p) [$indices,*])
   | .const c d => do
     `(.const $(← constStx c) $(← dstStx tys d))
   | .poison _ d => do
