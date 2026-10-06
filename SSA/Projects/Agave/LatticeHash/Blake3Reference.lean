@@ -1,10 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import SSA.Projects.Agave.LatticeHash.Equivalence
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 500000
-set_option linter.unusedSimpArgs false
-
 /-!
 An independent manual transcription of the unkeyed, one-shot, portable path in
 the locked Rust `blake3` crate 1.8.7. `portable.rs` uses sequential assignments,
@@ -237,7 +233,7 @@ theorem advance64_eq (m : Message) (j : Nat) :
   unfold advance64 inputAt
   congr 1
   · funext i
-    simp [advance64, inputAt, Nat.mul_add, Nat.add_assoc]
+    simp [Nat.mul_add, Nat.add_assoc]
 
 theorem firstBlock_eq (m : Message) (j : Nat)
     (hj : j < AgaveBatchControl.rootIndex m.length) :
@@ -490,14 +486,5 @@ theorem simdUpdate_eq_portableReference {n : Nat} (hn : 0 < n)
       (fun z l => AgaveStaging.plus z ((portableLtHash (ms l)).getD AgaveStaging.zero)) a := by
   simp only [portableLtHash_eq_oneChunk _ (hm _), Option.getD_some]
   exact AgaveConcrete.simdUpdate_eq_fold hn hp ms hm a
-
-/-- info: 'AgaveBlake3Reference.portableLtHash_eq_oneChunk' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms portableLtHash_eq_oneChunk
-/-- info: 'AgaveBlake3Reference.referenceHash_eq_scalarHash' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms referenceHash_eq_scalarHash
-/-- info: 'AgaveBlake3Reference.publicHash_eq_portableReference' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms publicHash_eq_portableReference
-/-- info: 'AgaveBlake3Reference.simdUpdate_eq_portableReference' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms simdUpdate_eq_portableReference
 
 end AgaveBlake3Reference

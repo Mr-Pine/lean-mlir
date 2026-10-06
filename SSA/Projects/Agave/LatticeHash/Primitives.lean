@@ -2,9 +2,6 @@
 import Std
 import Lean.Elab.Tactic.Omega
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-
 namespace AgaveLattice
 
 -- The AVX2 shift/or arms equal the AVX-512 lane rotate semantics.
@@ -253,43 +250,5 @@ theorem input_tile16_range (len k : Nat) (hlen : len ≤ 1024) :
     laneAt len k * 64 / 4 + 16 ≤ 256 := by
   have := lane_read_bounds len k hlen
   omega
-
-
-
-
-
-#print axioms ror16
-#print axioms ror12
-#print axioms ror8
-#print axioms ror7
-#print axioms avx2_mask_select
-#print axioms mask16_exact
-#print axioms avx512_mask_select
-#print axioms add16_lo
-#print axioms add16_hi
-#print axioms add16_assoc
-#print axioms add16_comm
-#print axioms fold16_lo
-#print axioms fold16_hi
-#print axioms fold16_reassociate
-#print axioms reduction_lo
-#print axioms reduction_hi
-#print axioms laneStep_min
-#print axioms laneAt_exact
-#print axioms root_bounds
-#print axioms all_lanes_finished_by_15
-#print axioms active_iff_not_root
-#print axioms lane_read_bounds
-#print axioms root_size
-#print axioms cvAt_exact
-#print axioms layout8_range
-#print axioms layout16_range
-#print axioms layout8_cover
-#print axioms layout16_cover
-#print axioms layout8_unique
-#print axioms layout16_unique
-#print axioms input_word_offset
-#print axioms input_tile8_range
-#print axioms input_tile16_range
 
 end AgaveLattice

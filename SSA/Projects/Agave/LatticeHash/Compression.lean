@@ -289,12 +289,3 @@ theorem laneXofBlock_project {n : Nat} (cv : CV (Lanes n)) (m : State (Lanes n))
   rfl
 
 end Blake3Compression
-
-#print axioms Blake3Compression.laneG_project
-#print axioms Blake3Compression.roundFn_project
-#print axioms Blake3Compression.rounds_project
-#print axioms Blake3Compression.sevenRounds_project
-#print axioms Blake3Compression.laneCompressPre_project
-#print axioms Blake3Compression.laneCompress_project
-#print axioms Blake3Compression.laneCompressCV_project
-#print axioms Blake3Compression.laneXofBlock_project

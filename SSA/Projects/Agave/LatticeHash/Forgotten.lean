@@ -1,9 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import Std
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-
 /-!
 Separate concrete byte-addressed staging model for the known client-mem::forget
 counterexample. Raw.flush resets count but deliberately retains curLen and lane
@@ -120,18 +117,15 @@ theorem actual_inputs_differ_between_widths :
 -- spilled guard has curLen=0 yet retains all its data in serial_hasher.
 def forgottenSpilled (w : Nat) : Raw := append (initial w) (List.replicate 1025 7)
 
+-- Reducing the concrete 1025-byte spill exceeds the default recursion limit.
+set_option maxRecDepth 16384 in
 theorem curLen_zero_alone_is_insufficient :
     (forgottenSpilled 8).curLen = 0 ∧ (forgottenSpilled 8).spilled = true ∧
     clean (forgottenSpilled 8) = false := by decide
 
+set_option maxRecDepth 16384 in
 theorem spilled_release_keeps_forgotten_prefix :
     let (_, s) := take (forgottenSpilled 8)
     (take (addMessage s [67])).1 = [List.replicate 1025 7 ++ [67]] := by decide
-
-#print axioms width1_counterexample
-#print axioms width8_counterexample
-#print axioms width16_counterexample
-#print axioms actual_inputs_differ_between_widths
-#print axioms spilled_release_keeps_forgotten_prefix
 
 end AgaveForgotten

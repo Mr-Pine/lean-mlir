@@ -2,10 +2,6 @@
 import Std
 import Lean.Elab.Tactic.Omega
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 Manual semantic model of lattice-hash/src/batch.rs, at message level.
 The implementation relation abstracts correctly padded lane storage to message
@@ -156,7 +152,7 @@ theorem append_bounds (s : Impl) (w : Nat) (p : Message) (h : Bounds w s) :
   rcases h with ⟨hn, hp, hl⟩
   unfold append
   cases hs : s.spilled <;> simp_all [Bounds, PendingOK, spill]
-  split <;> simp_all [Bounds, PendingOK, spill, List.length_append]
+  split <;> simp_all [List.length_append]
 
 theorem append_denote (hash : Message → Value) (s : Impl) (p : Message) :
     Denote hash (append s p) = Denote hash s := by
@@ -276,7 +272,6 @@ theorem take_correct (hash : Message → Value) (w : Nat) (b : Backend hash w)
     · simpa [Denote, hp] using hd'.trans hd
     · simpa [Refines, specInit, CurrentMatches, Denote, Bounds, Clean, PendingOK, hp] using And.intro hfb (And.intro hf (show zero = zero from rfl))
 
-
 theorem begin_refines (hash : Message → Value) (w : Nat) (s : Impl) (r : Spec)
     (h : Refines hash w s r) (hi : r.active = none) :
     Refines hash w s { r with active := some [] } := by
@@ -388,7 +383,5 @@ theorem saturating_append_guard (current incoming usizeMax : Nat)
     (hmax : 1024 < usizeMax) :
     min (current + incoming) usizeMax ≤ 1024 ↔ current + incoming ≤ 1024 := by
   omega
-
-#print axioms observational_equivalence_widths_1_8_16
 
 end AgaveStaging

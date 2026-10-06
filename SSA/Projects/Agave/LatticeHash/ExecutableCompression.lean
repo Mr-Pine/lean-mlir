@@ -64,8 +64,6 @@ theorem vectorXofBlock_eq (cv : CV Word) (m : State Word) (counter : Counter) (b
   rw [vectorXofBlock, vectorCompress_eq]
   rfl
 
-#print axioms vectorXofBlock_eq
-
 /-- Materialize the compression output to prevent repeated executable recomputation. -/
 def vectorCompressState (cv : CV Word) (m : State Word) (counter : Counter)
     (blockLen flags : Word) : Vector Word 16 :=
@@ -124,9 +122,5 @@ theorem vectorChunkBlock_eq (m : AgaveConcrete.Message) (out : Fin 32) :
   simp only [vectorChunkBlock, get64, vectorCompressState_get, vectorPrefix_get,
     AgaveConcrete.oneChunkWords, AgaveBatchControl.scalarXofAt, AgaveConcrete.xof,
     AgaveConcrete.counter, Nat.mul_zero, Nat.add_zero]
-
-/-- info: 'Blake3Compression.Executable.vectorChunkBlock_eq' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms vectorChunkBlock_eq
 
 end Blake3Compression.Executable

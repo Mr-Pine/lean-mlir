@@ -1,10 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import SSA.Projects.Agave.LatticeHash.PhysicalMixed
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 The entire observable output stream of a synchronized public event sequence.
 The events are chronological. Every drain records the LtHash actually returned
@@ -267,12 +263,5 @@ theorem every_legal_trace (longHash : AgaveConcrete.Message → Value)
       _ AgaveLattice.avx2_isTranspose events legal,
     specEval_lift longHash 16 (by decide) (by decide)
       _ AgaveLattice.avx512_isTranspose events legal⟩
-
-/-- info: 'AgaveOutputLog.reference_eq_avx2_eq_avx512' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms reference_eq_avx2_eq_avx512
-/-- info: 'AgaveOutputLog.every_legal_trace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms every_legal_trace
 
 end AgaveOutputLog

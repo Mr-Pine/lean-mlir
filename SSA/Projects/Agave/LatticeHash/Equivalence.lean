@@ -4,10 +4,6 @@ import SSA.Projects.Agave.LatticeHash.BatchControl
 import SSA.Projects.Agave.LatticeHash.TransposeReduction
 import SSA.Projects.Agave.LatticeHash.Staging
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 Concrete composition of the manually transcribed Agave lattice-hash models.
 The one-chunk oracle is byte-level BLAKE3: exact IV, little-endian loads,
@@ -19,7 +15,6 @@ This is a theorem about these Lean semantic models, not Rust extraction or a
 compiler/machine-code verification theorem.
 -/
 namespace AgaveConcrete
-
 
 abbrev Byte := BitVec 8
 abbrev Word := BitVec 32
@@ -150,7 +145,7 @@ theorem simdStep_eq {n : Nat} (hn : 0 < n) {perm : AgaveLattice.Matrix}
   unfold simdStep AgaveBatchControl.batchStep AgaveBatchControl.laneStep
   simp only [selectWord_eq]
   by_cases ha : (s l).off + 64 < lengths l
-  · simp only [decide_eq_true ha, Bool.true_eq, ↓reduceIte, Nat.not_le.mpr ha]
+  · simp only [decide_eq_true ha, ↓reduceIte, Nat.not_le.mpr ha]
     congr 1
     funext w
     change Blake3Compression.project (Blake3Compression.laneCompressCV _ _ _ _ _) l w = _
@@ -394,20 +389,5 @@ theorem reference_eq_avx2_eq_avx512 (longHash : Message → Value)
     avx2_observational_equivalence longHash trace8 idle,
     avx512_observational_equivalence longHash trace16 idle]
   exact ⟨rfl, rfl⟩
-
-#print axioms loaded_project
-#print axioms simdStep_eq
-#print axioms simdRun_eq
-#print axioms simdXofAt_project
-#print axioms rootState_eq
-#print axioms batchXofWords_correct
-#print axioms simdUpdate_eq_fold
-#print axioms run_correct
-#print axioms reference_observational_equivalence
-#print axioms avx2_observational_equivalence
-#print axioms avx512_observational_equivalence
-#print axioms avx2_eq_avx512
-/-- info: 'AgaveConcrete.reference_eq_avx2_eq_avx512' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms reference_eq_avx2_eq_avx512
 
 end AgaveConcrete

@@ -2,10 +2,6 @@
 import SSA.Projects.Agave.LatticeHash.PhysicalStaging
 import SSA.Projects.Agave.LatticeHash.MixedLifecycle
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 The combined public lifecycle proof. Full batches execute the concrete kernel
 over the retained allocation, scalar tails and spill prefixes read that same
@@ -200,14 +196,4 @@ theorem returned_observable_equivalence {α : Type} (observe : Value → α)
   have h := physical_reference_eq_avx2_eq_avx512 longHash trace1 trace8 trace16 idle
   exact ⟨congrArg observe h.1, congrArg observe h.2⟩
 
-#print axioms run_simulates
-#print axioms run_lift
-/-- info: 'AgavePhysicalMixed.physical_reference_eq_avx2_eq_avx512' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms physical_reference_eq_avx2_eq_avx512
-/-- info: 'AgavePhysicalMixed.returned_observable_equivalence' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms returned_observable_equivalence
-
 end AgavePhysicalMixed
-

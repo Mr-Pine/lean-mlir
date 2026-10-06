@@ -1,10 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import SSA.Projects.Agave.LatticeHash.Equivalence
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 Physical staging refinement for the manual Agave models.  The retained allocation
 is genuinely finite: sixteen lanes, each of 1024 bytes.  Only the active width's
@@ -86,7 +82,7 @@ theorem padding_matches (len : Nat) :
 
 theorem byte_append_left (m part : Message) (i : Nat) (hi : i < m.length) :
     byte (m ++ part) i = byte m i := by
-  simp [byte, AgaveConcrete.bytes, AgaveConcrete.toBytes, List.getElem_append, hi,
+  simp [byte, AgaveConcrete.bytes, AgaveConcrete.toBytes, hi,
     Nat.lt_of_lt_of_le hi (Nat.le_add_right _ _)]
 
 theorem byte_append_right (m part : Message) (i : Nat)
@@ -284,7 +280,7 @@ theorem take_represents (hash : Message → Value) (w : Nat) (b : Backend hash w
   by_cases he : p.count = 0
   · have hp : s.pending = [] := List.length_eq_zero_iff.mp (hr.count.symm.trans he)
     simp only [he, hp, List.isEmpty_nil, ↓reduceIte]
-    exact ⟨by simpa [hp] using hr.count, hr.cursor, by simp [hp], hr.current⟩
+    exact ⟨by simpa [hp] using hr.count, hr.cursor, by simp, hr.current⟩
   · have hp : s.pending.isEmpty = false := by
       have hn : s.pending ≠ [] := by intro hh; apply he; simpa [hh] using hr.count
       cases hh : s.pending with
@@ -813,9 +809,7 @@ theorem avx2_physical_eq_avx512 (longHash : AgaveConcrete.Message → Value)
 
 theorem reference_isTranspose : AgaveLattice.IsTranspose 1 AgaveLattice.labels := by
   intro r c
-  have hr : r.val = 0 := by have := r.isLt; omega
-  have hc : c.val = 0 := by have := c.isLt; omega
-  simp [AgaveLattice.labels, hr, hc]
+  simp [AgaveLattice.labels]
 
 theorem reference_physical_observational_equivalence (longHash : AgaveConcrete.Message → Value)
     {p : Store} {s : Impl} {r : Spec}
@@ -881,25 +875,4 @@ theorem discard_preserves_all_bytes (p : Store) : (discardStore p).memory = p.me
 
 theorem clear_preserves_all_bytes (p : Store) : (clearStore p).memory = p.memory := rfl
 
-#print axioms append_represents
-#print axioms finish_represents
-#print axioms run_represents
-#print axioms run_lift
-#print axioms reached_full_flush_valid
-#print axioms retainedUpdate_eq_canonical
-#print axioms physicalUpdate_correct
-#print axioms reached_full_kernel_correct
-#print axioms physicalAppend_eq
-#print axioms physicalFlush_eq
-#print axioms concrete_run_simulates
-#print axioms concrete_observational_equivalence
-#print axioms concrete_run_lift
-#print axioms avx2_physical_eq_avx512
-#print axioms reached_access_bounds
-
-/-- info: 'AgavePhysicalStaging.physical_reference_eq_avx2_eq_avx512' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs (whitespace := lax) in
-#print axioms physical_reference_eq_avx2_eq_avx512
-
 end AgavePhysicalStaging
-

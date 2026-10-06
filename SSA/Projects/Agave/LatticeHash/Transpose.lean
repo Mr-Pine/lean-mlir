@@ -1,8 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import Std
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
 namespace AgaveLattice
 abbrev Label := Nat × Nat
 abbrev Row := Nat → Label
@@ -152,15 +150,9 @@ theorem transpose8_payload {α : Type} (m : Nat → Nat → α) (r c : Fin 8) :
   unfold applyPerm
   rw [transpose8_mapping r c]
 
-#print axioms transpose8_mapping
-#print axioms transpose8_payload
-
 theorem transpose16_payload {α : Type} (m : Nat → Nat → α) (r c : Fin 16) :
     applyPerm (transpose16 labels) m r c = m c r := by
   unfold applyPerm
   rw [transpose16_mapping r c]
-
-#print axioms transpose16_mapping
-#print axioms transpose16_payload
 
 end AgaveLattice

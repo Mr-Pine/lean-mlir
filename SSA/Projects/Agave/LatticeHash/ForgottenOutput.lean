@@ -3,9 +3,6 @@ import SSA.Projects.Agave.LatticeHash.Equivalence
 import SSA.Projects.Agave.LatticeHash.ExecutableCompression
 import SSA.Projects.Agave.LatticeHash.Forgotten
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 1000000
-
 /-!
 Concrete final-output witnesses for the forgotten-guard trace. Only the first
 u16 of each 2048-byte LtHash is needed to prove that the returned values differ.
@@ -17,6 +14,8 @@ long-message fallback correctness is used.
 namespace AgaveForgotten
 open Blake3Compression.Executable
 
+-- Kernel reduction of the concrete BLAKE3 blocks needs deeper recursion.
+set_option maxRecDepth 4096 in
 theorem concrete_zc_first (longHash : AgaveConcrete.Message → AgaveConcrete.Value) :
     AgaveConcrete.hash longHash [90, 67] 0 = 27344#16 := by
   rw [AgaveConcrete.hash_short longHash _ (by simp)]
@@ -24,6 +23,7 @@ theorem concrete_zc_first (longHash : AgaveConcrete.Message → AgaveConcrete.Va
   rw [← vectorCompress_eq]
   rfl
 
+set_option maxRecDepth 4096 in
 theorem concrete_ic_first (longHash : AgaveConcrete.Message → AgaveConcrete.Value) :
     AgaveConcrete.hash longHash [73, 67] 0 = 5968#16 := by
   rw [AgaveConcrete.hash_short longHash _ (by simp)]
@@ -31,6 +31,7 @@ theorem concrete_ic_first (longHash : AgaveConcrete.Message → AgaveConcrete.Va
   rw [← vectorCompress_eq]
   rfl
 
+set_option maxRecDepth 4096 in
 theorem concrete_ac_first (longHash : AgaveConcrete.Message → AgaveConcrete.Value) :
     AgaveConcrete.hash longHash [65, 67] 0 = 47808#16 := by
   rw [AgaveConcrete.hash_short longHash _ (by simp)]
@@ -91,11 +92,4 @@ theorem final_outputs_pairwise_different
     change 27344 = 47808 at h
     omega
 
-/--
-info: 'AgaveForgotten.final_outputs_pairwise_different' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs (whitespace := lax) in
-#print axioms final_outputs_pairwise_different
-
 end AgaveForgotten
-

@@ -2,9 +2,6 @@
 import SSA.Projects.Agave.LatticeHash.Primitives
 import SSA.Projects.Agave.LatticeHash.Transpose
 
-set_option maxRecDepth 100000
-set_option maxHeartbeats 10000000
-
 namespace AgaveLattice
 
 -- Backend-independent specification of a checked N-by-N transpose.
@@ -239,33 +236,5 @@ theorem avx2_LtHash_update (xof : XofWords) (acc : LtAcc) :
 theorem avx512_LtHash_update (xof : XofWords) (acc : LtAcc) :
     simdLtHash 16 (by decide) (transpose16 labels) xof acc = scalarLtHash 16 xof acc :=
   simdLtHash_eq_scalarLtHash (by decide) avx512_isTranspose xof acc
-
-#print axioms avx2_isTranspose
-#print axioms avx512_isTranspose
-#print axioms transpose_payload
-#print axioms load_transpose_per_word
-#print axioms loadWords_correct
-#print axioms output_transpose_per_message
-#print axioms halfWord_packAcc
-#print axioms halfWord_fold
-#print axioms laneSum_update
-#print axioms transpose_reduce_update
-#print axioms fold_function_apply
-#print axioms scalarLtHash_apply
-#print axioms decoded_word
-#print axioms decoded_index
-#print axioms simdLtHash_eq_scalarLtHash
-#print axioms supported_positive
-#print axioms lane_iteration_coverage
-#print axioms lane_iteration_no_overlap
-#print axioms input_tile_coverage
-#print axioms input_tile_no_overlap
-#print axioms output_index_in_range
-#print axioms output_index_coverage
-#print axioms output_index_no_overlap
-#print axioms avx2_load_correct
-#print axioms avx512_load_correct
-#print axioms avx2_LtHash_update
-#print axioms avx512_LtHash_update
 
 end AgaveLattice

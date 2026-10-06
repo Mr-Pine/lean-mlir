@@ -1,9 +1,6 @@
 /- Released under Apache 2.0 license as described in the file LICENSE. -/
 import SSA.Projects.Agave.LatticeHash.Equivalence
 
-set_option maxHeartbeats 10000000
-set_option linter.unusedSimpArgs false
-
 /-!
 Extension of the hand-written staging model with explicit public mixing events.
 `mixIn` is the BatchLtHash accumulator update. `mixOut` models LtHash::mix_out
@@ -213,10 +210,4 @@ theorem returned_observable_equivalence {α : Type}
   have h := reference_eq_avx2_eq_avx512 longHash trace1 trace8 trace16 idle
   exact ⟨congrArg observe h.1, congrArg observe h.2⟩
 
-#print axioms observational_equivalence
-#print axioms observational_equivalence_coordinate
-/-- info: 'AgaveMixed.reference_eq_avx2_eq_avx512' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms reference_eq_avx2_eq_avx512
-/-- info: 'AgaveMixed.returned_observable_equivalence' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms returned_observable_equivalence
 end AgaveMixed

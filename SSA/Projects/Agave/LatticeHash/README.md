@@ -122,6 +122,8 @@ as represented by `longHash`.
   multi-block fixtures of 2048 output bytes each, covering XOF counters 0–31.
   `Tests.lean` is the test entry point; the core aggregator excludes these
   fixtures.
+- `AxiomAudit.lean` guards the expected axiom dependencies at the exported
+  theorem boundaries in one place.
 - `Forgotten.lean` and `ForgottenOutput.lean` formalize the necessary
   lifecycle boundary and its concrete unequal outputs.
 
@@ -166,6 +168,7 @@ machine-code verification result.
 lake build SSA.Projects.Agave.LatticeHash
 lake build SSA.Projects.Agave.LatticeHash.Tests
 lake env lean SSA/Projects/Agave/LatticeHash/Conformance.lean
+lake env lean SSA/Projects/Agave/LatticeHash/AxiomAudit.lean
 lake env lean SSA/Projects/Agave/LatticeHash/Blake3Reference.lean
 lake env lean SSA/Projects/Agave/LatticeHash/OutputLog.lean
 lake env lean SSA/Projects/Agave/LatticeHash/PhysicalMixed.lean

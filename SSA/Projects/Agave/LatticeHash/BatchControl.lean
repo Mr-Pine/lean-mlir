@@ -201,7 +201,6 @@ theorem laneStep_stateAt {CV : Type} (compress : Compress CV) (iv : CV)
     have hf := (rootIndex_bounds len).2
     simp [stateAt, ht, ht1, laneStep, hf]
 
-
 abbrev BatchState (n : Nat) (CV : Type) := Fin n → LaneState CV
 
 def batchStep {n : Nat} {CV : Type} (compress : Compress CV)
@@ -322,7 +321,6 @@ theorem all_iteration_loads_in_bounds {n : Nat} {CV : Type}
     (batchStateAt compress iv message lengths t l).off + w.val < capacity l := by
   apply load_in_bounds (hstage l)
   omega
-
 
 structure RootDescriptor (CV : Type) where
   cv : CV
@@ -463,14 +461,5 @@ theorem all_done_by_iteration_15 {n : Nat} {CV : Type}
   intro l
   have := rootIndex_lt16 (lengths l) (hlengths l)
   omega
-
-#print axioms reachable_arithmetic_bounds
-#print axioms all_done_by_iteration_15
-#print axioms compress_batch_control_equiv
-#print axioms compress_batch_xof_equiv
-#print axioms all_iteration_loads_in_bounds
-#print axioms root_partition
-#print axioms staging_size_formula
-#print axioms empty_staging_requires_block
 
 end AgaveBatchControl

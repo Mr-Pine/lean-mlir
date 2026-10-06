@@ -114,9 +114,4 @@ theorem reference_eq_avx2_eq_avx512 {State Result : Type} (h : Hasher State Resu
   exact ⟨same_parts_same_result h shortHash input dirty₁ dirty₈,
     same_parts_same_result h shortHash input dirty₈ dirty₁₆⟩
 
-/-- info: 'AgaveSerialStreaming.reference_eq_avx2_eq_avx512' depends on axioms: [propext] -/
-#guard_msgs (whitespace := lax) in
-#print axioms reference_eq_avx2_eq_avx512
-
 end AgaveSerialStreaming
-
