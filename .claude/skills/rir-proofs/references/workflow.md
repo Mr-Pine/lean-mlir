@@ -73,7 +73,8 @@ the bv-level proofs do not import.
 
 ## 6. Check and commit
 
-- `lean_diagnostic_messages` on the whole file: no errors, no `sorry`, no new linter warnings.
+- `lean_diagnostic_messages` on the whole file, no severity filter: no errors, no `sorry`, no
+  warnings.
 - `lean_verify` on each public theorem.
 - Format with `lean-fmt` (the build for the project's toolchain; it needs the modules built).
 - `lake build` of the project once, stopped at the first error.
