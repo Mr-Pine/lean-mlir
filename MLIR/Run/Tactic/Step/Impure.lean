@@ -108,7 +108,7 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
                           solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
                             $(mkIdent `mlir_transport):ident
                         -- a chain of transports, still at reducible transparency
-                        | transport_fact)
+                        | mem_fact)
                     | ( subst $hSId:ident
                         try simp at $hId:ident
                         simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
@@ -183,48 +183,14 @@ elab "expect_values" : tactic =>
       if (← whnf (← inferType a)).isAppOf ``PoisonOr && !a.isAppOfArity ``PoisonOr.value 2 then
         throwError "operand{indentExpr a}\nis not known to be `.value _`; it may be poison"
 
-/-- Close `Fits m p w` by a fact, or a conjunct of one, with the same `m` and `p`. -/
-elab "fits_fact" : tactic =>
-  withMainContext do
-    let g ← getMainGoal
-    let_expr Fits m p w := ← instantiateMVars (← g.getType) | throwError "goal is not `Fits`"
-    let some pf ←
-      Tactic.fitsProof? (← Tactic.splitConjunctedFacts) m p w | throwError "no fact `{← g.getType}`"
-    g.assign pf
-    replaceMainGoal []
-
-/-- Close `a ≠ b` (or `¬a = b`) from the facts: either way round, or by a `Nodup`. -/
-elab "ne_fact" : tactic =>
-  withMainContext do
-    let g ← getMainGoal
-    let ty := (← instantiateMVars (← g.getType)).cleanupAnnotations
-    let some (a, b) := Tactic.neSides? ty | throwError "goal is not `≠`"
-    let some pf ← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b | throwError "no `≠` fact"
-    g.assign (mkExpectedPropHint pf ty)
-    replaceMainGoal []
-
-/-- Close `(Range.of p v).Disjoint (Range.of q w)` from the facts (distinct blocks, offsets). -/
-elab "disjoint_fact" : tactic =>
-  withMainContext do
-    let g ← getMainGoal
-    let_expr Range.Disjoint a b :=
-      ← instantiateMVars (← g.getType) | throwError "goal is not `Disjoint`"
-    let_expr Range.of p v := a | throwError "goal is not `Disjoint` of two ranges"
-    let_expr Range.of q w := b | throwError "goal is not `Disjoint` of two ranges"
-    let some pf ←
-      Tactic.disjointProof? (← Tactic.splitConjunctedFacts) p v q
-          w | throwError "no disjointness from the facts"
-    g.assign pf
-    replaceMainGoal []
-
-/-- A load or store, closed with `lem`: the pointer's `Fits` from the facts, the value by
+/-- A load or store, closed with `lem`: the pointer's `Fits` by `mem_fact`, the value by
 `dsimp`. -/
 def runAccess (args : StepArgs) (lem : Ident) : TacticM Unit := do
   runStep args
       (←
         `(tacticSeq|
         expect_values
-        exact $lem (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
+        exact $lem (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
@@ -242,8 +208,8 @@ def evalStepMemcpy : Tactic := fun stx => do
         `(tacticSeq|
         expect_values
         exact
-            run_memcpy (by rfl) (by first | disjoint_fact | simp_all)
-              (by first | fits_fact | simp_all) (by first | fits_fact | simp_all)))
+            run_memcpy (by rfl) (by first | mem_fact | simp_all) (by first | mem_fact | simp_all)
+              (by first | mem_fact | simp_all)))
 
 @[tactic stepMemset]
 def evalStepMemset : Tactic := fun stx => do
@@ -251,7 +217,7 @@ def evalStepMemset : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact run_memset (by rfl) (by first | fits_fact | simp_all)))
+        exact run_memset (by rfl) (by first | mem_fact | simp_all)))
 
 end InstructionSpecific
 

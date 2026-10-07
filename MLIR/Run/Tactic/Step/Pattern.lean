@@ -93,25 +93,11 @@ def closeByDecide (g : MVarId) : MetaM Unit := do
         ty | throwError "step_pattern: side condition false or undecidable{indentExpr ty}"
   g.assign pf
 
-/-- Close a side condition by a local hypothesis (a fact about the pattern's inputs, like a flag
-being `0` or `1`), a `≠` from a `Nodup`, or one about an earlier state through `transport_fact`,
-else by `decide`. -/
+/-- Close a side condition from the facts (`memFact`: a fact about the pattern's inputs, like a flag
+being `0` or `1`, a `≠` from a `Nodup`, one about an earlier state), else by `decide`. -/
 def closeSide (g : MVarId) : TacticM Unit := do
-  let ty ← instantiateMVars (← g.getType)
-  -- a closed one (registers apart) by `decide` first, without scanning the facts
-  if !ty.hasFVar && !ty.hasMVar then
-    if let some pf← Tactic.decideProof? ty then
-      g.assign pf
-      return
-  if ← g.assumptionCore then
-    return
-  if let some (_, a, b) := ty.ne? then
-    if let some pf← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b then
-      g.assign pf
-      return
-  if (← observing? (Tactic.run g (evalTactic (← `(tactic| transport_fact))))) matches some [] then
-    return
-  closeByDecide g
+  unless ← Tactic.memFact g do
+    closeByDecide g
 
 /-- A premise of a pattern lemma: a read (`closePatternRead`), a side condition (`closeSide`), or
 a conjunction of them (`E ⊨ [r := v, …]`), split. -/

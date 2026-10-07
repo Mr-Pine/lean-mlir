@@ -343,7 +343,8 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
 def dsimpState (e : Expr) : MetaM Expr := do
   return (← dsimp e (← Simp.mkContext)).1
 
-/-- `transportDischarge`'s search, with the context's facts by (instantiated) type. -/
+/-- `p` from the facts `facts` (by instantiated type) and the `mlir_transport` lemmas `lemmas`, at
+reducible transparency, `fuel` lemmas deep. -/
 partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) (fuel : Nat)
     (p : Expr) : MetaM (Option Expr) := do
   if let some h := facts[p]? then
@@ -409,43 +410,54 @@ def memReadFact? (heads : Array Name) (s ty : Expr) : Option (Expr × Expr) := d
   guard (l.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg! == s)
   return (l, x)
 
-/-- What reading through memory needs, gathered once (per step, per `simp` call): the read and
-transport lemmas, the context's facts (split, and by type), its read facts by their left side,
-widths as literals, and its named slots. -/
-structure MemCtx where
-  lemmas : Array ReadLemma
-  heads : Array Name
+/-- What a side condition is discharged from (`factDischarge`), gathered once: the transport
+lemmas, the context's facts (split, and by type), and its named slots. -/
+structure FactCtx where
   transport : Array Name
   facts : Array (Expr × Expr)
   factMap : Std.HashMap Expr Expr
-  /-- `read (S.mem) … ↦ (x, h : read (S.mem) … = x)`, for the locals `S`. -/
-  reads : Std.HashMap Expr (Expr × Expr)
   /-- `b.slot k ↦ (x, hx : x = b.slot k)`, for the named slots `x`. -/
   slots : Std.HashMap Expr (Expr × Expr)
+
+/-- The named slots `hx : x = b.slot k` among `eqs`, by slot. -/
+def namedSlots (eqs : Array LocalEq) : MetaM (Std.HashMap Expr (Expr × Expr)) := do
+  let mut slots := {}
+  for e in eqs do
+    if e.lhs.isFVar && e.rhs.isAppOfArity ``GlobalState.slot 2 && !slots.contains e.rhs then
+      slots := slots.insert e.rhs (e.lhs, ← mkExpectedTypeHint e.decl.toExpr e.type)
+  return slots
+
+def FactCtx.build : MetaM FactCtx := do
+  return { transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
+           factMap := ← contextFactMap, slots := ← namedSlots (← localEqs) }
+
+/-- What reading through memory needs, gathered once (per step, per `simp` call): the facts, the
+read lemmas, and the context's read facts by their left side, widths as literals. -/
+structure MemCtx extends FactCtx where
+  lemmas : Array ReadLemma
+  heads : Array Name
+  /-- `read (S.mem) … ↦ (x, h : read (S.mem) … = x)`, for the locals `S`. -/
+  reads : Std.HashMap Expr (Expr × Expr)
   /-- `S.mem ↦ (hS, s.mem)` for `hS : S = s`, filled by `readThroughState`. -/
   mems : IO.Ref (Std.HashMap Expr (Option (FVarId × Expr)))
 
 def MemCtx.build : MetaM MemCtx := do
   let lemmas ← readLemmas
   let heads := ReadLemma.heads lemmas
+  let eqs ← localEqs
   let mut reads := {}
-  let mut slots := {}
-  for e in ← localEqs do
-    if e.lhs.isFVar && e.rhs.isAppOfArity ``GlobalState.slot 2 then
-      unless slots.contains e.rhs do
-        slots := slots.insert e.rhs (e.lhs, ← mkExpectedTypeHint e.decl.toExpr e.type)
-      continue
+  for e in eqs do
     unless heads.any e.lhs.isAppOf do
       continue
     unless e.lhs.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg!.isFVar do
       continue
     reads := reads.insert (← normWidths e.lhs) (e.rhs, e.decl.toExpr)
   return { lemmas, heads, transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
-           factMap := ← contextFactMap, reads, slots, mems := ← IO.mkRef {} }
+           factMap := ← contextFactMap, slots := ← namedSlots eqs, reads, mems := ← IO.mkRef {} }
 
 /-- `a ≠ b` for block ids `p.id` of slots spelled by their state (`(S.alloca n).allocaPtr`): by the
 facts about the named slots `x` they are. -/
-def neBySlots? (c : MemCtx) (a b : Expr) : MetaM (Option Expr) := do
+def neBySlots? (c : FactCtx) (a b : Expr) : MetaM (Option Expr) := do
   let side (e : Expr) : Option (Expr × Expr) := do
     let p ← e.app1? ``Pointer.id
     guard !p.isFVar
@@ -475,31 +487,41 @@ def neBySlots? (c : MemCtx) (a b : Expr) : MetaM (Option Expr) := do
     pf ← rewrite pf hx fun y => mkApp3 (mkConst ``Eq [1]) (mkConst ``BlockId) a'' y
   return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
 
-/-- A read lemma's side condition from the facts: `Fits` and separation directly, others (limbs
-fitting) through `mlir_transport` lemmas. -/
-def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
+/-- A side condition from the facts `c`, cheapest first: a fact; `decide`, the offsets replaced by
+their facts (an offset's `¬uaddOverflow`, a width bound); `Fits`, disjointness and `≠` by their
+searches; then `mlir_transport` lemmas `fuel` deep, or with no `fuel` a local up to reducible
+unfolding. -/
+def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr) := do
   let goal ← instantiateMVars goal
   if let some pf := c.factMap[goal]? then
     return some pf
+  if let some pf← decideWithOffsets? c.facts goal then
+    return some pf
+  let local? := do
+    return (← withReducible (findLocalDeclWithType? goal)).map mkFVar
   match_expr goal with
   | Fits m p w =>
     if let some pf← fitsProof? c.facts m p w then
       return some pf
-    -- a width only this premise mentions (`readAt_alloca`'s), bound by a fact
-    transportWith c.factMap c.transport 4 goal
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
     let_expr Range.of q w := b | return none
-    disjointProof? c.facts p v q w
-  | Ne _ a b =>
-    if let some pf← neProof? c.facts a b then
-      return some pf
-    neBySlots? c a b
+    return ← disjointProof? c.facts p v q w
   | _ =>
-    -- closed side conditions: an offset's `¬uaddOverflow`, a width bound
-    if let some pf← decideWithOffsets? c.facts goal then
-      return some pf
-    transportWith c.factMap c.transport 4 goal
+    -- no lemma concludes `≠`: its searches, or a local `h : b ≠ a` for `simp`; not for flags
+    -- (`¬x.uaddOverflow k = true`), which `neProof?` would unfold against each flag fact
+    if let some (a, b) := neSides? goal then
+      unless (← inferType a).isConstOf ``Bool do
+        if let some pf← neProof? c.facts a b then
+          return some (mkExpectedPropHint pf goal)
+        if let some pf← neBySlots? c a b then
+          return some pf
+        if fuel = 0 then
+          return ← local?
+        return none
+  if fuel = 0 then
+    return ← local?
+  transportWith c.factMap c.transport fuel goal
 
 /-- One `mlir_read` lemma on the read `e`: a stored value (`true`), or the read past a write, with
 the proof of `e = _`. Only lemmas for `e`'s read and write are tried. -/
@@ -521,7 +543,7 @@ def readStep (c : MemCtx) (e : Expr) : MetaM (Option (Bool × Expr × Expr)) := 
         let ty ← instantiateMVars (← inferType m)
         unless ← isProp ty do
           continue
-        let some pf ← dischargeRead c ty |
+        let some pf ← factDischarge c.toFactCtx 4 ty |
           ok := false;
           break
         m.mvarId!.assign pf
