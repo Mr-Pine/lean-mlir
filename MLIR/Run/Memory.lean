@@ -44,6 +44,20 @@ theorem run_addressof {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v 
   simp only [Instr.run, EffectM.bind_eq, hv, PoisonOr.value_bind, hb]
   rfl
 
+/-- `run_addressof` of a global whose initializer gives `wrap r`: a fresh block of `n` bytes holding
+`r`'s bits, at their literal width `w`. -/
+theorem run_addressof_wrap {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧}
+    {r : ⟦t⟧ᵣ} {dst : Dst Γ .ptr} {w n : Nat} (hv : v s = .value (Ty.wrap r, s))
+    (hp : t.hasPtr = false) (hw : t.width = w) (hn : (w + 7) / 8 = n) :
+    Instr.run env (.addressof v dst) s =
+      .value
+        (env.write dst (.value s.allocaPtr),
+          { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
+            mem := s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n (Ty.flatBits r (hw := hw)) }) := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr, Ty.flatBits_eq]
+  subst hw hn
+  exact run_addressof hv (Ty.flatten_wrap hp)
+
 @[mlir_operation]
 theorem gep_value {ptr} (h : ¬ptr.offset.uaddOverflow off) :
     Operation.gep (.value off) (.value ptr) = .value (ptr.add off) := by simp [Operation.gep, h]

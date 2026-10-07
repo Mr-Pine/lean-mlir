@@ -112,7 +112,10 @@ def nameAllocaSlot : TacticM Unit :=
       let ty' := motive.beta #[.fvar x]
       let name :=
         if ty.isAppOf ``Fits then (`h).appendAfter s!"{xName}_fits"
-        else if d.userName == `hslots then `hslots else d.userName.appendAfter s!"_{xName}"
+        -- the state's equation keeps its name: `addressof`'s state stores at the slot
+        else
+          if d.userName == `hslots || d.userName == `hS then d.userName
+          else d.userName.appendAfter s!"_{xName}"
       let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
       g ← g'.clear d.fvarId
     -- its offset, `0`: offsets into the slot (`x.add 24`) stay in range

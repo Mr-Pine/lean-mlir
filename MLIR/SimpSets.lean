@@ -22,6 +22,10 @@ register_simp_attr mlir_instr
 through `alloca`s; to close a proof with `simp [mlir_frame, *]` -/
 register_simp_attr mlir_frame
 
+/-- Erases a returning function's frame, for `erase_frame`: `eraseFrom` past a write, and a write
+into an erased block dropped -/
+register_simp_attr mlir_erase
+
 /-- Simplifies the state a step produces, as the step tactics seal it: reads through stores and
 `alloca`s -/
 register_simp_attr mlir_state

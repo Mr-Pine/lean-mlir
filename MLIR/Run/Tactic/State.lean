@@ -70,6 +70,12 @@ elab "transport_fact" : tactic =>
         g.assign pf
     replaceMainGoal []
 
+/-- `addressof`'s new state `⟨_, S.mem.addBlock _ n x⟩`: `n` and `x`. -/
+def addressofBlock? (new : Expr) : Option (Expr × Expr) := do
+  let_expr GlobalState.mk _ m := new | none
+  let_expr MemoryState.addBlock _ _ n _ x := m | none
+  return (n, x)
+
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
 `h : motive new`: every write an `mlir_read` lemma reads back, and every read fact of `S` the
 writes miss (one they overwrite is dropped). Asserted in `g`; the old read facts returned, for
@@ -94,6 +100,27 @@ def memFactsOf (g : MVarId) (S new : Expr) :
             mkLambdaFVars #[x] (← mkAppM ``Fits #[← mkAppM ``GlobalState.mem #[x], ptr, w])
       let pf ← mkAppOptM ``Fits.allocaPtr #[w, n, S, ← mkAppM ``Nat.le_refl #[w]]
       let (h, g') ← (← g.assert `hfits (motive.beta #[new]) pf).intro1P
+      g := g'
+      hyps := hyps.push (h, motive)
+    -- `addressof`'s new block fits its bytes and reads back its bits:
+    -- `Fits (S.mem.addBlock _ n x) S.allocaPtr (8 * n)`, `(…).readAt S.allocaPtr (8 * n) = x`
+    if let some (n, x) := addressofBlock? new then
+      let ptr ← mkAppM ``GlobalState.allocaPtr #[S]
+      let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
+      let motive ←
+        withLocalDeclD `s (mkConst ``GlobalState) fun s => do
+            mkLambdaFVars #[s] (← mkAppM ``Fits #[← mkAppM ``GlobalState.mem #[s], ptr, w])
+      let pf ← mkAppOptM ``Fits.addBlock_allocaPtr #[n, S, none, x]
+      let (h, g') ← (← g.assert `hfits (motive.beta #[new]) pf).intro1P
+      g := g'
+      hyps := hyps.push (h, motive)
+      let motive ←
+        withLocalDeclD `s (mkConst ``GlobalState) fun s => do
+            mkLambdaFVars #[s]
+                (←
+                  mkEq (← mkAppM ``MemoryState.readAt #[← mkAppM ``GlobalState.mem #[s], ptr, w]) x)
+      let pf ← mkAppOptM ``MemoryState.readAt_addBlock_allocaPtr #[n, S, x]
+      let (h, g') ← (← g.assert `hread (motive.beta #[new]) pf).intro1P
       g := g'
       hyps := hyps.push (h, motive)
     let mut seen : Array Expr := #[]
