@@ -504,6 +504,10 @@ theorem GlobalState.slot_id_id {s : GlobalState} : (s.slot k).id.id = s.alloc.ne
 theorem GlobalState.slot_offset {s : GlobalState} : (s.slot k).offset = 0 :=
   rfl
 
+/-- One state's slots at distinct indices are distinct blocks. -/
+theorem GlobalState.slot_id_ne {s : GlobalState} {i j : Nat} (h : i ≠ j) :
+    (s.slot i).id ≠ (s.slot j).id := by simp [GlobalState.slot, h]
+
 @[simp]
 theorem GlobalState.alloca_alloc {s : GlobalState} :
     (s.alloca n).alloc = ⟨s.alloc.nextFreeBlock + 1⟩ :=
