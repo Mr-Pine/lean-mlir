@@ -103,6 +103,11 @@ def replaceBySimp (m : MVarId) (e : Expr) (r : Simp.Result) : MetaM MVarId := do
   let newMVar := body.instantiate1 r.expr
   m.replaceTargetEq newMVar mvarProof -- Using congruence, get proof over goal
 
+/-- Whether `ty` is a continuation: a fact about a function's run (`Func.ContAt`, `∀ E', … runFrom
+… = K`), which stays about its own state. -/
+def isContinuation (ty : Expr) : MetaM Bool :=
+  return ((← whnfR ty).find? (·.isAppOf ``Func.runFrom)).isSome
+
 /-- The hypotheses whose statement mentions `e`, except `except`. -/
 def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVarId) := do
   (← getLCtx).foldlM (init := #[]) fun acc d => do

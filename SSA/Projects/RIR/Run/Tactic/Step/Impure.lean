@@ -56,13 +56,15 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
   -- Get facts to preserve
   let goals ←
     withMainContext do
-        -- not the new state's own facts (its reads may mention `inState` in their values)
         -- not the new state's own facts (its reads may mention `inState` in their values), nor
         -- facts about `inState` only as `inState.allocaPtr`: a fixed pointer, not the state
         let allocaPtr ← mkAppM ``GlobalState.allocaPtr #[inState]
         let preserveHyps ←
           (← hypsMentioning inState (except := #[hS', hS])).filterM fun h => do
               let ty ← instantiateMVars (← h.getType)
+              -- a continuation stays about its own state
+              if ← Tactic.isContinuation ty then
+                return false
               let rest :=
                 ty.replace fun t => if t == allocaPtr then some (mkConst ``Unit.unit) else none
               return !ty.containsFVar S' && inState.occurs rest
