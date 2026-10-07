@@ -156,6 +156,10 @@ def wrapFields : {fs : List Ty} → denoteFieldsRaw fs → denoteFields fs
   | _ :: _ :: _, (v, vs) => (wrap v, wrapFields vs)
 end
 
+@[mlir_operation]
+theorem wrap_ptr : wrap (t := ptr) v = .value v :=
+  rfl
+
 mutual
 def unwrap (v : ⟦t⟧) : PoisonOr ⟦t⟧ᵣ :=
   match t with
