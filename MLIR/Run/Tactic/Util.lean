@@ -19,19 +19,14 @@ structure GeneralizeFact where
   proof : Expr
 
 /-- Generalize `e` in the goal `g` and hyps `hyps` to a fresh opaque local `xName`.
-`facts` specifies the hypotheses to generate from the generalization.
-`occs` specifies what occurences to generalize. -/
-def generalizeOpaque (g : MVarId) (hyps : Array FVarId := #[]) (e : Expr) (xName : Name)
-    (facts : Array GeneralizeFact) (occs : Occurrences := Occurrences.all) :
-    MetaM (Array FVarId × MVarId) := do
+`facts` specifies the hypotheses to generate from the generalization. -/
+def generalizeOpaque (g : MVarId) (e : Expr) (xName : Name) (facts : Array GeneralizeFact)
+    (hyps : Array FVarId := #[]) : MetaM (Array FVarId × MVarId) := do
   let (reverted, g) ← g.revert (preserveOrder := true) hyps
   g.withContext do
       let ty ← inferType e -- Type of the expression to generalize
       -- reducible: `e` occurs verbatim, and default transparency unfolds every `Env.write`
-      let tgtAbstract ←
-        withReducible <|
-            kabstract (← instantiateMVars (← g.getType)) e
-              occs -- e abstracted as a loose bound variable
+      let tgtAbstract ← withReducible <| kabstract (← instantiateMVars (← g.getType)) e
       -- the new goal under binders for `x` and the facts, applied to `e` and the proofs: the value
       -- stays at this one place, where an `intro`ed goal would have it substituted into every later
       -- step on instantiation
@@ -81,10 +76,7 @@ def reduceIndex (g : MVarId) : MetaM MVarId :=
           mkAppM ``HAdd.hAdd #[base, mkNatLit k]
     if lit == idx then
       return g
-    let body ← kabstract goal idx
-    let motive := Expr.lam `pos (mkConst ``Nat) body .default
-    let proof := mkExpectedPropHint (← mkEqRefl idx) (← mkEq idx lit)
-    g.replaceTargetEq (body.instantiate1 lit) (← mkCongrArg motive proof)
+    g.replaceTargetDefEq ((← kabstract goal idx).instantiate1 lit)
 
 def finNLit? (n : Expr) : MetaM (Option Nat) := do
   if let some k← (Meta.evalNat (← mkAppM ``Fin.val #[n])).run then
@@ -108,6 +100,43 @@ def replaceBySimp (m : MVarId) (e : Expr) (r : Simp.Result) : MetaM MVarId := do
 def isContinuation (ty : Expr) : MetaM Bool :=
   return ((← whnfR ty).find? (·.isAppOf ``Func.runFrom)).isSome
 
+/-- `p` by `decide`, when it evaluates to `true`. -/
+def decideProof? (p : Expr) : MetaM (Option Expr) := do
+  let .some inst ← trySynthInstance (mkApp (mkConst ``Decidable) p) | return none
+  unless
+    (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) p inst)).isConstOf ``Bool.true do
+    return none
+  return some (← mkDecideProof p)
+
+/-- `fun y : ty => e` with each `t` in `e` replaced by `f y`. -/
+def motiveOver (e t ty : Expr) (f : Expr → Expr := id) : MetaM Expr :=
+  withLocalDeclD `y ty fun y =>
+    mkLambdaFVars #[y] (e.replace fun s => if s == t then some (f y) else none)
+
+/-- `a ≠ b`, maybe an `autoParam`, or `¬a = b`: `(a, b)`. -/
+def neSides? (ty : Expr) : Option (Expr × Expr) :=
+  let ty := ty.cleanupAnnotations
+  match ty.ne? with
+  | some (_, a, b) => some (a, b)
+  | none => ty.not?.bind (·.eq?) |>.map fun (_, a, b) => (a, b)
+
+/-- A goal `a ∧ b` closed by `And.intro` of two new goals, returned. -/
+def splitAnd? (g : MVarId) (ty : Expr) : MetaM (Option (MVarId × MVarId)) := do
+  let some (a, b) := ty.and? | return none
+  let ga ← g.withContext (mkFreshExprSyntheticOpaqueMVar a)
+  let gb ← g.withContext (mkFreshExprSyntheticOpaqueMVar b)
+  g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
+  return some (ga.mvarId!, gb.mvarId!)
+
+/-- The simp sets `sets`, after `extra`, as one context. -/
+def simpSetContext (sets : Array Name) (extra : Array SimpTheorems := #[]) : MetaM Simp.Context :=
+  do
+  let thms ←
+    sets.mapM fun n => do
+        let some ext ← getSimpExtension? n | throwError "no `{n}` simp set"
+        ext.getTheorems
+  Simp.mkContext (simpTheorems := extra ++ thms) (congrTheorems := ← getSimpCongrTheorems)
+
 /-- The hypotheses whose statement mentions `e`, except `except`. -/
 def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVarId) := do
   (← getLCtx).foldlM (init := #[]) fun acc d => do
@@ -115,18 +144,19 @@ def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVar
         return acc
       return if e.occurs (← instantiateMVars d.type) then acc.push d.fvarId else acc
 
-private def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
-  return (← localEqs).filterMap fun e => if e.lhs == lhs then some e.decl.fvarId else none
+/-- The unique equation `_ : lhs = _`, if there is one. -/
+def findLocalEq? (lhs : Expr) (what : MessageData) : MetaM (Option LocalEq) := do
+  match (← localEqs).filter (·.lhs == lhs) with
+  | #[] =>
+    return none
+  | #[e] =>
+    return some e
+  | es =>
+    throwError "ambiguous: {es.size} hypotheses {what}"
 
 /-- The unique hypothesis `_ : lhs = _`, if there is one. -/
 def findEqWithLhs? (lhs : Expr) (what : MessageData) : MetaM (Option FVarId) := do
-  match ← findEqsWithLhs lhs with
-  | #[] =>
-    return none
-  | #[h] =>
-    return some h
-  | hs =>
-    throwError "ambiguous: {hs.size} hypotheses {what}"
+  return (← findLocalEq? lhs what).map (·.decl.fvarId)
 
 /-- The unique hypothesis `_ : lhs = _`. -/
 def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do

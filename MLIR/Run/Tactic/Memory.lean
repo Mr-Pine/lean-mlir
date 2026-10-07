@@ -82,18 +82,12 @@ def decideWithOffsets? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Opt
   let goal' := subst 0 goal
   if goal'.hasFVar || goal'.hasMVar then
     return none
-  let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[goal'])) | return none
-  unless
-    (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) goal' inst)).isConstOf
-      ``Bool.true do
-    return none
+  let some pf ← decideProof? goal' | return none
   -- back from the values to the offsets, one at a time
-  let mut pf ← mkDecideProof goal'
+  let mut pf := pf
   for k in [0:eqs.size] do
     let (h, l, _) := eqs[k]!
-    let motive ←
-      withLocalDeclD `o (← inferType l) fun o => do
-          mkLambdaFVars #[o] (subst (k + 1) (goal.replace fun t => if t == l then some o else none))
+    let motive ← motiveOver (subst (k + 1) goal) l (← inferType l)
     pf ← mkEqNDRec motive pf (← mkEqSymm h)
   return some (mkExpectedPropHint pf goal)
 
@@ -243,9 +237,9 @@ partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option
   for (h, ty) in facts do
     if let some h← nodupNe? h ty a b then
       return some h
-  if !ne.hasFVar && (← withDefault (whnfD (← mkDecide ne))).isConstOf ``Bool.true then
-    return some (← mkDecideProof ne)
-  return none
+  if ne.hasFVar then
+    return none
+  decideProof? ne
 
 /-- `(Range.of p v).Disjoint (Range.of q w)`; by offsets in one block (`omega`) only if
 `offsets`. -/
@@ -367,10 +361,7 @@ partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) 
       return pf?
     restoreState saved
   -- a fact equal only up to reducible unfolding
-  for d in ← getLCtx do
-    if !d.isImplementationDetail && (← withReducible (isDefEq d.type p)) then
-      return some d.toExpr
-  return none
+  return (← withReducible (findLocalDeclWithType? p)).map mkFVar
 
 /-- An `mlir_read` lemma: its name, the read it rewrites (the left side's head) and the write it
 reads through (the head of the left side's application argument). -/
@@ -549,15 +540,10 @@ partial def writesOf (m : Expr) (acc : Array Expr := #[]) : MetaM (Array Expr) :
       return ← writesOf a (acc.push m)
   return acc
 
-/-- `fun s => k (e with the memory m as s.mem)`: a fact about a state's memory, as a motive over
+/-- `fun s => e` with the memory `m` as `s.mem`: a fact about a state's memory, as a motive over
 the state. -/
-def memMotive (e m : Expr) (k : Expr → MetaM Expr := pure) : MetaM Expr :=
-  withLocalDeclD `s (mkConst ``GlobalState) fun x => do
-    mkLambdaFVars #[x]
-        (←
-          k
-              (e.replace fun t =>
-                if t == m then some (mkApp (mkConst ``GlobalState.mem) x) else none))
+def memMotive (e m : Expr) : MetaM Expr :=
+  motiveOver e m (mkConst ``GlobalState) (mkApp (mkConst ``GlobalState.mem))
 
 /-- The `S.mem` argument of a registered read, `S` a local. -/
 def stateMemArg? (c : MemCtx) (e : Expr) : Option Expr := do
@@ -607,9 +593,11 @@ def readThroughState (c : MemCtx) (mems : IO.Ref (Std.HashMap Expr (Option (FVar
     | none =>
       let mem? ←
         do
-          let some hS ← findEqWithLhs? m.appArg! m!"" | pure none
-          let some (_, _, s) := (← instantiateMVars (← hS.getType)).eq? | pure none
-          pure (some (hS, ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[s]))))
+          let some hS ← findLocalEq? m.appArg! m!"" | pure none
+          pure
+              (some
+                (hS.decl.fvarId,
+                  ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[hS.rhs]))))
       mems.modify (·.insert m mem?)
       pure mem?
   let some (hS, sMem) := mem? | return .continue

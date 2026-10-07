@@ -82,10 +82,7 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
 
 /-- `dsimp [mlir_instr]` -/
 def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
-  let some ext ← getSimpExtension? `mlir_instr | throwError "no `mlir_instr` simp set"
-  let ctx ←
-    Simp.mkContext (simpTheorems := #[← ext.getTheorems]) (congrTheorems := ← getSimpCongrTheorems)
-  let (m?, _) ← dsimpGoal m ctx (simprocs := #[← Simp.getSimprocs])
+  let (m?, _) ← dsimpGoal m (← simpSetContext #[`mlir_instr]) (simprocs := #[← Simp.getSimprocs])
   return m?
 
 /-- Clear the body facts `block.body.drop i = _` behind the goal's position. -/
@@ -162,7 +159,7 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
           let (_, g) ←
             g.withContext do
                 -- a tagged value stays folded where later steps and the state take it
-                generalizeOpaque g (hyps := #[]) abstractionTarget var_name
+                generalizeOpaque g abstractionTarget var_name
                     #[⟨hyp_name, fun x => do
                         let ty ← mkEq x abstractionTarget
                         return if tag then Tactic.tagNamed ty else ty,

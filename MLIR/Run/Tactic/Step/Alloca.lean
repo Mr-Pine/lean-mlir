@@ -24,19 +24,19 @@ def addAllocaFreshness (tac : String) : TacticM Unit := do
       let S := (← Tactic.getRunBodyFrom goal).state
       let wfTy ← mkAppM ``GlobalState.WF #[S]
       let some hwf ←
-        (← getLCtx).findDeclM? fun d => do
-            if !d.isImplementationDetail && (← withReducible (isDefEq d.type wfTy)) then
-              return some d.toExpr
-            return none | throwError "`{tac}`: no hypothesis `{wfTy}`"
+        withReducible (findLocalDeclWithType? wfTy) | throwError "`{tac}`: no hypothesis `{wfTy}`"
+      let hwf := mkFVar hwf
       let memS ← mkAppM ``GlobalState.mem #[S]
       let a ← mkAppM ``Pointer.id #[← mkAppM ``GlobalState.allocaPtr #[S]]
       -- the earlier slots' ids, newest first, in `hslots : [...].Nodup`
       let slots? ←
-        (← getLCtx).findDeclRevM? fun d => do
-            if d.isImplementationDetail || d.userName != `hslots then
-              return none
-            let_expr List.Nodup _ l := ← instantiateMVars d.type | return none
-            return some (d, l)
+        match (← getLCtx).findFromUserName? `hslots with
+        | some d =>
+          do
+            let_expr List.Nodup _ l := ← instantiateMVars d.type | pure none
+            pure (some (d, l))
+        | none =>
+          pure none
       let slotIds := (slots?.bind fun (_, l) => l.listLit?.map (·.2)).getD []
       let mut seen : Array Expr := #[]
       let mut hyps : Array Hypothesis := #[]
@@ -99,15 +99,10 @@ def nameAllocaSlot : TacticM Unit :=
     -- the slot stays folded where memory steps take it, as the facts name it
     g ← g.replaceLocalDeclDefEq hx (Tactic.tagNamed e.type)
     let pf ← mkEqSymm (.fvar hx)
-    for d in ← getLCtx do
-      if d.isImplementationDetail || d.fvarId == hx then
-        continue
+    for h in ← Tactic.hypsMentioning p (except := #[hx]) do
+      let d ← h.getDecl
       let ty ← instantiateMVars d.type
-      unless (ty.find? (· == p)).isSome do
-        continue
-      let motive ←
-        withLocalDeclD `y (mkConst ``Pointer) fun y => do
-            mkLambdaFVars #[y] (ty.replace fun t => if t == p then some y else none)
+      let motive ← Tactic.motiveOver ty p (mkConst ``Pointer)
       let ty' := motive.beta #[.fvar x]
       let name :=
         if ty.isAppOf ``Fits then (`h).appendAfter s!"{xName}_fits"

@@ -15,45 +15,42 @@ public meta section
 
 section SealEnv
 
+/-- The root of a write chain. -/
+partial def envRoot (e : Expr) : Expr :=
+  if e.isAppOfArity ``Env.write 5 then envRoot (e.getArg! 2) else e
+
 def sealEnvAt (env : Expr) : TacticM Unit :=
   withMainContext do
     let g ← getMainGoal
     if env.isFVar then
       return
     -- the chain's root: a jump writes several parameters
-    let mut E := (← getEnvWrite env).base
-    while E.isAppOfArity ``Env.write 5 do
-      E := E.getArg! 2
+    let E := envRoot (← getEnvWrite env).base
     -- without `hE`, `E` is a root (a loop's env, or a continuation's): it stays
-    let hE? ← findEqWithLhs? E m!"of the form `{E} = _`"
+    let hE? ← findLocalEq? E m!"of the form `{E} = _`"
     let hEargs? ←
-      findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
+      findLocalEq? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
     let abstractWrite := Expr.lam `e (← inferType E) (← withReducible <| kabstract env E) .default
     let (E₀chain, hEpf) ←
       match hE? with
       | some hE =>
-        do
-          let some (_, _, c) :=
-            (← instantiateMVars (← hE.getType)).eq? | throwError "expected an equation"
-          pure (c, ← mkCongrArg abstractWrite (mkFVar hE))
+        pure (hE.rhs, ← mkCongrArg abstractWrite hE.decl.toExpr)
       | none =>
         pure (E, ← mkEqRefl env)
     let stmtEq := (mkEq · (abstractWrite.beta #[E₀chain]))
     let mut facts := #[⟨`hE, stmtEq, hEpf⟩]
     if let some hEargs := hEargs? then
-      let some (_, _, args) :=
-        (← instantiateMVars (← hEargs.getType)).eq? | throwError "expected an equation"
       let stmtArgs (e) : MetaM _ := do
-        mkEq (← mkAppM ``Env.args #[e]) args
-      facts := facts.push ⟨`hArgs, stmtArgs, mkExpectedPropHint (mkFVar hEargs) (← stmtArgs env)⟩
+        mkEq (← mkAppM ``Env.args #[e]) hEargs.rhs
+      facts := facts.push ⟨`hArgs, stmtArgs, mkExpectedPropHint hEargs.decl.toExpr (← stmtArgs env)⟩
     let (_, g) ←
       g.withContext do
-          generalizeOpaque g (hyps := #[]) env `E facts
+          generalizeOpaque g env `E facts
     let mut g := g
     if let some hEargs := hEargs? then
-      g ← g.clear hEargs
+      g ← g.clear hEargs.decl.fvarId
     if let some hE := hE? then
-      g ← g.clear hE
+      g ← g.clear hE.decl.fvarId
       g ← g.clear E.fvarId!
     replaceMainGoal [g]
 
@@ -88,10 +85,8 @@ def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
   return simprocs.addCore keys ``reduceArgsApp false (.inr reduceArgsApp)
 
 def decideDischarge : Simp.Discharge := fun prop => do
-  if let .some inst← trySynthInstance (← mkAppM ``Decidable #[prop]) then
-    let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) prop inst)
-    if value.isConstOf ``Bool.true then
-      return (← mkDecideProof prop)
+  if let some pf← decideProof? prop then
+    return pf
   -- abstract registers (a pattern lemma's): a local `h : prop`, or `h : j ≠ i` for `i ≠ j`
   let symm? ←
     match prop.ne? with
@@ -99,12 +94,8 @@ def decideDischarge : Simp.Discharge := fun prop => do
       some <$> mkAppM ``Ne #[b, a]
     | none =>
       pure none
-  -- `a ≠ b` (maybe an `autoParam`), or simp's `¬ a = b`
-  let ne := (← instantiateMVars prop).cleanupAnnotations
-  let sides? :=
-    match ne.ne? with
-    | some (_, a, b) => some (a, b)
-    | none => ne.not?.bind (·.eq?) |>.map fun (_, a, b) => (a, b)
+  -- `a ≠ b`, or simp's `¬ a = b`
+  let sides? := neSides? (← instantiateMVars prop)
   for d in ← getLCtx do
     if d.isImplementationDetail then
       continue
@@ -150,16 +141,15 @@ partial def walkRead (env reg : Expr) : MetaM (Option (Expr × Expr)) := do
     e := e.getArg! 2
   unless e.isFVar do
     return none
-  let some hE ← findEqWithLhs? e m!"" | readFact? e i lhs
-  let some (_, _, chain) := (← instantiateMVars (← hE.getType)).eq? | return none
-  let some (v, pf) ← walkRead chain reg | return none
+  let some hE ← findLocalEq? e m!"" | readFact? e i lhs
+  let some (v, pf) ← walkRead hE.rhs reg | return none
   let baseRead ← mkAppM ``Env.read #[e, reg]
   let readOf ←
     withLocalDeclD `x (← inferType e) fun x => do
         mkLambdaFVars #[x] (← mkAppM ``Env.read #[x, reg])
   -- `env.read reg = e.read reg` (the run skipped), `= chain.read reg` (`hE`), `= v`
   let skip := mkExpectedPropHint (← mkEqRefl baseRead) (← mkEq lhs baseRead)
-  return some (v, ← mkEqTrans skip (← mkEqTrans (← mkCongrArg readOf (.fvar hE)) pf))
+  return some (v, ← mkEqTrans skip (← mkEqTrans (← mkCongrArg readOf hE.decl.toExpr) pf))
 
 /-- `walkRead` as a simproc: a register read, resolved without walking the written values. -/
 simproc_decl readThroughWrites (Env.read _ _) := fun e => do
@@ -171,7 +161,6 @@ simproc_decl readThroughWrites (Env.read _ _) := fun e => do
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
 def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) :
     TacticM Simp.Result := do
-  let some ext ← getSimpExtension? `mlir_env | throwError "no `mlir_env` simp set"
   let mut thms ←
     if only then
       pure {}
@@ -191,11 +180,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
             let pf := mkExpectedPropHint h (← mkEq (← instantiateMVars rr) v)
             thms ← thms.add (.other `argReadFact) #[] pf
   -- operations unfold, even with `only`: the step machinery, like `mlir_env`
-  let some ops ← getSimpExtension? `mlir_operation | throwError "no `mlir_operation` simp set"
-  let opThms ← ops.getTheorems
-  let ctx ←
-    Simp.mkContext (simpTheorems := #[thms, (← ext.getTheorems), opThms]) (congrTheorems :=
-        ← getSimpCongrTheorems)
+  let ctx ← simpSetContext #[`mlir_env, `mlir_operation] (extra := #[thms])
   let procs :=
     #[←
         if h : 0 < facts.size then
@@ -259,12 +244,8 @@ def closeProofs (e : Expr) : MetaM Expr := do
         unless ← isDefEq (← inferType pf) ty do
           return .continue
         return .done pf
-      let some inst ← observing? (synthInstance (← mkAppM ``Decidable #[ty])) | return .continue
-      unless
-        (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) ty inst)).isConstOf
-          ``Bool.true do
-        return .continue
-      return .done (← mkDecideProof ty))
+      let some pf ← decideProof? ty | return .continue
+      return .done pf)
 
 /-- `e` with each literal vector that is a `mlir_const` constant's value as that constant: equal by
 unfolding it, so no proof. Both sides are literals, so comparing them is cheap. -/

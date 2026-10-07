@@ -206,9 +206,7 @@ elab "ne_fact" : tactic =>
   withMainContext do
     let g ← getMainGoal
     let ty := (← instantiateMVars (← g.getType)).cleanupAnnotations
-    let some (a, b) :=
-      ty.ne?.map (fun (_, a, b) => (a, b)) <|> (ty.not?.bind (·.eq?)).map fun (_, a, b) => (a, b)
-      | throwError "goal is not `≠`"
+    let some (a, b) := Tactic.neSides? ty | throwError "goal is not `≠`"
     let some pf ← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b | throwError "no `≠` fact"
     g.assign (mkExpectedPropHint pf ty)
     replaceMainGoal []

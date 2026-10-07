@@ -63,14 +63,13 @@ elab "extract_env" : tactic => do
               m!"Expected env {runFrom.env} to be an application of {``Env.init}"
         let proof := mkExpectedPropHint (← mkEqRefl rhs) (← stmt runFrom.env)
         let fact := ⟨`hE₀args, stmt, proof⟩
-        generalizeOpaque g (hyps := #[]) runFrom.env `E₀ #[fact]
+        generalizeOpaque g runFrom.env `E₀ #[fact]
   let E₀ := mkFVar fvs[0]!
   let hE₀args' := fvs[1]!
   let hE₀args := mkFVar hE₀args'
   let (_, g) ←
     g.withContext do
-        generalizeOpaque g (hyps := #[]) E₀ `E
-            #[⟨`hE, (mkEq · E₀), ← mkEqRefl E₀⟩, ⟨`hEargs, stmt, hE₀args⟩]
+        generalizeOpaque g E₀ `E #[⟨`hE, (mkEq · E₀), ← mkEqRefl E₀⟩, ⟨`hEargs, stmt, hE₀args⟩]
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
@@ -81,16 +80,9 @@ meta def addInitialWF : TacticM Unit :=
     let (g, goal) ← getGoalType
     let S := (← getFuncRunFromGoal goal).state
     let hS ← findEqWithLhs S m!"`{S} = _`"
-    let wfTy ← mkAppM ``GlobalState.WF #[S]
-    let some hwf ←
-      (← getLCtx).findDeclM? fun d => do
-          if !d.isImplementationDetail && (← withReducible (isDefEq d.type wfTy)) then
-            return some d
-          return none | return
-    let motive ←
-      withLocalDeclD `x (mkConst ``GlobalState) fun x => do
-          mkLambdaFVars #[x] (← mkAppM ``GlobalState.WF #[x])
-    let hwf₀ ← mkEqNDRec motive hwf.toExpr (mkFVar hS)
+    let some hwf ← withReducible (findLocalDeclWithType? (← mkAppM ``GlobalState.WF #[S])) | return
+    let hwf ← hwf.getDecl
+    let hwf₀ ← mkEqNDRec (mkConst ``GlobalState.WF) hwf.toExpr (mkFVar hS)
     let (_, g) ←
       g.assertHypotheses
           #[{ userName := hwf.userName.appendAfter "₀", type := ← inferType hwf₀, value := hwf₀ }]
