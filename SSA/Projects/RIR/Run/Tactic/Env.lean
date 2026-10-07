@@ -84,31 +84,6 @@ def argsSimprocs (fact : FVarId) : MetaM Simp.Simprocs := do
   let keys ← DiscrTree.mkPath (mkApp argsFn (← mkFreshExprMVar indexType))
   return simprocs.addCore keys ``reduceArgsApp false (.inr reduceArgsApp)
 
-def decideDischarge : Simp.Discharge := fun prop => do
-  if let some pf← decideProof? prop then
-    return pf
-  -- abstract registers (a pattern lemma's): a local `h : prop`, or `h : j ≠ i` for `i ≠ j`
-  let symm? ←
-    match prop.ne? with
-    | some (_, a, b) =>
-      some <$> mkAppM ``Ne #[b, a]
-    | none =>
-      pure none
-  -- `a ≠ b`, or simp's `¬ a = b`
-  let sides? := neSides? (← instantiateMVars prop)
-  for d in ← getLCtx do
-    if d.isImplementationDetail then
-      continue
-    if ← withReducible (isDefEq d.type prop) then
-      return some d.toExpr
-    if let some symm := symm? then
-      if ← withReducible (isDefEq d.type symm) then
-        return some (← mkAppM ``Ne.symm #[d.toExpr])
-    if let some (a, b) := sides? then
-      if let some h← nodupNe? d.toExpr (← instantiateMVars d.type) a b then
-        return some (← mkExpectedTypeHint h prop)
-  return none
-
 /-- Register `i` of `e`, an env without a chain fact, from a local `h : e.read (.val i _) = v`: a
 read at a block lemma's entry env. `lhs` is the read being resolved, `e.read` of `i` up to the
 skipped writes. -/
@@ -188,8 +163,16 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
       ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
-  return (←
-        simp e elaborated.ctx (simprocs := elaborated.simprocs) (discharge? := decideDischarge)).1
+  -- `decide` first, also with locals that do not block it (a vector's size); a closed goal it
+  -- refutes (registers `r ≠ r`, at each write a read passes) only by a local, else the facts
+  let disch : Simp.Discharge := fun p => do
+    let p ← instantiateMVars p
+    if let some pf← decideProof? p then
+      return some pf
+    if !p.hasFVar && !p.hasMVar then
+      return (← withReducible (findLocalDeclWithType? p)).map mkFVar
+    factDischarge c.toFactCtx 0 p
+  return (← simp e elaborated.ctx (simprocs := elaborated.simprocs) (discharge? := disch)).1
 
 /-- The state equations `S = …` in context -/
 def stateFacts : MetaM (Array FVarId) := do

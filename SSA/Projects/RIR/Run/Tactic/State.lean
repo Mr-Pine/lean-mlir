@@ -19,11 +19,6 @@ structure SealedState where
   hS' : FVarId
   hS : FVarId
 
-/-- Prove `p` from the context and the `mlir_transport` lemmas, at reducible transparency:
-`LimbsFit` of a store chain is its base's fact. -/
-def transportDischarge (fuel : Nat) (p : Expr) : MetaM (Option Expr) := do
-  transportWith (← contextFactMap) (← labelled `mlir_transport) fuel (← instantiateMVars p)
-
 /-- The new state simplified by `mlir_state` and the memory simprocs (reads through stores, by read
 facts, through `hS`); side conditions are discharged from the context (`c?`, else gathered), at
 reducible transparency. -/
@@ -32,22 +27,20 @@ def simpState (e : Expr) (c? : Option MemCtx := none) : MetaM Simp.Result := do
   let c ← c?.getDM MemCtx.build
   let dischProcs := #[← Simp.getSimprocs]
   let procs := dischProcs.push (← memSimprocs c)
-  let facts := c.factMap
-  let lemmas := c.transport
   -- reducible: a side condition's `assumption` must not unfold memory chains
   let disch : Simp.Discharge := fun p => do
-    -- a fact, as is or `mlir_state`-normalized (a store chain's `LimbsFit` is its base's); the
-    -- transport search last
+    -- from the facts, as is or `mlir_state`-normalized (a store chain's `LimbsFit` is its base's);
+    -- the transport search last
     let p ← instantiateMVars p
-    if let some pf := facts[p]? then
+    if let some pf := c.factMap[p]? then
       return some pf
     -- side conditions (`LimbsFit`, `Fits`) read no memory
     let (r, _) ← simp p ctx (simprocs := dischProcs)
-    if let some pf := facts[r.expr]? then
+    if let some pf := c.factMap[r.expr]? then
       return some (← mkEqMPR (← r.getProof) pf)
     if let some pf← withReducible (Simp.dischargeDefault? p) then
       return some pf
-    transportWith facts lemmas 64 p
+    factDischarge c.toFactCtx 64 p
   return (← simp e ctx (simprocs := procs) (discharge? := disch)).1
 
 /-- Substitute each state local of `e` that has an equation `x = _` by it. -/
@@ -68,17 +61,35 @@ def dsimpStateEq (g : MVarId) (h : FVarId) : MetaM MVarId :=
     let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | return g
     g.replaceLocalDeclDefEq h (← mkEq l (← dsimpState r))
 
-/-- Close the goal by `transportDischarge`: a fact of the context, through `mlir_transport`
-lemmas. -/
-elab "transport_fact" : tactic =>
+/-- Close `g` by `factDischarge`: its searches, then the transport search, about a state `S` with
+`hS : S = s` from the facts about `s`. -/
+def memFact (g : MVarId) : MetaM Bool :=
+  g.withContext do
+    -- a local, before gathering the facts
+    if let some h← withReducible (findLocalDeclWithType? (← g.getType)) then
+      g.assign (mkFVar h)
+      return true
+    if let some pf← factDischarge (← FactCtx.build) 0 (← g.getType) then
+      g.assign pf
+      return true
+    let saved ← saveState
+    let g' ← substStates g (← instantiateMVars (← g.getType))
+    let ok ←
+      g'.withContext do
+          let some pf ← factDischarge (← FactCtx.build) 64 (← g'.getType) | return false
+          g'.assign pf
+          return true
+    unless ok do
+      saved.restore
+    return ok
+
+/-- Close a side condition from the facts (`memFact`): `Fits`, disjointness, `≠`, a closed fact by
+`decide`, or a fact carried by `mlir_transport` lemmas. -/
+elab "mem_fact" : tactic =>
   withMainContext do
-    -- a state `S` with `hS : S = e` in the goal: the facts are about `e`
-    let g ← substStates (← getMainGoal) (← instantiateMVars (← getMainTarget))
-    g.withContext do
-        let some pf ←
-          transportDischarge 64
-              (← instantiateMVars (← g.getType)) | throwError "`transport_fact`: no transport"
-        g.assign pf
+    let g ← getMainGoal
+    unless ← memFact g do
+      throwError "`mem_fact`: not from the facts{indentExpr (← g.getType)}"
     replaceMainGoal []
 
 /-- `addressof`'s new state `⟨_, X.mem.addBlock ⟨X.alloc.nextFreeBlock⟩ n x⟩`: `X`, `n` and `x`. -/
