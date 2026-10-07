@@ -159,7 +159,7 @@ simproc_decl readThroughWrites (Env.read _ _) := fun e => do
 
 /-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and `readThroughStore`.
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
-def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) :
+def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) (c : MemCtx) :
     TacticM Simp.Result := do
   let mut thms ←
     if only then
@@ -187,8 +187,8 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
           argsSimprocs facts[0]
         else
           Simp.getSimprocs,
-      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false),
-      ← memSimprocs (← MemCtx.build), ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
+      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
+      ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   return (←
@@ -268,8 +268,9 @@ def foldConsts (e : Expr) : MetaM Expr := do
         return .continue
       for (c, v) in cands do
         -- default transparency: numerals differ in spelling (`43#64`, `(43 : BitVec 64)`)
-        if v.getAppFn == t.getAppFn && (← withNewMCtxDepth (withDefault (isDefEq t v))) then
-          return .done c
+        if v.getAppFn == t.getAppFn then
+          if ← withNewMCtxDepth (withDefault (isDefEq t v)) then
+            return .done c
       return .continue)
 
 /-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
@@ -280,8 +281,10 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
   let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
   let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
   let reads ← readFacts
-  let args ← simpPass only simpArgs e argsFact
-  let vals ← simpPass true simpArgs args.expr (chainFact ++ reads)
+  -- one memory context for every pass: they change no hypothesis
+  let c ← MemCtx.build
+  let args ← simpPass only simpArgs e argsFact c
+  let vals ← simpPass true simpArgs args.expr (chainFact ++ reads) c
   let r ← args.mkEqTrans vals
   let facts ←
     if expand then
@@ -293,7 +296,7 @@ def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand 
     if facts.isEmpty && only then
       pure r
     else
-      r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts ++ reads))
+      r.mkEqTrans (← simpPass only simpArgs r.expr (argsFact ++ facts ++ reads) c)
   -- last: `#v[.value x, …]` to `Ty.wrap #v[x, …]`, once every lane is final
   let ctx ← Simp.mkContext
   let (p, _) ← simp r.expr ctx (simprocs := #[← ({} : Simp.Simprocs).add ``pullWrap (post := true)])
