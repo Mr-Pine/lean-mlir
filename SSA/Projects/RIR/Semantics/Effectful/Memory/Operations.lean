@@ -477,6 +477,20 @@ theorem MemoryState.readAt_addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF
   unfold MemoryState.readAt
   rw [hget]
 
+/-- A read outside a new block: the read before it. For a block below others added since the
+state (a second global's), where `readAt_addBlock` does not match. -/
+@[mlir_read]
+theorem MemoryState.readAt_addBlock_of_id_ne {m : MemoryState} {b : BlockId} {x : BitVec v}
+    (h : q.id ≠ b) : (m.addBlock b n x).readAt q w = m.readAt q w := by
+  have hget : (m.addBlock b n x)[q.id]? = m[q.id]? := by
+    simp only [MemoryState.addBlock, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
+    split
+    · rename_i heq
+      exact absurd (beq_iff_eq.mp heq).symm h
+    · rfl
+  unfold MemoryState.readAt
+  rw [hget]
+
 /-- A block at or above `n` is gone once the frame from `n` is erased. -/
 @[mlir_frame, mlir_erase]
 theorem MemoryState.eraseFrom_addBlock_of_le {m : MemoryState} {b : BlockId} {x : BitVec v}
