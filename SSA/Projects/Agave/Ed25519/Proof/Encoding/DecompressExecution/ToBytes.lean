@@ -12,9 +12,9 @@ attribute [-simp] BitVec.shiftLeft_add_distrib in
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 4000000 in
 /-- The input is fully loaded before any output store, so overlapping buffers are allowed. -/
-theorem program_call (r a : Pointer) (s : GlobalState) (hwf : s.WF)
+theorem program_run (r a : Pointer) (s : GlobalState) (hwf : s.WF)
     (hr : SmallRange s.mem r 32) (ha : SmallRange s.mem a 40) :
-    program.call (program.args (.value r) (.value a)) s =
+    program.run (program.args (.value r) (.value a)) s =
       .value (.nil, { s with mem := storeBytes s.mem r (machine (SerialFieldMul.readLimbs s a)) }) := by
   have hr0 := hr.fits_add (k := 0) (count := 1) (by decide)
   have hr1 := hr.fits_add (k := 1) (count := 1) (by decide)
@@ -58,7 +58,9 @@ theorem program_call (r a : Pointer) (s : GlobalState) (hwf : s.WF)
   dsimp only [SerialFieldMul.readLimbs] at hs
   norm_num at hs
   rcases hs with ⟨h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24, h25, h26, h27, h28, h29, h30, h31, h32, h33, h34, h35, h36, h37, h38, h39, h40, h41⟩
-  func_init
+  rw [Func.run_runFrom_eq]
+  extract_state
+  extract_env
   block_init
   simp only [hS] at h0 h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15 h16 h17 h18 h19 h20 h21 h22 h23 h24 h25 h26 h27 h28 h29 h30 h31 h32 h33 h34 h35 h36 h37 h38 h39 h40 h41
   step_pure
@@ -436,6 +438,15 @@ theorem program_call (r a : Pointer) (s : GlobalState) (hwf : s.WF)
   try erase_frame
   subst_vars
   simp [machine, carryMachine, reverseCarry, quotientCarry, weakWord, rawBytes, storeBytes, SerialFieldMul.readLimbs, Pointer.add]
+
+/-- The standalone call reclaims no allocations; its output is the same exact
+store state as `program_run`. Kept at the original API for existing callers. -/
+theorem program_call (r a : Pointer) (s : GlobalState) (hwf : s.WF)
+    (hr : SmallRange s.mem r 32) (ha : SmallRange s.mem a 40) :
+    program.call (program.args (.value r) (.value a)) s =
+      .value (.nil, { s with mem := storeBytes s.mem r (machine (SerialFieldMul.readLimbs s a)) }) := by
+  exact Func.call_eq_of_run_eq (program_run r a s hwf hr ha)
+    (wf_storeBytes hwf r _) rfl
 
 set_option maxRecDepth 10000 in
 /-- Exact helper execution and full canonical output readback, without a limb
