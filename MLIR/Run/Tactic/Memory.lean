@@ -105,6 +105,28 @@ def noOverflowOfFact? (facts : Array (Expr × Expr)) (q off : Expr) : MetaM (Opt
     return some (← mkAppM ``BitVec.not_uaddOverflow_of_le #[pf, hle])
   return none
 
+/-- `¬q.offset.uaddOverflow off = true`. -/
+def noOverflowGoal (q off : Expr) : MetaM Expr := do
+  return mkNot
+      (←
+        mkEq (← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off])
+            (mkConst ``Bool.true))
+
+/-- `w` bits at `q.add off` inside `v` bits at `q`: the offset does not wrap (by the offsets'
+values, or a no-overflow fact for a larger offset), and `off.toNat * 8 + w ≤ v`. -/
+def addWithin? (facts : Array (Expr × Expr)) (q off w v : Expr) : MetaM (Option (Expr × Expr)) := do
+  let hov? ←
+    match ← decideWithOffsets? facts (← noOverflowGoal q off) with
+    | some h =>
+      pure (some h)
+    | none =>
+      noOverflowOfFact? facts q off
+  let some hov := hov? | return none
+  let off8 ← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8]
+  let some hw ←
+    decideWithOffsets? facts (← mkAppM ``LE.le #[← mkAppM ``HAdd.hAdd #[off8, w], v]) | return none
+  return some (hov, hw)
+
 /-- Prove `Fits m p w`: a fact with the same `m` and `p`, and the same width as a literal
 (`(Ty.vec 8 64).width` is `512`); not `isDefEq` on `Fits` itself, which unfolds the memory. An
 offset `q.add off` fits inside a fact for `q` (`Fits.add_of_le`) if `q.offset + off` does not wrap:
@@ -113,7 +135,9 @@ partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Op
   let w₁ ← normWidths w
   for (pf, ty) in facts do
     let_expr Fits m' p' w' := ty | continue
-    if m' == m && p' == p && (w' == w || w' == w₁ || (← normWidths w') == w₁) then
+    unless m' == m && p' == p do
+      continue
+    if w' == w || w' == w₁ || (← normWidths w') == w₁ then
       return some (mkExpectedPropHint pf (← mkAppM ``Fits #[m, p, w]))
   -- a wider fact, both widths literals
   if let some n := w₁.nat? then
@@ -132,21 +156,7 @@ partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Op
       let_expr Fits m' q' v := ty | continue
       unless m' == m && q' == q do
         continue
-      let v ← normWidths v
-      let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off]
-      let hov? ←
-        if let some h← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) then
-          pure (some h)
-        else
-          noOverflowOfFact? facts q off
-      let some hov := hov? | continue
-      let hwTy ←
-        mkAppM ``LE.le
-            #[←
-                mkAppM ``HAdd.hAdd
-                    #[← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8], w₁],
-              v]
-      let some hw ← decideWithOffsets? facts hwTy | continue
+      let some (hov, hw) ← addWithin? facts q off w₁ (← normWidths v) | continue
       return some (← mkAppOptM ``Fits.add_of_le #[none, none, none, none, off, hov, hw, pf])
   -- If not found directly, go through `Fits.storeAt`
   let_expr MemoryState.storeAt m' q _ x := m | return none
@@ -260,14 +270,12 @@ def disjointProof? (facts : Array (Expr × Expr)) (p v q w : Expr) (offsets := t
     -- Otherwise just return the closed goal.
     let some g' ←
       (do
-          let ctx ←
-            Simp.mkContext (simpTheorems :=
-                #[← ({} : SimpTheorems).addDeclToUnfold ``Range.Disjoint,
-                  ← ({} : SimpTheorems).addDeclToUnfold ``Range.of,
-                  ← ({} : SimpTheorems).addDeclToUnfold ``Pointer.offsetInBits,
-                  ← ({} : SimpTheorems).addDeclToUnfold ``Pointer.add,
-                  ← ({} : SimpTheorems).addConst ``BitVec.toNat_add,
-                  ← ({} : SimpTheorems).addConst ``BitVec.toNat_ofNat])
+          let mut thms : SimpTheorems := {}
+          for n in [``Range.Disjoint, ``Range.of, ``Pointer.offsetInBits, ``Pointer.add] do
+            thms ← thms.addDeclToUnfold n
+          for n in [``BitVec.toNat_add, ``BitVec.toNat_ofNat] do
+            thms ← thms.addConst n
+          let ctx ← Simp.mkContext (simpTheorems := #[thms])
           let (r, _) ← simpGoal g.mvarId! ctx (simprocs := #[← Simp.getSimprocs])
           pure (r.map (·.2))) | return some (← instantiateMVars g)
     let [g''] ←
@@ -284,7 +292,7 @@ simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ 
   let_expr MemoryState.storeAt m p v x := mm | return .continue
   let facts ← splitConjunctedFacts
   -- read back from write
-  if (← isDefEq p q) ∧ (← isDefEq v w) then
+  if ← isDefEq p q <&&> isDefEq v w then
     if let some hf← fitsProof? facts m p w then
       if let some pf← proveEqBy? ``MemoryState.readAt_storeAt_self e x [hf] then
         return .visit { expr := x, proof? := some pf }
@@ -297,8 +305,7 @@ simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ 
 
 /-- `¬p.offset.uaddOverflow off`: unfold `uaddOverflow`, then `omega` from the facts. -/
 def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Option Expr) := do
-  let overflow ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off]
-  let g ← mkFreshExprMVar (mkNot (← mkEq overflow (mkConst ``Bool.true)))
+  let g ← mkFreshExprMVar (← noOverflowGoal p off)
   try
     -- `Pointer.add` too, so `omega` sees a moved pointer's offset through its base's
     let thms ← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow
@@ -319,10 +326,9 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
   let_expr PoisonOr.value _ p := pp | return .continue
   let facts ← splitConjunctedFacts
   -- a stack slot's offset by its fact, a bound for a larger offset, else bounds by `omega`
-  let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off]
   let some h ←
     (do
-        if let some h← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) then
+        if let some h← decideWithOffsets? facts (← noOverflowGoal p off) then
           return some h
         if let some h← noOverflowOfFact? facts p off then
           return some h
@@ -384,9 +390,13 @@ def readLemmas : MetaM (Array ReadLemma) := do
     ls := ls.push { name := n, read, write, lhs := l }
   return ls
 
+/-- The read functions of the lemmas `ls`, each once. -/
+def ReadLemma.heads (ls : Array ReadLemma) : Array Name :=
+  ls.foldl (fun hs l => if hs.contains l.read then hs else hs.push l.read) #[]
+
 /-- The read functions of the `mlir_read` lemmas. -/
 def readHeads : MetaM (Array Name) := do
-  return (← readLemmas).foldl (fun hs l => if hs.contains l.read then hs else hs.push l.read) #[]
+  return ReadLemma.heads (← readLemmas)
 
 /-- A read fact `read (s.mem) … = x` of the state `s`: a registered read with `s.mem` an
 argument. -/
@@ -410,10 +420,12 @@ structure MemCtx where
   reads : Std.HashMap Expr (Expr × Expr)
   /-- `b.slot k ↦ (x, hx : x = b.slot k)`, for the named slots `x`. -/
   slots : Std.HashMap Expr (Expr × Expr)
+  /-- `S.mem ↦ (hS, s.mem)` for `hS : S = s`, filled by `readThroughState`. -/
+  mems : IO.Ref (Std.HashMap Expr (Option (FVarId × Expr)))
 
 def MemCtx.build : MetaM MemCtx := do
   let lemmas ← readLemmas
-  let heads := lemmas.foldl (fun hs l => if hs.contains l.read then hs else hs.push l.read) #[]
+  let heads := ReadLemma.heads lemmas
   let mut reads := {}
   let mut slots := {}
   for e in ← localEqs do
@@ -427,7 +439,7 @@ def MemCtx.build : MetaM MemCtx := do
       continue
     reads := reads.insert (← normWidths e.lhs) (e.rhs, e.decl.toExpr)
   return { lemmas, heads, transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
-           factMap := ← contextFactMap, reads, slots }
+           factMap := ← contextFactMap, reads, slots, mems := ← IO.mkRef {} }
 
 /-- `a ≠ b` for block ids `p.id` of slots spelled by their state (`(S.alloca n).allocaPtr`): by the
 facts about the named slots `x` they are. -/
@@ -566,15 +578,7 @@ def readMemFact (c : MemCtx) : Simp.Simproc := fun e => do
     unless m' == m && q' == q do
       continue
     let some hfits ← fitsProof? c.facts m q v | continue
-    let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off]
-    let some hov ← decideWithOffsets? c.facts (mkNot (← mkEq ov (mkConst ``Bool.true))) | continue
-    let hwTy ←
-      mkAppM ``LE.le
-          #[←
-              mkAppM ``HAdd.hAdd
-                  #[← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8], w],
-            v]
-    let some hw ← decideWithOffsets? c.facts hwTy | continue
+    let some (hov, hw) ← addWithin? c.facts q off w v | continue
     let pf ← mkAppM ``MemoryState.readAt_add_of_readAt #[hfits, hov, hw, h]
     let some (_, _, r) := (← inferType pf).eq? | continue
     return .visit { expr := r, proof? := some (mkExpectedPropHint pf (← mkEq e r)) }
@@ -582,12 +586,11 @@ def readMemFact (c : MemCtx) : Simp.Simproc := fun e => do
 
 /-- A registered read of `S.mem` without a fact, through the writes of `S`'s equation `hS : S = s`
 by the `mlir_read` lemmas: kept when it resolves, to a stored value or a read below every write.
-`S`'s equation and memory are looked up once per `S` (`mems`). -/
-def readThroughState (c : MemCtx) (mems : IO.Ref (Std.HashMap Expr (Option (FVarId × Expr)))) :
-    Simp.Simproc := fun e => do
+`S`'s equation and memory are looked up once per `S` (`c.mems`). -/
+def readThroughState (c : MemCtx) : Simp.Simproc := fun e => do
   let some m := stateMemArg? c e | return .continue
   let mem? ←
-    match (← mems.get)[m]? with
+    match (← c.mems.get)[m]? with
     | some mem? =>
       pure mem?
     | none =>
@@ -598,7 +601,7 @@ def readThroughState (c : MemCtx) (mems : IO.Ref (Std.HashMap Expr (Option (FVar
               (some
                 (hS.decl.fvarId,
                   ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[hS.rhs]))))
-      mems.modify (·.insert m mem?)
+      c.mems.modify (·.insert m mem?)
       pure mem?
   let some (hS, sMem) := mem? | return .continue
   let e' := e.replace fun t => if t == m then some sMem else none
@@ -611,20 +614,16 @@ def readThroughState (c : MemCtx) (mems : IO.Ref (Std.HashMap Expr (Option (FVar
 
 /-- `readMemFact` and `readThroughState` for one `simp` call, keyed on the registered reads. -/
 def memSimprocs (c : MemCtx) : MetaM Simp.Simprocs := do
-  let mems ← IO.mkRef {}
   let mut procs : Simp.Simprocs := {}
-  let mut done : Array Name := #[]
-  for l in c.lemmas do
-    if done.contains l.read then
-      continue
-    done := done.push l.read
+  for h in c.heads do
+    let some l := c.lemmas.find? (·.read == h) | continue
     -- `read _ … _`: the lemma's left side with its arguments open
     let args ←
       l.lhs.getAppArgs.mapM fun a => do
           mkFreshExprMVar (← inferType a)
     let keys ← DiscrTree.mkPath (mkAppN l.lhs.getAppFn args)
     procs := procs.addCore keys `readMemFact false (.inl (readMemFact c))
-    procs := procs.addCore keys `readThroughState true (.inl (readThroughState c mems))
+    procs := procs.addCore keys `readThroughState true (.inl (readThroughState c))
   return procs
 
 end

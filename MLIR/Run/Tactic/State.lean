@@ -255,7 +255,8 @@ def ensureStateEq : TacticM Unit :=
     s.forEachWhere
         (fun e => e.isAppOfArity ``GlobalState.mem 1 || e.isAppOfArity ``GlobalState.alloc 1)
         fun e => bases.modify (·.push e.appArg!)
-    for b in (← bases.get).toList.eraseDups do
+    let bases := (← bases.get).toList.eraseDups
+    for b in bases do
       if b == s then
         continue
       for d in ← getLCtx do
@@ -277,16 +278,20 @@ def ensureStateEq : TacticM Unit :=
         olds := olds.push d.fvarId
     -- the earlier state, a local (a loop's start): its reads carried past the writes over it, and
     -- the writes read back, as a step's
-    let base? := (← bases.get).toList.eraseDups.find? fun b => b.isFVar && b != s
+    let base? := bases.find? fun b => b.isFVar && b != s
     if let some b := base? then
       let (hyps, oldReads, g') ← memFactsOf g b s
       g := g'
       carried := carried ++ hyps.map (·.1)
       olds := olds ++ oldReads
+    let heads ←
+      if s.isFVar then
+        readHeads
+      else
+        pure #[]
     -- a bare state's own facts (`Fits s.mem p w`, `s.mem.readAt p w = x`), generalized with it:
     -- about `S`, so each seal transports them
     if s.isFVar then
-      let heads ← readHeads
       for h in ← g.withContext (hypsMentioning s) do
         let ty ← instantiateMVars (← g.withContext h.getType)
         -- facts and memory reads, not other equations nor continuations
@@ -312,7 +317,6 @@ def ensureStateEq : TacticM Unit :=
             let mut g₁ := g
             let mut seen : Array (Expr × Expr) := #[]
             let facts ← splitConjunctedFacts
-            let heads ← readHeads
             let known ←
               facts.filterMapM fun (_, ty) => do
                   let some (l, _) := memReadFact? heads S ty | return none
