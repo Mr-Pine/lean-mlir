@@ -12,11 +12,6 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-/-- The literal index of a `Reg.val k h`, if it has one. -/
-def valRegIndex? (r : Expr) : MetaM (Option Nat) := do
-  let_expr Reg.val _ _ i _ := r | return none
-  finNLit? i
-
 /-- Exit and instructions in `block` from `pos` on. -/
 def blockParts (block pos : Expr) : MetaM (Array Expr) := do
   let mut parts := #[← whnfD (← mkAppM ``BasicBlock.exit #[block])] -- Check all used in exit
@@ -122,11 +117,6 @@ partial def splitChain (e : Expr) : MetaM (Expr × Array ChainWrite) := do
 def ChainWrite.apply (w : ChainWrite) (env : Expr) : MetaM Expr :=
   mkAppM ``Env.write #[env, w.dst, w.val]
 
-/-- `fun e => e.write w.dst w.val`, for `mkCongrArg`. -/
-def ChainWrite.fn (w : ChainWrite) (env : Expr) : MetaM Expr := do
-  withLocalDeclD `e (← inferType env) fun e => do
-      mkLambdaFVars #[e] (← w.apply e)
-
 def chainFn (ws : List ChainWrite) (env : Expr) : MetaM Expr := do
   withLocalDeclD `e (← inferType env) fun e => do
       let body ←
@@ -147,54 +137,43 @@ private def writeComm (e : Expr) : MetaM Expr := do
   h.mvarId!.assign (← mkDecideProof (← instantiateMVars (← inferType h)))
   instantiateMVars (mkAppN lem args)
 
-private def swapN (env : Expr) (incoming : ChainWrite) :
-    Nat → (liveWrites : List ChainWrite) → MetaM Expr
-  | 0, [] => do
-    let write ← incoming.apply env
-    mkEqRefl write
-  | n + 1, w :: ws => do
-    let outerWrite ← incoming.apply env
-    let outerSwap ← writeComm outerWrite
+/-- `incoming` written over `env` swapped below the live writes `env` ends with. -/
+private def swapN (env : Expr) (incoming : ChainWrite) : (liveWrites : List ChainWrite) → MetaM Expr
+  | [] => do
+    mkEqRefl (← incoming.apply env)
+  | w :: ws => do
+    let outerSwap ← writeComm (← incoming.apply env)
     let_expr Env.write _ _ innerBase _ _ := env | throwError m!"{env} is no env write"
-    let innerSwaps ← swapN (innerBase) incoming n ws
-    let innerSwapsCongr ← mkCongrArg (← w.fn env) innerSwaps
-    mkEqTrans outerSwap innerSwapsCongr
-  | n, ws => do
-    throwError m!"Mismatch between N ({n}) and write length ({ws.length})"
+    let innerSwaps ← swapN innerBase incoming ws
+    mkEqTrans outerSwap (← mkCongrArg (← chainFn [w] env) innerSwaps)
 
-private def partitionProof' (env : Expr) (live : Std.HashSet Nat) (liveCount : Nat)
-    (writtenLive : List ChainWrite /-`head` is the most outer write-/ ) :
-    (remainingWrites : List ChainWrite) → MetaM Expr
+/-- `env` with the writes `remaining` equal to it with the dead ones first, the live ones last;
+`writtenLive` the live writes over `env`, outermost first. -/
+private def partitionProof (env : Expr) (live : Std.HashSet Nat) (writtenLive : List ChainWrite) :
+    (remaining : List ChainWrite) → MetaM Expr
   | [] => do
     mkEqRefl env
   | w :: ws =>
     if w.idx ∈ live then do
-      partitionProof' (← w.apply env) live (liveCount + 1) (w :: writtenLive) ws
+      partitionProof (← w.apply env) live (w :: writtenLive) ws
     else do
-      let swapProof ← swapN env w liveCount writtenLive
+      let swapProof ← swapN env w writtenLive
       let some (_, _, rhs) :=
         (← inferType swapProof).eq? | throwError "swap proof is not an equation"
-      let partProof ← partitionProof' rhs live liveCount writtenLive ws
-      let lifted ←
-        mkCongrArg (← chainFn ws env) swapProof -- Lift the swap proof to the remaining writes
+      let partProof ← partitionProof rhs live writtenLive ws
+      -- the swap lifted to the remaining writes
+      let lifted ← mkCongrArg (← chainFn ws env) swapProof
       mkEqTrans lifted partProof
 
-private def partitionProof (live : Std.HashSet Nat) (env : Expr) (writes : Array ChainWrite) :=
-  partitionProof' env live 0 [] writes.toList
-
 /-- Clear a value `x` and its hyp `hx : x = _` if possible -/
-def tryClearValue (g : MVarId) (v : FVarId) : TacticM MVarId :=
+def tryClearValue (g : MVarId) (v : FVarId) : MetaM MVarId :=
   g.withContext do
-    try
-      do
-        let hyp ←
-          findEqWithLhs (.fvar v)
-              m!"Var `{Expr.fvar v} without defining hypothesis" -- If we have more than one or none, don't clear
-        let g ← g.clear hyp
-        let g ← g.clear v
-        return g
-    catch _ =>
-      return g
+    let some hyp ← observing? (findEqWithLhs? (.fvar v) m!"") | return g
+    let some hyp := hyp | return g
+    return (←
+            observing? do
+                (← g.clear hyp).clear v).getD
+        g
 
 /-- Clear each `v` with `hv : v = _` that nothing but `hv` mentions, until nothing changes. -/
 def clearUnusedValues (g : MVarId) : MetaM MVarId :=
@@ -264,16 +243,13 @@ def runSeal : TacticM Unit :=
     -- loop's continuation) keeps the root
     let mut carried : Array (FVarId × Name × Expr) := #[]
     if E₀.isFVar then
-      for d in ← getLCtx do
-        if d.isImplementationDetail || d.fvarId == hE then
-          continue
+      for h in ← hypsMentioning E₀ (except := #[hE]) do
+        let d ← h.getDecl
         let ty ← instantiateMVars d.type
-        unless ty.containsFVar E₀.fvarId! do
-          continue
         unless ← carriesOver E₀ dead ty do
           return
         carried := carried.push (d.fvarId, d.userName, ty.replaceFVar E₀ E₀')
-    let partitionProof ← partitionProof liveRegs E₀ chain
+    let partitionProof ← partitionProof E₀ liveRegs [] chain.toList
     let hE' ← mkEqTrans (.fvar hE) partitionProof
     let r ← g.assertAfter hE `hE (← inferType hE') hE'
     -- `assertAfter` reintroduces the locals after `hE`: the carried facts by their new ids
@@ -286,7 +262,6 @@ def runSeal : TacticM Unit :=
     g := g'
     for (h, _, _) in carried do
       g ← g.clear h
-    replaceMainGoal [g]
     let (_, g') ← generalizeOpaque g (hyps := #[r.fvarId] ++ facts) E₀' `E₀ #[]
     -- the old root, now unused, if a local
     g ←
@@ -294,13 +269,7 @@ def runSeal : TacticM Unit :=
         g'.clear E₀.fvarId!
       else
         pure g'
-    replaceMainGoal [g]
-    -- Clear away unused values: the dead writes', then, until nothing changes, those only their
-    -- own `hv` mentions (clearing `v21` frees the `v20` that `hv21` used)
-    for write in deadWrites do
-      let v := if write.val.isAppOfArity ``PoisonOr.value 2 then write.val.appArg! else write.val
-      if let some x := v.fvarId? then
-        g ← tryClearValue g x
+    -- the values only their own `hv` mentions, the dead writes' among them
     replaceMainGoal [← clearUnusedValues g]
 
 elab "seal" : tactic => runSeal

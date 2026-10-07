@@ -4,6 +4,7 @@ public import SSA.Projects.RIR.Semantics.Func
 public meta import SSA.Projects.RIR.Run.BasicBlock
 public meta import SSA.Projects.RIR.Run.Scalar
 public meta import SSA.Projects.RIR.Run.Tactic.Env
+public meta import SSA.Projects.RIR.Run.Tactic.Step.Syntax
 public meta import Lean.Elab.Tactic
 public import SSA.Projects.RIR.Run.Tactic.Trace
 
@@ -13,20 +14,13 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-syntax (name :=
-  finishBlock) "finish_block" (&" only")? (" [" withoutPosition(Lean.Parser.Tactic.simpArg,*,?) "]")? :
-  tactic
+syntax (name := finishBlock) "finish_block" stepSimpArgs : tactic
 
 simproc reduceFuncContinue (Func.continue _ _ _) := fun e => do
   let_expr Func.continue func E res s := e | return .continue
-  let proof ←
-    match_expr res with
-    | Sum.inl _ _ vals =>
-      mkAppOptM ``Func.exit #[func, vals, s, E]
-    | Sum.inr _ _ n =>
-      return .continue -- TODO
-    | _ =>
-      return .continue
+  -- an exit; a jump stays
+  let_expr Sum.inl _ _ vals := res | return .continue
+  let proof ← mkAppOptM ``Func.exit #[func, vals, s, E]
   let some (_, _, rhs) := (← inferType proof).eq? | return .continue
   return .visit { expr := rhs, proof? := proof }
 
@@ -115,7 +109,6 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
     sealEnvAt (← getFuncRunFromGoal goal).env
     goals := goals ++ (← getGoals)
   setGoals goals
-  --throwError "Unimplemented"
 
 @[tactic finishBlock]
 def evalFinishBlock : Tactic := fun stx =>
@@ -147,9 +140,9 @@ def evalFinishBlock : Tactic := fun stx =>
     let some ret :=
       goal.find?
         (·.isAppOfArity ``Regs.read 4) -- If we don't exit, this will throw. Handle when relevant
-      | finishJumpingBlock (!stx[1].isNone) stx[2]
+      | finishJumpingBlock (!stx[1][0].isNone) stx[1][1]
     let env := ret.getArg! 2
-    let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env true
+    let r ← simpValue (only := !stx[1][0].isNone) (simpArgs := stx[1][1]) ret env true
     replaceMainGoal [← replaceBySimp g ret r]
 
 /-- The pointers' equations in context (`hx : x = s.slot k`, a named slot's), as simp lemmas. -/

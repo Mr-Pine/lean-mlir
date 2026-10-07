@@ -154,7 +154,7 @@ partial def closeReads (g : MVarId) : TacticM (List MVarId) := do
 partial def isReadGoal (ty : Expr) : Bool :=
   match ty.and? with
   | some (a, b) => isReadGoal a && isReadGoal b
-  | none => ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4)
+  | none => Tactic.isEnvReadEq ty
 
 /-- `env_reads` closes `E.read r = v`, or `E ⊨ [r := v, …]`, through `E`'s writes as `step_loop`
 closes its reads; what remains, by `rfl`. -/
