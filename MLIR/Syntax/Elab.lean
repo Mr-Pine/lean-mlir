@@ -21,6 +21,9 @@ defines it in the shape of a hand lift:
 * one `def` per block: `X.entry` for a single block, else `X.bb0`, `X.bb1`, … by MLIR name;
 * `X : Func` (`@[reducible]`), and `X.args`, the argument vector.
 
+The block bodies name value registers by `rir_reg%`/`rir_dst%`, whose types the kernel alone
+checks.
+
 A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`; an `llvm.mlir.addressof`
 of `@g` stores the value of the `GlobalInitializer` bound by `with @g := t` in a fresh block and
 returns its address. The terms may use the binders. Every called or addressed symbol needs a
@@ -35,14 +38,37 @@ open Lean Elab Command Term MLIR
 `GlobalInitializer` `t`'s value. -/
 public syntax calleeBinding := "@" ident " := " term
 
+/-- `rir_reg% X.hty k : Reg X.Γ t`: value register `k` of the `mlir_def` `X`, of the type `t` at
+entry `k` of `X.tree`; only the kernel checks the type. -/
+syntax (name := rirReg) "rir_reg% " ident num : term
+
+/-- `rir_dst% X.hty k : Dst X.Γ t`: `rir_reg% X.hty k` as a destination. -/
+syntax (name := rirDst) "rir_dst% " ident num : term
+
+/-- `rir_ty% X.hty k`: the type `t` of `rir_reg% X.hty k`. -/
+syntax (name := rirTy) "rir_ty% " ident num : term
+
+/-- `rir_rfl%`: `rfl` at the expected type, which only the kernel checks. -/
+syntax (name := rirRfl) "rir_rfl%" : term
+
+/-- `rir_tys% [t, …]`: the `List Ty` literal of the type literals `t, …`, built without
+elaborating them. -/
+syntax (name := rirTys) "rir_tys% " "[" term,* "]" : term
+
+/-- `rir_tree% d [t, …]`: the literal of `TyTree.ofList d [t, …]`, as `rir_tys%`. -/
+syntax (name := rirTree) "rir_tree% " num " [" term,* "]" : term
+
 public meta section
 
 namespace MlirDef
 
 /-! ## Terms -/
 
+def numLit (n : Nat) : NumLit :=
+  Syntax.mkNumLit (toString n)
+
 def num (n : Nat) : TSyntax `term :=
-  ⟨Syntax.mkNumLit (toString n)⟩
+  ⟨numLit n⟩
 
 /-- `v` as a numeral, negated if `v < 0`. -/
 def intLit (v : Int) : CommandElabM (TSyntax `term) :=
@@ -61,29 +87,42 @@ def tyStx : Ty → CommandElabM (TSyntax `term)
 def tysStx (ts : List Ty) : CommandElabM (TSyntax `term) := do
   `([$(← ts.toArray.mapM tyStx),*])
 
-/-- The value registers' types, and `hty`, the lemma that proves them. -/
+/-- `hty`, the lemma that proves the value registers' types. -/
 structure ValTys where
   hty : Ident
-  vals : List Ty
-
-/-- `Γ.ty i = t` for value register `i` of type `t`: `hty i t rfl`. -/
-def ValTys.proof (tys : ValTys) (i : Nat) : CommandElabM (TSyntax `term) := do
-  `($(tys.hty) $(num i) $(← tyStx ((tys.vals[i]?).getD (.bv 0))) rfl)
 
 def regStx (tys : ValTys) : RegRef → CommandElabM (TSyntax `term)
   | .arg i => `((.arg $(num i) rfl))
-  | .val i => do
-    `((.val $(num i) $(← tys.proof i)))
+  | .val i => `((rir_reg% $(tys.hty) $(numLit i)))
 
-def dstStx (tys : ValTys) (i : Nat) : CommandElabM (TSyntax `term) := do
-  `(⟨$(num i), $(← tys.proof i)⟩)
+def dstStx (tys : ValTys) (i : Nat) : CommandElabM (TSyntax `term) :=
+  `((rir_dst% $(tys.hty) $(numLit i)))
 
-/-- The trie literal. -/
-def treeStx : TyTree → CommandElabM (TSyntax `term)
-  | .leaf t => do
-    `(.leaf $(← tyStx t))
-  | .node l r => do
-    `(.node $(← treeStx l) $(← treeStx r))
+/-- The type `t` of register `r`: a lookup for a value register. -/
+def ValTys.tyStx (tys : ValTys) (t : Ty) : RegRef → CommandElabM (TSyntax `term)
+  | .arg _ => MlirDef.tyStx t
+  | .val i => `((rir_ty% $(tys.hty) $(numLit i)))
+
+/-- The type `tyStx` writes as `stx`. -/
+partial def tyOfStx (stx : Term) : Option Ty :=
+  match stx with
+  | `(.bv $w:num) => some (.bv w.getNat)
+  | `(.ptr) => some .ptr
+  | `(.vec $l:num $w:num) => some (.vec l.getNat w.getNat)
+  | `(.array $n:num $t) => (.array n.getNat ·) <$> tyOfStx t
+  | `(.struct [$ts,*]) => .struct <$> ts.getElems.toList.mapM tyOfStx
+  | _ => none
+
+/-- The types `tyStx` writes as `ts`. -/
+def tysOfStx (ts : Array Term) : MetaM (List Ty) :=
+  ts.toList.mapM fun t => do
+    let some t := tyOfStx t | throwErrorAt t "expected a type literal"
+    return t
+
+/-- The trie literal's expression. -/
+def treeExpr : TyTree → Expr
+  | .leaf t => mkApp (mkConst ``TyTree.leaf) (toExpr t)
+  | .node l r => mkApp2 (mkConst ``TyTree.node) (treeExpr l) (treeExpr r)
 
 /-- The least `d` with `n ≤ 2 ^ d`. -/
 def depth (n : Nat) : Nat :=
@@ -159,8 +198,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
           | some k => `(some $(num k.val))
           | none => `(none)
     `((.shufflevector (#v[$lanes,*] : Vector (Option (Fin (2 * $(num l₁)))) $(num l₂))))
-  | .insertvalue indices tCont tVal h => do
-    `((.insertvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) (by decide)))
+  | .insertvalue indices tCont tVal _ => do
+    `((.insertvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) rir_rfl%))
 
 def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .select => `(.select)
@@ -213,11 +252,16 @@ end
 def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String → TSyntax `term) :
     PInstr → CommandElabM (TSyntax `term)
   | .const c d => do
-    `(.const $(← constStx c) $(← dstStx tys d))
+    `(.const (τ := $(← tys.tyStx c.ty (.val d))) $(← constStx c) $(← dstStx tys d))
   | .poison _ d => do
     `(.poison $(← dstStx tys d))
   | .unop op d a => do
     `(.unop $(← unOpStx op) $(← dstStx tys d) $(← regStx tys a))
+  | .binop (.insertvalue indices tCont tVal _) d a b => do
+    `(.binop
+          (.insertvalue [$(indices.toArray.map num),*] $(← tys.tyStx tCont (.val d))
+            $(← tys.tyStx tVal b) rir_rfl%)
+          $(← dstStx tys d) $(← regStx tys a) $(← regStx tys b))
   | .binop op d a b => do
     `(.binop $(← binOpStx op) $(← dstStx tys d) $(← regStx tys a) $(← regStx tys b))
   | .ternop op d a b c => do
@@ -313,6 +357,61 @@ def globalTerm (ref : Syntax) (binders : Array (TSyntax ``Lean.Parser.Term.brack
         Term.synthesizeSyntheticMVarsNoPostponing
   return t
 
+/-! ## Value registers -/
+
+/-- Entry `k` of the trie literal `e`, as `TyTree.get` reads it. -/
+partial def treeGet? (e : Expr) (k : Nat) : Option Expr :=
+  match e.consumeMData.getAppFnArgs with
+  | (``TyTree.leaf, #[t]) => some t
+  | (``TyTree.node, #[l, r]) => treeGet? (if k % 2 = 0 then l else r) (k / 2)
+  | _ => none
+
+/-- Value register `k` of a `mlir_def`, read off its literals. -/
+structure ValTy where
+  /-- `hty : ∀ (k : Fin Γ.n) (t : Ty), tree.get k = t → Γ.ty k = t` -/
+  hty : Name
+  Γ : Expr
+  /-- `Fin Γ.n` -/
+  fin : Expr
+  /-- `tree.get k = t`, over `k t` -/
+  get : Expr
+  /-- The register's type: entry `k` of `tree`'s literal. -/
+  t : Expr
+
+/-- Value register `k` of the `mlir_def` whose type lemma is `hty`. -/
+def valTy (hty : Ident) (k : Nat) : TermElabM ValTy := do
+  let h ← resolveGlobalConstNoOverload hty
+  -- the statement only: the proof may still be checked
+  let some (Γ, fin, get, tree) :=
+    (match (← getConstVal h).type with
+    | .forallE _ fin (.forallE _ _ (.forallE _ get _ _) _) _ => do
+      let (``Fin, #[n]) := fin.getAppFnArgs | none
+      let (``Ctx.n, #[Γ]) := n.getAppFnArgs | none
+      let (``Eq, #[_, lhs, _]) := get.getAppFnArgs | none
+      let (``TyTree.get, #[.const tree _, _]) := lhs.getAppFnArgs | none
+      some (Γ, fin, get, tree)
+    | _ => none)
+    | throwErrorAt hty "{h} does not state `∀ k t, tree.get k = t → Γ.ty k = t`"
+  let env := (← getEnv).setExporting false
+  let value? (e : Expr) := e.constName? >>= env.find? >>= (·.value?) |>.map (·.consumeMData)
+  let some n := value? Γ >>= (·.getAppArgs[0]?) >>= (·.nat?)
+    | throwErrorAt hty "{Γ} is not a context literal"
+  unless k < n do
+    throwErrorAt hty "{Γ} has no value register {k}, only {n}"
+  let some t := value? (.const tree []) >>= (treeGet? · k)
+    | throwErrorAt hty "{tree} is not a type trie literal"
+  return { hty := h, Γ, fin, get, t }
+
+/-- `rir_reg% hty k`'s `Γ`, type `t`, index `k : Fin Γ.n`, and `hty k t rfl : Γ.ty k = t`, where
+only the kernel checks `rfl`. -/
+def valReg (hty : Ident) (k : Nat) : TermElabM (Expr × Expr × Expr × Expr) := do
+  let { hty, Γ, fin, get, t } ← valTy hty k
+  let i ← Meta.mkNumeral fin k
+  let rfl :=
+    Meta.mkExpectedPropHint (mkApp2 (mkConst ``Eq.refl [1]) (mkConst ``Ty) t)
+      (get.instantiateRev #[i, t])
+  return (Γ, t, i, mkApp3 (mkConst hty) i t rfl)
+
 end MlirDef
 
 open MlirDef in
@@ -393,22 +492,23 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
   let blockTys := name `blockTys
   let blockParams := name `blockParams
   let tree := name `tree
-  let tys : ValTys := { hty := name `hty, vals := p.Γ.vals }
+  let tys : ValTys := { hty := name `hty }
   let blockName (b : PBlock) : Ident := name (if n == 1 then `entry else .mkSimple b.name)
   let tRets ← tysStx p.tRets
+  let vals ← p.Γ.vals.toArray.mapM tyStx
   let cmds ← do
     let paramTys (b : PBlock) := b.params.map fun i => (p.Γ.vals[i]?).getD (.bv 0)
     let fins := List.range n
     let Γdef ←
       -- the kernel checks the count: the elaborator would recurse once per value
       `(abbrev $Γ : Ctx :=
-          ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), $(← tysStx p.Γ.vals), by decide +kernel⟩)
+          ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), rir_tys% [$vals,*], by decide +kernel⟩)
     let d := depth p.Γ.n
-    let treeDef ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d p.Γ.vals)))
+    let treeDef ← `(abbrev $tree : TyTree := rir_tree% $(numLit d) [$vals,*])
     -- the kernel checks the trie against `Γ.vals` once
     let htyDef ←
       `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
-          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h)
+          (Ctx.ty_eq_get (d := $(num d)) rir_rfl% (by decide) k).trans h)
     let tysDef ←
       if n == 1 then `(abbrev $blockTys : Fin 1 → List Ty := fun _ => [])
       else
@@ -475,7 +575,7 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let lit := name `lit
   let c? := p.constant?
   let vals := if c?.isSome then [t] else p.Γ.vals
-  let tys : ValTys := { hty := name `hty, vals }
+  let tys : ValTys := { hty := name `hty }
   let d := depth vals.length
   let tStx ← tyStx t
   let noSymbol (f : String) : TSyntax `term := mkIdent (.mkSimple f)
@@ -487,13 +587,14 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
           #[← `(.const $lit $(← dstStx tys 0))], ← exitStx tys (.ret [.val 0]))
     | none =>
       pure (#[], ← b.body.toArray.mapM (instrStx tys noSymbol noSymbol), ← exitStx tys b.exit)
+  let valStxs ← vals.toArray.mapM tyStx
   let cmds ← do
     pure <| #[
       -- the kernel checks the count: the elaborator would recurse once per value
-      ← `(abbrev $Γ : Ctx := ⟨$(num vals.length), [], $(← tysStx vals), by decide +kernel⟩),
-      ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d vals))),
+      ← `(abbrev $Γ : Ctx := ⟨$(num vals.length), [], rir_tys% [$valStxs,*], by decide +kernel⟩),
+      ← `(abbrev $tree : TyTree := rir_tree% $(numLit d) [$valStxs,*]),
       ← `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
-          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h)] ++
+          (Ctx.ty_eq_get (d := $(num d)) rir_rfl% (by decide) k).trans h)] ++
       litDef ++ #[
       ← `(def $(name `entry) : BasicBlock $Γ [$tStx] (fun _ : Fin 1 => []) :=
           { body := [$body,*], exit := $exit }),
@@ -502,6 +603,25 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   elabLift nc cmds
 
 end
+
+elab_rules : term <= expectedType
+  | `(rir_rfl%) => do
+    let expectedType ← tryPostponeIfHasMVars expectedType "rir_rfl%: the expected type is not known"
+    let some (_, _, b) := expectedType.eq?
+      | throwError "rir_rfl%: expected an equation, not{indentExpr expectedType}"
+    return Meta.mkExpectedPropHint (← Meta.mkEqRefl b) expectedType
+
+open MlirDef in
+elab_rules : term
+  | `(rir_tys% [$ts,*]) => return toExpr (← tysOfStx ts.getElems)
+  | `(rir_tree% $d [$ts,*]) => return treeExpr (.ofList d.getNat (← tysOfStx ts.getElems))
+  | `(rir_ty% $h $k) => return (← valTy h k.getNat).t
+  | `(rir_reg% $h $k) => do
+    let (Γ, t, i, h) ← valReg h k.getNat
+    return mkApp4 (mkConst ``Reg.val) Γ t i h
+  | `(rir_dst% $h $k) => do
+    let (Γ, t, i, h) ← valReg h k.getNat
+    return mkApp4 (mkConst ``Dst.mk) Γ t i h
 
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
 generic-form MLIR region. `noncomputable mlir_def` lets what the code generator cannot compile be
