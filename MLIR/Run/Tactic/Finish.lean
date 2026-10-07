@@ -96,7 +96,7 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
         `(tactic|
             try
               simp only [switchTarget, Jump.run_ite, beq_iff_eq, bne_iff_ne, ofBool_eq_one_iff,
-                ↓reduceIte]))
+                BitVec.reduceEq, ↓reduceIte]))
   splitJumps
   evalTactic
       (←
