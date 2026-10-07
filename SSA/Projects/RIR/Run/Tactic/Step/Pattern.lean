@@ -206,7 +206,7 @@ def evalStepPattern : Tactic := fun stx => do
         withMainContext do
             return (← getRunBodyFrom (← getGoalType).2).state
       if outState != inState then
-        let goals ← sealStep inState #[]
+        let goals ← sealStep inState
         replaceMainGoal ((← getMainGoal) :: goals.toList)
 
 end

@@ -116,12 +116,7 @@ def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVar
       return if e.occurs (← instantiateMVars d.type) then acc.push d.fvarId else acc
 
 private def findEqsWithLhs (lhs : Expr) : MetaM (Array FVarId) := do
-  (← getLCtx).foldlM (init := #[])
-      (fun acc d => do
-        if d.isImplementationDetail then
-          return acc
-        let some (_, l, _) := (← instantiateMVars d.type).consumeMData.eq? | return acc
-        return if l == lhs then acc.push d.fvarId else acc)
+  return (← localEqs).filterMap fun e => if e.lhs == lhs then some e.decl.fvarId else none
 
 /-- The unique hypothesis `_ : lhs = _`, if there is one. -/
 def findEqWithLhs? (lhs : Expr) (what : MessageData) : MetaM (Option FVarId) := do

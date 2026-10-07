@@ -20,7 +20,8 @@ syntax (name := stepAddressof) "step_addressof" term:max (stepNames)? (stepConsu
 elab "addressof_value" hv:term:max : tactic =>
   withMainContext do
     -- `g`'s type, from `hv`'s statement
-    let ty ← inferType (← elabTerm hv none)
+    let hv ← elabTerm hv none
+    let ty ← inferType hv
     let some v ←
         forallTelescope ty fun _ body =>
           return body.find? (·.isAppOfArity ``GlobalInitializer.value 1)
@@ -34,17 +35,15 @@ elab "addressof_value" hv:term:max : tactic =>
     evalTactic
         (← `(tactic|
             exact run_addressof_wrap (t := $(← Term.exprToSyntax t)) (w := $(quote w)) (n := $(quote n))
-              ($hv _) (by simp) rfl rfl))
+              ($(← Term.exprToSyntax hv) _) (by simp) rfl rfl))
 
 @[tactic stepAddressof]
 def evalStepAddressof : Tactic := fun stx => do
-  addAllocaFreshness
+  addAllocaFreshness "step_addressof"
   runStep (StepArgs.parse mkNullNode stx[2] stx[3] mkNullNode (named := true))
       (← `(tacticSeq| addressof_value $(⟨stx[1]⟩)))
   nameAllocaSlot
   reduceSlotPtr
-  -- the counter after several: `n + 1 + 1` as `n + 2`
-  evalTactic (← `(tactic| try simp only [Nat.add_assoc, Nat.reduceAdd] at $(mkIdent `hS):ident))
 
 end
 

@@ -121,6 +121,18 @@ partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Op
     let_expr Fits m' p' w' := ty | continue
     if m' == m && p' == p && (w' == w || w' == w₁ || (← normWidths w') == w₁) then
       return some (mkExpectedPropHint pf (← mkAppM ``Fits #[m, p, w]))
+  -- a wider fact, both widths literals
+  if let some n := w₁.nat? then
+    for (pf, ty) in facts do
+      let_expr Fits m' p' w' := ty | continue
+      unless m' == m && p' == p do
+        continue
+      let w' ← normWidths w'
+      let some n' := w'.nat? | continue
+      if n ≤ n' then
+        let hw ← mkDecideProof (← mkAppM ``LE.le #[w₁, w'])
+        return some
+            (mkExpectedPropHint (← mkAppM ``Fits.mono #[hw, pf]) (← mkAppM ``Fits #[m, p, w]))
   if let some (q, off) := p.app2? ``Pointer.add then
     for (pf, ty) in facts do
       let_expr Fits m' q' v := ty | continue
@@ -178,17 +190,34 @@ def omegaFromFacts (facts : Array (Expr × Expr)) (g : MVarId) : MetaM Unit := d
   g3.withContext do
       Lean.Elab.Tactic.Omega.omega (facts' ++ (← getLocalHyps).toList) g3
 
-/-- `s.allocaPtr` as a slot `b.slot k` of a local base state `b`: `s` is `b` after `k` `alloca`s, or a
-state literal with `b`'s counter after `k` blocks. -/
-def slotPtr? (p : Expr) : MetaM (Option Expr) := do
-  unless p.isAppOfArity ``GlobalState.allocaPtr 1 do
-    return none
-  let mut thms : SimpTheorems := {}
-  for n in [``GlobalState.allocaPtr_eq_slot, ``GlobalState.alloca_slot, ``GlobalState.mk_slot] do
-    thms ← thms.addConst n
-  let procs ← ({} : Simp.Simprocs).add ``Nat.reduceAdd (post := true)
-  let (r, _) ← simp p (← Simp.mkContext (simpTheorems := #[thms])) (simprocs := #[procs])
-  return if r.expr == p then none else some r.expr
+/-- `(b, k)` for a state whose counter is the local `b`'s plus `k`: `b` after `alloca`s, or a state
+literal over `b`'s counter (`⟨b.alloc.nextFreeBlock + 1 + 1⟩`, `b.alloc`). -/
+partial def counterBase? (s : Expr) : Option (Expr × Nat) :=
+  if s.isFVar then some (s, 0)
+  else
+    if s.isAppOfArity ``GlobalState.alloca 2 then
+      (counterBase? s.appFn!.appArg!).map fun (b, k) => (b, k + 1)
+    else if s.isAppOfArity ``GlobalState.mk 2 then allocBase? s.appFn!.appArg! else none
+where
+  /-- An `AllocState`: `⟨n⟩`, or a state's `alloc`. -/
+  allocBase? (a : Expr) : Option (Expr × Nat) :=
+    if a.isAppOfArity ``AllocState.mk 1 then natBase? a.appArg!
+    else if a.isAppOfArity ``GlobalState.alloc 1 then counterBase? a.appArg! else none
+  /-- A counter: `a.nextFreeBlock` plus literals. -/
+  natBase? (n : Expr) : Option (Expr × Nat) := do
+    if n.isAppOfArity ``AllocState.nextFreeBlock 1 then
+      allocBase? n.appArg!
+    else
+      guard (n.isAppOfArity ``HAdd.hAdd 6)
+      let (b, k) ← natBase? n.appFn!.appArg!
+      let j ← n.appArg!.nat? <|> n.appArg!.rawNatLit?
+      return (b, k + j)
+
+/-- `s.allocaPtr` as `b.slot k` (`counterBase?`), equal by `rfl`. -/
+def slotPtr? (p : Expr) : Option Expr := do
+  guard (p.isAppOfArity ``GlobalState.allocaPtr 1)
+  let (b, k) ← counterBase? p.appArg!
+  return mkApp2 (mkConst ``GlobalState.slot) b (mkNatLit k)
 
 /-- `a ≠ b` from the facts: either way round, by a `[…].Nodup`, or by `decide` for closed terms
 (on locals it would only unfold them). -/
@@ -377,60 +406,52 @@ def memReadFact? (heads : Array Name) (s ty : Expr) : Option (Expr × Expr) := d
   guard (l.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg! == s)
   return (l, x)
 
-/-- What reading through memory needs, gathered once (per step, per `simp` call): the read lemmas,
-the context's facts (split, and by type), and its read facts by their left side, widths as
-literals. -/
+/-- What reading through memory needs, gathered once (per step, per `simp` call): the read and
+transport lemmas, the context's facts (split, and by type), its read facts by their left side,
+widths as literals, and its named slots. -/
 structure MemCtx where
   lemmas : Array ReadLemma
   heads : Array Name
+  transport : Array Name
   facts : Array (Expr × Expr)
   factMap : Std.HashMap Expr Expr
   /-- `read (S.mem) … ↦ (x, h : read (S.mem) … = x)`, for the locals `S`. -/
   reads : Std.HashMap Expr (Expr × Expr)
+  /-- `b.slot k ↦ (x, hx : x = b.slot k)`, for the named slots `x`. -/
+  slots : Std.HashMap Expr (Expr × Expr)
 
 def MemCtx.build : MetaM MemCtx := do
   let lemmas ← readLemmas
   let heads := lemmas.foldl (fun hs l => if hs.contains l.read then hs else hs.push l.read) #[]
   let mut reads := {}
-  for d in ← getLCtx do
-    if d.isImplementationDetail then
+  let mut slots := {}
+  for e in ← localEqs do
+    if e.lhs.isFVar && e.rhs.isAppOfArity ``GlobalState.slot 2 then
+      unless slots.contains e.rhs do
+        slots := slots.insert e.rhs (e.lhs, ← mkExpectedTypeHint e.decl.toExpr e.type)
       continue
-    let some (_, l, x) := (← instantiateMVars d.type).eq? | continue
-    unless heads.any l.isAppOf do
+    unless heads.any e.lhs.isAppOf do
       continue
-    unless l.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg!.isFVar do
+    unless e.lhs.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg!.isFVar do
       continue
-    reads := reads.insert (← normWidths l) (x, d.toExpr)
-  return { lemmas, heads, facts := ← splitConjunctedFacts, factMap := ← contextFactMap, reads }
-
-/-- A named slot `x` for a pointer `p` that is one (`hx : x = s` in the context, `s` `p`'s `slotPtr?`
-form): `(x, hx)`. -/
-def slotVar? (p : Expr) : MetaM (Option (Expr × Expr)) := do
-  let some s ← slotPtr? p | return none
-  for d in ← getLCtx do
-    if d.isImplementationDetail then
-      continue
-    let ty := (← instantiateMVars d.type).consumeMData
-    let some (_, x, rhs) := ty.eq? | continue
-    if x.isFVar && rhs == s then
-      return some (x, ← mkExpectedTypeHint d.toExpr ty)
-  return none
+    reads := reads.insert (← normWidths e.lhs) (e.rhs, e.decl.toExpr)
+  return { lemmas, heads, transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
+           factMap := ← contextFactMap, reads, slots }
 
 /-- `a ≠ b` for block ids `p.id` of slots spelled by their state (`(S.alloca n).allocaPtr`): by the
-facts about the named slots `x` they are (`slotVar?`). -/
-def neBySlots? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
-  let side (e : Expr) : MetaM (Option (Expr × Expr)) := do
-    let_expr Pointer.id p := e | return none
-    if p.isFVar then
-      return none
-    slotVar? p
-  let sa ← side a
-  let sb ← side b
+facts about the named slots `x` they are. -/
+def neBySlots? (c : MemCtx) (a b : Expr) : MetaM (Option Expr) := do
+  let side (e : Expr) : Option (Expr × Expr) := do
+    let p ← e.app1? ``Pointer.id
+    guard !p.isFVar
+    c.slots[← slotPtr? p]?
+  let sa := side a
+  let sb := side b
   if sa.isNone && sb.isNone then
     return none
   let a' := sa.elim a fun (x, _) => mkApp (mkConst ``Pointer.id) x
   let b' := sb.elim b fun (x, _) => mkApp (mkConst ``Pointer.id) x
-  let some pf ← neProof? facts a' b' | return none
+  let some pf ← neProof? c.facts a' b' | return none
   -- back along each `hx : x = s`, `s` the slot as `p` is, up to `rfl`
   let slotId (h : Expr) : MetaM Expr := do
     let some (_, _, s) := (← inferType h).eq? | throwError "not an equation"
@@ -460,7 +481,7 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
     if let some pf← fitsProof? c.facts m p w then
       return some pf
     -- a width only this premise mentions (`readAt_alloca`'s), bound by a fact
-    transportWith c.factMap (← labelled `mlir_transport) 4 goal
+    transportWith c.factMap c.transport 4 goal
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
     let_expr Range.of q w := b | return none
@@ -468,12 +489,12 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
   | Ne _ a b =>
     if let some pf← neProof? c.facts a b then
       return some pf
-    neBySlots? c.facts a b
+    neBySlots? c a b
   | _ =>
     -- closed side conditions: an offset's `¬uaddOverflow`, a width bound
     if let some pf← decideWithOffsets? c.facts goal then
       return some pf
-    transportWith c.factMap (← labelled `mlir_transport) 4 goal
+    transportWith c.factMap c.transport 4 goal
 
 /-- One `mlir_read` lemma on the read `e`: a stored value (`true`), or the read past a write, with
 the proof of `e = _`. Only lemmas for `e`'s read and write are tried. -/
@@ -601,8 +622,7 @@ def readThroughState (c : MemCtx) (mems : IO.Ref (Std.HashMap Expr (Option (FVar
   return .visit { expr := v, proof? := some (← mkEqTrans h₁ pf) }
 
 /-- `readMemFact` and `readThroughState` for one `simp` call, keyed on the registered reads. -/
-def memSimprocs : MetaM Simp.Simprocs := do
-  let c ← MemCtx.build
+def memSimprocs (c : MemCtx) : MetaM Simp.Simprocs := do
   let mems ← IO.mkRef {}
   let mut procs : Simp.Simprocs := {}
   let mut done : Array Name := #[]

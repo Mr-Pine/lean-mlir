@@ -151,20 +151,34 @@ def getEnvWrite (e : Expr) : MetaM EnvWrite := do
     e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
   return ⟨base, dst, value⟩
 
+/-- A local equation `decl : lhs = rhs`. -/
+structure LocalEq where
+  decl : LocalDecl
+  /-- The equation, instantiated, without a named value's tag. -/
+  type : Expr
+  lhs : Expr
+  rhs : Expr
+
+/-- The context's equations. -/
+def localEqs : MetaM (Array LocalEq) := do
+  (← getLCtx).foldlM (init := #[]) fun acc d => do
+      if d.isImplementationDetail then
+        return acc
+      let type := (← instantiateMVars d.type).consumeMData
+      let some (_, lhs, rhs) := type.eq? | return acc
+      return acc.push { decl := d, type, lhs, rhs }
+
 /-- A local `h : block.body.drop idx = x :: xs`, for a `block` whose body does not reduce: `h`
 (typed with the `cons` exposed), `x` and `xs`. -/
 def bodyFact? (block idx : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
-  for d in ← getLCtx do
-    if d.isImplementationDetail then
-      continue
-    let some (_, lhs, rhs) := (← instantiateMVars d.type).eq? | continue
-    let_expr List.drop _ n body := lhs | continue
+  for e in ← localEqs do
+    let_expr List.drop _ n body := e.lhs | continue
     let_expr BasicBlock.body _ _ _ _ b := body | continue
     unless ← isDefEq b block <&&> isDefEq n idx do
       continue
-    let rhs ← whnfD rhs
+    let rhs ← whnfD e.rhs
     let_expr List.cons _ x xs := rhs | continue
-    return some (mkExpectedPropHint (.fvar d.fvarId) (← mkEq lhs rhs), x, xs)
+    return some (mkExpectedPropHint e.decl.toExpr (← mkEq e.lhs rhs), x, xs)
   return none
 
 /-- `block.body.drop idx`, reduced to its first `cons`, by unfolding or from a body fact. -/
