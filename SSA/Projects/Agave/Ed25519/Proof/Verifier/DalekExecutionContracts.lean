@@ -197,13 +197,15 @@ def BytesEqContract (call : Vals [.ptr, .ptr] → EffectM (Vals [.bv 8])) : Prop
       ReadOnlyFrame state after
 
 /-- The initializer's return value is not consumed by the extracted caller.
-The contract therefore specifies the reloaded cache byte and its frame. -/
+Every possible reloaded cache byte selects one of the two equivalent backends.
+Only successful return and the caller-visible memory frame are required; neither
+feature-detection accuracy nor a normalized 0/1 cache value is an acceptance premise.
+Hardware instruction legality and termination remain execution obligations. -/
 def CacheContract (call : Vals [] → EffectM (Vals [.bv 1])) (cache : Pointer) : Prop :=
   ∀ (state : GlobalState), state.WF → ReadBytes state cache 1 255 →
-    ∃ (after : GlobalState) (returned : BitVec 1) (avx2 : Bool),
+    ∃ (after : GlobalState) (returned : BitVec 1),
       call .nil state = .value (.cons (.value returned) .nil, after) ∧
-      OutputFrame state after cache 1 ∧
-      ReadBytes after cache 1 (if avx2 then 1 else 0)
+      OutputFrame state after cache 1
 
 /-- Both backends have this one-call contract. The frame is only the ordinary
 160-byte point output; private callee stack objects may be allocated. -/

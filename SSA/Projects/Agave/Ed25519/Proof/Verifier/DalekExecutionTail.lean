@@ -105,8 +105,8 @@ theorem TailRegisters.dispatch (q : TailPointers) (E : Env program.Γ)
   change E.args 1 = .value q.signature at hr
   constructor <;> simp [mlir_env, *]
 
-/-- Runtime dispatch is proved for every cache byte; a valid 0/1/255 cache
-invariant is required only by the prefix that decides whether to initialize it. -/
+/-- Runtime dispatch is proved for every cache byte. The prefix initializes
+only on 255; other non-one values select the serial branch directly. -/
 theorem dispatch_tail_of_contracts {Point Scalar Result : Type}
     (p : Primitives) (g : Globals) (layout : Layout Point Scalar Result)
     (doubleBase : Scalar → Point → Scalar → Result) (compress : Result → Bytes32)
@@ -178,13 +178,13 @@ theorem initialized_tail_of_contracts {Point Scalar Result : Type}
     ∃ after, (program p g).runFrom E 6 state =
       .value (.cons (.value (code (decide (compress (doubleBase h a scalar) = r)))) .nil,
         after) := by
-  obtain ⟨middle, returned, avx2, hcall, hframe, hvalue⟩ :=
+  obtain ⟨middle, returned, hcall, hframe⟩ :=
     hinit state hmem.wellFormed hcache
   rw [initialize_cache_block p g E state middle returned hcall]
   exact dispatch_tail_of_contracts p g layout doubleBase compress
     hserial havx2 hcompress hcompare q _ middle h scalar a r
-    (if avx2 then 1 else 0) (TailRegisters.initialize q E hregs returned)
+    (middle.mem.readAt q.cache 8) (TailRegisters.initialize q E hregs returned)
     (TailMemory.cache_frame q state middle layout h scalar a r hmem hframe hd)
-    hvalue.1.fits hvalue.2
+    (hframe.live q.cache 1 hcache.1).fits rfl
 
 end Agave.Ed25519.Verifier.Execution.Dalek
