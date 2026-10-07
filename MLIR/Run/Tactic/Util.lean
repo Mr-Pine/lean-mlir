@@ -108,8 +108,13 @@ def isContinuation (ty : Expr) : MetaM Bool :=
 /-- `p` by `decide`, when it evaluates to `true`. -/
 def decideProof? (p : Expr) : MetaM (Option Expr) := do
   let .some inst ← trySynthInstance (mkApp (mkConst ``Decidable) p) | return none
-  unless
-    (← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) p inst)).isConstOf ``Bool.true do
+  -- too deep to evaluate (a 64-bit flag at a large literal) is no proof: callers try facts next
+  let some v ←
+      tryCatchRuntimeEx
+          (some <$> (withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) p inst)))
+          fun _ => pure none |
+    return none
+  unless v.isConstOf ``Bool.true do
     return none
   return some (← mkDecideProof p)
 
