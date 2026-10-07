@@ -30,3 +30,28 @@ The source is split at actual instruction cutpoints: `Allocation` and `EntryTail
 compose in `Entry`; `BranchContracts` and padding readback compose in
 `PaddedBranches`; `Serialization`, `Cutpoints`, and `FinalTail` compose in
 `FinalBlock`; `FullCall` connects these and erases the private frame.
+
+The `Cold*` modules add a contextual path for a compressor that may initialize
+its designated one-byte CPU-feature cache. `CacheFrame` preserves every other
+allocation exactly and records `CacheTransition`; `CacheOutputEffect` additionally
+permits the expected output store. `ColdFullCall.finalizer_contract_cold` composes
+the actual imported finalizer under `CompressionReady` and `ScalarWide.Ready`.
+`finalizer_call_warm` recovers the exact output-only effect from a warm entry cache.
+
+`ColdChallengeCall.challenge_call_cold` extends this to the actual challenge
+prefix, bulk compression calls, context copy, finalizer, and return cleanup.
+Its `ColdChallengeReady` states cache separation for the output, decoded key,
+signature, message, and both Montgomery constants. The result includes the exact
+challenge scalar and preservation of the caller's 192-byte key, 64-byte signature,
+and message bytes. `coldLinked_finalizer_contract` links the imported finalizer
+and wide reducer, retaining the compressor contract and the reducer's local
+`ExecutionObligation`. `ColdAudit.lean` guards these endpoints separately.
+
+The cold-cache modules through `ColdLinked` and the extended `ColdAudit` have
+passed Lean validation, as has the existing `Audit`.
+`ColdLinked.coldLinked_finalizer_contract_proved` instantiates the reducer
+obligation with the proved `ScalarWide.execution_obligation`, leaving only the
+local compressor contract. Its exact transitive axioms are `propext`,
+`Classical.choice`, and `Quot.sound`. This closes scalar-reducer execution for
+the linked cold finalizer; the concrete SHA compressor refinement remains a
+separate obligation.
