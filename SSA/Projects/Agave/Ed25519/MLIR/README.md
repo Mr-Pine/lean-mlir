@@ -66,6 +66,91 @@ double-base multiplication in both backends, and the strict verifier wrapper.
 These retain memory effects and/or calls. Their presence is not a completed
 whole-verifier proof and does not supply semantics for external callees.
 
+### Verifier call graph
+
+The original `agave_ed25519_verify` artifact contains the four-block byte-input
+wrapper, with `VerificationKey::try_from`, `Signature::from_bytes`, and
+`VerificationKey::verify_dalek` as external calls. It therefore does not, by
+itself, expose the strict verification checks.
+
+`extract_verifier.py` supplements that artifact with the original
+`verify_dalek` (14 blocks), key construction (4 blocks), and challenge-scalar
+construction (8 blocks). It checks the complete crate LLVM file against the
+existing manifest's hash before selecting any function. It adds no Rust
+wrapper and applies no extra inlining or instruction rewriting. Reproduce it
+after the main extraction with:
+
+```bash
+python3 SSA/Projects/Agave/Ed25519/MLIR/extract_verifier.py \
+  --crate-ir /tmp/ed25519-extract/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll \
+  --llvm-bin /path/to/llvm-22/bin \
+  --llvm-lib /path/to/llvm-22/libraries
+python3 SSA/Projects/Agave/Ed25519/MLIR/import_verifier.py
+python3 SSA/Projects/Agave/Ed25519/MLIR/extract_verifier.py --check
+python3 SSA/Projects/Agave/Ed25519/MLIR/import_verifier.py --check
+```
+
+`generated/verifier-manifest.json` records the supplementary artifact hashes and
+commands. `generated/verifier-rir-manifest.json` records the exact regions and
+every external call signature. The generated
+`Proof/Verifier/ExecutionProgram.lean` uses the ordinary RIR parser and
+instruction emitter, with a small importer extension to insert explicitly
+typed external effects directly, without an additional call frame. The quoted
+regions preserve source instructions and attributes, apart from symbol-name
+quoting recorded in the manifest. RIR translation does not interpret every
+attribute: ordinary load/store alignment and volatile markers are erased.
+`Fits` and `SmallRange` prove allocation bounds, not physical-address alignment.
+The [source memory audit](../Proof/SourceMemoryAudit/README.md) records the exact
+affected instructions, checked alignment lemmas, and the residual alignment
+and volatile-memory conditions needed for source refinement. The current
+theorems do not establish volatile-event trace equivalence.
+
+`Proof/Verifier/Execution.lean` links the actual RIR wrapper, key constructor,
+verifier, and optional challenge body. Its basic composition interface states
+`RefinesControlFlow` as an execution-conformance premise;
+`ExecutionAcceptance.lean` applies the strict/Firedancer acceptance bridge
+under that premise. The later
+[linked execution proofs](../Proof/Verifier/LinkedLeafExecution.lean) derive
+`RefinesControlFlow` from named callee contracts and invocation memory facts.
+Successful import alone does not discharge those contracts.
+
+The invocation contract includes the live-allocation size restriction required
+by the current flags-7 GEP semantics. Its separate environment invariant must
+supply the exact identity/SHA constants, initialized or cached CPUID storage,
+separation, and primitive-specific global/table requirements. The concrete
+linked interface requires that environment at each invocation. Acceptance
+composition requires the challenge to be below `2^255` and derives the same
+bound for the signature scalar from canonical parsing; it does not impose a
+false all-natural-number arithmetic contract on the fixed-width backend.
+
+Execution proofs now cover the wrapper/key control flow, signature copying,
+canonical scalar parsing, both scalar reducers, cofactor multiplication,
+point equality, and point compression. The
+[proved-leaf composition](../Proof/Verifier/LinkedProvedLeaves.lean) installs
+the corresponding actual callees. The
+[decoder contract](../Proof/Encoding/DecompressExecution/DecoderSemanticReady.lean)
+supplies rejection and success under initialized constants and live-buffer
+conditions, without an assumed decoder execution result. The
+[complete SHA dispatcher](../Proof/SHA512/Compression/FinalizationDispatchComplete.lean)
+supplies compression, finalization, and challenge execution for the actual
+scalar/AVX2 bodies, retaining explicit hardware instruction contracts.
+
+These component proofs still need their concrete invocation conditions when
+composed. The [guarded linked interface](../Proof/Verifier/LinkedColdLeavesGuarded.lean)
+keeps memory, initialized globals, and backend readiness local to reached calls;
+the [SHA readiness bridge](../Bridge/CrossClientSHAComplete.lean) supplies its
+compression contract from the proved dispatcher. Backend table and point/scalar
+representation requirements are not unconditional all-state guarantees.
+External `bcmp` semantics and hardware/ABI instruction laws remain explicit
+boundaries. CPUID cache initialization is a separately named effect; the
+extracted verifier retains its actual cache loads and dispatch branches.
+The emitted `ordering = 2` byte loads translate to a distinct
+`Instr.loadMonotonic` instruction. Its value and undefined-behavior semantics
+are those of a sequential load; refinement to a concurrent LLVM execution is
+not provided. The source boundary requires exclusive access to that cache byte
+during the modeled invocation. Stronger atomic orderings, atomic stores, and
+atomic read-modify-write operations remain unsupported.
+
 Encoding observations cover all five limbs of serial `from_bytes`, all four
 little-endian output words of serial `to_bytes`, and all twenty serial limbs
 returned by AVX2 `split` (projection number `5 * coordinate + limb`). All

@@ -1,80 +1,123 @@
-# Exact subgroup scalar wide-reduction boundary
+# Scalar-wide reduction machine proof
 
-The pinned `Scalar::from_bytes_mod_order_wide` is distinct from the base-field
-`Reduce64` kernel. Its input is 64 bytes and its output is 32 bytes modulo
+The pinned `Scalar::from_bytes_mod_order_wide` has a complete linked RIR
+execution proof. It reduces a 64-byte little-endian input to the canonical
+32-byte scalar modulo
 `L = 2^252 + 27742317777372353535851937790883648493`.
+This is the subgroup scalar operation, distinct from the base-field `Reduce64`
+kernel. The full invocation proof and its audit were committed in
+`f3265219dbe1b610eacff66eccbb136fb91dead2` (`Complete scalar-wide reduction execution`).
 
-`ExecutionProgram.lean` imports the original wide reducer and its
-`Scalar52::montgomery_mul` callee. Both are single-block regions. The outer
-region contains two Montgomery calls, one byte black-box call, 24 allocations,
-11 fences, and two byte globals. The Montgomery region contains one black-box
-call, nine allocations, and nine fences. No body rewrite, extra inlining, or
-instruction normalization is applied. The RIR model remains sequential and
-does not prove volatile-event traces.
+## Checked endpoint and assumptions
 
-`ExecutionGlobals.lean` records the exact 40-byte initializers of R and RR.
-`Arithmetic.lean` interprets their five u64 slots as radix-2^52 limbs and checks
-that they equal `2^260 mod L` and `2^520 mod L`. It reuses the existing
-`Bridge.Challenge` subgroup-order lemmas to combine split-input congruences
-and canonicality into exact output equality.
+Import `SSA.Projects.Agave.Ed25519.Proof.ScalarWide.FullCall` to obtain
+`Agave.Ed25519.Verifier.Execution.ScalarWide.linked_program_call` and
+`execution_obligation`. The former proves the actual call equation:
 
-`Contract.lean` states successful execution, the exact 32-byte output, and an
-output frame preserving live caller ranges and bytes outside the output. Its
-observation theorem explicitly derives unchanged input bytes, little-endian
-integer equality modulo L, and the canonical bound from that contract.
+```lean
+(linkedProgram g).call (args2 out input) state =
+  .value (.nil, exactPostState state out bytes)
+```
 
-`Linked.lean` binds both external routines to the independently extracted
-Montgomery and black-box bodies. It also supplies the exact `reduceWide`
-function field for `SHA512Finalization.Primitives`. Global addresses and their
-initializers remain explicit. **There is no proof of `ExecutionObligation`:**
-the complete wide-wrapper memory execution and the Montgomery carry/bounds
-refinement remain outstanding. An import, contract definition, linking
-function, or pure modular lemma must not be presented as this proof.
+Its premises are `state.WF`, a live 32-byte output range, the original 64 input
+bytes through `ReadBytes`, and invocation-local `Ready g state out`.
+`Ready` requires the exact addresses and 40-byte initializers of R and RR,
+distinct allocation ids for those globals, and an output allocation distinct
+from both globals. It does not assume initialized globals in every state or
+any callee execution equation.
 
-`Startup.lean` executes the actual initial 89 wide-body instructions and 33
-Montgomery-body instructions, including exact constant/global address writes
-and all 24/9 stack allocations. `CallPhases.lean` proves the real call/suffix
-boundaries at wide-body indices 320, 324, 376 and Montgomery index 226.
-`MontgomeryProduct.lean` executes Montgomery instructions 33–49: lifetime and
-scope declarations, two input loads, u64-to-u128 extension, and the first
-`mul nuw`. Its product is proved equal to the full natural-number product for
-arbitrary u64 inputs. These are partial concrete execution proofs; they do not
-cover subsequent carry reduction or the complete wrapper.
+`exactPostState` replaces exactly the 32 output bytes with `reducedBytes bytes`
+and advances the allocation counter by 45. Those allocations comprise 24 in
+the wrapper, nine plus one black-box allocation in each Montgomery call, and
+one outer black-box allocation. All private allocations and scratch writes
+are erased from the caller-visible memory. The output is the input integer
+modulo L and is strictly less than L.
 
-## Provenance
+The stronger `linked_program_call` theorem does not require input/output
+separation. `ExecutionObligation` and the ABI observation adapters retain the
+explicit disjoint-range premise; it establishes preservation of the original
+input bytes. `execution_obligation g` now supplies that obligation from the
+machine proof. `Linked.lean` deliberately keeps its reusable adapters
+parameterized by the obligation: instantiate
+`observations_of_exact_execution` or `store_effect_of_exact_execution` with
+`execution_obligation g`. The latter supplies SHA's exact `StoreEffect` and
+preserves `Ready`. Global readiness remains a caller premise; this does not
+assert `ReduceWideContract` for arbitrary uninitialized states.
 
-The complete pinned crate LLVM SHA-256 is
-`2ea5bd097be748ddb48c0361700c0dacb5ee7146c87f29543001e78261c82dcc`.
-The extracted wide LLVM SHA-256 is
-`3af5a470ac2ec4f002c3abf7ada62e1d02d18bf67bc1e247b8c21f5475ae582b`;
-the wide MLIR SHA-256 is
-`1f91ae907831e13b7c93d60549d03de6cbb40bf09ec376098cd9f50ebe700750`.
-The Montgomery LLVM SHA-256 is
-`07f3f1e49ec2ea7470e3da8af1198f8f15eb1cb5ade67f652baa50173024ed79`;
-its MLIR SHA-256 is
-`2d0f10b723772e48d03534b067b4220829a86c9d1f254c1d63c44ed820678f48`.
+## Proof structure
 
-`MLIR/generated/scalar-wide-manifest.json` records the exact target symbols,
-original-definition hashes, LLVM 22.1.2 tool versions, extraction commands,
-and operation inventory. `scalar-wide-rir-manifest.json` records the exact
-region hashes, callees, globals, and generated-input hashes.
+`ExecutionProgram.lean` imports both single-block bodies, and `Linked.lean`
+binds the Montgomery and byte black-box calls to their extracted programs.
+The wrapper has two Montgomery calls, one black-box call, 24 allocations,
+11 fences, and two byte globals. The Montgomery body has one black-box call,
+nine allocations, and nine fences.
 
-Import path: `SSA.Projects.Agave.Ed25519.Proof.ScalarWide.Linked`.
+- `ExecutionGlobals`, `Arithmetic`, and `GlobalOperands` identify R and RR as
+  five radix-2^52 limbs representing `2^260 mod L` and `2^520 mod L`.
+- The product, cancellation, carry, borrow, and addback modules prove the
+  arithmetic and retained overflow/truncation flags of the actual word
+  expressions. `MontgomeryWordCorrect.lean` proves
+  `ScalarMontgomeryMul.montgomery_words_correct` for canonical modular output. `MontgomeryCall.lean` proves the complete
+  `ScalarMontgomeryMul.program_call`, including five output stores, scratch
+  erasure, and a counter increase of ten.
+- The input and `Invocation*` modules derive mixed-width reads from the
+  original 512-bit input, split at bit 260, instantiate both Montgomery calls
+  with the exact globals, and compose the modular sum, serialization, output
+  stores, and cleanup. Register values, live ranges, and scratch provenance
+  are established along this execution.
+- `InvocationReturn` proves exact final memory and counter behavior;
+  `InvocationBody.lean` proves `invocation_body_run` over all instruction intervals;
+  `FullCall.lean` applies the actual function-call frame rule. No whole-call or
+  phase-execution premise is used as a replacement for this composition.
+
+## Provenance and semantics boundary
+
+The extraction/import manifests record no instruction normalization, body
+rewrite, or extra inlining. The checked theorem uses the imported sequential
+RIR semantics and its modeled instruction attributes. Extraction identity and
+this execution proof do not by themselves prove a general LLVM-to-RIR
+semantics theorem, compiler correctness, constant-time behavior, or
+concurrent/volatile-event trace equivalence.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Complete pinned crate LLVM | `2ea5bd097be748ddb48c0361700c0dacb5ee7146c87f29543001e78261c82dcc` |
+| Wide LLVM | `3af5a470ac2ec4f002c3abf7ada62e1d02d18bf67bc1e247b8c21f5475ae582b` |
+| Wide MLIR | `1f91ae907831e13b7c93d60549d03de6cbb40bf09ec376098cd9f50ebe700750` |
+| Montgomery LLVM | `07f3f1e49ec2ea7470e3da8af1198f8f15eb1cb5ade67f652baa50173024ed79` |
+| Montgomery MLIR | `2d0f10b723772e48d03534b067b4220829a86c9d1f254c1d63c44ed820678f48` |
+
+[`scalar-wide-manifest.json`](../../MLIR/generated/scalar-wide-manifest.json)
+records target symbols, original-definition hashes, LLVM 22.1.2 tools,
+extraction commands, and operation inventories.
+[`scalar-wide-rir-manifest.json`](../../MLIR/generated/scalar-wide-rir-manifest.json)
+records exact region hashes, callees, globals, and importer-input hashes.
 
 ## Validation
 
-From the repository root:
+On 2026-10-07, the final composition compiled on the devbox in
+`/tmp/lmf-rir-ed25519-20261007` with Lean `nightly-2026-09-16`,
+`lean -j1 --tstack=400000`, and normal-cache oleans. `FullCall` and
+`FullCallAudit` passed in 5.672 and 5.322 seconds respectively.
+`FullCallAudit.lean` checks 92 endpoints, including both full-call theorems,
+and rejects dependencies outside `propext`, `Classical.choice`, and
+`Quot.sound`. The closure uses no `sorry`, `admit`, added axioms,
+`native_decide`, or `bv_decide` proof shortcut.
 
-```
+Session evidence is recorded in `/tmp/scalar-integration-all-results.json`,
+`/tmp/scalar-integration-final-results.json`, and
+`/tmp/scalar-integration-axioms.log`; devbox module logs are under
+`/tmp/scalar-integration-logs/`. Current local source hashes were also checked against fresh devbox artifacts for `MontgomeryCall`,
+`MontgomeryWordCorrect`, `InvocationReturn`, `InvocationBody`, `FullCall`, and
+`FullCallAudit`, recorded in `/tmp/scalar-wide-readme-endpoints-20261007.json`.
+Both extraction/import checks passed again. These session files are auxiliary
+evidence; the committed sources, manifests, and guarded audit are the
+reproducible proof boundary.
+
+From a configured repository checkout on the devbox:
+
+```sh
 python3 SSA/Projects/Agave/Ed25519/MLIR/extract_scalar_wide.py --check
 python3 SSA/Projects/Agave/Ed25519/MLIR/import_scalar_wide.py --check
-lake build SSA.Projects.Agave.Ed25519.Proof.ScalarWide.Audit
+lake build SSA.Projects.Agave.Ed25519.Proof.ScalarWide.FullCallAudit
 ```
-
-The two Python checks passed on 2026-10-07. The nine Lean modules were then
-compiled sequentially with the pinned local toolchain and `-j1`, emitting
-normal-cache oleans. `Audit.lean` passed its guarded standard-three closure
-checks for 22 import, arithmetic, contract, linkage, and partial-execution
-endpoints. Logs: `/tmp/scalar-wide-*.log`; reproduction wrapper:
-`/tmp/check_scalar_wide.sh`. The full audit used 4.76 seconds and 6.47 GiB
-maximum RSS. The complete execution obligation remains unproved.

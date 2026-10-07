@@ -2,18 +2,14 @@ import SSA.Projects.Agave.Ed25519.Proof.Verifier.DalekExecutionContracts
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.BlackBox
 
 /-!
-Discharge the Dalek verifier's byte helper contracts using the independently
-imported bodies from the same pinned crate IR. Both bodies preserve memory but
-advance the allocation counter: one block for black_box, 33 for byte equality.
+Discharge the Dalek verifier's black-box contract using the independently
+imported body from the same pinned crate IR. It preserves memory and advances
+the allocation counter by one.
 
-The exact source symbols are:
-* `_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519`
-* `_RNvXs8_Csh8VEmffyqhs_6subtleShNtB5_14ConstantTimeEq5ct_eqCsjK63O35OHGN_14solana_ed25519`
+Exact source symbol:
+`_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519`.
 
-`bcmp` remains an external library obligation: the pinned verifier IR contains
-only its declaration, not an implementation. These proofs do not substitute a
-model equality function for that absent compiled routine. The byte equality
-proof establishes the returned value and sequential memory frame, not timing or
+The proof establishes the returned value and sequential memory frame, not
 volatile-event trace equivalence.
 -/
 namespace Agave.Ed25519.Verifier.Execution.Dalek
