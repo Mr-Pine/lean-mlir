@@ -26,7 +26,7 @@ def scalarBlockEnv (E : Env program.Γ) (signature : Pointer)
 reducer and equality premises concern only their individual calls. `first`
 and `last` are loaded from the signature before either call runs. -/
 theorem scalar_check_block (p : Primitives) (g : Globals) (E : Env program.Γ)
-    (s t u : GlobalState) (signature scratch : Pointer)
+    (s t u v w : GlobalState) (signature scratch : Pointer)
     (first last : BitVec 8) (equal : Bool)
     (hsig : E.read (%arg1) = .value signature)
     (hscratch : E.read (%20) = .value scratch)
@@ -37,15 +37,18 @@ theorem scalar_check_block (p : Primitives) (g : Globals) (E : Env program.Γ)
     (hfit : SmallRange s.mem signature 64)
     (hfirst : s.mem.readAt (signature.add 32#64) 8 = first)
     (hlast : s.mem.readAt (signature.add 63#64) 8 = last)
-    (hblack : BlackBoxContract p.blackBoxByte)
-    (hreduce : p.scalarReduce (args2 scratch (signature.add 32#64)) s = .value (.nil, t))
-    (hequal : p.bytesConstantTimeEq (args2 (signature.add 32#64) scratch) t =
-      .value (.cons (.value (choiceByte equal)) .nil, u)) :
+    (hblackFirst : p.blackBoxByte (.cons (.value (choiceByte ((255#8).slt last))) .nil) s =
+      .value (.cons (.value (choiceByte ((255#8).slt last))) .nil, t))
+    (hblackLast : p.blackBoxByte
+      (.cons (.value (choiceByte (equal && (255#8).slt last))) .nil) v =
+      .value (.cons (.value (choiceByte (equal && (255#8).slt last))) .nil, w))
+    (hreduce : p.scalarReduce (args2 scratch (signature.add 32#64)) t = .value (.nil, u))
+    (hequal : p.bytesConstantTimeEq (args2 (signature.add 32#64) scratch) u =
+      .value (.cons (.value (choiceByte equal)) .nil, v)) :
     (program p g).runFrom E 4 s =
       (program p g).runFrom (scalarBlockEnv E signature first last equal)
-        (if equal && (255#8).slt last then 5 else 11) u := by
+        (if equal && (255#8).slt last then 5 else 11) w := by
   dsimp only [args2] at hreduce hequal
-  unfold BlackBoxContract at hblack
   change E.args 1 = .value signature at hsig
   have hg32 := hfit.gep (k := 32) (by decide)
   have hg63 := hfit.gep (k := 63) (by decide)
@@ -59,8 +62,9 @@ theorem scalar_check_block (p : Primitives) (g : Globals) (E : Env program.Γ)
     hfit.fits_add (k := 63) (count := 1) (by decide)
   have hblock : (program.bb4 p).run program.blockParams E s =
       .value (((scalarBlockEnv E signature first last equal),
-        .inr (if equal && (255#8).slt last then 5 else 11)), u) := by
+        .inr (if equal && (255#8).slt last then 5 else 11)), w) := by
     cases hh : (255#8).slt last <;> cases equal <;>
+      simp [hh, choiceByte] at hblackFirst hblackLast hequal <;>
       simp [BasicBlock.run, program.bb4, scalarBlockEnv,
         List.foldlM_cons, List.foldlM_nil, Instr.run, Operation.load,
         UnOp.compute, BinOp.compute, Operation.zext, Operation.and, Operation.icmp,
@@ -69,7 +73,7 @@ theorem scalar_check_block (p : Primitives) (g : Globals) (E : Env program.Γ)
         Env.writeMany_cons, Env.writeMany_nil, args2, choiceByte,
         GepIndex.inboundsOffset, Operation.gepInboundsIndex, Operation.GepSignedRange,
         hsig, hscratch, h32, h63, hminus, hone, hg32, hg63, hf32, hf63,
-        hfirst, hlast, hblack, hreduce, hequal, hh, throwUBIf]
+        hfirst, hlast, hblackFirst, hblackLast, hreduce, hequal, hh, throwUBIf]
   rw [Func.runFrom_eq, block_4, hblock]
   rfl
 
@@ -77,7 +81,7 @@ theorem scalar_check_block (p : Primitives) (g : Globals) (E : Env program.Γ)
 error path. This statement retains the first-byte/last-byte memory obligations
 rather than assuming a well-formed scalar. -/
 theorem scalar_check_rejection (p : Primitives) (g : Globals) (E : Env program.Γ)
-    (s t u : GlobalState) (signature scratch : Pointer)
+    (s t u v w : GlobalState) (signature scratch : Pointer)
     (first last : BitVec 8) (equal : Bool)
     (hsig : E.read (%arg1) = .value signature)
     (hscratch : E.read (%20) = .value scratch)
@@ -89,14 +93,18 @@ theorem scalar_check_rejection (p : Primitives) (g : Globals) (E : Env program.�
     (hfit : SmallRange s.mem signature 64)
     (hfirst : s.mem.readAt (signature.add 32#64) 8 = first)
     (hlast : s.mem.readAt (signature.add 63#64) 8 = last)
-    (hblack : BlackBoxContract p.blackBoxByte)
-    (hreduce : p.scalarReduce (args2 scratch (signature.add 32#64)) s = .value (.nil, t))
-    (hequal : p.bytesConstantTimeEq (args2 (signature.add 32#64) scratch) t =
-      .value (.cons (.value (choiceByte equal)) .nil, u))
+    (hblackFirst : p.blackBoxByte (.cons (.value (choiceByte ((255#8).slt last))) .nil) s =
+      .value (.cons (.value (choiceByte ((255#8).slt last))) .nil, t))
+    (hblackLast : p.blackBoxByte
+      (.cons (.value (choiceByte (equal && (255#8).slt last))) .nil) v =
+      .value (.cons (.value (choiceByte (equal && (255#8).slt last))) .nil, w))
+    (hreduce : p.scalarReduce (args2 scratch (signature.add 32#64)) t = .value (.nil, u))
+    (hequal : p.bytesConstantTimeEq (args2 (signature.add 32#64) scratch) u =
+      .value (.cons (.value (choiceByte equal)) .nil, v))
     (hreject : (equal && (255#8).slt last) = false) :
-    (program p g).runFrom E 4 s = .value (.cons (.value 2#8) .nil, u) := by
-  rw [scalar_check_block p g E s t u signature scratch first last equal hsig hscratch
-    h32 h63 hminus hone hfit hfirst hlast hblack hreduce hequal, hreject]
+    (program p g).runFrom E 4 s = .value (.cons (.value 2#8) .nil, w) := by
+  rw [scalar_check_block p g E s t u v w signature scratch first last equal hsig hscratch
+    h32 h63 hminus hone hfit hfirst hlast hblackFirst hblackLast hreduce hequal, hreject]
   apply scalar_rejection
   simp [scalarBlockEnv, mlir_env, herr]
 
@@ -109,6 +117,15 @@ theorem OutputFrame.thenReadOnly (frame : OutputFrame before middle out bytes)
     exact readOnly.live q n (frame.live q n hq)
   · intro q w hd
     exact (readOnly.read q w).trans (frame.read q w hd)
+
+/-- A read-only prefix preserves the caller-visible output frame. -/
+theorem ReadOnlyFrame.thenOutput (readOnly : ReadOnlyFrame before middle)
+    (frame : OutputFrame middle after out bytes) : OutputFrame before after out bytes := by
+  refine ⟨frame.wellFormed, ?_, ?_⟩
+  · intro q n hq
+    exact frame.live q n (readOnly.live q n hq)
+  · intro q width hd
+    exact (frame.read q width hd).trans (readOnly.read q width)
 
 /-- A subread of the scalar half of a signature, including the exact generated
 pointer arithmetic. The full scalar remains arbitrary. -/
@@ -151,17 +168,22 @@ theorem scalar_check_of_contracts {Point Scalar Result : Type}
           (scalarBlockEnv E signature (bytes.extractLsb' 0 8) (bytes.extractLsb' 248 8)
             (decide (bytes = layout.reduce bytes)))
           (if scalarGate layout bytes then 5 else 11) after := by
+  obtain ⟨blackFirst, hbf, hbfFrame⟩ := hblack
+    (choiceByte ((255#8).slt (bytes.extractLsb' 248 8))) state hwf
+  have hbytesFirst := ReadOnlyFrame.readBytes state blackFirst
+    (signature.add 32#64) 32 bytes hbfFrame hbytes
   obtain ⟨middle, hrcall, hframe, hred⟩ := hreduce scratch (signature.add 32#64)
-    state bytes hwf hfit hbytes hd
-  have hb := OutputFrame.readBytes state middle scratch (signature.add 32#64) 32 32 bytes hframe hbytes hd.symm
-  obtain ⟨after, hecall, hro⟩ := hequal (signature.add 32#64) scratch middle bytes
+    blackFirst bytes hbfFrame.wellFormed (hbfFrame.live _ _ hfit) hbytesFirst hd
+  have hb := OutputFrame.readBytes blackFirst middle scratch
+    (signature.add 32#64) 32 32 bytes hframe hbytesFirst hd.symm
+  obtain ⟨equalAfter, hecall, hro⟩ := hequal (signature.add 32#64) scratch middle bytes
     (layout.reduce bytes) hframe.wellFormed hb hred
   have hfirst := scalar_signature_subread state signature bytes hbytes 0 1 (by decide)
   have hlast := scalar_signature_subread state signature bytes hbytes 31 1 (by decide)
   change state.mem.readAt (signature.add 32#64) 8 = bytes.extractLsb' 0 8 at hfirst
   change state.mem.readAt (signature.add 63#64) 8 = bytes.extractLsb' 248 8 at hlast
   have hecall' : p.bytesConstantTimeEq (args2 (signature.add 32#64) scratch) middle =
-    .value (.cons (.value (choiceByte (decide (bytes = layout.reduce bytes)))) .nil, after) := by
+    .value (.cons (.value (choiceByte (decide (bytes = layout.reduce bytes)))) .nil, equalAfter) := by
     simpa only [choiceByte, decide_eq_true_eq] using hecall
   have hsame : decide (bytes = layout.reduce bytes) = decide (layout.reduce bytes = bytes) := by
     simp only [eq_comm]
@@ -170,9 +192,12 @@ theorem scalar_check_of_contracts {Point Scalar Result : Type}
     unfold scalarGate scalarHighBitClear
     have hnegative : (-1 : BitVec 8) = 255#8 := by decide
     rw [hsame, Bool.and_comm, hnegative]
-  refine ⟨after, hframe.thenReadOnly hro, ?_⟩
-  rw [scalar_check_block p g E state middle after signature scratch
+  obtain ⟨after, hbl, hblFrame⟩ := hblack
+    (choiceByte (decide (bytes = layout.reduce bytes) &&
+      (255#8).slt (bytes.extractLsb' 248 8))) equalAfter hro.wellFormed
+  refine ⟨after, hbfFrame.thenOutput ((hframe.thenReadOnly hro).thenReadOnly hblFrame), ?_⟩
+  rw [scalar_check_block p g E state blackFirst middle equalAfter after signature scratch
     (bytes.extractLsb' 0 8) (bytes.extractLsb' 248 8) (decide (bytes = layout.reduce bytes))
-    hsig hscratch h32 h63 hminus hone hsigfit hfirst hlast hblack hrcall hecall', hgate]
+    hsig hscratch h32 h63 hminus hone hsigfit hfirst hlast hbf hbl hrcall hecall', hgate]
 
 end Agave.Ed25519.Verifier.Execution.Dalek

@@ -172,9 +172,12 @@ def SmallOrderEqContract (call : Vals [.ptr, .ptr] → EffectM (Vals [.bv 8]))
         .value (.cons (.value (if shared.smallOrder value then 1 else 0)) .nil, after) ∧
       ReadOnlyFrame state after
 
+/-- Byte identity with a read-only frame. The imported volatile-load body uses
+one private stack allocation, so literal global-state identity would be false. -/
 def BlackBoxContract (call : Vals [.bv 8] → EffectM (Vals [.bv 8])) : Prop :=
-  ∀ (value : BitVec 8) (state : GlobalState),
-    call (.cons (.value value) .nil) state = .value (.cons (.value value) .nil, state)
+  ∀ (value : BitVec 8) (state : GlobalState), state.WF →
+    ∃ after, call (.cons (.value value) .nil) state =
+      .value (.cons (.value value) .nil, after) ∧ ReadOnlyFrame state after
 
 def ScalarReduceContract (call : Vals [.ptr, .ptr] → EffectM (Vals []))
     (layout : Layout Point Scalar Result) : Prop :=
