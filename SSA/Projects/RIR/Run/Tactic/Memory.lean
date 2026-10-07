@@ -84,9 +84,24 @@ def decideWithOffsets? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Opt
     pf ← mkEqNDRec motive pf (← mkEqSymm h)
   return some (mkExpectedPropHint pf goal)
 
+/-- `¬q.offset.uaddOverflow off` from a fact `¬q.offset.uaddOverflow c` for a literal `c` at least
+`off`. -/
+def noOverflowOfFact? (facts : Array (Expr × Expr)) (q off : Expr) : MetaM (Option Expr) := do
+  let qo ← mkAppM ``Pointer.offset #[q]
+  for (pf, ty) in facts do
+    let some (_, l, r) := ty.cleanupAnnotations.not? >>= (·.eq?) | continue
+    let_expr BitVec.uaddOverflow _ x c := l | continue
+    unless r.isConstOf ``Bool.true && x == qo do
+      continue
+    let hle ← mkAppM ``LE.le #[← mkAppM ``BitVec.toNat #[off], ← mkAppM ``BitVec.toNat #[c]]
+    let some hle ← decideWithOffsets? facts hle | continue
+    return some (← mkAppM ``BitVec.not_uaddOverflow_of_le #[pf, hle])
+  return none
+
 /-- Prove `Fits m p w`: a fact with the same `m` and `p`, and the same width as a literal
 (`(Ty.vec 8 64).width` is `512`); not `isDefEq` on `Fits` itself, which unfolds the memory. An
-offset `q.add off` fits inside a fact for `q` (`Fits.add_of_le`). -/
+offset `q.add off` fits inside a fact for `q` (`Fits.add_of_le`) if `q.offset + off` does not wrap:
+by `q.offset`'s value, or a no-overflow fact for a larger offset. -/
 partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Option Expr) := do
   let w₁ ← normWidths w
   for (pf, ty) in facts do
@@ -100,7 +115,12 @@ partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Op
         continue
       let v ← normWidths v
       let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off]
-      let some hov ← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) | continue
+      let hov? ←
+        if let some h← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) then
+          pure (some h)
+        else
+          noOverflowOfFact? facts q off
+      let some hov := hov? | continue
       let hwTy ←
         mkAppM ``LE.le
             #[←
@@ -262,11 +282,13 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
   let_expr PoisonOr.value _ off := bo | return .continue
   let_expr PoisonOr.value _ p := pp | return .continue
   let facts ← splitConjunctedFacts
-  -- a stack slot's offset by its fact, else bounds by `omega`
+  -- a stack slot's offset by its fact, a bound for a larger offset, else bounds by `omega`
   let ov ← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off]
   let some h ←
     (do
         if let some h← decideWithOffsets? facts (mkNot (← mkEq ov (mkConst ``Bool.true))) then
+          return some h
+        if let some h← noOverflowOfFact? facts p off then
           return some h
         noOverflowProof? facts p off) | return .continue
   return .visit
