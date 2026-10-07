@@ -1,0 +1,29 @@
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.CachedSubExecution
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.AffineSubExecution
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.AffineAddExecution
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.ResidualRepresentation
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.PointContractMemory
+
+/-- info: Serial residual point helpers use only standard Lean axioms. -/
+#guard_msgs in
+open Lean Elab Command in
+run_cmd do
+  let allowed : List Name := [`propext, `Classical.choice, `Quot.sound]
+  let endpoints : List Name := [
+    ``Agave.Ed25519.SerialPoint.Execution.cachedSubWordTrace_unsigned,
+    ``Agave.Ed25519.SerialPoint.Execution.affineSubWordTrace_unsigned,
+    ``Agave.Ed25519.SerialPoint.Execution.affineAddWordTrace_unsigned,
+    ``Agave.Ed25519.SerialPoint.Execution.cached_sub_call,
+    ``Agave.Ed25519.SerialPoint.Execution.affine_sub_call,
+    ``Agave.Ed25519.SerialPoint.Execution.affine_add_call,
+    ``Agave.Ed25519.SerialPoint.Execution.readPoint_words,
+    ``Agave.Ed25519.SerialPoint.Execution.readCached_words,
+    ``Agave.Ed25519.SerialPoint.Execution.pointPost_writesOnly,
+    ``Agave.Ed25519.SerialPoint.cachedSubCompleted_represents,
+    ``Agave.Ed25519.SerialPoint.affineSubCompleted_represents,
+    ``Agave.Ed25519.SerialPoint.affineAddCompleted_represents]
+  for endpoint in endpoints do
+    for dependency in (← collectAxioms endpoint) do
+      unless allowed.contains dependency do
+        throwError "Unexpected axiom {dependency} in {endpoint}"
+  logInfo "Serial residual point helpers use only standard Lean axioms."
