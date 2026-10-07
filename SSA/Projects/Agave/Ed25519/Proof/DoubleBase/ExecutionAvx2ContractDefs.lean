@@ -28,10 +28,11 @@ def packedPoint (m : MemoryState) (p : Pointer) : Avx2PointAdd.Point :=
   let limbs := Avx2FieldMul.Execution.inputNat (Avx2FieldMul.Execution.readBlocks m p)
   ⟨limbs 0, limbs 1, limbs 2, limbs 3⟩
 
+/-- The verifier's tight serial representation allows one carry bit per radix-51 limb. -/
 def serialLimbsBounded (s : GlobalState) (p : Pointer) : Prop :=
   ∀ (coordinate : Fin 4) (limb : Fin 5),
     (s.mem.readAt (p.add (BitVec.ofNat 64
-      (40 * coordinate.val + 8 * limb.val))) 64).toNat < 2 ^ 51
+      (40 * coordinate.val + 8 * limb.val))) 64).toNat < 2 ^ 52
 
 /-- Only the four live caller objects need a signed-small allocation witness.
 Scalar values are the complete 256-bit memory inputs; no canonical-scalar or
