@@ -11,6 +11,9 @@ open Encoding.Decompress.Execution.Pow2k (program)
 
 set_option maxHeartbeats 1600000 in
 set_option maxRecDepth 10000 in
+/-- Execute the unchanged three-block `pow2k` body at exponent one, including
+the loop's terminating branch and all five stores. Inputs may alias output;
+the word-level execution needs no arithmetic bound. -/
 theorem square_call (r a : Pointer) (s : GlobalState) (hwf : s.WF)
     (hr : SmallRange s.mem r 40) (ha : SmallRange s.mem a 40) :
     program.call (program.args (.value r) (.value a) (.value 1#32)) s =

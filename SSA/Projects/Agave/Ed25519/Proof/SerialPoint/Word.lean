@@ -30,14 +30,14 @@ theorem weak_mul_nooverflow (x : BitVec 64) :
 /-- The final limb-zero addition has both LLVM no-overflow properties for
 arbitrary input words. The other four additions use `final_add_nooverflow`. -/
 theorem weak_fold_nooverflow (x y : BitVec 64) :
-    ((x >>> 51)*19).uaddOverflow (y &&& 2251799813685247#64) = false ∧
-    ((x >>> 51)*19).saddOverflow (y &&& 2251799813685247#64) = false := by
+    ((x >>> 51)*19#64).uaddOverflow (y &&& 2251799813685247#64) = false ∧
+    ((x >>> 51)*19#64).saddOverflow (y &&& 2251799813685247#64) = false := by
   have hx : (x >>> 51).toNat < 2^13 := by
     have h := x.isLt
     simp only [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
     norm_num at h ⊢
     omega
-  have hm : ((x >>> 51)*19).toNat < 2^18 := by
+  have hm : ((x >>> 51)*19#64).toNat < 2^18 := by
     have hp : (x >>> 51).toNat * 19 < 2^18 := by omega
     have hp64 : (x >>> 51).toNat * 19 < 2^64 := by omega
     rw [BitVec.toNat_mul]
@@ -49,7 +49,7 @@ theorem weak_fold_nooverflow (x y : BitVec 64) :
     change y.toNat &&& (2^51-1) < 2^51
     rw [Nat.and_two_pow_sub_one_eq_mod]
     exact Nat.mod_lt _ (by decide)
-  have hmi : ((x >>> 51)*19).toInt = (((x >>> 51)*19).toNat : Int) :=
+  have hmi : ((x >>> 51)*19#64).toInt = (((x >>> 51)*19#64).toNat : Int) :=
     BitVec.toInt_eq_toNat_of_lt (by norm_num at hm ⊢; omega)
   have hyi : (y &&& 2251799813685247#64).toInt =
       ((y &&& 2251799813685247#64).toNat : Int) :=
