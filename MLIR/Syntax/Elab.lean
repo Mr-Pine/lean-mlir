@@ -173,7 +173,9 @@ def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .vector op => do
     `((.vector $(← ternOpStx op)))
 
-def constStx : ConstLit → CommandElabM (TSyntax `term)
+mutual
+/-- `c`, a term of type `⟦c.ty⟧ᵣ`. -/
+partial def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .bv w v => do
     `(($(← intLit v) : BitVec $(num w)))
   | .vec l w vs => do
@@ -185,6 +187,27 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .arraySplat n w v => do
     `((.replicate $(num n) $(← intLit v) : Vector (BitVec $(num w)) $(num n)))
   | .null => `(Pointer.null)
+  | .agg t ms => do
+    `(($(← membersStx t ms) : Ty.denoteRaw $(← tyStx t)))
+/-- The aggregate of type `t` with members `ms`, unascribed: an array as `#v[…]`, a struct as the
+tuple of its fields. -/
+partial def membersStx (t : Ty) (ms : List ConstLit) : CommandElabM (TSyntax `term) := do
+  let ms ←
+    ms.toArray.mapM fun
+        | .agg t ms => membersStx t ms
+        | c => constStx c
+  match t, ms with
+  | .array .., ms =>
+    `(#v[$ms,*])
+  | .struct _, #[] =>
+    `(())
+  | .struct _, #[m] =>
+    pure m
+  | .struct _, ms =>
+    `(($(ms[0]!), $(ms.extract 1),*))
+  | t, _ =>
+    throwError "an aggregate of type {t.toMLIR}"
+end
 
 /-- The instruction, calling `callee f` for `@f` or loading `global g` for `@g`. -/
 def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String → TSyntax `term) :
@@ -302,9 +325,20 @@ def finAlts (n : Nat) (alts : Array (TSyntax ``Lean.Parser.Term.matchAlt)) :
     return alts
   return alts.push (← `(Lean.Parser.Term.matchAltExpr| | ⟨_ + $(num n), h⟩ => absurd h (by omega)))
 
+/-- Elaborate a lift's definitions, as in a `noncomputable section` if `nc`: then those the code
+generator cannot compile (a long table's) are noncomputable, the others not. -/
+def elabLift (nc : Bool) (cmds : Array Syntax) : CommandElabM Unit :=
+  if nc then
+    withScope ({ · with isNoncomputable := true }) do
+      for c in cmds do
+        elabCommand c
+  else
+    for c in cmds do
+      elabCommand c
+
 open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
-def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
+def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
     (r : TSyntax `mlir_region) (callees : Array (TSyntax ``calleeBinding)) :
     CommandElabM Unit := do
@@ -416,13 +450,14 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
     let argsDef ←
       `(def $(name `args) $argBinders* : Vals ($Γ).args := $(← consStx (argNames.map (⟨·.raw⟩))))
     pure (#[Γdef, treeDef, htyDef, tysDef, paramsDef] ++ blockDefs ++ #[funcDef, argsDef])
-  for c in cmds do
-    elabCommand c
+  elabLift nc cmds
 
 open MlirDef in
 /-- Define `x : GlobalInitializer` from a constant global's initializer region, as `mlir_def`
-defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. -/
-def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
+defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. A region that builds a
+constant (`Prog.constant?`) folds to `x.lit : ⟦x.t⟧ᵣ`, and its block to the one `const x.lit`.
+-/
+def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
     (r : TSyntax `mlir_region) : CommandElabM Unit := do
   let rgn ← liftCoreM (region r)
   let p ← match Prog.ofRegion rgn with
@@ -437,45 +472,62 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let name (s : Name) : Ident := mkIdent (x.getId ++ s)
   let Γ := name `Γ
   let tree := name `tree
-  let tys : ValTys := { hty := name `hty, vals := p.Γ.vals }
-  let d := depth p.Γ.n
+  let lit := name `lit
+  let c? := p.constant?
+  let vals := if c?.isSome then [t] else p.Γ.vals
+  let tys : ValTys := { hty := name `hty, vals }
+  let d := depth vals.length
   let tStx ← tyStx t
   let noSymbol (f : String) : TSyntax `term := mkIdent (.mkSimple f)
-  let body ← b.body.toArray.mapM (instrStx tys noSymbol noSymbol)
+  let (litDef, body, exit) ←
+    match c? with
+    | some c =>
+      pure
+        (#[← `(def $lit : Ty.denoteRaw $tStx := $(← constStx c))],
+          #[← `(.const $lit $(← dstStx tys 0))], ← exitStx tys (.ret [.val 0]))
+    | none =>
+      pure (#[], ← b.body.toArray.mapM (instrStx tys noSymbol noSymbol), ← exitStx tys b.exit)
   let cmds ← do
-    pure #[
+    pure <| #[
       -- the kernel checks the count: the elaborator would recurse once per value
-      ← `(abbrev $Γ : Ctx := ⟨$(num p.Γ.n), [], $(← tysStx p.Γ.vals), by decide +kernel⟩),
-      ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d p.Γ.vals))),
+      ← `(abbrev $Γ : Ctx := ⟨$(num vals.length), [], $(← tysStx vals), by decide +kernel⟩),
+      ← `(abbrev $tree : TyTree := $(← treeStx (TyTree.ofList d vals))),
       ← `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
-          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h),
+          (Ctx.ty_eq_get (d := $(num d)) (by decide +kernel) (by decide) k).trans h)] ++
+      litDef ++ #[
       ← `(def $(name `entry) : BasicBlock $Γ [$tStx] (fun _ : Fin 1 => []) :=
-          { body := [$body,*], exit := $(← exitStx tys b.exit) }),
+          { body := [$body,*], exit := $exit }),
       ← `($[$doc?:docComment]? @[reducible] def $x : GlobalInitializer :=
           { Γ := $Γ, hΓ := rfl, t := $tStx, block := $(name `entry) })]
-  for c in cmds do
-    elabCommand c
+  elabLift nc cmds
 
 end
 
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
-generic-form MLIR region. -/
-syntax (name := mlirDef) (docComment)? "mlir_def " ident (ppSpace bracketedBinder)* " := "
-  mlir_region (" with " calleeBinding,+)? : command
-
-elab_rules : command
-  | `($[$doc?:docComment]? mlir_def $x:ident $bs* := $r:mlir_region $[with $cs,*]?) =>
-    elabMlirDef doc? x bs r ((cs.map (·.getElems)).getD #[])
-
-/-- `mlir_const_def X := { region }`: define `X : GlobalInitializer` and its pieces from a constant
-global's initializer region, in generic-form MLIR. -/
-syntax (name := mlirConstDef) (docComment)? "mlir_const_def " ident " := " mlir_region : command
+generic-form MLIR region. `noncomputable mlir_def` lets what the code generator cannot compile be
+noncomputable, e.g. a function binding a noncomputable global. -/
+syntax (name := mlirDef) (docComment)? ("noncomputable ")? "mlir_def " ident
+  (ppSpace bracketedBinder)* " := " mlir_region (" with " calleeBinding,+)? : command
 
 elab_rules : command
   |
   `(
-$[$doc?:docComment]?mlir_const_def $x:ident := $r:mlir_region) =>
-    elabMlirConstDef doc? x r
+$[$doc?:docComment]? $[noncomputable%$nc]? mlir_def $x:ident $bs* := $r:mlir_region
+      $[with $cs,*]?) =>
+    elabMlirDef doc? nc.isSome x bs r ((cs.map (·.getElems)).getD #[])
+
+/-- `mlir_const_def X := { region }`: define `X : GlobalInitializer` and its pieces from a constant
+global's initializer region, in generic-form MLIR; a region that builds a constant folds to it,
+`X.lit`. `noncomputable mlir_const_def` lets a table too long for the code generator be
+noncomputable; or raise `maxRecDepth` to compile it. -/
+syntax (name := mlirConstDef) (docComment)? ("noncomputable ")? "mlir_const_def " ident " := "
+  mlir_region : command
+
+elab_rules : command
+  |
+  `(
+$[$doc?:docComment]? $[noncomputable%$nc]? mlir_const_def $x:ident := $r:mlir_region) =>
+    elabMlirConstDef doc? nc.isSome x r
 
 /-- `mlir_region% { region }` is the region's AST, a `MLIR.Region`: `translate`'s input. -/
 elab "mlir_region% " r:mlir_region : term => do

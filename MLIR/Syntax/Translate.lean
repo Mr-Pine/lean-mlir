@@ -8,7 +8,8 @@ public import MLIR.Func
 
 `Prog.ofRegion` checks a parsed region and translates it to a `Prog`: the function's instructions
 with registers as indices and every type resolved. `Prog.toFunc` builds the `Func`, and `mlir_def`
-(`Syntax/Elab.lean`) builds the terms of a hand lift from the same `Prog`.
+(`Syntax/Elab.lean`) builds the terms of a hand lift from the same `Prog`. `Prog.constant?` folds a
+region that only builds a constant, as a global's initializer does.
 
 Registers: `%argK` is `.arg K` and `%K` is `.val K`; a block's arguments are values, numbered as
 MLIR numbers them. The translation is trusted, and guarded by tests.
@@ -29,7 +30,7 @@ inductive RegRef
   deriving DecidableEq, Repr
 
 /-- A constant, as written: a scalar, a vector's lanes or an integer array's elements, or one for
-all (`dense<c>`). -/
+all (`dense<c>`); or an aggregate, as `Prog.constant?` folds it. -/
 inductive ConstLit
   | bv (w : Nat) (v : Int)
   | vec (l w : Nat) (vs : List Int)
@@ -37,6 +38,8 @@ inductive ConstLit
   | array (n w : Nat) (vs : List Int)
   | arraySplat (n w : Nat) (v : Int)
   | null
+  /-- An array's elements or a struct's fields, of type `t`. -/
+  | agg (t : Ty) (ms : List ConstLit)
   deriving Repr
 
 def ConstLit.ty : ConstLit → Ty
@@ -44,6 +47,7 @@ def ConstLit.ty : ConstLit → Ty
   | .vec l w _ | .splat l w _ => .vec l w
   | .array n w _ | .arraySplat n w _ => .array n (.bv w)
   | .null => .ptr
+  | .agg t _ => t
 
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
@@ -835,6 +839,69 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
         return { name := b.name, params := ps, body, exit : PBlock }
   return { Γ, tRets, blocks }
 
+/-! ## Folding constants -/
+
+namespace Translate
+
+/-- A value being folded: undefined (`undef`, `poison`), a constant, or an aggregate's members. -/
+inductive Folded
+  | undef
+  | lit (c : ConstLit)
+  | agg (t : Ty) (ms : List Folded)
+
+/-- `f`'s members, at array or struct type `t`. -/
+def Folded.members (t : Ty) : Folded → Option (List Folded)
+  | .undef =>
+    match t with
+    | .array n _ => some (.replicate n .undef)
+    | .struct fs => some (fs.map fun _ => .undef)
+    | _ => none
+  | .lit (.array _ w vs) => some (vs.map (.lit <| .bv w ·))
+  | .lit (.arraySplat n w v) => some (.replicate n (.lit (.bv w v)))
+  | .lit _ => none
+  | .agg _ ms => some ms
+
+/-- `f`, of type `t`, with its member at `path` set to `v`: `insertvalue`. -/
+def Folded.insert (v : Folded) (t : Ty) (f : Folded) : (path : List Nat) → Option Folded
+  | [] => some v
+  | i :: is => do
+    let ms ← f.members t
+    let m ← v.insert (← t.memberType [i]) (← ms[i]?) is
+    return .agg t (ms.set i m)
+
+mutual
+/-- `f`'s constant, if no member is undefined. -/
+def Folded.toLit : Folded → Option ConstLit
+  | .undef => none
+  | .lit c => some c
+  | .agg t ms => .agg t <$> toLits ms
+def Folded.toLits : List Folded → Option (List ConstLit)
+  | [] => some []
+  | f :: fs => return (← f.toLit) :: (← toLits fs)
+end
+
+end Translate
+
+open Translate in
+/-- The constant `p` returns, if its one block builds it from constants, `undef`s and
+`insertvalue`s alone and leaves no member undefined. -/
+def Prog.constant? (p : Prog) : Option ConstLit := do
+  let [b] := p.blocks | none
+  let .ret [.val r] := b.exit | none
+  -- registers start undefined, as `Env.init` starts them poison
+  let vals ←
+    b.body.foldlM (init := Array.replicate p.Γ.n Folded.undef) fun vals i => do
+        match i with
+        | .const c d =>
+          return vals.set! d (.lit c)
+        | .poison _ d =>
+          return vals.set! d .undef
+        | .binop (.insertvalue is t _ _) d (.val a) (.val v) =>
+          return vals.set! d (← (← vals[v]?).insert t (← vals[a]?) is)
+        | _ =>
+          none
+  (← vals[r]?).toLit
+
 /-! ## Building the `Func` -/
 
 /-- A global's initializer, typically `G.value` for a `G : GlobalInitializer`. -/
@@ -845,6 +912,25 @@ abbrev Global :=
 abbrev Callee :=
   Σ (ts us : List Ty), Vals ts → EffectM (Vals us)
 
+mutual
+/-- `t`'s all-zero raw value, with null pointers. -/
+def Ty.zeroRaw : (t : Ty) → ⟦t⟧ᵣ
+  | .bv w => 0#w
+  | .ptr => Pointer.null
+  | .vec l w => Vector.replicate l 0#w
+  | .array n t => Vector.replicate n t.zeroRaw
+  | .struct fs => Ty.zeroRawFields fs
+def Ty.zeroRawFields : (fs : List Ty) → Ty.denoteFieldsRaw fs
+  | [] => ()
+  | [t] => t.zeroRaw
+  | t :: t' :: ts => (t.zeroRaw, Ty.zeroRawFields (t' :: ts))
+end
+
+/-- `v`, a value of `c`, at type `t`; zero if `c` has another type. -/
+def ConstLit.castTo (c : ConstLit) (v : ⟦c.ty⟧ᵣ) (t : Ty) : ⟦t⟧ᵣ :=
+  if h : c.ty = t then h ▸ v else t.zeroRaw
+
+mutual
 def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
   | .bv w v => BitVec.ofInt w v
   | .vec l w vs => Vector.ofFn fun i : Fin l => BitVec.ofInt w (vs[i]?.getD 0)
@@ -852,6 +938,19 @@ def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
   | .array n w vs => Vector.ofFn fun i : Fin n => BitVec.ofInt w (vs[i]?.getD 0)
   | .arraySplat n w v => Vector.replicate n (BitVec.ofInt w v)
   | .null => Pointer.null
+  | .agg (.array _ t) ms => Vector.ofFn fun i => (ConstLit.valuesAt t ms).getD i t.zeroRaw
+  | .agg (.struct fs) ms => ConstLit.fieldsAt fs ms
+  | .agg t _ => t.zeroRaw
+/-- `cs`' values at type `t`. -/
+def ConstLit.valuesAt (t : Ty) : List ConstLit → List ⟦t⟧ᵣ
+  | [] => []
+  | c :: cs => c.castTo c.value t :: ConstLit.valuesAt t cs
+/-- A struct of fields `fs` from `cs`' values; zero where `cs` runs out. -/
+def ConstLit.fieldsAt : (fs : List Ty) → List ConstLit → Ty.denoteFieldsRaw fs
+  | [f], c :: _ => c.castTo c.value f
+  | f :: f' :: fs, c :: cs => (c.castTo c.value f, ConstLit.fieldsAt (f' :: fs) cs)
+  | fs, _ => Ty.zeroRawFields fs
+end
 
 namespace Prog
 
