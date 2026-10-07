@@ -1,7 +1,6 @@
 # RIR tactics: technical reference
 
-Source: `MLIR/Run/Tactic/**` in `~/lean-mlir-nightly-port` (branch `new-semantics`).
-Import `MLIR.Run.Tactic`. For when to use what, see `tactics-guide.md`.
+Source: `MLIR/Run/Tactic/**`. Import `MLIR.Run.Tactic`. For when to use what, see `tactics-guide.md`.
 
 ## The proof state the tactics maintain
 
