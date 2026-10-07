@@ -5,6 +5,7 @@ import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Sign
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Input
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.ByteHelpersAudit
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.CutpointAudit
+import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Pow2k
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.DecodeWords
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.InlineWords
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.LinkedCalls
@@ -27,13 +28,14 @@ Execution progress for the manifest-pinned decompressor:
 * actual rejection/tag control and the success suffix from Y/Z initialization
   through payload copy are checked, with exact overlapping caller reads;
 * invocation-local initialized D/SQRT_M1 memory is explicit and frame-stable.
-* repeated-square and pow22501 word schedules, tight bounds, and field values;
+* the entire actual repeated-square helper, including loads, its pure loop,
+  final stores and caller-frame behavior; pow22501 word schedule and field value;
 * the parsed-input execution slice, scalar sign/arithmetic word laws, and the
   exact sqrt output suffix; the word decoder has the same acceptance predicate
   and field coordinates as the mathematical decoder.
 
 This is not yet an execution proof of `linkedProgram` against `decompress`.
-Outstanding: repeated-square loop and pow22501 full call execution;
+Outstanding: pow22501 full call execution;
 sqrt_ratio_i call/serialization/comparison composition and its
 conditional assignment/negation execution; decompression entry allocation and
 inline vector arithmetic/sign execution; full caller-frame erasure and
@@ -48,7 +50,7 @@ linked graph; unproved execution composition must not be described as such a
 primitive assumption or hidden behind whole-decoder equality.
 -/
 
-/-- info: All 81 decompression execution components use only standard Lean axioms. -/
+/-- info: All 86 decompression execution components use only standard Lean axioms. -/
 #guard_msgs in
 open Lean Elab Command in
 run_cmd do
@@ -71,6 +73,11 @@ run_cmd do
     ``Agave.Ed25519.Encoding.Decompress.Execution.sign_byte,
     ``Agave.Ed25519.Encoding.Decompress.Execution.sign_mask_nooverflow,
     ``Agave.Ed25519.Encoding.Decompress.Execution.sign_mask_operation,
+    ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.body_run,
+    ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.loop_run,
+    ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.program_run,
+    ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.program_call,
+    ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.program_call_field,
     ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.iterateSquare_value,
     ``Agave.Ed25519.Encoding.Decompress.Execution.Pow2k.iterateSquare_tight,
     ``Agave.Ed25519.Encoding.Decompress.Execution.Pow22501.wordChain_value,
@@ -139,4 +146,4 @@ run_cmd do
     for dependency in (← collectAxioms endpoint) do
       unless allowed.contains dependency do
         throwError "Unexpected axiom {dependency} in {endpoint}"
-  logInfo "All 81 decompression execution components use only standard Lean axioms."
+  logInfo "All 86 decompression execution components use only standard Lean axioms."
