@@ -97,9 +97,15 @@ def closeByDecide (g : MVarId) : MetaM Unit := do
 being `0` or `1`), a `≠` from a `Nodup`, or one about an earlier state through `transport_fact`,
 else by `decide`. -/
 def closeSide (g : MVarId) : TacticM Unit := do
+  let ty ← instantiateMVars (← g.getType)
+  -- a closed one (registers apart) by `decide` first, without scanning the facts
+  if !ty.hasFVar && !ty.hasMVar then
+    if let some pf← Tactic.decideProof? ty then
+      g.assign pf
+      return
   if ← g.assumptionCore then
     return
-  if let some (_, a, b) := (← instantiateMVars (← g.getType)).ne? then
+  if let some (_, a, b) := ty.ne? then
     if let some pf← Tactic.neProof? (← Tactic.splitConjunctedFacts) a b then
       g.assign pf
       return
@@ -124,9 +130,7 @@ def evalStepPattern : Tactic := fun stx => do
   -- the state as `S` with `hS`, to seal what the pattern stores
   Tactic.ensureStateEq
   withMainContext do
-      let args :=
-        StepArgs.parse (mkNullNode #[mkNullNode, mkNullNode]) stx[3] mkNullNode mkNullNode (named :=
-          true)
+      let args := StepArgs.parse mkNullNode stx[3] mkNullNode mkNullNode (named := true)
       let g ← getMainGoal
       let inState := (← getRunBodyFrom (← getGoalType).2).state
       -- a constant with all its arguments open, so its implicit registers are ours to split
@@ -184,7 +188,7 @@ def evalStepPattern : Tactic := fun stx => do
       -- the lemma's names: a kept fact is referred to by them
       let (dead, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
       replaceMainGoal [← Tactic.reduceIndex main]
-      finishStep args.value args.hyp false mkNullNode true args.tag
+      finishStep args
       -- the pattern's intermediates: sealed away, so unused; its facts about them kept
       let mut main ← getMainGoal
       for x in dead.reverse do

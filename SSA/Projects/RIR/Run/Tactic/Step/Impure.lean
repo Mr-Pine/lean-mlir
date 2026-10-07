@@ -66,30 +66,27 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
         let hSId := mkIdent (← hS.getUserName)
         let hS'Id := mkIdent (← hS'.getUserName)
         let mlirMem := mkIdent `mlir_mem
+        let transport ← labelled `mlir_transport
+        let new? := (← instantiateMVars (← hS'.getType)).eq?.map (·.2.2)
         for hyp in preserveHyps do
           let decl ← hyp.getDecl
-          -- P S ↦ P S'
-          let newTy := (← kabstract (← instantiateMVars decl.type) inState).instantiate1 (.fvar S')
+          -- `P S` as `fun s => P s`, then `P S'`
+          let key ← instantiateMVars decl.type
+          let motive := .lam `s (← inferType inState) (← kabstract key inState) .default
+          let newTy := motive.beta #[.fvar S']
           let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
           let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
           g ← g'.clear hyp
-          -- fast path, without elaborating tactics: `P S`, one or two transport lemmas to
-          -- `P (new state)`, then `hS'` back
+          -- without elaborating tactics: `P S`, one or two transport lemmas to `P (new state)`,
+          -- then `hS'` back
           let fast? ←
             observing? do
-                let some (_, _, new) := (← instantiateMVars (← hS'.getType)).eq? | failure
-                let motive ←
-                  withLocalDeclD `s (← inferType inState) fun x => do
-                      mkLambdaFVars #[x]
-                          ((← kabstract (← instantiateMVars decl.type) inState).instantiate1 x)
+                let some new := new? | failure
                 -- `P S`, keyed as is, and `dsimp`ed like the new state
-                let key ← instantiateMVars decl.type
                 let facts : Std.HashMap Expr Expr :=
                   (({} : Std.HashMap Expr Expr).insert key (.fvar hyp)).insert
                     (← Tactic.dsimpState key) (.fvar hyp)
-                let some pf ←
-                  Tactic.transportWith facts (← labelled `mlir_transport) 2
-                      (motive.beta #[new]) | failure
+                let some pf ← Tactic.transportWith facts transport 2 (motive.beta #[new]) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
           if let some pf := fast? then
             pg.mvarId!.assign pf
@@ -100,17 +97,18 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
               (←
                 `(tactic|
                     first
-                    -- fast path: the old fact and one transport lemma; the context
-                    -- (`*`) only when a lemma needs a side fact
                     | ( subst $hS'Id:ident $hSId:ident
-                        solve_by_elim (transparency := .reducible) only [$hId:ident] using
-                          $(mkIdent `mlir_transport):ident)
-                    | ( subst $hS'Id:ident $hSId:ident
-                        solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
-                          $(mkIdent `mlir_transport):ident)
-                    -- a chain of transports, still at reducible transparency
-                    | ( subst $hS'Id:ident $hSId:ident
-                        transport_fact)
+                        first
+                        -- the old fact and one transport lemma; the context (`*`) only when a
+                        -- lemma needs a side fact
+                        |
+                          solve_by_elim (transparency := .reducible) only [$hId:ident] using
+                            $(mkIdent `mlir_transport):ident
+                        |
+                          solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
+                            $(mkIdent `mlir_transport):ident
+                        -- a chain of transports, still at reducible transparency
+                        | transport_fact)
                     | ( subst $hSId:ident
                         try simp at $hId:ident
                         simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
@@ -132,9 +130,8 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
         return goals
   return goals
 
-/-- Step a pure instruction, extending the env with the new value -/
-def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax)
-    (expand : Bool) (runTactics : Syntax) (consumed : Array Ident) (tag : Bool) : TacticM Unit :=
+/-- Step an effectful instruction, proving it with `runTactics`. -/
+def runStep (args : StepArgs) (runTactics : Syntax) : TacticM Unit :=
   focus do
     Tactic.ensureStateEq
     withMainContext do
@@ -151,8 +148,7 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         let operation := op_run.appFn!.appFn!
         setGoals [runGoal] -- Makes the following simp work
         let resultValue ←
-          simpValue only simpArgs operation (← getRunBodyFrom goal).env
-              expand -- Let simp work on the newly written value
+          simpValue args.only args.simpArgs operation (← getRunBodyFrom goal).env args.expand
         let runGoal ← replaceBySimp runGoal operation resultValue
         -- Apply runTactics to runGoal
         setGoals [runGoal]
@@ -161,18 +157,14 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
         let goals ← sealStep inState
-        finishStep value hyp only simpArgs expand tag
+        finishStep args
         -- the consumed facts last: the value may read through them
         withMainContext do
             let mut g ← getMainGoal
-            for h in consumed do
+            for h in args.consumed do
               g ← g.clear (← getFVarId h)
             replaceMainGoal [g]
         setGoals (goals.toList ++ (← getGoals))
-
-/-- Step an effectful instruction, proving it with `tac`. -/
-def runStep (args : StepArgs) (tac : Syntax) : TacticM Unit :=
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand tac args.consumed args.tag
 
 @[tactic stepImpure]
 def evalStepImpure : Tactic := fun stx =>
@@ -225,49 +217,41 @@ elab "disjoint_fact" : tactic =>
     g.assign pf
     replaceMainGoal []
 
-@[tactic stepLoad]
-def evalStepLoad : Tactic := fun stx => do
-  let args := StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true)
-  -- the pointer keeps the values named with `with`, as the facts about it do
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
+/-- A load or store, closed with `lem`: the pointer's `Fits` from the facts, the value by
+`dsimp`. -/
+def runAccess (args : StepArgs) (lem : Ident) : TacticM Unit := do
+  runStep args
       (←
         `(tacticSeq|
         expect_values
-        exact run_load (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
-      args.consumed args.tag
+        exact $lem (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
+
+@[tactic stepLoad]
+def evalStepLoad : Tactic := fun stx => do
+  -- the pointer keeps the values named with `with`, as the facts about it do
+  runAccess (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true)) (mkCIdent ``run_load)
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
-  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
-      (←
-        `(tacticSeq|
-        expect_values
-        exact run_store (by first | fits_fact | simp_all) (by dsimp; try simp; rfl)))
-      args.consumed args.tag
+  runAccess (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode) (mkCIdent ``run_store)
 
 @[tactic stepMemcpy]
 def evalStepMemcpy : Tactic := fun stx => do
-  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
+  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
       (←
         `(tacticSeq|
         expect_values
         exact
             run_memcpy (by rfl) (by first | disjoint_fact | simp_all)
               (by first | fits_fact | simp_all) (by first | fits_fact | simp_all)))
-      args.consumed args.tag
 
 @[tactic stepMemset]
 def evalStepMemset : Tactic := fun stx => do
-  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
-  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
+  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
       (←
         `(tacticSeq|
         expect_values
-        exact
-            run_memset (by rfl) (by first | fits_fact | simp_all)))
-      args.consumed args.tag
+        exact run_memset (by rfl) (by first | fits_fact | simp_all)))
 
 end InstructionSpecific
 

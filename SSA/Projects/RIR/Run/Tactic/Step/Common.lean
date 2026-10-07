@@ -16,6 +16,17 @@ inductive EnvName
   | auto
   | named (s : TSyntax `ident)
 
+/-- The arguments shared by the stepping tactics. -/
+structure StepArgs where
+  value : EnvName := .auto
+  hyp : EnvName := .auto
+  only : Bool := false
+  simpArgs : Syntax := mkNullNode
+  consumed : Array Ident := #[]
+  expand : Bool := true
+  /-- Tag the value's equation, so later steps keep it folded. -/
+  tag : Bool := false
+
 structure RewriteStepResult where
   stepGoal : MVarId
   mainGoal : MVarId
@@ -97,8 +108,7 @@ def clearStaleBodyFacts : TacticM Unit :=
         g ← g.tryClear e.decl.fvarId
     replaceMainGoal [g]
 
-def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool)
-    (tag := false) : TacticM Unit :=
+def finishStep (args : StepArgs) : TacticM Unit :=
   withMainContext do
     clearStaleBodyFacts
     -- a call writes its results with `writeMany`: unfold it into single writes (none for `void`)
@@ -116,55 +126,42 @@ def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Synta
         runSeal
         return -- Nothing to do; Env is not modified
     let envWrite ← getEnvWrite runBodyFrom.env
-    let env := envWrite.base
-    let resultValue ←
-      simpValue only simpArgs envWrite.value env expand -- Let simp work on the newly written value
-    replaceMainGoal [← replaceBySimp g envWrite.value resultValue]
-    -- If not `inline`, extract the value into a local variable with a hypothesis
-    match value with
-    | .inline =>
-      pure ()
-    | _ =>
-      do
-        let (g, goal) ← getGoalType
-        let runBodyFrom ← getRunBodyFrom goal
-        let envWrite ← getEnvWrite runBodyFrom.env
-        let var_name ←
-          match value with
-          | .inline =>
-            throwError m!"Unreachable: inline var name"
-          | .named s =>
-            pure s.getId
-          | .auto =>
-            do
-              let some idx ←
-                dstIndex? envWrite.dst | throwError m!"Could not get dst index from {envWrite.dst}"
-              pure ((`v).appendAfter (toString idx))
-        let hyp_name ←
-          match hyp with
-          | .inline =>
-            throwError m!"Cannot have hyp inline but not value"
-          | .named s =>
-            pure s.getId
-          | .auto =>
-            pure (var_name.appendBefore "h")
-        -- Abstract only the inner `x` of `.value x`. Helps for not carrying the `PoisonOr` Monad.
-        let abstractionTarget :=
-          if envWrite.value.isAppOfArity ``PoisonOr.value 2 then envWrite.value.appArg!
-          else
-            if envWrite.value.isAppOfArity ``Ty.wrap 2 then envWrite.value.appArg!
-            else envWrite.value
-        -- a value that already is a local stays: naming it would capture that local everywhere
-        unless abstractionTarget.isFVar do
-          let (_, g) ←
-            g.withContext do
-                -- a tagged value stays folded where later steps and the state take it
-                generalizeOpaque g abstractionTarget var_name
-                    #[⟨hyp_name, fun x => do
-                        let ty ← mkEq x abstractionTarget
-                        return if tag then Tactic.tagNamed ty else ty,
-                        ← mkEqRefl abstractionTarget⟩]
-          replaceMainGoal [g]
+    -- the newly written value, its reads resolved
+    let r ← simpValue args.only args.simpArgs envWrite.value envWrite.base args.expand
+    let g ← replaceBySimp g envWrite.value r
+    replaceMainGoal [g]
+    -- unless `inline`, the value as a local `v` with `hv : v = …`
+    let name? ←
+      match args.value with
+      | .inline =>
+        pure none
+      | .named s =>
+        pure (some s.getId)
+      | .auto =>
+        do
+          let some idx ←
+            dstIndex? envWrite.dst | throwError m!"Could not get dst index from {envWrite.dst}"
+          pure (some ((`v).appendAfter (toString idx)))
+    if let some x := name? then
+      let hx :=
+        match args.hyp with
+        | .named s => s.getId
+        | _ => x.appendBefore "h"
+      -- only the inner `x` of `.value x` or `wrap x`, so the local is not a `PoisonOr`
+      let target :=
+        if r.expr.isAppOfArity ``PoisonOr.value 2 || r.expr.isAppOfArity ``Ty.wrap 2 then
+          r.expr.appArg!
+        else r.expr
+      -- a value that already is a local stays: naming it would capture that local everywhere
+      unless target.isFVar do
+        let (_, g) ←
+          g.withContext do
+              -- a tagged value stays folded where later steps and the state take it
+              generalizeOpaque g target x
+                  #[⟨hx, fun y => do
+                      let ty ← mkEq y target
+                      return if args.tag then Tactic.tagNamed ty else ty, ← mkEqRefl target⟩]
+        replaceMainGoal [g]
     -- Extract new `E`
     sealEnv
     runSeal
