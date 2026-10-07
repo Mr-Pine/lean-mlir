@@ -130,11 +130,13 @@ def runStep (args : StepArgs) (runTactics : Syntax) : TacticM Unit :=
         setGoals [main]
         let goals ← sealStep inState
         finishStep args
-        -- the consumed facts last: the value may read through them
+        -- the consumed facts last: the value may read through them. Their ids first: once a
+        -- `clear` assigns the main goal, its context is gone
         withMainContext do
+            let hs ← args.consumed.mapM getFVarId
             let mut g ← getMainGoal
-            for h in args.consumed do
-              g ← g.clear (← getFVarId h)
+            for h in hs do
+              g ← g.clear h
             replaceMainGoal [g]
         setGoals (goals.toList ++ (← getGoals))
 
