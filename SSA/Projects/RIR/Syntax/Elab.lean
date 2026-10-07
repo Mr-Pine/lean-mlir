@@ -149,6 +149,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.add $(← flagsStx f)))
   | .sub f => do
     `((.sub $(← flagsStx f)))
+  | .usubSat => `(.usubSat)
   | .mul f => do
     `((.mul $(← flagsStx f)))
   | .shl f => do
@@ -162,6 +163,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.cmp $(← boolStx signed)))
   | .icmp p => do
     `((.icmp $(← predStx p)))
+  | .ptrCmp isNe => do
+    `((.ptrCmp $(← boolStx isNe)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)

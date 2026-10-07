@@ -38,12 +38,17 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | xor {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | add (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | sub (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  /-- Unsigned subtraction clamped to zero, propagating either operand's poison. -/
+  | usubSat {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | mul (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | shl (flags : OverflowFlags) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | lshr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
+  /-- Same-allocation pointer equality, or inequality when `isNe` is true.
+  Comparisons across allocation identities are outside RIR's address-free pointer model. -/
+  | ptrCmp (isNe : Bool) : BinOp .ptr .ptr (.bv 1)
   /-- Three-way integer comparison, with an independently typed result width. -/
   | cmp (signed : Bool) {w wr : Nat} : BinOp (.bv w) (.bv w) (.bv wr)
   |

@@ -593,6 +593,13 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     arith (.add (← overflowFlags op)) (← res) args
   | "llvm.sub" =>
     arith (.sub (← overflowFlags op)) (← res) args
+  | "llvm.intr.usub.sat" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w), (b, t₂)] := args | throw "expected two scalar integer operands"
+      unless t₂ == .bv w && t == .bv w do
+        throw "the operand and result types must agree"
+      return .binop (.usubSat (w := w)) dst a b
   | "llvm.mul" =>
     arith (.mul (← overflowFlags op)) (← res) args
   | "llvm.shl" =>
@@ -629,6 +636,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless t₁ == t₂ do
         throw "the operand types differ"
       match t₁, t with
+      | .ptr, .bv 1 =>
+        match p with
+        | .eq => return .binop (.ptrCmp false) dst a b
+        | .ne => return .binop (.ptrCmp true) dst a b
+        | _ => throw "ordered pointer comparisons are not supported"
       | .bv w, .bv 1 =>
         return .binop (.icmp (w := w) p) dst a b
       | .vec l w, .vec l' 1 =>

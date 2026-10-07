@@ -59,6 +59,15 @@ def sub (flags : OverflowFlags) {w : Nat} (x y : IntW w) : IntW w := do
     .poison
   return (a - b)
 
+/-- `llvm.intr.usub.sat`: unsigned subtraction, clamped to zero on underflow.
+Both operands propagate poison, including when the other operand is zero.
+https://llvm.org/docs/LangRef.html#llvm-usub-sat-intrinsics -/
+@[mlir_operation]
+def usubSat {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return if a.ult b then 0 else a - b
+
 @[mlir_operation]
 def mul (flags : OverflowFlags) {w : Nat} (x y : IntW w) : IntW w := do
   let a : BitVec w ← x
@@ -140,6 +149,22 @@ def cmp (signed : Bool) {w wr : Nat} (x y : IntW w) : IntW wr := do
   return if (if signed then a.slt b else a.ult b) then -1 else if a == b then 0 else 1
 
 end BVBinOp
+
+/-- Pointer equality for pointers derived from one allocation.  LLVM compares address bits,
+but RIR deliberately does not assign concrete addresses to allocation identities.  Equal
+allocation identities therefore compare by byte offset; a cross-allocation comparison is
+poison until an address-realization layer can supply the missing physical-address fact.
+The comparison does not dereference either pointer, so the allocation need not be live and
+the offsets need not be in bounds. -/
+@[mlir_operation]
+def ptrCmp (isNe : Bool) (x y : PoisonOr Pointer) : IntW 1 := do
+  let a ← x
+  let b ← y
+  if a.id = b.id then
+    return BitVec.ofBool (if isNe then decide (a.offset ≠ b.offset)
+      else decide (a.offset = b.offset))
+  else
+    .poison
 
 section Intrinsics
 

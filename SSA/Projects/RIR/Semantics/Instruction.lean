@@ -34,12 +34,14 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | xor => Operation.xor
   | add flags => Operation.add flags
   | sub flags => Operation.sub flags
+  | usubSat => Operation.usubSat
   | mul flags => Operation.mul flags
   | shl flags => Operation.shl flags
   | lshr exact => Operation.lshr exact
   | ashr exact => Operation.ashr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p
+  | ptrCmp isNe => Operation.ptrCmp isNe
   | cmp signed => Operation.cmp signed
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
