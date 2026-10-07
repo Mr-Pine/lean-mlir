@@ -73,10 +73,55 @@ same reachable blocks. -/
 initialize blockUseCache : IO.Ref (Std.HashMap (Expr × Nat) (Std.HashSet Nat × Array Expr)) ←
   IO.mkRef {}
 
+/-- A closed block's registers read before written from each position on (its exit included),
+by position: each step asks for the next, and walking the instruction list again per step is
+quadratic in the block's length. -/
+initialize blockSuffixCache : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Nat))) ← IO.mkRef {}
+
+/-- `exposedRegs (blockParts block pos)` for every `pos`, last position (the exit alone) last. -/
+def suffixExposed (block : Expr) : MetaM (Array (Std.HashSet Nat)) := do
+  if let some r := (← blockSuffixCache.get)[block]? then
+    return r
+  let parts ← blockParts block (mkNatLit 0)
+  let n := parts.size - 1
+  let mut cur ← usedRegs #[parts[0]!]
+  let mut out := Array.replicate (n + 1) cur
+  for j in [0:n] do
+    let i := n - 1 - j
+    let part := parts[i + 1]!
+    let writes ← IO.mkRef #[]
+    part.forEachWhere (·.isAppOfArity ``Dst.mk 4) fun d => writes.modify (·.push (d.getArg! 2))
+    for w in ← writes.get do
+      if let some k← finNLit? w then
+        cur := cur.erase k
+    cur := cur.union (← usedRegs #[part])
+    out := out.set! i cur
+  blockSuffixCache.modify (·.insert block out)
+  return out
+
 def liveRegs (func block pos : Expr) : MetaM (Std.HashSet Nat) := do
-  let parts ← blockParts block pos
-  let mut live ← exposedRegs parts
-  let mut todo ← jumpTargets parts[0]!
+  let block ← instantiateMVars block
+  let pos ← instantiateMVars pos
+  -- a closed block at a literal position: its suffixes once
+  let cached? ←
+    if block.hasFVar || block.hasMVar then
+      pure none
+    else
+      match pos.nat? <|> pos.rawNatLit? with
+      | some i =>
+        do
+          let sx ← suffixExposed block
+          pure (sx[i]?)
+      | none =>
+        pure none
+  let exit ← whnfD (← mkAppM ``BasicBlock.exit #[block])
+  let mut live ←
+    match cached? with
+    | some regs =>
+      pure regs
+    | none =>
+      exposedRegs (← blockParts block pos)
+  let mut todo ← jumpTargets exit
   let mut seen : Std.HashSet Nat := {}
   let func ← instantiateMVars func
   while !todo.isEmpty do
