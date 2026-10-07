@@ -1,0 +1,42 @@
+{
+  "xgetbv": {
+    "source": "generated/agave_xgetbv.mlir",
+    "source_sha256": "629b1388d97ce924bb5589adcbca6d56a47816b5d305c89092707b19284a1ec3",
+    "region_sha256": "ffe5738322f7d3b26951b5b5b7a1f7d9b7198d2ab4bffc43ed0957839801f8ee",
+    "imported_region_sha256": "a82adc884828015d5db95bb64dbb581ed4c0c30b84ed1613e09f88a822ab5ba2",
+    "instruction_boundaries": [
+      {
+        "source": "%1 = \"llvm.call_intrinsic\"(%0) <{fastmathFlags = #llvm.fastmath<none>, intrin = \"llvm.x86.xgetbv\", op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (i32) -> i64",
+        "boundary": "%1 = \"llvm.call\"(%0) <{callee = @cache_instruction_xgetbv}> : (i32) -> i64"
+      }
+    ],
+    "other_instruction_changes": []
+  },
+  "initializer": {
+    "source": "generated/agave_initialize_avx2_cache.mlir",
+    "source_sha256": "bdf35de6b9b7f5cf71674fc6653905f22b7b54d82b3b389f3f93f64a277270a7",
+    "region_sha256": "b825840d65eae7b5c0c47a7ad2b2c233e4c7b15573ec43a5b4379841b3ec6467",
+    "imported_region_sha256": "39dbafa5d8830ca0aec6f567b35a687561b50b0b8f433653b2dce3df653f7f13",
+    "instruction_boundaries": [
+      {
+        "source": "%9 = \"llvm.inline_asm\"(%0, %1) <{asm_dialect = 1 : i64, asm_string = \"mov ${0:q}, rbx\\0Acpuid\\0Axchg ${0:q}, rbx\", constraints = \"=&r,=&{ax},=&{cx},=&{dx},1,2,~{memory}\", has_side_effects, tail_call_kind = #llvm.tailcallkind<tail>}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>",
+        "boundary": "%9 = \"llvm.call\"(%0, %1) <{callee = @cache_instruction_cpuid}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>"
+      },
+      {
+        "source": "%11 = \"llvm.inline_asm\"(%2, %1) <{asm_dialect = 1 : i64, asm_string = \"mov ${0:q}, rbx\\0Acpuid\\0Axchg ${0:q}, rbx\", constraints = \"=&r,=&{ax},=&{cx},=&{dx},1,2,~{memory}\", has_side_effects, tail_call_kind = #llvm.tailcallkind<tail>}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>",
+        "boundary": "%11 = \"llvm.call\"(%2, %1) <{callee = @cache_instruction_cpuid}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>"
+      },
+      {
+        "source": "%12 = \"llvm.inline_asm\"(%2, %0) <{asm_dialect = 1 : i64, asm_string = \"mov ${0:q}, rbx\\0Acpuid\\0Axchg ${0:q}, rbx\", constraints = \"=&r,=&{ax},=&{cx},=&{dx},1,2,~{memory}\", has_side_effects, tail_call_kind = #llvm.tailcallkind<tail>}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>",
+        "boundary": "%12 = \"llvm.call\"(%2, %0) <{callee = @cache_instruction_cpuid}> : (i32, i32) -> !llvm.struct<(i32, i32, i32, i32)>"
+      },
+      {
+        "source": "\"llvm.store\"(%23, %8) <{alignment = 1 : i64, ordering = 2 : i64}> : (i8, !llvm.ptr) -> ()",
+        "boundary": "\"llvm.call\"(%23, %8) <{callee = @cache_instruction_store_monotonic}> : (i8, !llvm.ptr) -> ()"
+      }
+    ],
+    "other_instruction_changes": []
+  },
+  "importer_sha256": "6b27cb1d0503591c85eeaff14abc51fb2a7d9256ef848a13c0f6ae111a24dd44",
+  "extraction_manifest_sha256": "edd141bd9af14ea0a4eea2452892fe8570012100b01e81ca6e4640d75b9d5945"
+}
