@@ -1,0 +1,184 @@
+{
+  "source_manifest_sha256": "7d954a743a8fa5d3854d2da3f9863dc9af9b6798a022475b852365e7dbe2a0a2",
+  "base_manifest_sha256": "a5df0990047876600f4644a4ef6754f2d11a1c348e204d5a82515d71efb24277",
+  "caller_artifact_sha256": "a8736c22319a5ae7d9c218386f94b1f0f4a67e33ade616ae88d9f1533c11193a",
+  "lock_sha256": "b19e8b986f8dc6802377ae1f1350a8df651b25347248ec8f1a262eeb5c58d5bf",
+  "extract_script_sha256": "04e3b886b509d40749880e7864cedcd7632d9762ee85027fa32d2ea16e632135",
+  "crate_llvm_ir_sha256": "425819f700b76e8f02b1e36fb5e2e9cdfa8bcf291c29362992abb2eba15e3136",
+  "crate_llvm_ir_path": "/tmp/ed25519-rir-extract/final/build/target/release/deps/sha2-04132bacac12e7ba.ll",
+  "compiled_source_path": "/home/nine/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sha2-0.11.0",
+  "cargo_working_directory": "/tmp/ed25519-rir-extract/final/build",
+  "dependency_features": [],
+  "dependency_rustflags": [],
+  "caller_external_symbol": "_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512",
+  "tools": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "llvm-extract": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+    "opt": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n  Default target: x86_64-pc-linux-gnu\n  Host CPU: meteorlake\n",
+    "mlir-translate": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n"
+  },
+  "commands": [
+    [
+      "cargo",
+      "+1.98.1",
+      "rustc",
+      "--manifest-path",
+      "/tmp/ed25519-rir-extract/final/build/Cargo.toml",
+      "--offline",
+      "--locked",
+      "--release",
+      "--lib",
+      "-p",
+      "sha2",
+      "--",
+      "--emit=llvm-ir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/sha2-04132bacac12e7ba.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_dispatch.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_dispatch.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_dispatch.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_dispatch.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_dispatch.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvNtNtCs7dqAOVfn11v_4sha26sha5128x86_avx28compress",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/sha2-04132bacac12e7ba.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_avx2.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvNtNtCs7dqAOVfn11v_4sha26sha5128x86_avx28compress",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_avx2.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_avx2.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_avx2.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_sha512_compress_avx2.mlir"
+    ]
+  ],
+  "kernels": {
+    "agave_sha512_compress_dispatch": {
+      "target_symbol": "_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512",
+      "original_definition_sha256": "d95fcc954d13db770a7572950eafdc2cb29d2d49a7bb05db7dd91639280fc5bb",
+      "llvm_inlining_applied_after_rustc": false,
+      "original_global_definitions": {
+        "_RNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid7STORAGE.0": {
+          "definition": "@_RNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid7STORAGE.0 = internal unnamed_addr global i8 -1, align 1",
+          "sha256": "78a458552a6bb62ef8a049bd5d68c76b30e28cc17e4f00e308048bf2ce4a04bc"
+        },
+        "alloc_448aca044373cb4cde6849f95106f1ce": {
+          "definition": "@alloc_448aca044373cb4cde6849f95106f1ce = private unnamed_addr constant [640 x i8] c\"\\22\\AE(\\D7\\98/\\8AB\\CDe\\EF#\\91D7q/;M\\EC\\CF\\FB\\C0\\B5\\BC\\DB\\89\\81\\A5\\DB\\B5\\E98\\B5H\\F3[\\C2V9\\19\\D0\\05\\B6\\F1\\11\\F1Y\\9BO\\19\\AF\\A4\\82?\\92\\18\\81m\\DA\\D5^\\1C\\ABB\\02\\03\\A3\\98\\AA\\07\\D8\\BEopE\\01[\\83\\12\\8C\\B2\\E4N\\BE\\851$\\E2\\B4\\FF\\D5\\C3}\\0CUo\\89{\\F2t]\\BEr\\B1\\96\\16;\\FE\\B1\\DE\\805\\12\\C7%\\A7\\06\\DC\\9B\\94&i\\CFt\\F1\\9B\\C1\\D2J\\F1\\9E\\C1i\\9B\\E4\\E3%O8\\86G\\BE\\EF\\B5\\D5\\8C\\8B\\C6\\9D\\C1\\0Fe\\9C\\ACw\\CC\\A1\\0C$u\\02+Yo,\\E9-\\83\\E4\\A6n\\AA\\84tJ\\D4\\FBA\\BD\\DC\\A9\\B0\\\\\\B5S\\11\\83\\DA\\88\\F9v\\AB\\DFf\\EERQ>\\98\\102\\B4-m\\C61\\A8?!\\FB\\98\\C8'\\03\\B0\\E4\\0E\\EF\\BE\\C7\\7FY\\BF\\C2\\8F\\A8=\\F3\\0B\\E0\\C6%\\A7\\0A\\93G\\91\\A7\\D5o\\82\\03\\E0Qc\\CA\\06pn\\0E\\0Ag))\\14\\FC/\\D2F\\85\\0A\\B7'&\\C9&\\\\8!\\1B.\\ED*\\C4Z\\FCm,M\\DF\\B3\\95\\9D\\13\\0D8S\\DEc\\AF\\8BTs\\0Ae\\A8\\B2w<\\BB\\0Ajv\\E6\\AE\\EDG.\\C9\\C2\\81;5\\82\\14\\85,r\\92d\\03\\F1L\\A1\\E8\\BF\\A2\\010B\\BCKf\\1A\\A8\\91\\97\\F8\\D0p\\8BK\\C20\\BET\\06\\A3Ql\\C7\\18R\\EF\\D6\\19\\E8\\92\\D1\\10\\A9eU$\\06\\99\\D6* qW\\855\\0E\\F4\\B8\\D1\\BB2p\\A0j\\10\\C8\\D0\\D2\\B8\\16\\C1\\A4\\19S\\ABAQ\\08l7\\1E\\99\\EB\\8E\\DFLwH'\\A8H\\9B\\E1\\B5\\BC\\B04cZ\\C9\\C5\\B3\\0C\\1C9\\CB\\8AA\\E3J\\AA\\D8Ns\\E3cwO\\CA\\9C[\\A3\\B8\\B2\\D6\\F3o.h\\FC\\B2\\EF]\\EE\\82\\8Ft`/\\17Coc\\A5xr\\AB\\F0\\A1\\14x\\C8\\84\\EC9d\\1A\\08\\02\\C7\\8C(\\1Ec#\\FA\\FF\\BE\\90\\E9\\BD\\82\\DE\\EBlP\\A4\\15y\\C6\\B2\\F7\\A3\\F9\\BE+Sr\\E3\\F2xq\\C6\\9Ca&\\EA\\CE>'\\CA\\07\\C2\\C0!\\C7\\B8\\86\\D1\\1E\\EB\\E0\\CD\\D6}\\DA\\EAx\\D1n\\EE\\7FO}\\F5\\BAo\\17r\\AAg\\F0\\06\\A6\\98\\C8\\A2\\C5}c\\0A\\AE\\0D\\F9\\BE\\04\\98?\\11\\1BG\\1C\\135\\0Bq\\1B\\84}\\04#\\F5w\\DB(\\93$\\C7@{\\AB\\CA2\\BC\\BE\\C9\\15\\0A\\BE\\9E<L\\0D\\10\\9C\\C4g\\1DC\\B6B>\\CB\\BE\\D4\\C5L*~e\\FC\\9C)\\7FY\\EC\\FA\\D6:\\ABo\\CB_\\17XGJ\\8C\\19Dl\", align 8",
+          "sha256": "1b2ec36396c432d5fcd65f138a7726d4c3fc3557b065528982df132c0829ef87"
+        }
+      },
+      "mlir_operations": {
+        "llvm.add": 776,
+        "llvm.and": 320,
+        "llvm.br": 3,
+        "llvm.call": 2,
+        "llvm.cond_br": 3,
+        "llvm.func": 4,
+        "llvm.getelementptr": 103,
+        "llvm.icmp": 2,
+        "llvm.intr.bswap": 16,
+        "llvm.intr.experimental.noalias.scope.decl": 6,
+        "llvm.intr.fshl": 736,
+        "llvm.load": 105,
+        "llvm.lshr": 128,
+        "llvm.mlir.addressof": 2,
+        "llvm.mlir.constant": 92,
+        "llvm.mlir.global": 2,
+        "llvm.module_flags": 1,
+        "llvm.or": 64,
+        "llvm.return": 1,
+        "llvm.shl": 1,
+        "llvm.store": 8,
+        "llvm.switch": 1,
+        "llvm.xor": 816
+      },
+      "files_sha256": {
+        "agave_sha512_compress_dispatch.ll": "f5cf87ce9e229c1c93b43110465c372951c403d220105cfcb7bb994d4bb4a9f4",
+        "agave_sha512_compress_dispatch.mlir": "1f230d1a71c8f1fe939a418984587cfe3fb81814ed37723660acab2ffb30c8c1",
+        "agave_sha512_compress_dispatch.original.ll": "c86b7448dd58b871f4d14012a202213f7c7650b8ed3fd88cf97b99c34aec0e04"
+      }
+    },
+    "agave_sha512_compress_avx2": {
+      "target_symbol": "_RNvNtNtCs7dqAOVfn11v_4sha26sha5128x86_avx28compress",
+      "original_definition_sha256": "3944d717207ba3f7a1339f65ead3e4bfdaba5269f2030f1d156b2dfd1b8d156b",
+      "llvm_inlining_applied_after_rustc": false,
+      "original_global_definitions": {
+        "alloc_448aca044373cb4cde6849f95106f1ce": {
+          "definition": "@alloc_448aca044373cb4cde6849f95106f1ce = private unnamed_addr constant [640 x i8] c\"\\22\\AE(\\D7\\98/\\8AB\\CDe\\EF#\\91D7q/;M\\EC\\CF\\FB\\C0\\B5\\BC\\DB\\89\\81\\A5\\DB\\B5\\E98\\B5H\\F3[\\C2V9\\19\\D0\\05\\B6\\F1\\11\\F1Y\\9BO\\19\\AF\\A4\\82?\\92\\18\\81m\\DA\\D5^\\1C\\ABB\\02\\03\\A3\\98\\AA\\07\\D8\\BEopE\\01[\\83\\12\\8C\\B2\\E4N\\BE\\851$\\E2\\B4\\FF\\D5\\C3}\\0CUo\\89{\\F2t]\\BEr\\B1\\96\\16;\\FE\\B1\\DE\\805\\12\\C7%\\A7\\06\\DC\\9B\\94&i\\CFt\\F1\\9B\\C1\\D2J\\F1\\9E\\C1i\\9B\\E4\\E3%O8\\86G\\BE\\EF\\B5\\D5\\8C\\8B\\C6\\9D\\C1\\0Fe\\9C\\ACw\\CC\\A1\\0C$u\\02+Yo,\\E9-\\83\\E4\\A6n\\AA\\84tJ\\D4\\FBA\\BD\\DC\\A9\\B0\\\\\\B5S\\11\\83\\DA\\88\\F9v\\AB\\DFf\\EERQ>\\98\\102\\B4-m\\C61\\A8?!\\FB\\98\\C8'\\03\\B0\\E4\\0E\\EF\\BE\\C7\\7FY\\BF\\C2\\8F\\A8=\\F3\\0B\\E0\\C6%\\A7\\0A\\93G\\91\\A7\\D5o\\82\\03\\E0Qc\\CA\\06pn\\0E\\0Ag))\\14\\FC/\\D2F\\85\\0A\\B7'&\\C9&\\\\8!\\1B.\\ED*\\C4Z\\FCm,M\\DF\\B3\\95\\9D\\13\\0D8S\\DEc\\AF\\8BTs\\0Ae\\A8\\B2w<\\BB\\0Ajv\\E6\\AE\\EDG.\\C9\\C2\\81;5\\82\\14\\85,r\\92d\\03\\F1L\\A1\\E8\\BF\\A2\\010B\\BCKf\\1A\\A8\\91\\97\\F8\\D0p\\8BK\\C20\\BET\\06\\A3Ql\\C7\\18R\\EF\\D6\\19\\E8\\92\\D1\\10\\A9eU$\\06\\99\\D6* qW\\855\\0E\\F4\\B8\\D1\\BB2p\\A0j\\10\\C8\\D0\\D2\\B8\\16\\C1\\A4\\19S\\ABAQ\\08l7\\1E\\99\\EB\\8E\\DFLwH'\\A8H\\9B\\E1\\B5\\BC\\B04cZ\\C9\\C5\\B3\\0C\\1C9\\CB\\8AA\\E3J\\AA\\D8Ns\\E3cwO\\CA\\9C[\\A3\\B8\\B2\\D6\\F3o.h\\FC\\B2\\EF]\\EE\\82\\8Ft`/\\17Coc\\A5xr\\AB\\F0\\A1\\14x\\C8\\84\\EC9d\\1A\\08\\02\\C7\\8C(\\1Ec#\\FA\\FF\\BE\\90\\E9\\BD\\82\\DE\\EBlP\\A4\\15y\\C6\\B2\\F7\\A3\\F9\\BE+Sr\\E3\\F2xq\\C6\\9Ca&\\EA\\CE>'\\CA\\07\\C2\\C0!\\C7\\B8\\86\\D1\\1E\\EB\\E0\\CD\\D6}\\DA\\EAx\\D1n\\EE\\7FO}\\F5\\BAo\\17r\\AAg\\F0\\06\\A6\\98\\C8\\A2\\C5}c\\0A\\AE\\0D\\F9\\BE\\04\\98?\\11\\1BG\\1C\\135\\0Bq\\1B\\84}\\04#\\F5w\\DB(\\93$\\C7@{\\AB\\CA2\\BC\\BE\\C9\\15\\0A\\BE\\9E<L\\0D\\10\\9C\\C4g\\1DC\\B6B>\\CB\\BE\\D4\\C5L*~e\\FC\\9C)\\7FY\\EC\\FA\\D6:\\ABo\\CB_\\17XGJ\\8C\\19Dl\", align 8",
+          "sha256": "1b2ec36396c432d5fcd65f138a7726d4c3fc3557b065528982df132c0829ef87"
+        }
+      },
+      "mlir_operations": {
+        "llvm.add": 95,
+        "llvm.alloca": 3,
+        "llvm.and": 24,
+        "llvm.bitcast": 24,
+        "llvm.br": 8,
+        "llvm.cond_br": 10,
+        "llvm.func": 2,
+        "llvm.getelementptr": 72,
+        "llvm.icmp": 10,
+        "llvm.insertelement": 8,
+        "llvm.intr.experimental.noalias.scope.decl": 7,
+        "llvm.intr.fshl": 42,
+        "llvm.intr.lifetime.end": 3,
+        "llvm.intr.lifetime.start": 3,
+        "llvm.intr.memset": 1,
+        "llvm.intr.usub.sat": 1,
+        "llvm.load": 51,
+        "llvm.lshr": 13,
+        "llvm.mlir.addressof": 1,
+        "llvm.mlir.constant": 76,
+        "llvm.mlir.global": 1,
+        "llvm.mlir.poison": 4,
+        "llvm.module_flags": 1,
+        "llvm.return": 1,
+        "llvm.shl": 11,
+        "llvm.shufflevector": 47,
+        "llvm.store": 37,
+        "llvm.sub": 1,
+        "llvm.xor": 72
+      },
+      "files_sha256": {
+        "agave_sha512_compress_avx2.ll": "2b5123e541ef79564a4895eb713c2c4fb4e6f57ab96a5012854e0037200d5f45",
+        "agave_sha512_compress_avx2.mlir": "a52b11e26eb4c079df51d175e6100ac85010b6809a5958ab4fea26cde283cac9",
+        "agave_sha512_compress_avx2.original.ll": "aa6efebd4b1c6d641409e6380da6fb7f06650ac599a6aa0951044ad625b604d4"
+      }
+    }
+  },
+  "boundary": "Original sha2 dependency, original runtime dispatch, no Rust wrappers or body rewrites. Rust/LLVM compilation and MLIR import remain trusted. CPUID/cache effects and both backend execution refinements are separate proof obligations."
+}

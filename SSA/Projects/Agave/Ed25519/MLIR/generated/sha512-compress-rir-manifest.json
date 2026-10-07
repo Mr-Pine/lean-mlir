@@ -1,0 +1,56 @@
+{
+  "Dispatch": {
+    "source": "generated/agave_sha512_compress_dispatch.mlir",
+    "source_sha256": "1f230d1a71c8f1fe939a418984587cfe3fb81814ed37723660acab2ffb30c8c1",
+    "function_symbol": "_RNvNtCs7dqAOVfn11v_4sha26sha51211compress512",
+    "function_type": "!llvm.func<void (ptr, ptr, i64)>",
+    "region_sha256": "1ba47070a75a01369422b136ae150ccc6a15a673a24dce5d8646979db3ecc82e",
+    "callees": {
+      "_RNvNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid8init_get10init_inner": {
+        "field": "initializeAvx2Cache",
+        "args": [],
+        "returns": [
+          ".bv 1"
+        ]
+      },
+      "_RNvNtNtCs7dqAOVfn11v_4sha26sha5128x86_avx28compress": {
+        "field": "avx2Compress",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".bv 64"
+        ],
+        "returns": []
+      }
+    },
+    "globals": [
+      "_RNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid7STORAGE.0",
+      "alloc_448aca044373cb4cde6849f95106f1ce"
+    ],
+    "blocks": 8,
+    "normalizations": [
+      {
+        "symbol_quoting": "_RNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid7STORAGE.0"
+      }
+    ]
+  },
+  "Avx2": {
+    "source": "generated/agave_sha512_compress_avx2.mlir",
+    "source_sha256": "a52b11e26eb4c079df51d175e6100ac85010b6809a5958ab4fea26cde283cac9",
+    "function_symbol": "_RNvNtNtCs7dqAOVfn11v_4sha26sha5128x86_avx28compress",
+    "function_type": "!llvm.func<void (ptr, ptr, i64)>",
+    "region_sha256": "3848e33ca8f8fd3ae9f3d7e26d943a5cbc4d2577fa51806b7a33bac9567d3ff8",
+    "callees": {},
+    "globals": [
+      "alloc_448aca044373cb4cde6849f95106f1ce"
+    ],
+    "blocks": 19,
+    "normalizations": []
+  },
+  "import_inputs_sha256": {
+    "MLIR/import_sha512_compress.py": "364f83d0819e260bb6188295cf7a339ce9f188bffd758f971316fd8c48e1aa3b",
+    "MLIR/extract_sha512_compress.py": "04e3b886b509d40749880e7864cedcd7632d9762ee85027fa32d2ea16e632135",
+    "MLIR/generated/sha512-compress-manifest.json": "008c9ae43c2dd85a1e28a1428be996d8ddd5f425139969088cffc5288e6bc619",
+    "Proof/Verifier/ExecutionElab.lean": "56a1fe6cb964c965b0120861d5cdb54e312bfea4d19bea58dd614f13e3da2bce"
+  }
+}
