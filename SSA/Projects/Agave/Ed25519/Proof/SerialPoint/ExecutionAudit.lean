@@ -8,10 +8,11 @@ import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.DoubleSquareCall
 import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.FieldCall
 import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.PointMemory
 import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.CachedAddExecution
+import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.CachedAddContractsLink
 import SSA.Projects.Agave.Ed25519.Proof.SerialPoint.SquareContractsLink
 
 /-! Guard the logical dependency boundary of the checked helper execution and
-word-refinement endpoints, including exact cached-add execution and the square contract link. -/
+word-refinement endpoints, including exact cached-add execution and the checked helper contract links. -/
 
 /-- info: 'Agave.Ed25519.SerialPoint.Execution.storeLimbs_readAt' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
@@ -94,3 +95,7 @@ word-refinement endpoints, including exact cached-add execution and the square c
 /-- info: 'Agave.Ed25519.SerialPoint.Execution.square_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms Agave.Ed25519.SerialPoint.Execution.square_contract
+
+/-- info: 'Agave.Ed25519.SerialPoint.Execution.cached_add_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Agave.Ed25519.SerialPoint.Execution.cached_add_contract
