@@ -651,6 +651,21 @@ def readMemFact (c : MemCtx) : Simp.Simproc := fun e => do
     return .visit { expr := x, proof? := some (mkExpectedPropHint h (← mkEq e x)) }
   -- inside a known read: `S.mem.readAt (q.add off) w` from `S.mem.readAt q v = x`
   let_expr MemoryState.readAt m p w := e' | return .continue
+  -- at its start: `S.mem.readAt q w` for literal `w ≤ v`
+  if !p.isAppOf ``Pointer.add then
+    let some wn := w.nat? | return .continue
+    for (l, h) in c.reads.toArray.map fun (l, (_, h)) => (l, h) do
+      let_expr MemoryState.readAt m' q' v := l | continue
+      unless m' == m && q' == p do
+        continue
+      let some vn := v.nat? | continue
+      unless wn < vn do
+        continue
+      let hw ← mkDecideProof (← mkAppM ``LE.le #[w, v])
+      let pf ← mkAppM ``MemoryState.readAt_of_readAt_le #[hw, h]
+      let some (_, _, r) := (← inferType pf).eq? | continue
+      return .visit { expr := r, proof? := some (mkExpectedPropHint pf (← mkEq e r)) }
+    return .continue
   let some (q, off) := p.app2? ``Pointer.add | return .continue
   for (l, h) in c.reads.toArray.map fun (l, (_, h)) => (l, h) do
     let_expr MemoryState.readAt m' q' v := l | continue
