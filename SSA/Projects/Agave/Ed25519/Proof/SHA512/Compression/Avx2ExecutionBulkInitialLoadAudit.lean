@@ -9,3 +9,7 @@ import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionBulkInit
 #print axioms Agave.Ed25519.SHA512.Execution.Avx2.bulkInitialPairEnv_ready
 #print axioms Agave.Ed25519.SHA512.Execution.Avx2.bulk_initial_pair_entry
 #print axioms Agave.Ed25519.SHA512.Execution.Avx2.bulk_initial_setup_pair_entry
+
+#print axioms Agave.Ed25519.SHA512.Execution.Avx2.EntryReady.bulk_initial
+#print axioms Agave.Ed25519.SHA512.Execution.Avx2.bulkEntryEnv_bulkInitialReady
+#print axioms Agave.Ed25519.SHA512.Execution.Avx2.BulkInitialEntryReady.of_frame

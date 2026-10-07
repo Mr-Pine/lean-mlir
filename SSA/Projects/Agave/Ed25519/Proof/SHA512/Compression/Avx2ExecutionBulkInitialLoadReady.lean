@@ -1,7 +1,7 @@
 import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionBulkInitialLoad
 import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionBulkPairStep
 import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionBulkPairGroupReady
-import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionEntry
+import SSA.Projects.Agave.Ed25519.Proof.SHA512.Compression.Avx2ExecutionBulkInitialEntryReady
 
 /-! Concrete entry invariant of the original bb11/bb12 bulk loop. -/
 namespace Agave.Ed25519.SHA512.Execution.Avx2
@@ -13,100 +13,9 @@ set_option maxRecDepth 100000
 set_option maxHeartbeats 3500000
 set_option linter.unusedSimpArgs false
 
-theorem EntryReady.of_bulk_initial_frame {g : Globals} {E E' : Env program.Γ}
-    {origin : GlobalState} (h : EntryReady g E origin) (hf : RegFrame 321 487 E E') :
-    EntryReady g E' origin := by
-  constructor
-  · exact (hf.read (%0)).trans h.v0
-  · exact (hf.read (%1)).trans h.v1
-  · exact (hf.read (%2)).trans h.v2
-  · exact (hf.read (%3)).trans h.v3
-  · exact (hf.read (%4)).trans h.v4
-  · exact (hf.read (%5)).trans h.v5
-  · exact (hf.read (%6)).trans h.v6
-  · exact (hf.read (%7)).trans h.v7
-  · exact (hf.read (%8)).trans h.v8
-  · exact (hf.read (%9)).trans h.v9
-  · exact (hf.read (%10)).trans h.v10
-  · exact (hf.read (%11)).trans h.v11
-  · exact (hf.read (%12)).trans h.v12
-  · exact (hf.read (%13)).trans h.v13
-  · exact (hf.read (%14)).trans h.v14
-  · exact (hf.read (%15)).trans h.v15
-  · exact (hf.read (%16)).trans h.v16
-  · exact (hf.read (%17)).trans h.v17
-  · exact (hf.read (%18)).trans h.v18
-  · exact (hf.read (%19)).trans h.v19
-  · exact (hf.read (%20)).trans h.v20
-  · exact (hf.read (%21)).trans h.v21
-  · exact (hf.read (%22)).trans h.v22
-  · exact (hf.read (%23)).trans h.v23
-  · exact (hf.read (%24)).trans h.v24
-  · exact (hf.read (%25)).trans h.v25
-  · exact (hf.read (%26)).trans h.v26
-  · exact (hf.read (%27)).trans h.v27
-  · exact (hf.read (%28)).trans h.v28
-  · exact (hf.read (%29)).trans h.v29
-  · exact (hf.read (%30)).trans h.v30
-  · exact (hf.read (%31)).trans h.v31
-  · exact (hf.read (%32)).trans h.v32
-  · exact (hf.read (%33)).trans h.v33
-  · exact (hf.read (%34)).trans h.v34
-  · exact (hf.read (%35)).trans h.v35
-  · exact (hf.read (%36)).trans h.v36
-  · exact (hf.read (%37)).trans h.v37
-  · exact (hf.read (%38)).trans h.v38
-  · exact (hf.read (%39)).trans h.v39
-  · exact (hf.read (%40)).trans h.v40
-  · exact (hf.read (%41)).trans h.v41
-  · exact (hf.read (%42)).trans h.v42
-  · exact (hf.read (%43)).trans h.v43
-  · exact (hf.read (%44)).trans h.v44
-  · exact (hf.read (%45)).trans h.v45
-  · exact (hf.read (%46)).trans h.v46
-  · exact (hf.read (%47)).trans h.v47
-  · exact (hf.read (%48)).trans h.v48
-  · exact (hf.read (%49)).trans h.v49
-  · exact (hf.read (%50)).trans h.v50
-  · exact (hf.read (%51)).trans h.v51
-  · exact (hf.read (%52)).trans h.v52
-  · exact (hf.read (%53)).trans h.v53
-  · exact (hf.read (%54)).trans h.v54
-  · exact (hf.read (%55)).trans h.v55
-  · exact (hf.read (%56)).trans h.v56
-  · exact (hf.read (%57)).trans h.v57
-  · exact (hf.read (%58)).trans h.v58
-  · exact (hf.read (%59)).trans h.v59
-  · exact (hf.read (%60)).trans h.v60
-  · exact (hf.read (%61)).trans h.v61
-  · exact (hf.read (%62)).trans h.v62
-  · exact (hf.read (%63)).trans h.v63
-  · exact (hf.read (%64)).trans h.v64
-  · exact (hf.read (%65)).trans h.v65
-  · exact (hf.read (%66)).trans h.v66
-  · exact (hf.read (%67)).trans h.v67
-  · exact (hf.read (%68)).trans h.v68
-  · exact (hf.read (%69)).trans h.v69
-  · exact (hf.read (%70)).trans h.v70
-  · exact (hf.read (%71)).trans h.v71
-  · exact (hf.read (%72)).trans h.v72
-  · exact (hf.read (%73)).trans h.v73
-  · exact (hf.read (%74)).trans h.v74
-  · exact (hf.read (%75)).trans h.v75
-  · exact (hf.read (%76)).trans h.v76
-  · exact (hf.read (%77)).trans h.v77
-  · exact (hf.read (%78)).trans h.v78
-  · exact (hf.read (%79)).trans h.v79
-  · exact (hf.read (%80)).trans h.v80
-  · exact (hf.read (%81)).trans h.scratch
-  · exact (hf.read (%82)).trans h.cache
-  · exact (hf.read (%83)).trans h.buffer
-  · exact (hf.read (%84)).trans h.parity
-  · exact (hf.read (%85)).trans h.branch
-
 theorem BulkInitialLoadReady.of_entry (g : Globals) (E : Env program.Γ)
-    (origin : GlobalState) (data scratch cache : Pointer) (n : Nat)
-    (h : EntryReady g E origin) (hp : BulkInitialPointers E scratch cache)
+    (data scratch cache : Pointer) (n : Nat)
+    (h : BulkInitialEntryReady g E) (hp : BulkInitialPointers E scratch cache)
     (hd : E.read (%arg1) = .value data) (hn : E.read (%358) = .value (BitVec.ofNat 64 n)) :
     BulkInitialLoadReady E data scratch cache n := by
   refine ⟨hp, hd, hn, h.v1, h.v4, h.v6, h.v8, h.v15, h.v17, h.v19, h.v21, h.v47, h.v52, h.v54, h.v56, h.v58, h.v60, h.v62, h.v64, ?_ , ?_ , ?_ , ?_ , ?_ , ?_ , ?_ , ?_ ⟩
@@ -492,10 +401,10 @@ theorem bulkInitialPairEnv_read451 (E : Env program.Γ) (data cache : Pointer) (
     (bulkInitialPairEnv E data cache n first second).read (%451) = E.read (%1) :=
   (bulkInitialEnter_read451 _ cache).trans ((bulkInitialLoadEnv_frame E data n first second).read (%1))
 
-theorem bulkInitialPairEnv_ready (g : Globals) (E : Env program.Γ) (origin : GlobalState)
+theorem bulkInitialPairEnv_ready (g : Globals) (E : Env program.Γ)
     (data scratch cache : Pointer) (n : Nat) (pairs : BitVec 64)
     (first second : Bytes) (s : Spec.State)
-    (h : EntryReady g E origin) (hp : BulkInitialPointers E scratch cache)
+    (h : BulkInitialEntryReady g E) (hp : BulkInitialPointers E scratch cache)
     (ho : BulkOuterReady E s (BitVec.ofNat 64 n) pairs) :
     BulkPairSpecReady (bulkInitialPairEnv E data cache n first second)
       scratch cache g.address0 0 0 first second s := by
@@ -539,8 +448,8 @@ theorem bulkInitialPairEnv_ready (g : Globals) (E : Env program.Γ) (origin : Gl
   · exact (hf.read (%42)).trans h.v42
   · simp [bulkInitialPairEnv, bulkGroupPairEnv, bulkGroupSetupEnv, mlir_env]
 
-theorem bulkInitialPairEnv_group (g : Globals) (E : Env program.Γ) (origin : GlobalState)
-    (data cache : Pointer) (n : Nat) (first second : Bytes) (h : EntryReady g E origin) :
+theorem bulkInitialPairEnv_group (g : Globals) (E : Env program.Γ)
+    (data cache : Pointer) (n : Nat) (first second : Bytes) (h : BulkInitialEntryReady g E) :
     BulkGroupReady (bulkInitialPairEnv E data cache n first second) 1 := by
   have hf := bulkInitialPairEnv_frame E data cache n first second
   constructor
@@ -548,18 +457,18 @@ theorem bulkInitialPairEnv_group (g : Globals) (E : Env program.Γ) (origin : Gl
   · exact (hf.read (%1)).trans h.v1
   · exact (hf.read (%78)).trans h.v78
 
-theorem bulkInitialPairEnv_loopConstants (g : Globals) (E : Env program.Γ) (origin : GlobalState)
+theorem bulkInitialPairEnv_loopConstants (g : Globals) (E : Env program.Γ)
     (data scratch cache : Pointer) (n : Nat) (first second : Bytes)
-    (h : EntryReady g E origin) (hp : BulkInitialPointers E scratch cache) :
+    (h : BulkInitialEntryReady g E) (hp : BulkInitialPointers E scratch cache) :
     BulkPairLoopConstants (bulkInitialPairEnv E data cache n first second) cache := by
   have hf := bulkInitialPairEnv_frame E data cache n first second
   exact ⟨(hf.read (%2)).trans h.v2, (hf.read (%15)).trans h.v15,
     (hf.read (%17)).trans h.v17, (hf.read (%44)).trans h.v44,
     (hf.read (%82)).trans hp.cachePtr, (hf.read (%66)).trans h.v66⟩
 
-theorem bulk_initial_pair_setup_run (g : Globals) (E : Env program.Γ) (origin mem : GlobalState)
+theorem bulk_initial_pair_setup_run (g : Globals) (E : Env program.Γ) (mem : GlobalState)
     (data scratch cache : Pointer) (n : Nat) (first second : Bytes)
-    (h : EntryReady g E origin) (hp : BulkInitialPointers E scratch cache)
+    (h : BulkInitialEntryReady g E) (hp : BulkInitialPointers E scratch cache)
     (hc : SmallRange mem.mem cache 640) :
     program.bb11.run program.blockParams
       (bulkInitialGroupEnv (bulkInitialLoadEnv E data n first second)) mem =
