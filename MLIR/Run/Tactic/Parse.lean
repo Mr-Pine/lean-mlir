@@ -15,141 +15,41 @@ def getGoalType := do
   let ty ← instantiateMVars (← g.getType)
   return (g, ty)
 
-abbrev ParseM (E T : Type) [ToMessageData E] :=
-  ExceptT E MetaM T
+/-- The first application of `fn` in `goal`, with its arguments, when it has at least `n`. -/
+def appArgs? (goal : Expr) (fn : Name) (n : Nat) : Option (Expr × Array Expr) := do
+  let app ← goal.find? (·.isAppOf fn)
+  guard (app.getAppNumArgs ≥ n)
+  return (app, app.getAppArgs)
 
-@[inline]
-private def fail (e : Err) [ToMessageData Err] : ParseM Err α :=
-  throwThe Err e
+private def noApp (fn : Name) (goal : Expr) : MetaM α :=
+  throwError "no application of `{fn}` in the goal{indentExpr goal}"
 
-section FuncRunGoal
-
-structure FuncRunGoal where
-  app : Expr
-  func : Expr
-  env : Expr
-  state : Expr
-
-inductive FuncRunGoalError where
-  | noRunApp (goal : Expr)
-  | notEnoughArgs (runApp : Expr) (got expected : Nat)
-
-instance : ToMessageData FuncRunGoalError where
-  toMessageData
-    | .noRunApp goal => m!"Did not find application of {``Func.run} in the goal {indentExpr goal}"
-    | .notEnoughArgs runApp got expected =>
-      m!"Expected {expected} args, got {got} in {indentExpr runApp}"
-
-def getFuncRunGoal? (goal : Expr) : ParseM FuncRunGoalError FuncRunGoal := do
-  let some runApp := goal.find? (·.isAppOf ``Func.run)
-    | fail (.noRunApp goal)
-  let args := runApp.getAppArgs
-  if args.size < 3 then
-    fail (.notEnoughArgs runApp args.size 3)
-  return ⟨runApp, args[0]!, args[1]!, args[2]!⟩
-
-def getFuncRunGoal (goal : Expr) : MetaM FuncRunGoal := do
-  match ← getFuncRunGoal? goal with
-  | .ok g =>
-    return g
-  | .error e =>
-    throwError "{e}"
-
-end FuncRunGoal
-
-section FuncRunFromGoal
-
+/-- A goal's `Func.runFrom f env k state`. -/
 structure FuncRunFromGoal where
   app : Expr
-  func : Expr
-  blockIndex : Expr
   env : Expr
   state : Expr
 
-inductive FuncRunFromGoalError where
-  | noRunFromApp (goal : Expr)
-  | notEnoughArgs (runApp : Expr) (got expected : Nat)
-
-instance : ToMessageData FuncRunFromGoalError where
-  toMessageData
-    | .noRunFromApp goal =>
-      m!"Did not find application of {``Func.runFrom} in the goal {indentExpr goal}"
-    | .notEnoughArgs runApp got expected =>
-      m!"Expected {expected} args, got {got} in {indentExpr runApp}"
-
-def getFuncRunFromGoal? (goal : Expr) : ParseM FuncRunFromGoalError FuncRunFromGoal := do
-  let some runApp := goal.find? (·.isAppOf ``Func.runFrom)
-    | fail (.noRunFromApp goal)
-  let args := runApp.getAppArgs
-  if args.size < 4 then
-    fail (.notEnoughArgs runApp args.size 4)
-  return ⟨runApp, args[0]!, args[2]!, args[1]!, args[3]!⟩
-
 def getFuncRunFromGoal (goal : Expr) : MetaM FuncRunFromGoal := do
-  match ← getFuncRunFromGoal? goal with
-  | .ok g =>
-    return g
-  | .error e =>
-    throwError "{e}"
+  let some (app, args) := appArgs? goal ``Func.runFrom 4 | noApp ``Func.runFrom goal
+  return ⟨app, args[1]!, args[3]!⟩
 
-end FuncRunFromGoal
-
-section RunBodyFromGoal
-
+/-- A goal's `block.runBodyFrom env idx state`. -/
 structure RunBodyFrom where
-  app : Expr
   block : Expr
   env : Expr
   idx : Expr
   state : Expr
 
-inductive RunBodyFromError where
-  | noRunBodyFromApp (goal : Expr)
-  | notEnoughArgs (runApp : Expr) (got expected : Nat)
-
-instance : ToMessageData RunBodyFromError where
-  toMessageData
-    | .noRunBodyFromApp goal =>
-      m!"Did not find application of {``BasicBlock.runBodyFrom} in the goal {indentExpr goal}"
-    | .notEnoughArgs runApp got expected =>
-      m!"Expected {expected} args, got {got} in {indentExpr runApp}"
-
-def getRunBodyFrom? (goal : Expr) : ParseM RunBodyFromError RunBodyFrom := do
-  let some runApp := goal.find? (·.isAppOf ``BasicBlock.runBodyFrom)
-    | fail (.noRunBodyFromApp goal)
-  let args := runApp.getAppArgs
-  if args.size < 8 then
-    fail (.notEnoughArgs runApp args.size 8)
-  return ⟨runApp, args[4]!, args[5]!, args[6]!, args[7]!⟩
+def getRunBodyFrom? (goal : Expr) : Option RunBodyFrom := do
+  let (_, args) ← appArgs? goal ``BasicBlock.runBodyFrom 8
+  return ⟨args[4]!, args[5]!, args[6]!, args[7]!⟩
 
 def getRunBodyFrom (goal : Expr) : MetaM RunBodyFrom := do
-  match ← getRunBodyFrom? goal with
-  | .ok g =>
-    return g
-  | .error e =>
-    throwError "{e}"
-
-end RunBodyFromGoal
-
-@[inline]
-def _root_.Lean.Expr.app5? (e : Expr) (fName : Name) : Option (Expr × Expr × Expr × Expr × Expr) :=
-  if e.isAppOfArity fName 5 then
-    some
-      (e.appFn!.appFn!.appFn!.appArg!.appArg!, e.appFn!.appFn!.appFn!.appArg!,
-        e.appFn!.appFn!.appArg!, e.appFn!.appArg!, e.appArg!)
-  else none
+  let some r := getRunBodyFrom? goal | noApp ``BasicBlock.runBodyFrom goal
+  return r
 
 section RunBodyFromGoal
-
-structure EnvWrite where
-  base : Expr
-  dst : Expr
-  value : Expr
-
-def getEnvWrite (e : Expr) : MetaM EnvWrite := do
-  let some (_, _, base, dst, value) :=
-    e.app5? ``Env.write | throwError m!"Env {e} is not a {``Env.write}"
-  return ⟨base, dst, value⟩
 
 /-- A local equation `decl : lhs = rhs`. -/
 structure LocalEq where
@@ -168,12 +68,17 @@ def localEqs : MetaM (Array LocalEq) := do
       let some (_, lhs, rhs) := type.eq? | return acc
       return acc.push { decl := d, type, lhs, rhs }
 
+/-- `(n, b)` for a body fact's left side `b.body.drop n`. -/
+def bodyDrop? (lhs : Expr) : Option (Expr × Expr) := do
+  let_expr List.drop _ n body := lhs | none
+  let_expr BasicBlock.body _ _ _ _ b := body | none
+  return (n, b)
+
 /-- A local `h : block.body.drop idx = x :: xs`, for a `block` whose body does not reduce: `h`
 (typed with the `cons` exposed), `x` and `xs`. -/
 def bodyFact? (block idx : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
   for e in ← localEqs do
-    let_expr List.drop _ n body := e.lhs | continue
-    let_expr BasicBlock.body _ _ _ _ b := body | continue
+    let some (n, b) := bodyDrop? e.lhs | continue
     unless ← isDefEq b block <&&> isDefEq n idx do
       continue
     let rhs ← whnfD e.rhs

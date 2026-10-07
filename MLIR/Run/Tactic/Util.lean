@@ -84,6 +84,11 @@ def finNLit? (n : Expr) : MetaM (Option Nat) := do
   let_expr OfNat.ofNat _ n _ := n | return none
   return n.rawNatLit?
 
+/-- The literal index of a `Reg.val k h`, if it has one. -/
+def valRegIndex? (r : Expr) : MetaM (Option Nat) := do
+  let_expr Reg.val _ _ i _ := r | return none
+  finNLit? i
+
 /-- Replace `e` in `m`'s target by `r.expr`, using the proof `e = r.expr` from `r`. -/
 def replaceBySimp (m : MVarId) (e : Expr) (r : Simp.Result) : MetaM MVarId := do
   -- reducible: `e` occurs verbatim, and a default-transparency mismatch against a similar value

@@ -25,7 +25,7 @@ def upcomingInstrs (block idx : Expr) (n : Nat) : MetaM (Array Expr × Bool) := 
 
 /-- The current and next instructions of the `runBodyFrom` in `goal`; nothing without one. -/
 def instrsHtml (goal : Expr) : MetaM Html := do
-  let .ok r ← (getRunBodyFrom? goal).run | return .text ""
+  let some r := getRunBodyFrom? goal | return .text ""
   let (instrs, exit) ← upcomingInstrs r.block r.idx 2
   let idx := (← whnfD r.idx).nat?
   let row (label : String) (e : Expr) : MetaM Html := do

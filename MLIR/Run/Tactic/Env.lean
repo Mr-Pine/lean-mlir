@@ -25,7 +25,8 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     if env.isFVar then
       return
     -- the chain's root: a jump writes several parameters
-    let E := envRoot (← getEnvWrite env).base
+    let_expr Env.write _ _ base _ _ := env | throwError "env {env} is not an `Env.write`"
+    let E := envRoot base
     -- without `hE`, `E` is a root (a loop's env, or a continuation's): it stays
     let hE? ← findLocalEq? E m!"of the form `{E} = _`"
     let hEargs? ←
@@ -118,8 +119,7 @@ def readFact? (e : Expr) (i : Nat) (lhs : Expr) : MetaM (Option (Expr × Expr)) 
     let_expr Env.read _ _ e' r := l | continue
     unless e' == e do
       continue
-    let_expr Reg.val _ _ rj _ := r | continue
-    unless (← finNLit? rj) == some i do
+    unless (← valRegIndex? r) == some i do
       continue
     return some (v, mkExpectedPropHint h (← mkEq lhs v))
   return none
@@ -128,8 +128,7 @@ def readFact? (e : Expr) (i : Nat) (lhs : Expr) : MetaM (Option (Expr × Expr)) 
 Each run of writes is one definitional step (the kernel decides the index comparisons), each
 local's `hE` one rewrite. Unlike `simp`, it never walks the written values. -/
 partial def walkRead (env reg : Expr) : MetaM (Option (Expr × Expr)) := do
-  let_expr Reg.val _ _ ri _ := reg | return none
-  let some i ← finNLit? ri | return none
+  let some i ← valRegIndex? reg | return none
   let lhs ← mkAppM ``Env.read #[env, reg]
   -- down this run of writes: the value, or the run's base
   let mut e := env
@@ -211,6 +210,10 @@ private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
         return none
       return some q.decl.fvarId
 
+/-- Whether `ty` is a read `E.read r = v`. -/
+def isEnvReadEq (ty : Expr) : Bool :=
+  ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4)
+
 /-- The local facts `E.read r = v` (a pattern lemma's inputs): read resolution goes through them as
 through `hE`. -/
 def readFacts : MetaM (Array FVarId) := do
@@ -218,8 +221,7 @@ def readFacts : MetaM (Array FVarId) := do
       if d.isImplementationDetail then
         return acc
       let reads ←
-        (← conjuncts d.toExpr (← instantiateMVars d.type)).anyM fun (_, ty) =>
-            return ty.eq?.any (·.2.1.isAppOf ``Env.read)
+        (← conjuncts d.toExpr (← instantiateMVars d.type)).anyM fun (_, ty) => return isEnvReadEq ty
       return if reads then acc.push d.fvarId else acc
 
 /-- `e` with each proof in it that mentions locals but proves a closed fact by `decide` (`x[0]`'s

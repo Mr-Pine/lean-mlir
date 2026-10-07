@@ -99,12 +99,11 @@ def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
 /-- Clear the body facts `block.body.drop i = _` behind the goal's position. -/
 def clearStaleBodyFacts : TacticM Unit :=
   withMainContext do
-    let .ok run ← (getRunBodyFrom? (← getMainTarget)).run | return
+    let some run := getRunBodyFrom? (← getMainTarget) | return
     let mut g ← getMainGoal
     for e in ← localEqs do
-      let_expr List.drop _ n body := e.lhs | continue
-      let_expr BasicBlock.body _ _ _ _ b := body | continue
-      if (← isDefEq b run.block) && !(← isDefEq n run.idx) then
+      let some (n, b) := bodyDrop? e.lhs | continue
+      if ← isDefEq b run.block <&&> notM (isDefEq n run.idx) then
         g ← g.tryClear e.decl.fvarId
     replaceMainGoal [g]
 
@@ -125,10 +124,11 @@ def finishStep (args : StepArgs) : TacticM Unit :=
       do
         runSeal
         return -- Nothing to do; Env is not modified
-    let envWrite ← getEnvWrite runBodyFrom.env
+    let_expr Env.write _ _ base dst value := runBodyFrom.env
+      | throwError "env {runBodyFrom.env} is not an `Env.write`"
     -- the newly written value, its reads resolved
-    let r ← simpValue args.only args.simpArgs envWrite.value envWrite.base args.expand
-    let g ← replaceBySimp g envWrite.value r
+    let r ← simpValue args.only args.simpArgs value base args.expand
+    let g ← replaceBySimp g value r
     replaceMainGoal [g]
     -- unless `inline`, the value as a local `v` with `hv : v = …`
     let name? ←
@@ -139,8 +139,7 @@ def finishStep (args : StepArgs) : TacticM Unit :=
         pure (some s.getId)
       | .auto =>
         do
-          let some idx ←
-            dstIndex? envWrite.dst | throwError m!"Could not get dst index from {envWrite.dst}"
+          let some idx ← dstIndex? dst | throwError m!"Could not get dst index from {dst}"
           pure (some ((`v).appendAfter (toString idx)))
     if let some x := name? then
       let hx :=

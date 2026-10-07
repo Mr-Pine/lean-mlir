@@ -75,7 +75,7 @@ def closePatternRead (g : MVarId) : TacticM Unit :=
       g.assign (mkExpectedPropHint pf (← mkEq lhs rhs))
       return
     let (v', pf') ← unfoldLocals v pf
-    unless (← withReducible (isDefEq v' rhs)) || (← withDefault (isDefEq v' rhs)) do
+    unless ← withReducible (isDefEq v' rhs) <||> withDefault (isDefEq v' rhs) do
       throwError "step_pattern: {lhs} is{indentExpr v}\nnot{indentExpr rhs}"
     g.assign (mkExpectedPropHint pf' (← mkEq lhs rhs))
 
@@ -120,7 +120,7 @@ partial def closePremise (g : MVarId) : TacticM Unit := do
   if let some (ga, gb)← Tactic.splitAnd? g ty then
     closePremise ga
     closePremise gb
-  else if ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4) then
+  else if Tactic.isEnvReadEq ty then
     closePatternRead g
   else
     closeSide g
