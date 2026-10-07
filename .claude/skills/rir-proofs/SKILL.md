@@ -57,7 +57,8 @@ next instruction (infoview "Instructions" panel)
 
 ## Rules
 
-- No `sorry`; `lean_verify` shows only `propext`, `Classical.choice`, `Quot.sound`.
+- No `sorry`; `lean_verify` shows only `propext`, `Classical.choice`, `Quot.sound`, and the
+  `…_native.bv_decide.ax_…` axioms of `bv_decide` (allowed). No `native_decide`.
 - `maxHeartbeats` only with a comment saying why the proof needs it; never `maxRecDepth`
   (bisect to the `fun ⟨…⟩`, `simpa` or unification on a big literal instead).
 - No workaround that only hides a problem (a weakened spec, an unused hypothesis, a `try` that
