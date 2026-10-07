@@ -122,3 +122,12 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
    fact as a separate lemma.
 10. **A `local macro` between theorems** waits for every proof above it (7.9 s → 6.3 s on
     pow22523 by moving them up).
+11. **Reads through `hS` stall although the facts hold**: `hS`'s store chain starts at the entry
+    state `S₀`, so a read lemma's premise about the base memory is about `S₀`, not `S`. Keep the
+    object facts the reads need about `S₀` (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right
+    after `func_init`).
+12. **`mem_fact` cannot see a conjunct of an object predicate** (`LimbsFit (p.add 40#64)` inside
+    `PointFit p`): give the predicate `mlir_transport` projection lemmas.
+13. **Attributes in proof files are `local`** (`attribute [local mlir_state] …`); a global one
+    changes every importer's simp sets. A `@[mlir_read]` lemma must be `public`: a private one
+    breaks every importer's steps ("Unknown constant `_private…`").

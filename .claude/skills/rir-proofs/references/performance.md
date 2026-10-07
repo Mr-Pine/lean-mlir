@@ -8,7 +8,8 @@ end of a proof answers in well under a second.
 1. **`lean_profile_proof`** on the theorem's line: the slowest lines and time per category
    (`simp`, `type checking`, `instantiate metavars`, …). It re-elaborates the theorem alone with
    the file's imports, so a theorem using a macro or lemma defined earlier in the same file fails
-   there; move that helper to an imported module first, or use 2.
+   there, and it does not find `public theorem` declarations ("No theorem/lemma/def at line N");
+   use 2 for those.
 2. **`set_option trace.profiler true in`** before the theorem, then `lean_diagnostic_messages`
    (info) on its line: the profiler tree per tactic. For attribution by nesting, the JSON variant
    needs flags on the command line: `lake env lean -Dtrace.profiler=true
