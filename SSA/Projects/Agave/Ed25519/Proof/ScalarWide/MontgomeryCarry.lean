@@ -1,4 +1,5 @@
 import SSA.Projects.Agave.Ed25519.Proof.ScalarWide.MaskedFlags
+import SSA.Projects.Agave.Ed25519.Proof.ScalarWide.WordSchedule
 
 /-! Actual 86-instruction carry/repacking window, with every value nonpoison.
 Wrapping additions/truncations remain word operations. Natural congruence
@@ -740,6 +741,36 @@ private def carryChunkEnv8 (E : Env program.Γ) (z : Fin 9 → BitVec 128) : Env
 
 def carryWordEnv (E : Env program.Γ) (z : Fin 9 → BitVec 128) : Env program.Γ :=
   carryChunkEnv8 E z
+
+/-- The carry window writes only SSA values, preserving every argument. -/
+theorem carryWordEnv_read_arg (E : Env program.Γ) (z : Fin 9 → BitVec 128)
+    (i : Fin program.Γ.args.length) (ht : program.Γ.args[i] = t) :
+    (carryWordEnv E z).read (.arg i ht) = E.read (.arg i ht) := by
+  simp only [carryWordEnv, carryChunkEnv8, carryChunkEnv7, carryChunkEnv6, carryChunkEnv5, carryChunkEnv4, carryChunkEnv3, carryChunkEnv2, carryChunkEnv1, carryChunkEnv0, Env.read_write_arg]
+
+/-- The carry window writes registers 102–187 and preserves every earlier value. -/
+theorem carryWordEnv_read_early (E : Env program.Γ) (z : Fin 9 → BitVec 128)
+    (i : Fin program.Γ.n) (ht : program.Γ.ty i = t) (hi : i.val < 102) :
+    (carryWordEnv E z).read (.val i ht) = E.read (.val i ht) := by
+  unfold carryWordEnv carryChunkEnv8 carryChunkEnv7 carryChunkEnv6 carryChunkEnv5 carryChunkEnv4 carryChunkEnv3 carryChunkEnv2 carryChunkEnv1 carryChunkEnv0
+  repeat' rw [Env.read_write_ne _ _ (by
+    intro h
+    have hv := congrArg Fin.val h
+    simp only at hv
+    omega)]
+
+/-- The five quotient registers agree with the arithmetic word schedule. -/
+theorem carryWordEnv_quotient (E : Env program.Γ) (z : Fin 9 → BitVec 128) :
+    (carryWordEnv E z).read (%165) = .value (wordQuotientLimbs z 0) ∧
+    (carryWordEnv E z).read (%173) = .value (wordQuotientLimbs z 1) ∧
+    (carryWordEnv E z).read (%179) = .value (wordQuotientLimbs z 2) ∧
+    (carryWordEnv E z).read (%185) = .value (wordQuotientLimbs z 3) ∧
+    (carryWordEnv E z).read (%187) = .value (wordQuotientLimbs z 4) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  all_goals
+    simp only [carryWordEnv, carryChunkEnv8, carryChunkEnv7, carryChunkEnv6, carryChunkEnv5, carryChunkEnv4, carryChunkEnv3, carryChunkEnv2, carryChunkEnv1, carryChunkEnv0, mlir_env,
+      Fin.reduceEq, Fin.reduceNe, Nat.reduceEqDiff, ne_eq, Fin.mk.injEq, not_false_eq_true]
+    rfl
 
 section CarryExecution
 
