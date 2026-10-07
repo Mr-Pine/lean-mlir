@@ -28,9 +28,8 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     let_expr Env.write _ _ base _ _ := env | throwError "env {env} is not an `Env.write`"
     let E := envRoot base
     -- without `hE`, `E` is a root (a loop's env, or a continuation's): it stays
-    let hE? ← findLocalEq? E m!"of the form `{E} = _`"
-    let hEargs? ←
-      findLocalEq? (← mkAppM ``Env.args #[E]) m!"of the form `{(← mkAppM ``Env.args #[E])} = _"
+    let hE? ← findLocalEq? E
+    let hEargs? ← findLocalEq? (← mkAppM ``Env.args #[E])
     let abstractWrite := Expr.lam `e (← inferType E) (← withReducible <| kabstract env E) .default
     let (E₀chain, hEpf) ←
       match hE? with
@@ -140,7 +139,7 @@ partial def walkRead (env reg : Expr) : MetaM (Option (Expr × Expr)) := do
     e := e.getArg! 2
   unless e.isFVar do
     return none
-  let some hE ← findLocalEq? e m!"" | readFact? e i lhs
+  let some hE ← findLocalEq? e | readFact? e i lhs
   let some (v, pf) ← walkRead hE.rhs reg | return none
   let baseRead ← mkAppM ``Env.read #[e, reg]
   let readOf ←
@@ -280,8 +279,8 @@ then values, unfolding the write chain with `chainFact : E = _`.
 Unfolding first would send the argument reads past `E` down to the root env. -/
 def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool) :
     TacticM Simp.Result := do
-  let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env]) m!"`{env}.args = _`").toArray
-  let chainFact := (← findEqWithLhs? env m!"`{env} = _`").toArray
+  let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env])).toArray
+  let chainFact := (← findEqWithLhs? env).toArray
   let reads ← readFacts
   -- one memory context for every pass: they change no hypothesis
   let c ← MemCtx.build

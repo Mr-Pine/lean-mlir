@@ -149,8 +149,8 @@ def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVar
         return acc
       return if e.occurs (← instantiateMVars d.type) then acc.push d.fvarId else acc
 
-/-- The unique equation `_ : lhs = _`, if there is one. -/
-def findLocalEq? (lhs : Expr) (what : MessageData) : MetaM (Option LocalEq) := do
+/-- The unique equation `_ : lhs = _`, if there is one; `what` names it in errors. -/
+def findLocalEq? (lhs : Expr) (what : MessageData := m!"`{lhs} = _`") : MetaM (Option LocalEq) := do
   match (← localEqs).filter (·.lhs == lhs) with
   | #[] =>
     return none
@@ -160,11 +160,12 @@ def findLocalEq? (lhs : Expr) (what : MessageData) : MetaM (Option LocalEq) := d
     throwError "ambiguous: {es.size} hypotheses {what}"
 
 /-- The unique hypothesis `_ : lhs = _`, if there is one. -/
-def findEqWithLhs? (lhs : Expr) (what : MessageData) : MetaM (Option FVarId) := do
+def findEqWithLhs? (lhs : Expr) (what : MessageData := m!"`{lhs} = _`") : MetaM (Option FVarId) :=
+  do
   return (← findLocalEq? lhs what).map (·.decl.fvarId)
 
 /-- The unique hypothesis `_ : lhs = _`. -/
-def findEqWithLhs (lhs : Expr) (what : MessageData) : MetaM FVarId := do
+def findEqWithLhs (lhs : Expr) (what : MessageData := m!"`{lhs} = _`") : MetaM FVarId := do
   let h ← findEqWithLhs? lhs what
   let some (h) := h | throwError "no hypothesis {what}"
   return h

@@ -79,7 +79,7 @@ meta def addInitialWF : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let S := (← getFuncRunFromGoal goal).state
-    let hS ← findEqWithLhs S m!"`{S} = _`"
+    let hS ← findEqWithLhs S
     let some hwf ← withReducible (findLocalDeclWithType? (← mkAppM ``GlobalState.WF #[S])) | return
     let hwf ← hwf.getDecl
     let hwf₀ ← mkEqNDRec (mkConst ``GlobalState.WF) hwf.toExpr (mkFVar hS)
