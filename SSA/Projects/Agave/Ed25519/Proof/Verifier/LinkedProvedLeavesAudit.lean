@@ -1,8 +1,8 @@
 import SSA.Projects.Agave.Ed25519.Proof.Verifier.LinkedProvedLeaves
 
 /-! The exact remaining premises are recorded in LinkedProvedLeaves:
-* RemainingContracts contains ScalarReduceContract, CacheContract,
-  serial/AVX2 DoubleBaseContract, and CompareContract (external bcmp).
+* RemainingContracts contains CacheContract, serial/AVX2 DoubleBaseContract,
+  and CompareContract (external bcmp).
 * The linked decoder requires DecompressContractUnder Ready.
 * The contextual endpoint requires Challenge.CompressContract; the cold/warm
   endpoint instead requires SHA512Finalization.CompressContractUnder.

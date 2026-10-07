@@ -5,9 +5,10 @@ import SSA.Projects.Agave.Ed25519.Proof.SmallOrder.EqualityValidPoint
 import SSA.Projects.Agave.Ed25519.Proof.SHA512.Execution.ColdLinked
 import SSA.Projects.Agave.Ed25519.Proof.DoubleBase.ExecutionSerialDalekContract
 import SSA.Projects.Agave.Ed25519.Proof.Tables.SerialConstructorContract
+import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.Execution
 
 /-! Compose the already proved cofactor, small-order equality, point compressor,
-and scalar-wide call into the exact verifier. The five remaining Dalek contracts
+and both scalar reducers into the exact verifier. The four remaining Dalek contracts
 are explicit below. Decoder execution, SHA compression, and invocation memory
 remain separate premises. In particular, neither the external bcmp ABI nor
 the hardware-dependent AVX2 cache initializer is supplied by this module.
@@ -21,18 +22,18 @@ open LeanMLIR.RIR
 
 abbrev timesEight := SmallOrder.ValidPoint.timesEight
 
-/-- Fix three previously residual leaves to their actual imported programs. -/
+/-- Fix four previously residual leaves to their actual imported programs. -/
 noncomputable def primitives (remaining : Dalek.Primitives) : Dalek.Primitives :=
   { remaining with
     pointMulByPow2 := SmallOrder.Execution.cofactorProgram.call
     pointConstantTimeEq := SmallOrder.Execution.equalityProgram.call
+    scalarReduce := ScalarReduce32.Execution.program.call
     compressPoint := Encoding.Compress.Execution.linkedProgram.call }
 
-/-- Exactly the five Dalek leaves not discharged by this composition.
+/-- Exactly the four Dalek leaves not discharged by this composition.
 The cache field is an explicit hardware/ABI boundary and bcmp remains external.
-The scalar reduction and both backend refinements are proof obligations. -/
+Both backend contracts remain explicit in this all-state interface. -/
 structure RemainingContracts (p : Dalek.Primitives) (dg : Dalek.Globals) : Prop where
-  scalarReduce : Dalek.ScalarReduceContract p.scalarReduce (ValidPoint.layout timesEight)
   cache : Dalek.CacheContract p.initializeAvx2Cache dg.address1
   serialDoubleBase : Dalek.DoubleBaseContract p.serialDoubleBase
     (ValidPoint.layout timesEight) ValidPoint.doubleBase
@@ -49,7 +50,7 @@ theorem RemainingContracts.complete (p : Dalek.Primitives) (dg : Dalek.Globals)
     { cofactor := SmallOrder.Execution.cofactorContract
       smallOrderEq := SmallOrder.Execution.EqualityValidPoint.smallOrder_contract
         decode timesEight SmallOrder.ValidPoint.timesEight_curve
-      scalarReduce := h.scalarReduce
+      scalarReduce := ScalarReduce32.Execution.contract (ValidPoint.layout timesEight) (fun _ => rfl)
       cache := h.cache
       serialDoubleBase := h.serialDoubleBase
       avx2DoubleBase := h.avx2DoubleBase
@@ -82,8 +83,8 @@ variable (hdecodeRun : Dalek.DecompressContractUnder (Encoding.Decompress.Execut
 
 include hleaves hdecodeRun
 
-/-- Contextual exact wrapper execution with the three point leaves and the
-wide-reduction finalizer supplied by their proved imported implementations. -/
+/-- Contextual exact wrapper execution with the three point leaves and both
+scalar reducers supplied by their proved imported implementations. -/
 theorem primitive_calls_contextual
     (hcompress : Challenge.CompressContract compressCall (Agave.Ed25519.SHA512.model compression))
     (i : Invocation) (initial : GlobalState) (a r s : Bytes32) (message : List (BitVec 8))
@@ -102,8 +103,8 @@ theorem primitive_calls_contextual
     (SHA512Finalization.linkedReduceWide_of_execution sg (ScalarWide.execution_obligation sg))
     i initial a r s message hinput
 
-/-- Defined contextual observation; no cofactor, point-equality, compression,
-or scalar-wide execution hypothesis remains. -/
+/-- Defined contextual observation; no cofactor, point equality, point compression,
+or scalar-reducer execution hypothesis remains. -/
 theorem observe_contextual
     (hcompress : Challenge.CompressContract compressCall (Agave.Ed25519.SHA512.model compression))
     (i : Invocation) (initial : GlobalState) (a r s : Bytes32) (message : List (BitVec 8))
@@ -141,7 +142,7 @@ theorem primitive_calls_cold (scg : SHA512Finalization.CompressionGlobals)
     (ScalarWide.execution_obligation sg) i initial a r s message hinput
 
 /-- Cold/warm observation after discharging every currently proved leaf in
-this interface. This remains conditional on the five fields of RemainingContracts,
+this interface. This remains conditional on the four fields of RemainingContracts,
 the contextual decoder, SHA compression, and concrete invocation inputs. -/
 theorem observe_cold (scg : SHA512Finalization.CompressionGlobals)
     (hcompress : SHA512Finalization.CompressContractUnder scg compressCall compression)
