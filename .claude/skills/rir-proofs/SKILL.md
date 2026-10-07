@@ -61,8 +61,12 @@ next instruction (infoview "Instructions" panel)
   `…_native.bv_decide.ax_…` axioms of `bv_decide` (allowed). No `native_decide`.
 - `maxHeartbeats` only with a comment saying why the proof needs it; never `maxRecDepth`
   (bisect to the `fun ⟨…⟩`, `simpa` or unification on a big literal instead).
+- No warnings: unused simp arguments, unused variables and every linter (Mathlib's included,
+  e.g. `unnecessarySeqFocus`) are fixed, not silenced.
 - No workaround that only hides a problem (a weakened spec, an unused hypothesis, a `try` that
   swallows a failing step).
+- Case splits over `Fin n` use Mathlib's `fin_cases` (`import Mathlib.Tactic.FinCases` and
+  `Mathlib.Data.Fintype.Basic`), never `split` on a `match` or `match i, hi with | 0, _ …`.
 - Every `local macro` and `macro` a proof uses is defined before the file's first theorem.
 - Name step values after the C source's variables (`with x6`); inline only what an overflow
   lemma must see expanded.

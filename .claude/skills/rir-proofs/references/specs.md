@@ -27,6 +27,10 @@ def fiat_25519_add.spec (x y : Fin 5 → BitVec 64) : Fin 5 → BitVec 64
   state their results with one name per call, and `hS` stays readable.
 - Several outputs: one spec per output object when the C computes them independently, else one
   spec returning a structure (a point's four coordinates).
+- A function that only sequences calls on separate objects (`fd_f25519_mul3`) needs no spec of
+  its own: its `call_eq` stores the callees' specs in order, under the separation that makes each
+  call read the inputs as they were (no output in the block of a later input). Without that
+  separation every read would be of the previous memory and the terms would grow with each call.
 - Bounds and algebraic properties of the spec are separate pure lemmas
   (`fiat_25519_carry.spec_bound`), never conjuncts of `call_eq`.
 
