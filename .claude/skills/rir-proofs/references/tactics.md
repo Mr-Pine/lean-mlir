@@ -35,7 +35,7 @@ ha : a = S₀.mem.readAt y 64               -- a named value
 - **State sealing.** Every effectful step leaves one state local `S` with `hS : S = <term over
   S₀>` (the previous state is substituted away). Facts about the old `S` are restated about the
   new one, by the context's facts, the `mlir_transport` lemmas and the context's implications;
-  one that cannot be carried becomes a **new goal after the main goal**, named after the fact.
+  one that cannot be carried becomes a **new goal before the main goal**, named after the fact.
 - **Folded values.** A value named with `with x` (or `named`) is *tagged*: later steps, the state
   and `finish_block` keep `x` and never unfold `hx`. Default names (a load's `vN`) and
   `transparent` names are untagged and unfold into later values.

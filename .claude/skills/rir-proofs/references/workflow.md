@@ -55,6 +55,10 @@ A failing test is a wrong spec, or a wrong layout assumption (the Edwards struct
 offsets 0, 40, 80, 120), found in seconds instead of in a stuck proof. A `noncomputable` lift
 cannot be evaluated; test its spec on the parts that can.
 
+A spec's limbs are functions, recomputed at every use: an expected value nested a few calls deep
+takes minutes. Compute it with each callee's result memoized, `(Vector.ofFn l).get` per limb
+function (a `let v := …; fun i => v[i]` did not memoize in practice).
+
 ## 4. The `call_eq` theorem
 
 State it (`specs.md`), then prove it with the steps (`tactics-guide.md`):
