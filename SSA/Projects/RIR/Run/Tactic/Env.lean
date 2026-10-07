@@ -11,6 +11,11 @@ namespace LeanMLIR.RIR.Tactic
 
 open Lean Elab Tactic Meta
 
+-- GEP indices contain register reads behind these helpers. Expose them during
+-- read resolution, before sealing can abstract the environment that supplied
+-- the consumed operands.
+attribute [mlir_env] GepIndex.offset GepIndex.inboundsOffset
+
 public meta section
 
 section SealEnv
