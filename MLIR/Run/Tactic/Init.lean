@@ -129,13 +129,19 @@ end FuncInit
 
 section BlockInit
 
-/-- Unfold reducible definitions at the head of the block's env (a named loop-header env), so the
-steps see its writes. -/
+/-- `e` with reducible definitions unfolded at its head and at its write chain's root. -/
+meta partial def unfoldEnvChain (e : Expr) : MetaM Expr := do
+  let e ← whnfR e
+  let_expr Env.write Γ t base dst val := e | return e
+  return mkAppN e.getAppFn #[Γ, t, ← unfoldEnvChain base, dst, val]
+
+/-- Unfold reducible definitions at the head of the block's env (a named loop-header env) and at
+its write chain's root (`(hdr E)[%k := v]`), so the steps see its writes. -/
 meta def unfoldEnvHead : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let env := (← getRunBodyFrom goal).env
-    let env' ← whnfR env
+    let env' ← unfoldEnvChain env
     unless env' == env do
       replaceMainGoal
           [← g.replaceTargetDefEq (goal.replace fun e => if e == env then env' else none)]
