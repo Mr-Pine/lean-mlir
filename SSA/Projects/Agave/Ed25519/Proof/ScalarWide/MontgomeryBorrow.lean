@@ -1,0 +1,102 @@
+import SSA.Projects.Agave.Ed25519.Proof.ScalarWide.SubtractionFlags
+
+/-! Exact 18-instruction borrow window of Scalar52::montgomery_mul. Every
+retained `nsw` addition and the doubly flagged truncation are discharged. -/
+set_option maxRecDepth 100000
+set_option maxHeartbeats 1000000
+
+namespace Agave.Ed25519.Verifier.Execution.ScalarMontgomeryMul
+
+open LeanMLIR.RIR
+open ScalarWide.Subtraction
+
+def borrowEnv (E : Env program.Γ) (x : Fin 5 → BitVec 52) : Env program.Γ :=
+  let d := differences (x 0) (x 1) (x 2) (x 3) (x 4)
+  E[%188 := .value (d 0),
+    %189 := .value (d 0 &&& 4503599627370495#64),
+    %190 := .value ((d 0).sshiftRight 63),
+    %191 := .value ((d 0).sshiftRight 63 + (-3916664325105025 : BitVec 64)),
+    %192 := .value (d 1),
+    %193 := .value (d 1 &&& 4503599627370495#64),
+    %194 := .value ((d 1).sshiftRight 63),
+    %195 := .value ((d 1).sshiftRight 63 + (-1367801 : BitVec 64)),
+    %196 := .value (d 2),
+    %197 := .value (d 2 &&& 4503599627370495#64),
+    %198 := .value ((d 2).sshiftRight 63),
+    %199 := .value (d 3),
+    %200 := .value (d 3 &&& 4503599627370495#64),
+    %201 := .value ((d 3).sshiftRight 63),
+    %202 := .value ((x 4).setWidth 64 + (-17592186044416 : BitVec 64)),
+    %203 := .value (d 4),
+    %204 := .value (d 4 >>> 63),
+    %205 := .value (borrowByte d)]
+
+/-- Execute the actual subtraction window, retaining all source flags. -/
+theorem borrow_run (p : Primitives) (E : Env program.Γ) (state : GlobalState)
+    (x : Fin 5 → BitVec 52)
+    (hx0 : E.read (%165) = .value ((x 0).setWidth 64))
+    (hx1 : E.read (%173) = .value ((x 1).setWidth 64))
+    (hx2 : E.read (%179) = .value ((x 2).setWidth 64))
+    (hx3 : E.read (%185) = .value ((x 3).setWidth 64))
+    (hx4 : E.read (%187) = .value ((x 4).setWidth 64))
+    (hmask : E.read (%6) = .value 4503599627370495#64)
+    (hneg0 : E.read (%12) = .value (-671914833335277 : BitVec 64))
+    (hshift : E.read (%13) = .value 63#64)
+    (hneg1 : E.read (%14) = .value (-3916664325105025 : BitVec 64))
+    (hneg2 : E.read (%15) = .value (-1367801 : BitVec 64))
+    (hneg4 : E.read (%16) = .value (-17592186044416 : BitVec 64)) :
+    List.foldlM Instr.run E (((program.entry p).body.drop 208).take 18) state =
+      .value (borrowEnv E x, state) := by
+  let d := differences (x 0) (x 1) (x 2) (x 3) (x 4)
+  have hx (i : Fin 5) : ((x i).setWidth 64).toNat < 2 ^ 52 := by
+    simpa only [BitVec.toNat_setWidth_of_le (by decide : 52 ≤ 64)] using (x i).isLt
+  have hc := (borrowSteps_certificate x).1
+  have hs := differences_refine x
+  have hf0 := (limb_minus_constant ((x 0).setWidth 64) 671914833335277
+    (hx 0) (by decide)).1
+  have hf1 := middle_borrow_flags ((x 1).setWidth 64) 3916664325105025
+    (borrowSteps x 0).2 (hx 1) (by decide) (hc 0).2
+  have hf2 := middle_borrow_flags ((x 2).setWidth 64) 1367801
+    (borrowSteps x 1).2 (hx 2) (by decide) (hc 1).2
+  have hf3 := limb_plus_borrow ((x 3).setWidth 64) (borrowSteps x 2).2 (hx 3) (hc 2).2
+  have ht := high_bit_trunc_flags (d 4)
+  have h191 : Operation.add { nsw := true }
+      (.value ((d 0).sshiftRight 63)) (.value (-3916664325105025 : BitVec 64)) =
+      .value ((d 0).sshiftRight 63 + (-3916664325105025 : BitVec 64)) := by
+    rw [(hs 0).2]
+    exact hf1.1
+  have h192 : Operation.add { nsw := true }
+      (.value ((d 0).sshiftRight 63 + (-3916664325105025 : BitVec 64)))
+      (.value ((x 1).setWidth 64)) = .value (d 1) := by
+    change Operation.add _ _ _ = .value
+      ((d 0).sshiftRight 63 + (-3916664325105025 : BitVec 64) + (x 1).setWidth 64)
+    rw [(hs 0).2]
+    exact hf1.2
+  have h195 : Operation.add { nsw := true }
+      (.value ((d 1).sshiftRight 63)) (.value (-1367801 : BitVec 64)) =
+      .value ((d 1).sshiftRight 63 + (-1367801 : BitVec 64)) := by
+    rw [(hs 1).2]
+    exact hf2.1
+  have h196 : Operation.add { nsw := true }
+      (.value ((d 1).sshiftRight 63 + (-1367801 : BitVec 64)))
+      (.value ((x 2).setWidth 64)) = .value (d 2) := by
+    change Operation.add _ _ _ = .value
+      ((d 1).sshiftRight 63 + (-1367801 : BitVec 64) + (x 2).setWidth 64)
+    rw [(hs 1).2]
+    exact hf2.2
+  have h199 : Operation.add { nsw := true }
+      (.value ((x 3).setWidth 64)) (.value ((d 2).sshiftRight 63)) = .value (d 3) := by
+    change Operation.add _ _ _ = .value ((x 3).setWidth 64 + (d 2).sshiftRight 63)
+    rw [(hs 2).2]
+    exact hf3
+  have hadd (a b : BitVec 64) : Operation.add {} (.value a) (.value b) = .value (a + b) := by
+    simp [Operation.add]
+  simp [d, differences] at hf0 h191 h192 h195 h196 h199 ht
+  simp [program.entry, List.foldlM_cons, List.foldlM_nil, Instr.run,
+    borrowEnv, borrowByte, differences, d,
+    hx0, hx1, hx2, hx3, hx4, hmask, hneg0, hneg1, hneg2, hneg4, hshift,
+    hf0, h191, h192, h195, h196, h199, ht,
+    hadd, Operation.and, Operation.ashr, Operation.lshr,
+    UnOp.compute, BinOp.compute, EffectM.bind_eq, EffectM.pure_eq, mlir_env, mlir_effect]
+
+end Agave.Ed25519.Verifier.Execution.ScalarMontgomeryMul
