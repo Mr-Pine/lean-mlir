@@ -157,8 +157,10 @@ called through its spec hypothesis: `step_call using hspec.1`.
 Mistakes:
 - A premise the context cannot show by `mem_fact` or `simp [mlir_mem, *]`: state it with `have`
   before the step (`have hzero_limbs := MemoryState.LimbsFit.of_fits hzero_fits hzero_off`).
-- A fact that does not survive the call shows up as an extra goal after the main one: register a
-  `mlir_transport` lemma for the callee's result state (`MemoryState.LimbsFit.storeLimbs`).
+- A fact that does not survive the call shows up as an extra goal before the main one: register a
+  `mlir_transport` lemma for the callee's result state (`MemoryState.LimbsFit.storeLimbs`). A
+  framed callee's state is a constructor, `{ alloc := ⟨s.alloc.nextFreeBlock + k⟩, mem := … }`:
+  `S.WF` carries only through a lemma of that shape (`GlobalState.WF.storePoint_mk`).
 - Large spec terms in the state: name the callee's result right after the call (`name_limbs x`,
   a project tactic: `conventions.md`).
 

@@ -170,6 +170,28 @@ the lemma quantifies over the state and its facts (`S.WF → S.mem.LimbsFit t �
 continuation receives the state after all iterations
 (`{ S with mem := S.mem.storeLimbs t (sqrN (n + 1) (S.mem.readLimbs t)) }`).
 
+A header entered with a written env (the entry block's values, `E₀[%1 := …, …]`) matches no env
+pattern: quantify over the env, with its args and the registers the loop reads as facts, and give
+the continuation the exit's state through an equation (`fd_ed25519_point_dbln.lean`):
+
+```lean
+theorem loop (r a tp : Pointer) (n : BitVec 32) (g : Vals [.ptr] × GlobalState → PoisonOr β)
+    (K : PoisonOr β) :
+    ∀ m k (t : PointLimbs) (S : GlobalState) (E : ⟪Γ⟫),
+      E.args = (args (.value r) (.value a) (.value n)).get →
+      (E ⊨ [%2 := tp, %6 := BitVec.ofNat 8 k]) → k + m + 1 = n.toNat →
+      S.WF → S.mem.PointFit r → S.mem.PointFit tp → r.id ≠ tp.id → S.mem.readPoint tp = t →
+      (∀ (E' : ⟪Γ⟫) (S' : GlobalState), E'.args = (args (.value r) (.value a) (.value n)).get →
+        (E' ⊨ [%2 := tp]) →
+        S' = { alloc := ⟨S.alloc.nextFreeBlock + 5 * (m + 1)⟩, mem := … } →
+        (fd_ed25519_point_dbln.runFrom E' ^bb1 S' >>= g) = K) →
+      (fd_ed25519_point_dbln.runFrom E ^bb2 S >>= g) = K
+```
+
+The caller proves the read facts with `env_reads`. The back edge applies `ih` with the
+continuation `fun E' S' h1 h2 h3 => hK E' S' h1 h2 (h3.trans ?_)` and closes the state equation
+with the store lemmas; the exit applies `hK`.
+
 ## P8. Many loops of one shape (`fd_f25519_pow22523.lean`)
 
 State one iteration (`LoopIter`) and the whole loop (`Loop`) as `abbrev`s over the header, exit,
