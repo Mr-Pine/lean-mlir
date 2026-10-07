@@ -1,0 +1,119 @@
+{
+  "source_commit": "292f89b338a634e23e9f45c3dfdd5383ddcae624",
+  "source_repository": "firedancer",
+  "translation_unit": "src/ballet/ed25519/fd_curve25519.c",
+  "symbol": "fd_ed25519_base_point_wnaf_table",
+  "target": "x86_64 LP64 little endian, FD_HAS_AVX=0 FD_HAS_AVX512=0",
+  "entry_count": 128,
+  "entry_bytes": 160,
+  "raw_initializer_sha256": "15e14e27656bc7e81c687467c44d6444b58acfa1fc23ea712ccaa6283c3c438c",
+  "source_files_sha256": {
+    "src/ballet/bigint/fd_uint256.h": "927b065941e646f255e40f45dad03c29b5a9bda61e9ab7677a6c5073adf00b9c",
+    "src/ballet/bigint/fd_uint256_mul.h": "83e240b30bb8e3edce0fc1d525f7a871d3028baaad02b1bbca2205c52b925ff7",
+    "src/ballet/ed25519/fd_curve25519.c": "ff22e590ef69f41dd2528d36129e1781389e3b9b2c52c3d0a24b1fe5cd496024",
+    "src/ballet/ed25519/fd_curve25519.h": "cbe0b4467a96cb2d0c3cf4addde0b3babbd0671e6424ef39a2950af0d254c6ad",
+    "src/ballet/ed25519/fd_curve25519_scalar.h": "03b3b74b0cebbe789ae27b2c72d692d17eec96df5ad8d5165c0031e54f7a50bc",
+    "src/ballet/ed25519/fd_curve25519_secure.c": "bbe58678b6dd495dbf6d1432a3e15d4f5289a6ac4f2da9d1563cd59b76f3bb42",
+    "src/ballet/ed25519/fd_f25519.h": "475307455ffcbe5ae4a6c383c24a450c9408d35a96c18023b5653c63642c7706",
+    "src/ballet/ed25519/ref/fd_curve25519.c": "a6f22b10cf5f47e51e960223de9ecf3cd71a07b9c2dd08b463945aa57b0547a4",
+    "src/ballet/ed25519/ref/fd_curve25519.h": "5d95bc831103a682fe12339a3ffa47c41dde084d90649e9c8499fd66f71a9401",
+    "src/ballet/ed25519/ref/fd_curve25519_secure.c": "856ba16b4dbc12e626a633096649b1a3a4677031904d936130a3f85c2265fb25",
+    "src/ballet/ed25519/ref/fd_f25519.h": "2933351244395da55af2bc39b1885ff4c372d7b6d39be58c36ddc67d4bad8443",
+    "src/ballet/ed25519/table/fd_curve25519_table_ref.c": "d88dbc2995c01deeddc377bfa0d8341acc40bc4afdcd687169d6c07aa6795d6a",
+    "src/ballet/ed25519/table/fd_f25519_table_ref.c": "88d37cd11d48fa4177236f9d0f189cc08455b429567b15a4ca7f0051ed54af30",
+    "src/ballet/fd_ballet_base.h": "a99ae22ec5dde5c201045d65a6d77af42f99f556ad2408d383250e523fb8596c",
+    "src/ballet/hex/fd_hex.h": "be3df366beefce9bd9c7cbc784af0f6366b51932c5affdb3ad5b7b005aba2b9a",
+    "src/third_party/fiat-crypto/curve25519_64.c": "da84e480e14749fdc0f95ae8302250c1157a10e6564c3c47c567badb0176f455",
+    "src/util/alloc/fd_alloc.h": "af764e1b02653db0a6069fd540112fc5f9b554bd5af5e952c01a2749830ac48e",
+    "src/util/bits/fd_bits.h": "b471f8bb2effa323cdd0ec00c35a2695c346ceb675eae1e72bb4b1bc056e7df6",
+    "src/util/bits/fd_bits_find_lsb.h": "22dae97fa9b49f91b5d01fa55618d50426e8e5f114b486a091d9152bdcca2aec",
+    "src/util/bits/fd_bits_find_msb.h": "3a768f21a8e5114860b99da0d68553dd63aed9fe6cc361ca57f144892c880a7d",
+    "src/util/bits/fd_bits_tg.h": "2f00ba914179f1bf4bddc03163637702d6c6319af5722257b85bebdd7d5441c1",
+    "src/util/bits/fd_sat.h": "8ad819d39dabd50bdf58aa40a2c5cb7439beccc2275fdbf009caa93257e7d636",
+    "src/util/cstr/fd_cstr.h": "792358d9c72a17b95ec22800c7e7244e5f848ca2f24c650aab61602a40c8c198",
+    "src/util/env/fd_env.h": "74ca010717c835ee1cf737796d9026d3d501cbb7208bf1490e4ac7e86c77d94e",
+    "src/util/fd_util.h": "41159b47717dedb457290bd0a3795c58b96d5f1876738784a60686ce62c2f496",
+    "src/util/fd_util_base.h": "8d82903c0e151015c0fc0bd3c98e26ea9ca8b8d74773327f99c8c9d5196dbd61",
+    "src/util/fd_version.h": "9401328f2d5728b20b8f3080a685197f833546aaf08887bb9199a9bb001b87ff",
+    "src/util/io/fd_io.h": "b2aa4d36a86168efa375475173140d1da44609de1c4004abfa18a370cf45c162",
+    "src/util/log/fd_log.h": "55fbd4b25119a6f717970aec9c2933ec077a67145324af3ee1a98071ccb0a073",
+    "src/util/rng/fd_rng.h": "bbdf4cb0dac1a436d8fc5593a70ce6e712c806c3e42fbb95cc4a8d6502e2744f",
+    "src/util/sandbox/fd_sandbox.h": "b3abb0a9b2e4918a50468fc0ec7c2fc815a238e6df9d9e018969ef9b5b5a50a1",
+    "src/util/sanitize/fd_asan.h": "4272dfd5eb55412cbdf2d311b889e0899621021835ffca534ee148c33dab446b",
+    "src/util/sanitize/fd_msan.h": "08c5d7f22ea480a8eba45bb5cabfc5c80a46bd56f2bd341c4554ca76d8bfd276",
+    "src/util/sanitize/fd_sanitize.h": "aa8eaa2f036c8b793024970c08bf56e9d3f72a0069fdccdecaba33e208a37ebb",
+    "src/util/sanitize/fd_tsa.h": "a0e5d82c488b7e09bcc94e08f7b6eb7983cbb34f062e78208a97b779b6973d5c",
+    "src/util/scratch/fd_scratch.h": "725e90489fa0bfe6815afbf3a79460163fa82af0fb36da33a4084e00563e4d8f",
+    "src/util/shmem/fd_shmem.h": "1403de8f1a5d378dcf089c1d4d8298b8a8de5d9df728d7dffdde39beb0094863",
+    "src/util/tile/fd_tile.h": "f801eab8583f6b6573b2564248b4d623a758128dea23132ee7669039427545a8",
+    "src/util/wksp/fd_wksp.h": "de1e46a01d566f70a8a4cf9c0dce3b3d4b43a15571d57ee14752dc6bccf42160"
+  },
+  "artifacts_sha256": {
+    "source-table.c": "a1fba1c2dbafc9ecff9a53582f3c5198f3f9233c7e8209994a2448566c6851a6",
+    "table.bin": "15e14e27656bc7e81c687467c44d6444b58acfa1fc23ea712ccaa6283c3c438c",
+    "table.ll": "7101e907a0cd2ebd2de270d550e085732784bc222e13b330e11a291291b42769",
+    "table.mlir": "cadc933b3f0a07540af44d9d9dd6b80d8b82e00f109783b75eaa7d0ad3a60d42",
+    "check.py": "5f9ce6df4abaea9e0b1587281517380c3d6368a0a7e37302c75c985a1695de87"
+  },
+  "provenance_boundary": "Pinned C compilation and LLVM/MLIR translation are trusted extraction. No equivalence to the older unpinned SLLVM region initializer is asserted; the exact named global bytes are newly pinned here.",
+  "clang_version": "Ubuntu clang version 21.1.8 (6ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin\n",
+  "lean_data_sha256": "e946861a0de04b765e34b13dc2b993d15d1cd2b417380e78fb694948a152b9ae",
+  "extraction_commands": [
+    [
+      "git",
+      "archive",
+      "292f89b338a634e23e9f45c3dfdd5383ddcae624",
+      "src"
+    ],
+    [
+      "clang",
+      "-S",
+      "-emit-llvm",
+      "-O1",
+      "-fno-vectorize",
+      "-fno-slp-vectorize",
+      "-fno-unroll-loops",
+      "-DFD_HAS_AVX=0",
+      "-DFD_HAS_AVX512=0",
+      "-MMD",
+      "-MF",
+      "table.d",
+      "-o",
+      "curve.ll",
+      "src/ballet/ed25519/fd_curve25519.c"
+    ],
+    [
+      "llvm-extract",
+      "--keep-const-init",
+      "--glob=fd_ed25519_base_point_wnaf_table",
+      "-S",
+      "curve.ll",
+      "-o",
+      "table.ll"
+    ],
+    [
+      "mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "table.ll",
+      "-o",
+      "table.mlir"
+    ]
+  ],
+  "reproduce": "Run check.py --source-checkout <Firedancer checkout containing pinned commit> --reextract --clang <clang21> --llvm-extract <llvm-extract22> --mlir-translate <mlir-translate22>. The checkout is read only; re-extraction uses a temporary archive. Path-dependent IR metadata may differ; all initializer words must agree.",
+  "extraction_tools": {
+    "clang": {
+      "version": "Ubuntu clang version 21.1.8 (6ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin\n",
+      "executable_sha256": "412bbe8c60571a1eb06f48fde89635033621caeb01a9b4ee76d46711bae8e932"
+    },
+    "llvm-extract": {
+      "version": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+      "executable_sha256": "566f462f3a7bbf99a66269ae71d1b72535a9d228f9603cf7c2ba769655ccd425"
+    },
+    "mlir-translate": {
+      "version": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+      "executable_sha256": "972ca49580e4c6bc8b77338ecc0e74ba0ee4ec3d3c236463282c07c68024d100"
+    }
+  },
+  "retained_source_transform": "source-table.c removes exactly one final newline from the pinned source, eliminating its extra blank line at EOF. The source_files_sha256 entries retain the original Git source hashes; initializer bytes are unchanged."
+}
