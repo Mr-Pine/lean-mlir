@@ -323,6 +323,12 @@ theorem Fits.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
+/-- An `alloca`'s block holds its `8 * n` bits. -/
+@[mlir_fresh]
+theorem Fits.allocaPtr_self {n : Nat} {s : GlobalState} :
+    Fits (s.alloca n).mem s.allocaPtr (8 * n) :=
+  Fits.allocaPtr (Nat.le_refl _)
+
 @[mlir_read]
 theorem MemoryState.readAt_alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w') :
     (s.alloca n).mem.readAt q w = s.mem.readAt q w := by
@@ -443,12 +449,14 @@ theorem GlobalState.WF.addBlock {s : GlobalState} {x : BitVec v} (h : s.WF) :
   exact GlobalState.WF.storeAt (s := s.alloca n) h.alloca
 
 /-- A new block holds its `8 * n` bits. -/
+@[mlir_fresh]
 theorem Fits.addBlock_allocaPtr {n : Nat} {s : GlobalState} {v : Nat} {x : BitVec v} :
     Fits (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) s.allocaPtr (8 * n) := by
   rw [← GlobalState.alloca_storeAt_allocaPtr]
   exact (Fits.allocaPtr (Nat.le_refl _)).storeAt
 
 /-- A new block reads back its bits. -/
+@[mlir_read]
 theorem MemoryState.readAt_addBlock_allocaPtr {w n : Nat} {s : GlobalState} {x : BitVec w}
     (hw : w ≤ 8 * n) : (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt s.allocaPtr w = x := by
   rw [← GlobalState.alloca_storeAt_allocaPtr]

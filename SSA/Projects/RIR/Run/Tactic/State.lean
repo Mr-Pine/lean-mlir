@@ -92,21 +92,10 @@ elab "mem_fact" : tactic =>
       throwError "`mem_fact`: not from the facts{indentExpr (← g.getType)}"
     replaceMainGoal []
 
-/-- `addressof`'s new state `⟨_, X.mem.addBlock ⟨X.alloc.nextFreeBlock⟩ n x⟩`: `X`, `n` and `x`. -/
-def addressofBlock? (new : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
-  let_expr GlobalState.mk _ m := new | return none
-  let_expr MemoryState.addBlock m' b n _ x := m | return none
-  let some X := m'.app1? ``GlobalState.mem | return none
-  let next ←
-    mkAppM ``BlockId.mk #[← mkAppM ``AllocState.nextFreeBlock #[← mkAppM ``GlobalState.alloc #[X]]]
-  unless ← withReducible (isDefEq b next) do
-    return none
-  return some (X, n, x)
-
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
-`h : motive new`: a new block's size and bits, every write an `mlir_read` lemma reads back, and
-every read fact of `S` the writes miss (one they overwrite is dropped). Asserted in `g`; the old
-read facts returned, for clearing once the state is sealed. Read through the writes while `S`'s
+`h : motive new`: a new block's size (`mlir_fresh`), every write an `mlir_read` lemma reads back,
+and every read fact of `S` the writes miss (one they overwrite is dropped). Asserted in `g`; the
+old read facts returned, for clearing once the state is sealed. Read through the writes while `S`'s
 facts hold. -/
 def memFactsOf (g : MVarId) (S new : Expr) :
     MetaM (Array (FVarId × Expr) × Array FVarId × MVarId) :=
@@ -116,26 +105,25 @@ def memFactsOf (g : MVarId) (S new : Expr) :
     let c ← MemCtx.build
     -- `(name, fact about newMem, proof)`, asserted last
     let mut facts : Array (Name × Expr × Expr) := #[]
-    -- an `alloca`'s fresh slot fits its bytes: `Fits (X.alloca n).mem X.allocaPtr (8 * n)`
-    if new.isAppOfArity ``GlobalState.alloca 2 then
-      let X := new.appFn!.appArg!
-      let n := new.appArg!
-      let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
-      let ptr ← mkAppM ``GlobalState.allocaPtr #[X]
-      let pf ← mkAppOptM ``Fits.allocaPtr #[w, n, X, ← mkAppM ``Nat.le_refl #[w]]
-      facts := facts.push (`hfits, ← mkAppM ``Fits #[newMem, ptr, w], pf)
-    -- `addressof`'s new block fits its bytes and reads back its bits `x : BitVec v`:
-    -- `Fits (X.mem.addBlock _ n x) X.allocaPtr (8 * n)`, `(…).readAt X.allocaPtr v = x`
-    if let some (X, n, x)← addressofBlock? new then
-      let ptr ← mkAppM ``GlobalState.allocaPtr #[X]
-      let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
-      let pf ← mkAppOptM ``Fits.addBlock_allocaPtr #[n, X, none, x]
-      facts := facts.push (`hfits, ← mkAppM ``Fits #[newMem, ptr, w], pf)
-      let_expr BitVec v := ← whnfR (← inferType x) | pure ()
-      let v ← normWidths v
-      if let some hv← decideWithOffsets? #[] (← mkAppM ``LE.le #[v, w]) then
-        let pf ← mkAppOptM ``MemoryState.readAt_addBlock_allocaPtr #[v, n, X, x, hv]
-        facts := facts.push (`hread, ← mkEq (← mkAppM ``MemoryState.readAt #[newMem, ptr, v]) x, pf)
+    -- a new block's size: each `mlir_fresh` lemma's `Fits` at the new memory
+    for n in ← labelled `mlir_fresh do
+      let some fact ←
+        observing? do
+            let lem ← mkConstWithFreshMVarLevels n
+            let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
+            let_expr Fits m _ _ := concl | failure
+            unless ← withReducible (isDefEq m newMem) do
+              failure
+            for mv in ms do
+              let mv := mv.mvarId!
+              if !(← mv.isAssigned) && (← isProp (← mv.getType)) then
+                let some pf ← factDischarge c.toFactCtx 4 (← mv.getType) | failure
+                mv.assign pf
+            unless ← ms.allM (·.mvarId!.isAssigned) do
+              failure
+            return (← normWidths (← instantiateMVars concl),
+                ← instantiateMVars (mkAppN lem ms)) | continue
+      facts := facts.push (`hfits, fact)
     let mut seen : Array Expr := #[]
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
     for w in ← writesOf newMem do
