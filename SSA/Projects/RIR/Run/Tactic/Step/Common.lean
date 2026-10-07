@@ -107,6 +107,22 @@ def clearStaleBodyFacts : TacticM Unit :=
         g ← g.tryClear e.decl.fvarId
     replaceMainGoal [g]
 
+/-- The value an effectful step writes, its reads resolved while the state they read is a local
+with its facts: sealing the new state substitutes it away, and a read of the substituted term
+resolves only by walking its writes. -/
+def resolveWrittenValue (args : StepArgs) : TacticM Unit :=
+  withMainContext do
+    evalTactic
+        (←
+          `(tactic|
+              try
+                dsimp only [$(mkIdent ``Env.writeMany_nil):ident,
+                  $(mkIdent ``Env.writeMany_cons):ident]))
+    let (g, goal) ← getGoalType
+    let_expr Env.write _ _ base _ value := (← getRunBodyFrom goal).env | return
+    let r ← simpValue args.only args.simpArgs value base args.expand
+    replaceMainGoal [← replaceBySimp g value r]
+
 def finishStep (args : StepArgs) : TacticM Unit :=
   withMainContext do
     clearStaleBodyFacts

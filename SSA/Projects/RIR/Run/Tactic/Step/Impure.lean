@@ -102,8 +102,9 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
         return goals
   return goals
 
-/-- Step an effectful instruction, proving it with `runTactics`. -/
-def runStep (args : StepArgs) (runTactics : Syntax) : TacticM Unit :=
+/-- Step an effectful instruction, proving it with `runTactics`; with `resolveFirst`, the written
+value's reads resolved before the state is sealed (a call's result, which reads the old state). -/
+def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : TacticM Unit :=
   focus do
     Tactic.ensureStateEq
     withMainContext do
@@ -128,6 +129,8 @@ def runStep (args : StepArgs) (runTactics : Syntax) : TacticM Unit :=
         unless (← getUnsolvedGoals).isEmpty do
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
+        if resolveFirst then
+          resolveWrittenValue args
         let goals ← sealStep inState
         finishStep args
         -- the consumed facts last: the value may read through them. Their ids first: once a

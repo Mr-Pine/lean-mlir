@@ -19,7 +19,7 @@ def evalStepCall : Tactic := fun stx => do
   let innerDischarge ←
     `(tacticSeq| exact run_call (by
         apply $thm <;> first | mem_fact | simp [$(mkIdent `mlir_mem):ident, *]))
-  runStep args innerDischarge
+  runStep args innerDischarge (resolveFirst := true)
 
 end
 
