@@ -466,6 +466,29 @@ theorem MemoryState.eraseFrom_addBlock_of_le {m : MemoryState} {b : BlockId} {x 
   · rename_i h'; simp at h'; subst h'; simp [show ¬b.id < n by omega]
   · rfl
 
+/-- `s.allocaPtr` after `k` `alloca`s: the `k`-th block allocated after `s`, from its start. -/
+def GlobalState.slot (s : GlobalState) (k : Nat) : Pointer :=
+  ⟨⟨s.alloc.nextFreeBlock + k⟩, 0#64⟩
+
+theorem GlobalState.allocaPtr_eq_slot {s : GlobalState} : s.allocaPtr = s.slot 0 :=
+  rfl
+
+theorem GlobalState.alloca_slot {s : GlobalState} : (s.alloca n).slot k = s.slot (1 + k) := by
+  simp only [GlobalState.slot, GlobalState.alloca, Nat.add_assoc]
+
+/-- The slots of a state literal whose counter is `s`'s after `j` blocks: `s`'s. -/
+theorem GlobalState.mk_slot {s : GlobalState} {m : MemoryState} :
+    ({ alloc := ⟨s.alloc.nextFreeBlock + j⟩, mem := m } : GlobalState).slot k = s.slot (j + k) := by
+  simp only [GlobalState.slot, Nat.add_assoc]
+
+@[simp]
+theorem GlobalState.slot_id_id {s : GlobalState} : (s.slot k).id.id = s.alloc.nextFreeBlock + k :=
+  rfl
+
+@[simp]
+theorem GlobalState.slot_offset {s : GlobalState} : (s.slot k).offset = 0 :=
+  rfl
+
 @[simp]
 theorem GlobalState.alloca_alloc {s : GlobalState} :
     (s.alloca n).alloc = ⟨s.alloc.nextFreeBlock + 1⟩ :=

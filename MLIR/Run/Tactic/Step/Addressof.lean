@@ -36,23 +36,6 @@ elab "addressof_value" hv:term:max : tactic =>
             exact run_addressof_wrap (t := $(← Term.exprToSyntax t)) (w := $(quote w)) (n := $(quote n))
               ($hv _) (by simp) rfl rfl))
 
-/-- The slot `hx : x = ⟨…⟩.allocaPtr` of a state literal as its pointer `⟨⟨k⟩, 0⟩`: the state's
-memory does not matter. Keeps the equation tagged, as `nameAllocaSlot` leaves it. -/
-def reduceSlotPtr : TacticM Unit :=
-  withMainContext do
-    let mut g ← getMainGoal
-    for d in ← getLCtx do
-      let ty ← instantiateMVars d.type
-      unless Tactic.isNamedEq ty do
-        continue
-      let some (_, x, p) := ty.consumeMData.eq? | continue
-      unless p.isAppOfArity ``GlobalState.allocaPtr 1 && p.appArg!.isAppOf ``GlobalState.mk do
-        continue
-      let some p' ← unfoldDefinition? p | continue
-      let p' ← Tactic.dsimpState p'
-      g ← g.replaceLocalDeclDefEq d.fvarId (Tactic.tagNamed (← mkEq x p'))
-    replaceMainGoal [g]
-
 @[tactic stepAddressof]
 def evalStepAddressof : Tactic := fun stx => do
   addAllocaFreshness

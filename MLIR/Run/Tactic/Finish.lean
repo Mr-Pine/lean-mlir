@@ -152,17 +152,34 @@ def evalFinishBlock : Tactic := fun stx =>
     let r ← simpValue (only := !stx[1].isNone) (simpArgs := stx[2]) ret env true
     replaceMainGoal [← replaceBySimp g ret r]
 
+/-- Close a frame bound `n ≤ _` by `omega` over the counters, the pointers by their equations in the
+context (`hx : x = s.slot k`, a named slot's). -/
+elab "slot_bound" : tactic =>
+  withMainContext do
+    let mut eqs : Array (TSyntax `Lean.Parser.Tactic.simpLemma) := #[]
+    for d in ← getLCtx do
+      if d.isImplementationDetail then
+        continue
+      let ty := (← instantiateMVars d.type).consumeMData
+      let some (α, x, _) := ty.eq? | continue
+      if x.isFVar && α.isConstOf ``Pointer then
+        let h ← Term.exprToSyntax (← mkExpectedTypeHint d.toExpr ty)
+        eqs := eqs.push (← `(Lean.Parser.Tactic.simpLemma| $h:term))
+    evalTactic
+        (← `(tactic|
+            ((try simp only [GlobalState.allocaPtr_id_id, GlobalState.alloca_alloc,
+                GlobalState.slot_id_id, Pointer.add, $eqs,*]);
+              omega)))
+
 /-- Erase a frame from a result state with the `mlir_erase` lemmas: writes into the frame's blocks
-and its `alloca`s and new blocks are dropped, their bounds `n ≤ _` by a fact or `omega` over the
-counters; then the erase itself, below a `WF` state's counter. -/
+and its `alloca`s and new blocks are dropped, their bounds `n ≤ _` by a fact or `slot_bound`; then
+the erase itself, below a `WF` state's counter. -/
 macro "erase_frame" : tactic =>
   `(tactic|
     ( simp (disch :=
         first
         | assumption
-        |
-          ((try simp only [GlobalState.allocaPtr_id_id, GlobalState.alloca_alloc, Pointer.add]);
-            omega)) only [mlir_erase]
+        | slot_bound) only [mlir_erase]
       try simp (disch := assumption) only [GlobalState.WF.eraseFrom]))
 
 end

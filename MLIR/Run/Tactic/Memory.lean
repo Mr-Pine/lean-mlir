@@ -145,6 +145,18 @@ def omegaFromFacts (facts : Array (Expr × Expr)) (g : MVarId) : MetaM Unit := d
   g3.withContext do
       Lean.Elab.Tactic.Omega.omega (facts' ++ (← getLocalHyps).toList) g3
 
+/-- `s.allocaPtr` as a slot `b.slot k` of a local base state `b`: `s` is `b` after `k` `alloca`s, or a
+state literal with `b`'s counter after `k` blocks. -/
+def slotPtr? (p : Expr) : MetaM (Option Expr) := do
+  unless p.isAppOfArity ``GlobalState.allocaPtr 1 do
+    return none
+  let mut thms : SimpTheorems := {}
+  for n in [``GlobalState.allocaPtr_eq_slot, ``GlobalState.alloca_slot, ``GlobalState.mk_slot] do
+    thms ← thms.addConst n
+  let procs ← ({} : Simp.Simprocs).add ``Nat.reduceAdd (post := true)
+  let (r, _) ← simp p (← Simp.mkContext (simpTheorems := #[thms])) (simprocs := #[procs])
+  return if r.expr == p then none else some r.expr
+
 /-- `a ≠ b` from the facts: either way round, by a `[…].Nodup`, or by `decide` for closed terms
 (on locals it would only unfold them). -/
 partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
@@ -356,6 +368,52 @@ def MemCtx.build : MetaM MemCtx := do
     reads := reads.insert (← normWidths l) (x, d.toExpr)
   return { lemmas, heads, facts := ← splitConjunctedFacts, factMap := ← contextFactMap, reads }
 
+/-- A named slot `x` for a pointer `p` that is one (`hx : x = s` in the context, `s` `p`'s `slotPtr?`
+form): `(x, hx)`. -/
+def slotVar? (p : Expr) : MetaM (Option (Expr × Expr)) := do
+  let some s ← slotPtr? p | return none
+  for d in ← getLCtx do
+    if d.isImplementationDetail then
+      continue
+    let ty := (← instantiateMVars d.type).consumeMData
+    let some (_, x, rhs) := ty.eq? | continue
+    if x.isFVar && rhs == s then
+      return some (x, ← mkExpectedTypeHint d.toExpr ty)
+  return none
+
+/-- `a ≠ b` for block ids `p.id` of slots spelled by their state (`(S.alloca n).allocaPtr`): by the
+facts about the named slots `x` they are (`slotVar?`). -/
+def neBySlots? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
+  let side (e : Expr) : MetaM (Option (Expr × Expr)) := do
+    let_expr Pointer.id p := e | return none
+    if p.isFVar then
+      return none
+    slotVar? p
+  let sa ← side a
+  let sb ← side b
+  if sa.isNone && sb.isNone then
+    return none
+  let a' := sa.elim a fun (x, _) => mkApp (mkConst ``Pointer.id) x
+  let b' := sb.elim b fun (x, _) => mkApp (mkConst ``Pointer.id) x
+  let some pf ← neProof? facts a' b' | return none
+  -- back along each `hx : x = s`, `s` the slot as `p` is, up to `rfl`
+  let slotId (h : Expr) : MetaM Expr := do
+    let some (_, _, s) := (← inferType h).eq? | throwError "not an equation"
+    return mkApp (mkConst ``Pointer.id) s
+  let rewrite (pf hx : Expr) (side : Expr → Expr) : MetaM Expr := do
+    let motive ←
+      withLocalDeclD `y (mkConst ``Pointer) fun y => do
+          mkLambdaFVars #[y] (mkNot (side (mkApp (mkConst ``Pointer.id) y)))
+    mkEqNDRec motive pf hx
+  let mut pf := pf
+  let mut a'' := a'
+  if let some (_, hx) := sa then
+    pf ← rewrite pf hx fun y => mkApp3 (mkConst ``Eq [1]) (mkConst ``BlockId) y b'
+    a'' ← slotId hx
+  if let some (_, hx) := sb then
+    pf ← rewrite pf hx fun y => mkApp3 (mkConst ``Eq [1]) (mkConst ``BlockId) a'' y
+  return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
+
 /-- A read lemma's side condition from the facts: `Fits` and separation directly, others (limbs
 fitting) through `mlir_transport` lemmas. -/
 def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
@@ -373,7 +431,9 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
     let_expr Range.of q w := b | return none
     disjointProof? c.facts p v q w (offsets := false)
   | Ne _ a b =>
-    neProof? c.facts a b
+    if let some pf← neProof? c.facts a b then
+      return some pf
+    neBySlots? c.facts a b
   | _ =>
     -- closed side conditions: an offset's `¬uaddOverflow`, a width bound
     if let some pf← decideWithOffsets? c.facts goal then
