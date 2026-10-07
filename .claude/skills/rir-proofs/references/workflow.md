@@ -51,6 +51,9 @@ separate module (`Tests/<f>.lean`, importing the proof file), so the proofs neve
   | _ => false
 ```
 
+The fuel of `f.eval fuel` counts block jumps (a loop of `n` iterations needs `n + 2` or so), not
+calls; out of fuel it returns `.value (none, _)`.
+
 A failing test is a wrong spec, or a wrong layout assumption (the Edwards struct is X, Y, T, Z at
 offsets 0, 40, 80, 120), found in seconds instead of in a stuck proof. A `noncomputable` lift
 cannot be evaluated; test its spec on the parts that can.
@@ -81,5 +84,7 @@ the bv-level proofs do not import.
   warnings.
 - `lean_verify` on each public theorem.
 - Format with `lean-fmt` (the build for the project's toolchain; it needs the modules built).
+  It can garble tactic quotations (`have $x := e` to `have $x :=e`): check
+  `grep -n ':=[A-Za-z(]'` afterwards, and leave a file it breaks unformatted.
 - `lake build` of the project once, stopped at the first error.
 - Re-read every docstring and comment, then commit: one function per commit, short subject.
