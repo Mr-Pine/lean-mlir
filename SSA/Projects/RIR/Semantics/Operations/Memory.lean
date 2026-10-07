@@ -58,6 +58,17 @@ def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Poi
     .poison
   return ptr.add off
 
+/-- `gep` by `byteOff + index * stride` bytes, the index unsigned: poison when that does not fit in
+64 bits, as when the pointer's offset overflows. -/
+@[mlir_operation]
+def gepDyn (byteOff stride : Nat) (ptr : PoisonOr Pointer) (idx : IntW 64) : PoisonOr Pointer := do
+  let i ← idx
+  let off := byteOff + i.toNat * stride
+  if off < 2 ^ 64 then
+    gep (.value (BitVec.ofNat 64 off)) ptr
+  else
+    .poison
+
 def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let .value (dst, val, len) := do
     return (← dst, ← val, (← len).toNat) | throwUB

@@ -38,6 +38,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | smin => Operation.smin
   | icmp p => Operation.icmp p
   | ptrcmp ne => Operation.ptrcmp ne
+  | gepDyn byteOff stride => Operation.gepDyn byteOff stride
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm

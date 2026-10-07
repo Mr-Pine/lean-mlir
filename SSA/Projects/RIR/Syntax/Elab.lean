@@ -149,6 +149,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.icmp $(← predStx p)))
   | .ptrcmp ne => do
     `((.ptrcmp $(← boolStx ne)))
+  | .gepDyn byteOff stride => `((.gepDyn $(num byteOff) $(num stride)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)
