@@ -119,7 +119,7 @@ open Lean Meta in
 /-- Reduce a block's parameters `params k` in a `writeMany` to their `Dsts` literal, so
 `writeMany_cons`/`writeMany_nil` apply: `params` is a function of the program, defined by cases. -/
 dsimproc [mlir_instr]reduceWriteManyDsts (Env.writeMany _ _ _) := fun e => do
-  let_expr Env.writeMany _ _ env ds vs := e | return .continue
+  let_expr Env.writeMany _ _ _ ds _ := e | return .continue
   if ds.isAppOf ``Dsts.cons || ds.isAppOf ``Dsts.nil then
     return .continue
   let ds' ← withTransparency .default (whnf ds)
