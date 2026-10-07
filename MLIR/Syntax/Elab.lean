@@ -147,6 +147,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .smin => `(.smin)
   | .icmp p => do
     `((.icmp $(← predStx p)))
+  | .ptrcmp ne => do
+    `((.ptrcmp $(← boolStx ne)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)
@@ -181,6 +183,7 @@ def constStx : ConstLit → CommandElabM (TSyntax `term)
     `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num n)))
   | .arraySplat n w v => do
     `((.replicate $(num n) $(← intLit v) : Vector (BitVec $(num w)) $(num n)))
+  | .null => `(Pointer.null)
 
 /-- The instruction, calling `callee f` for `@f` or loading `global g` for `@g`. -/
 def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String → TSyntax `term) :

@@ -188,51 +188,45 @@ theorem MemoryState.readAt_storeAt_disjoint_offset {m : MemoryState} {off} {x : 
     Nat.mod_eq_of_lt hoff']
   omega
 
+/-- A store keeps the set of blocks. -/
+theorem MemoryState.mem_storeAt {m : MemoryState} : k ∈ (m.storeAt p x).mem ↔ k ∈ m.mem := by
+  unfold MemoryState.storeAt
+  split
+  · rename_i blk hblk
+    rw [MemoryState.getElem?_eq] at hblk
+    show k ∈ m.mem.insert _ _ ↔ _
+    rw [Std.ExtHashMap.mem_insert]
+    constructor
+    · rintro (hk | hk)
+      · have : p.id = k := by simpa using hk
+        subst this
+        exact
+          Std.ExtHashMap.mem_iff_isSome_getElem?.2
+            (by
+              rw [hblk]; rfl)
+      · exact hk
+    · exact .inr
+  · exact Iff.rfl
+
 /-- A store keeps the set of blocks, so `WF` does not depend on it. -/
 @[simp, mlir_mem]
 theorem GlobalState.WF_storeAt {s : GlobalState} :
     ({ s with mem := m.storeAt p x } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF := by
-  simp only [GlobalState.WF, MemoryState.storeAt]
-  split
-  · rename_i blk hblk
-    rw [MemoryState.getElem?_eq] at hblk
-    constructor
-    · intro h k hk
-      exact h k (Std.ExtHashMap.mem_insert.2 (.inr hk))
-    · intro h k hk
-      rcases Std.ExtHashMap.mem_insert.1 hk with hk | hk
-      · have : p.id = k := by simpa using hk
-        subst this
-        exact
-          h _
-            (Std.ExtHashMap.mem_iff_isSome_getElem?.2
-              (by
-                rw [hblk]; rfl))
-      · exact h k hk
-  · exact Iff.rfl
+  constructor
+  · rintro ⟨hb, hp, hn⟩
+    exact
+      ⟨fun k hk => hb k (MemoryState.mem_storeAt.2 hk), hp, fun h =>
+        hn (MemoryState.mem_storeAt.2 h)⟩
+  · rintro ⟨hb, hp, hn⟩
+    exact
+      ⟨fun k hk => hb k (MemoryState.mem_storeAt.1 hk), hp, fun h =>
+        hn (MemoryState.mem_storeAt.1 h)⟩
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.storeAt {s : GlobalState} (h : s.WF) :
-    { s with mem := s.mem.storeAt p x }.WF := by
-  unfold GlobalState.WF
-  intro k hk
-  dsimp at *
-  simp only [MemoryState.storeAt] at hk
-  split at hk
-  case h_1 blk hblk =>
-    dsimp at hk
-    rw [Std.ExtHashMap.mem_insert] at hk
-    rcases hk with hk | hk
-    · simp at hk
-      replace hk := hk.symm
-      subst hk
-      rw [MemoryState.getElem?_eq] at hblk
-      replace hblk := Option.isSome_of_eq_some hblk
-      simp at hblk
-      refine h p.id hblk
-    · exact h k hk
-  case h_2 => exact h k hk
+    { s with mem := s.mem.storeAt p x }.WF :=
+  GlobalState.WF_storeAt.2 h
 
 @[mlir_mem]
 theorem GlobalState.eraseFrom_self {s : GlobalState} (hs : s.WF) :
@@ -243,14 +237,14 @@ theorem GlobalState.eraseFrom_self {s : GlobalState} (hs : s.WF) :
   rw [Std.ExtHashMap.filter_eq_self_iff]
   intro k hk
   simp
-  exact hs k hk
+  exact hs.bound k hk
 
 /-! ### `alloca` and frames -/
 
 /-- A block in memory has an id below the counter. -/
 theorem GlobalState.WF.lt {s : GlobalState} (h : s.WF) (hq : q ∈ s.mem.mem) :
     q.id < s.alloc.nextFreeBlock :=
-  h q hq
+  h.bound q hq
 
 theorem Fits.mem (h : Fits m p w) : p.id ∈ m.mem := by
   obtain ⟨b, hb, _⟩ := h
@@ -259,6 +253,14 @@ theorem Fits.mem (h : Fits m p w) : p.id ∈ m.mem := by
     Std.ExtHashMap.mem_iff_isSome_getElem?.2
       (by
         rw [hb]; rfl)
+
+/-- A pointer into memory of a `WF` state is not null. -/
+theorem GlobalState.WF.ne_null_of_fits {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
+    q.id ≠ Pointer.null.id := by
+  intro heq
+  have := h.mem
+  rw [heq] at this
+  exact hwf.null this
 
 /-- A pointer into memory is not the next `alloca`'s. -/
 theorem GlobalState.ne_allocaPtr_of_fits {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
@@ -270,20 +272,33 @@ theorem GlobalState.ne_allocaPtr_of_fits {s : GlobalState} (hwf : s.WF) (h : Fit
 /-- Advancing the block counter keeps a state well-formed: a callee's frames, freed again. -/
 @[mlir_transport]
 theorem GlobalState.WF.add_blocks {s : GlobalState} (h : s.WF) :
-    (⟨⟨s.alloc.nextFreeBlock + k⟩, s.mem⟩ : GlobalState).WF := by
-  intro b hb
-  have := h b hb
-  dsimp
-  omega
+    (⟨⟨s.alloc.nextFreeBlock + k⟩, s.mem⟩ : GlobalState).WF
+    where
+  bound b hb := by
+    have := h.bound b hb
+    dsimp
+    omega
+  pos := by
+    have := h.pos
+    dsimp
+    omega
+  null := h.null
 
 @[mlir_mem, mlir_transport]
-theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n).WF := by
-  intro k hk
-  simp only [GlobalState.alloca, Std.ExtHashMap.mem_insert] at hk ⊢
-  rcases hk with hk | hk
-  · have : (⟨s.alloc.nextFreeBlock⟩ : BlockId) = k := by simpa using hk
-    subst this; simp
-  · have := h k hk; omega
+theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n).WF where
+  bound k hk := by
+    simp only [GlobalState.alloca, Std.ExtHashMap.mem_insert] at hk ⊢
+    rcases hk with hk | hk
+    · have : (⟨s.alloc.nextFreeBlock⟩ : BlockId) = k := by simpa using hk
+      subst this; simp
+    · have := h.bound k hk; omega
+  pos := by simp [GlobalState.alloca]
+  null := by
+    simp only [GlobalState.alloca, Std.ExtHashMap.mem_insert, not_or]
+    have := h.pos
+    exact
+      ⟨by
+        simp; omega, h.null⟩
 
 /-- `alloca` adds a block under a fresh id: the others are unchanged. -/
 theorem GlobalState.getElem?_alloca {s : GlobalState} (hq : q ≠ s.allocaPtr.id) :
@@ -394,7 +409,7 @@ theorem GlobalState.WF.storeAt_allocaPtr {s : GlobalState} (h : s.WF) (hp : p.id
     rw [MemoryState.getElem?_eq]
     apply Std.ExtHashMap.getElem?_eq_none
     intro hm
-    have := h _ hm
+    have := h.bound _ hm
     simp [hp, GlobalState.allocaPtr] at this
   simp [MemoryState.storeAt, this]
 

@@ -36,12 +36,14 @@ inductive ConstLit
   | splat (l w : Nat) (v : Int)
   | array (n w : Nat) (vs : List Int)
   | arraySplat (n w : Nat) (v : Int)
+  | null
   deriving Repr
 
 def ConstLit.ty : ConstLit → Ty
   | .bv w _ => .bv w
   | .vec l w _ | .splat l w _ => .vec l w
   | .array n w _ | .arraySplat n w _ => .array n (.bv w)
+  | .null => .ptr
 
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
@@ -384,6 +386,20 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       "x86vector.avx512.intr.vpmadd52h.uq.512"
     | name, _ => name
   match name with
+  | "llvm.mlir.zero" =>
+    do
+      let (dst, t) ← res
+      match t with
+      | .ptr =>
+        return .const .null dst
+      | .bv w =>
+        return .const (.bv w 0) dst
+      | .vec l w =>
+        return .const (.splat l w 0) dst
+      | .array n (.bv w) =>
+        return .const (.arraySplat n w 0) dst
+      | t =>
+        throw s!"unsupported zero of type {t.toMLIR}"
   | "llvm.mlir.constant" =>
     do
       let (dst, t) ← res
@@ -477,6 +493,14 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
         unless l == l' do
           throw "the result has another lane count"
         return .binop (.vector (l := l) (.icmp (w := w) p)) dst a b
+      | .ptr, .bv 1 =>
+        match p with
+        | .eq =>
+          return .binop (.ptrcmp false) dst a b
+        | .ne =>
+          return .binop (.ptrcmp true) dst a b
+        | _ =>
+          throw "pointers compare only by `eq` and `ne`"
       | t₁, _ =>
         throw s!"unsupported operand type {t₁.toMLIR}"
   | "llvm.select" =>
@@ -812,6 +836,7 @@ def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
   | .splat l w v => Vector.replicate l (BitVec.ofInt w v)
   | .array n w vs => Vector.ofFn fun i : Fin n => BitVec.ofInt w (vs[i]?.getD 0)
   | .arraySplat n w v => Vector.replicate n (BitVec.ofInt w v)
+  | .null => Pointer.null
 
 namespace Prog
 

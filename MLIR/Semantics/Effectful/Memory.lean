@@ -53,7 +53,11 @@ def MemoryBlock.lengthInBits (b : MemoryBlock) : Nat :=
 theorem MemoryState.getElem?_eq (m : MemoryState) (q : BlockId) : m[q]? = m.mem[q]? :=
   rfl
 
-def GlobalState.WF (s : GlobalState) : Prop :=
-  ∀ k ∈ s.mem.mem, k.id < s.alloc.nextFreeBlock
+/-- A state the allocator can extend: every block below the counter, and block `0`, the null
+pointer's, never allocated. -/
+structure GlobalState.WF (s : GlobalState) : Prop where
+  bound : ∀ k ∈ s.mem.mem, k.id < s.alloc.nextFreeBlock
+  pos : 0 < s.alloc.nextFreeBlock
+  null : (⟨0⟩ : BlockId) ∉ s.mem.mem
 
 end

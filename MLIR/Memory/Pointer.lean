@@ -14,6 +14,10 @@ structure Pointer where
   offset : BitVec 64
   deriving Inhabited, DecidableEq
 
+/-- The null pointer: block `0`, which a `WF` state never allocates. -/
+def Pointer.null : Pointer :=
+  ⟨⟨0⟩, 0⟩
+
 def Pointer.offsetInBits (p : Pointer) : Nat :=
   8 * p.offset.toNat
 
