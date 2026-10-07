@@ -271,6 +271,14 @@ def ensureStateEq : TacticM Unit :=
         g := g'
         carried := carried.push h
         olds := olds.push d.fvarId
+    -- the earlier state, a local (a loop's start): its reads carried past the writes over it, and
+    -- the writes read back, as a step's
+    let base? := (← bases.get).toList.eraseDups.find? fun b => b.isFVar && b != s
+    if let some b := base? then
+      let (hyps, oldReads, g') ← memFactsOf g b s
+      g := g'
+      carried := carried ++ hyps.map (·.1)
+      olds := olds ++ oldReads
     -- a bare state's own facts (`Fits s.mem p w`, `s.mem.readAt p w = x`), generalized with it:
     -- about `S`, so each seal transports them
     if s.isFVar then

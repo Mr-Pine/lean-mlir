@@ -99,19 +99,29 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
         g ← tryClearValue g x
         g ← g.tryClear x
       replaceMainGoal [g]
-  -- the earlier state `S` (kept for applying the lemma): substituted by its definition, so
-  -- later generalizations do not nest over it
+  -- named again, the facts carried over from the earlier state `S` while it is still a local, as
+  -- a step's
+  Tactic.ensureStateEq
+  -- then `S` (kept for applying the lemma) substituted by its definition, so later
+  -- generalizations do not nest over it
   withMainContext do
       let mut g ← getMainGoal
-      let S := (← Tactic.getFuncRunFromGoal (← instantiateMVars (← g.getType))).state
-      for x in (collectFVars {} S).fvarIds do
+      let S' := (← Tactic.getFuncRunFromGoal (← instantiateMVars (← g.getType))).state
+      let some hS' ← Tactic.findEqWithLhs? S' m!"" | return
+      let some (_, _, s) := (← instantiateMVars (← hS'.getType)).eq? | return
+      for x in (collectFVars {} s).fvarIds do
         unless (← inferType (.fvar x)).isConstOf ``GlobalState do
           continue
         if let some h← Tactic.findEqWithLhs? (.fvar x) m!"" then
           g := (← substCore g h (symm := false)).2
+      -- the substituted state's projections reduced, as a step's
+      g ←
+        g.withContext do
+            let S' := (← Tactic.getFuncRunFromGoal (← instantiateMVars (← g.getType))).state
+            let some hS' ← Tactic.findEqWithLhs? S' m!"" | return g
+            let some (_, l, r) := (← instantiateMVars (← hS'.getType)).eq? | return g
+            g.replaceLocalDeclDefEq hS' (← mkEq l (← Tactic.dsimpState r))
       replaceMainGoal [g]
-  -- named again, with the substituted state's facts carried over
-  Tactic.ensureStateEq
 
 /-- Close a read goal `E.read r = v` through `E`'s write chain (`walkRead`, else `simpValue`);
 unless the result is `v` itself, leave `result = v` open. -/
@@ -271,8 +281,19 @@ def evalStepLoop : Tactic := fun stx => do
   let (E, he, premises) ←
     try
       stepLoopApply stx false
-    catch _ =>
+    catch ex =>
       saved.restore
+      -- a warning, unless the lemma is a local (an induction hypothesis or continuation about a
+      -- fixed state, which needs `S` substituted): the steps after a loop lemma would work on `S`'s
+      -- definition, not on `S`
+      let head := stx[2].getHead?.getD stx[2]
+      let isLocal ←
+        withMainContext do
+            return head.isIdent && ((← getLCtx).findFromUserName? head.getId).isSome
+      unless isLocal do
+        logWarning
+            m!"`step_loop`: the lemma does not apply to the state `S`, so `S` is \
+          substituted by its definition:{indentD ex.toMessageData}"
       stepLoopApply stx true
   stepLoopFinish E he premises
 

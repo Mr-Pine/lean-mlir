@@ -128,12 +128,27 @@ def nameAllocaSlot : TacticM Unit :=
           return (← (← g.assert ((`h).appendAfter s!"{xName}_off") ty pf).intro1P).2
     replaceMainGoal [g]
 
+/-- The slots `hx : x = s.allocaPtr` as `b.slot k` (`slotPtr?`), kept tagged as `nameAllocaSlot`
+leaves them. -/
+def reduceSlotPtr : TacticM Unit :=
+  withMainContext do
+    let mut g ← getMainGoal
+    for d in ← getLCtx do
+      let ty ← instantiateMVars d.type
+      unless Tactic.isNamedEq ty do
+        continue
+      let some (_, x, p) := ty.consumeMData.eq? | continue
+      let some p' ← Tactic.slotPtr? p | continue
+      g ← g.replaceLocalDeclDefEq d.fvarId (Tactic.tagNamed (← mkEq x p'))
+    replaceMainGoal [g]
+
 @[tactic stepAlloca]
 def evalStepAlloca : Tactic := fun stx => do
   addAllocaFreshness
   runStep (StepArgs.parse mkNullNode stx[1] stx[2] mkNullNode (named := true))
       (← `(tacticSeq| exact run_alloca))
   nameAllocaSlot
+  reduceSlotPtr
 
 end
 
