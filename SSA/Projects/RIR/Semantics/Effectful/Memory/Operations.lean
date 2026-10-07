@@ -151,6 +151,17 @@ theorem MemoryState.readAt_add_of_readAt {off : BitVec 64} (hfits : Fits m p v)
   simp only [BitVec.getLsbD_extractLsb']
   grind
 
+/-- A narrower read at a known read's start: its low bits. -/
+theorem MemoryState.readAt_of_readAt_le {m : MemoryState} {p : Pointer} {x : BitVec v}
+    (hw : w ≤ v) (h : m.readAt p v = x) : m.readAt p w = x.setWidth w := by
+  subst h
+  unfold MemoryState.readAt
+  split
+  · apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    simp [hi, show i < v by omega]
+  · simp
+
 /-- A read over a store inside it: the bits read before, with the stored ones spliced in. -/
 @[mlir_read]
 theorem MemoryState.readAt_add_storeAt {off : BitVec 64} (hfits : Fits m p v)
