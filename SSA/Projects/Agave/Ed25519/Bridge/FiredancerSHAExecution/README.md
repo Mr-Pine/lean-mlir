@@ -3,6 +3,9 @@
 This directory imports all four scalar Firedancer SHA-512 bodies into RIR. It
 proves the complete initializer call, the zero-length append call, and the
 actual extracted constant table's equality to the existing SHA-512 specification.
+The frozen source leaves also prove the first/later round instruction bodies,
+circular schedule arithmetic and memory updates, the initialized streaming
+invariant, append's length-counter body, and finalizer padding/output slices.
 It does **not** provide `FiredancerShaInitBy`, `FiredancerShaAppendBy`,
 `FiredancerShaFinishBy`, or `DigestBy` witnesses.
 
@@ -47,6 +50,28 @@ steps; Lean checks the imported RIR definitions and proof terms.
 - `Linked.lean`: append and finish call the **actual imported core CFG**, through
   `Func.call`; the linked empty append theorem needs no compression assumption.
 - `Audit.lean`: kernel axiom closure of the checked execution/data endpoints.
+- `Arithmetic.lean`, `CoreRounds.lean`, `RingSchedule.lean`: exact source
+  Boolean/rotation/addition expressions refine the common SHA round and schedule;
+  the circular 16-word schedule preserves its relation to all 80 standard words.
+- `CoreSchedule.lean`, `CoreFirst.lean`, `CoreLater.lean`: complete imported
+  first-round and later-round instruction bodies, including safe stack/table
+  indices, ring writes, and exit tests. `CoreInputMemory.lean` relates native
+  input loads and byte swaps to the common big-endian block words, and proves
+  incremental initialization of the ring memory.
+- `Context.lean`: the concrete 224-byte context relation to completed blocks,
+  pending bytes, chaining words, and a wrapping 128-bit bit count; actual init
+  establishes it. `AppendCounter.lean` proves the nonempty counter-update block,
+  including carry and memory preservation outside the context allocation.
+- `FinishPadding.lean`: actual marker/branch body and the zero-fill/length-store
+  prefixes before the core calls. `FinishOutput.lean` proves the complete
+  post-core output instruction suffix as eight byte-swapped word stores.
+- `SourceAudit.lean`: strict transitive axiom audit of 110 source-leaf endpoints,
+  allowing only `propext`, `Classical.choice`, and `Quot.sound`.
+  `source-leaves-manifest.json` freezes their source and compiled hashes, exact
+  repository dependency source hashes checked against the validation checkout,
+  toolchain/package lock hashes, and scope. `source-leaves.paths0` is the exact
+  NUL-delimited file list for this slice. These are instruction-body and
+  arithmetic results; they do not assert complete core or streaming execution.
 
 The recorded target is x86-64 Linux LP64, little-endian. The context layout is
 buffer at 0, eight words at 128, magic at 192, used-byte count at 200, and low/high
@@ -67,11 +92,12 @@ the artifacts. Linking here uses RIR's exactly typed parameter order
    compression entry case. Reusing the Agave **specification and arithmetic**
    is appropriate; an Agave machine-body theorem is not a theorem about this
    different Firedancer CFG.
-2. Use that core refinement to prove nonempty append's counter arithmetic,
+2. Use that core refinement and the proved counter body to prove nonempty append's
    partial-buffer/full-block split, and exact state/memory frame; establish the
    invariant `buf_used < 128` and the 128-bit message-length interpretation.
-3. Prove finish's one/two padding blocks, big-endian bit length, eight output
-   byte-swapped words, and alias/range conditions. Compose into a streaming
+3. Compose the proved finalizer instruction slices with core calls; prove their
+   byte-level padding and digest observations and the required memory frames.
+   Compose into a streaming
    SHA-512 result for `R || A || message`.
 4. Connect to the existing bridge contracts. `FiredancerShaPrograms` and
    `FiredancerSha*By` currently quantify **SLLVM.Cfg**, SLLVM `GlobalState`, and
