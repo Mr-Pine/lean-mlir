@@ -1,0 +1,39 @@
+{
+  "inputs": [
+    {
+      "file": "MLIR/generated/agave_sha512_compress_dispatch.ll",
+      "sha256": "f5cf87ce9e229c1c93b43110465c372951c403d220105cfcb7bb994d4bb4a9f4",
+      "original_definition_sha256": "1b2ec36396c432d5fcd65f138a7726d4c3fc3557b065528982df132c0829ef87"
+    },
+    {
+      "file": "MLIR/generated/agave_sha512_compress_avx2.ll",
+      "sha256": "2b5123e541ef79564a4895eb713c2c4fb4e6f57ab96a5012854e0037200d5f45",
+      "original_definition_sha256": "1b2ec36396c432d5fcd65f138a7726d4c3fc3557b065528982df132c0829ef87"
+    }
+  ],
+  "source_manifest_sha256": "008c9ae43c2dd85a1e28a1428be996d8ddd5f425139969088cffc5288e6bc619",
+  "k64_symbol": "alloc_448aca044373cb4cde6849f95106f1ce",
+  "initializer_sha256": "125cf2084d7eec18dc9795be4baa221655c0eabab89e90a74fb0370378a60293",
+  "initializer_length": 640,
+  "cache_original_definition": {
+    "definition": "@_RNvNtNtCs7dqAOVfn11v_4sha26sha51210avx2_cpuid7STORAGE.0 = internal unnamed_addr global i8 -1, align 1",
+    "sha256": "78a458552a6bb62ef8a049bd5d68c76b30e28cc17e4f00e308048bf2ce4a04bc"
+  },
+  "iv": {
+    "record": {
+      "symbol": "anon.2688bd6af3b9e90d4f6e608faea972d6.1",
+      "length": 64,
+      "alignment": 16,
+      "bytes_hex": "08c9bcf367e6096a3ba7ca8485ae67bb2bf894fe72f36e3cf1361d5f3af54fa5d182e6ad7f520e511f6c3e2b8c68059b6bbd41fbabd9831f79217e1319cde05b",
+      "sha256": "3b721fb05904288533a0c3f44162aa4631530bcfebd22c3e57dbc4994e38f83d",
+      "source": "agave_verifier_challenge_scalar.mlir",
+      "lean_name": "sha512InitialState"
+    },
+    "source_sha256": "c8fe297ee56fee608c42bd0d019eabe4c38d465d1d424158f6bd0d01afb4ce1c",
+    "import_sha256": "2855ddddd1743af715c49425065ea0ccf20b5b12e78a3a5a4d93e56718406341",
+    "extractor_sha256": "3efe3e5931a2b93ce7eb8a4c3db72c88c1d933a9a7f954a689f7566fb88b27c1"
+  },
+  "generator_sha256": "749b068ecc9818b191f04a8fb99b47dc652aa1aec2a0ad644d76d5a0be2dac0d",
+  "output_sha256": "f04eae1dfdb5008b5e15d491689a1e501c7478afecd57c9e3485e9cd807cbb4f",
+  "normalizations": []
+}
