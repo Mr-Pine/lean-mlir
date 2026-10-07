@@ -113,29 +113,22 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
 @[tactic finishBlock]
 def evalFinishBlock : Tactic := fun stx =>
   withMainContext do
-    -- a long body's length hits `maxRecDepth` in the elaborator's `decide`, uncatchably;
-    -- `decide +kernel` only then, as its kernel check is slow
-    let long ←
-      do
-        let (_, goal) ← getGoalType
-        let mut rest ← whnfD (← mkAppM ``BasicBlock.body #[(← getRunBodyFrom goal).block])
-        let mut n := 0
-        while rest.isAppOfArity ``List.cons 3 && n < 64 do
-          rest ← whnfD rest.appArg!
-          n := n + 1
-        pure (decide (n ≥ 64))
-    let hpos ←
-      if long then
-        `(term| by decide +kernel)
-      else
-        -- not `decide`: it refuses a body that mentions a local (a callee parameter)
-        `(term| Nat.le_of_ble_eq_true rfl)
+    -- at the block's end: `body.drop pos` reduces to `[]` here, so a wrong position fails at the
+    -- tactic; `hpos` itself by `decide`, for the kernel only, as each step's
+    let (g, goal) ← getGoalType
+    let run ← getRunBodyFrom goal
+    unless (← bodyFrom run.block run.idx).isAppOfArity ``List.nil 1 do
+      throwError "`finish_block`: instructions left at position {run.idx}"
+    let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``BasicBlock.runBodyFrom_done)
+    for m in r.mvarIds do
+      unless ← m.isAssigned do
+        m.assign (← mkDecideProof (← instantiateMVars (← m.getType)).consumeTypeAnnotations)
+    replaceMainGoal [← g.replaceTargetEq r.eNew r.eqProof]
     evalTactic
         (←
           `(tactic|
-              ( rw [BasicBlock.runBodyFrom_done $hpos]
-                simp only [EffectM.pure_eq, PoisonOr.value_bind, reduceBlockExit,
-                  reduceFuncContinue, Exit.run])))
+              simp only [EffectM.pure_eq, PoisonOr.value_bind, reduceBlockExit, reduceFuncContinue,
+                Exit.run]))
     let (g, goal) ← getGoalType
     let some ret :=
       goal.find?
