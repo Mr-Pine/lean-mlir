@@ -288,7 +288,8 @@ def ensureStateEq : TacticM Unit :=
         -- facts and memory reads, not other equations nor continuations
         if
             (← g.withContext (isProp ty)) && (!ty.isEq || (memReadFact? heads s ty).isSome) &&
-              !ty.isForall then
+              !ty.isForall &&
+              !(← g.withContext (isContinuation ty)) then
           carried := carried.push h
     -- simplified like a step's new state: reads through the stores resolve
     let r ←
