@@ -25,6 +25,18 @@ Regenerate with `python3 SSA/Projects/Agave/Ed25519/Proof/Tables/generate.py`;
 add `--check` for a read-only reproducibility check. The generator is not trusted
 for arithmetic: the emitted finite certificates use `decide +kernel`.
 
+`SerialConstructor.lean` and `Avx2Constructor.lean` retain the exact pinned
+constructor bodies. `ConstructorGlobals.lean` imports the serial constructor's
+40-byte `2d` initializer, and `ConstructorConstant.lean` derives its five limb
+reads, bounds and curve-field value from the initializer's presence in memory.
+`ConstructorMemory.lean` proves the seven successor-record address bounds and
+the exact final 1,280-byte copy in both constructors. It does not yet execute
+the constructor loops or establish their output point multiples. `Audit.lean`
+checks the axiom dependencies of these boundaries and the static certificates.
+Reproduce the exact constructor bodies and constant with
+`python3 SSA/Projects/Agave/Ed25519/Proof/Tables/import_constructors.py --check`
+and `python3 SSA/Projects/Agave/Ed25519/Proof/Tables/import_constructor_globals.py --check`.
+
 This layer proves mathematical constructors and byte-table contents. It does
 not by itself prove that a RIR execution performs the dynamic constructor,
 loads the intended immutable allocation, preserves the global bytes, or uses

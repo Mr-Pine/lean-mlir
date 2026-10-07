@@ -1,0 +1,21 @@
+{
+  "source": "MLIR/generated/agave_serial_table5.ll",
+  "source_sha256": "bdc87c62e80374192f3cf047d9ffc198ca676f50ecb4c117abee984b235d938c",
+  "source_extraction_manifest_sha256": "7e9143ed9e2f96f3cdd7ce2d3f7e833dc258d19089d44caa611362e758f5b74f",
+  "symbol": "alloc_6e6f5bdc2dd4f9d83a28bc96071152e7",
+  "bytes": 40,
+  "alignment": 8,
+  "initializer_sha256": "5532f15e1bfbca7f3e6c46357fb445bf6677ceb796663f5f6e7a10e89f0b446d",
+  "little_endian_u64_words": [
+    1859910466990425,
+    932731440258426,
+    1072319116312658,
+    1815898335770999,
+    633789495995903
+  ],
+  "generator_sha256": "1f14c823bdc3b27217874f92b11b7d4c688c55462321c12565eaadcb731e6f14",
+  "output": "ConstructorGlobals.lean",
+  "output_sha256": "b3bf75a2b55d4e098fe8a2178def6526eed59b420b67de794d746ddb57c853f5",
+  "command": "python3 Proof/Tables/import_constructor_globals.py",
+  "normalizations": []
+}
