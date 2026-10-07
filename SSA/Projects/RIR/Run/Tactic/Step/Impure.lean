@@ -26,6 +26,9 @@ syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)?
 /-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`. -/
 syntax (name := stepMemcpy) "step_memcpy" stepSimpArgs (stepConsuming)? : tactic
 
+/-- `step_impure` for a `memset`, closing the instruction with `run_memset`. -/
+syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
+
 /-- `step_impure` for a `store`, closing the instruction with `run_store`. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
@@ -263,6 +266,17 @@ def evalStepMemcpy : Tactic := fun stx => do
         exact
             run_memcpy (by rfl) (by first | disjoint_fact | simp_all)
               (by first | fits_fact | simp_all) (by first | fits_fact | simp_all)))
+      args.consumed args.tag
+
+@[tactic stepMemset]
+def evalStepMemset : Tactic := fun stx => do
+  let args := StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode
+  runStepImpure args.value args.hyp args.only args.simpArgs args.expand
+      (←
+        `(tacticSeq|
+        expect_values
+        exact
+            run_memset (by rfl) (by first | fits_fact | simp_all)))
       args.consumed args.tag
 
 end InstructionSpecific

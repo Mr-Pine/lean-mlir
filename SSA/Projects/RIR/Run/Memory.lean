@@ -21,6 +21,14 @@ theorem run_memcpy {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNa
   subst hn
   simp [Operation.memcpy, hd, hfd, hfs, throwUBIf, mlir_effect]
 
+/-- `memset` of `n` bytes: a store at `src` of the repeated byte. -/
+theorem run_memset {dst : Pointer} {val : BitVec 8} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
+    (hfd : Fits s.mem dst (8 * n)) :
+    (Operation.memset (.value dst) (.value val) (.value len)) env s =
+      .value (env, { s with mem := s.mem.storeAt dst (val.replicate n) }) := by
+  subst hn
+  simp [Operation.memset, hfd, throwUBIf, mlir_effect]
+
 theorem run_load {ptr : Pointer} {t : Ty} {v} {dst : Dst Γ t} (hfits : Fits s.mem ptr t.width)
     (hv : (t.unflatten (s.mem.readAt ptr t.width)) = v) :
     (Operation.load dst (.value ptr)) env s = .value (env[dst := v], s) := by
