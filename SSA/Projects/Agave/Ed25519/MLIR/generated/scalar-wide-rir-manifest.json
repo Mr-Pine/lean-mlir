@@ -1,0 +1,76 @@
+{
+  "ScalarWide": {
+    "source": "generated/agave_scalar_wide.mlir",
+    "source_sha256": "1f91ae907831e13b7c93d60549d03de6cbb40bf09ec376098cd9f50ebe700750",
+    "region_sha256": "ed6c86ed66e75900e8c1930f9af0e7c51175dd386ddbac7c420c7c8503ed153f",
+    "region_lines": 609,
+    "callees": {
+      "_RNvMs2_NtNtNtNtCsjK63O35OHGN_14solana_ed255197backend6serial3u646scalarNtB5_8Scalar5214montgomery_mul": {
+        "field": "montgomeryMul",
+        "args": [
+          ".ptr",
+          ".ptr",
+          ".ptr"
+        ],
+        "returns": []
+      },
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [
+      "alloc_595ed8f9b6c4f781a4a1d10db150f124",
+      "alloc_b0a0adc7a7ee3d20b0509962c17b23d6"
+    ],
+    "normalizations": []
+  },
+  "ScalarMontgomeryMul": {
+    "source": "generated/agave_scalar_montgomery_mul.mlir",
+    "source_sha256": "2d0f10b723772e48d03534b067b4220829a86c9d1f254c1d63c44ed820678f48",
+    "region_sha256": "a0f9558aaf2d9fbe84429c55b3f6d17be5215d323a2294f7572ab964e5fb2fc7",
+    "region_lines": 288,
+    "callees": {
+      "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": {
+        "field": "blackBoxByte",
+        "args": [
+          ".bv 8"
+        ],
+        "returns": [
+          ".bv 8"
+        ]
+      }
+    },
+    "globals": [],
+    "normalizations": []
+  },
+  "byteGlobals": [
+    {
+      "symbol": "alloc_595ed8f9b6c4f781a4a1d10db150f124",
+      "length": 40,
+      "alignment": 8,
+      "bytes_hex": "ede62167bd480f005ae467acb5ba03001be535ebffff0f00ffffffffffff0f00ffffffffff0f0000",
+      "sha256": "8b66dd610871c608b418a629c06e712c2da21cebb797c9ece45ff47eedd61205",
+      "source": "agave_scalar_wide.mlir",
+      "lean_name": "montgomeryR"
+    },
+    {
+      "symbol": "alloc_b0a0adc7a7ee3d20b0509962c17b23d6",
+      "length": 40,
+      "alignment": 8,
+      "bytes_hex": "3bd152e965d209009fa6be15c7630d00047668cb65be05007f213dc7eedc03009a307c1b41090000",
+      "sha256": "1102b2862e097d020ed2fc0cad75ecddcb99b9b5c9a5263c2cc537e6af67da7a",
+      "source": "agave_scalar_wide.mlir",
+      "lean_name": "montgomeryRR"
+    }
+  ],
+  "import_inputs_sha256": {
+    "MLIR/import_scalar_wide.py": "b210dd9853aa2219ca76593d5ca23cdb5c0fa8b7ce9db63048dd7fcdb6d152da",
+    "Proof/Verifier/ExecutionElab.lean": "56a1fe6cb964c965b0120861d5cdb54e312bfea4d19bea58dd614f13e3da2bce"
+  }
+}
