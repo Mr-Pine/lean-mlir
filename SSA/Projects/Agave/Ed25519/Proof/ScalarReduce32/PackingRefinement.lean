@@ -1,4 +1,4 @@
-import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.MontgomeryRefinement
+import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.MachineCertificate
 import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.Subtract
 import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.PackingWords
 import SSA.Projects.Agave.Ed25519.Proof.ScalarReduce32.PackPhase
@@ -22,18 +22,12 @@ theorem reductionWords_correct (bits : BitVec 256) :
       bits.toNat % subgroupOrder ∧
     limbValue (fun i => (subtractWords (reductionQuotient (inputWords bits)) i).toNat) <
       subgroupOrder := by
-  have hc : limbValue (fun i => (reductionR i).toNat) % subgroupOrder =
-      (1 * 2 ^ 260) % subgroupOrder := by
-    change sourceR % UpstreamMath.Canonicality.ell =
-      montgomeryModulus % UpstreamMath.Canonicality.ell
-    rw [sourceR_eq_mod, Nat.mod_mod]
-  have h := montgomery_words_correct (inputWords bits) reductionR default default 1
-    (inputWords_bound bits) reductionR_bound reductionR_canonical hc
-  have hi : limbValue (fun i => (inputWords bits i).toNat) = bits.toNat :=
-    inputWords_value bits
-  simp only [Nat.mul_one, hi] at h
-  simpa only [subtractWords, tailWords, reductionQuotient,
-    reductionProducts_eq (inputWords bits) default default, quotient52] using h
+  have hwords := tailWords_value (reductionQuotient (inputWords bits))
+  change limbValue (fun i => (subtractWords (reductionQuotient (inputWords bits)) i).toNat) =
+    finish (rawValue (reductionQuotient (inputWords bits))) at hwords
+  rw [hwords]
+  exact reduction_finish_correct bits
+
 
 
 /-- Canonical bytes of the complete source word computation. -/
