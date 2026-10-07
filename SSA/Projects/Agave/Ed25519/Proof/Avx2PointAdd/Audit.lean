@@ -35,4 +35,3 @@ The exact observation execution endpoints have a separate audit. -/
 /-- info: 'Agave.Ed25519.Avx2PointAdd.rir_lazySum' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Agave.Ed25519.Avx2PointAdd.rir_lazySum
-
