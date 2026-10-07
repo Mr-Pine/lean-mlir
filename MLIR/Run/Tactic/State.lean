@@ -147,6 +147,9 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         -- unresolved: a write no lemma reads back or past
         if v == e || (v.find? (· == newMem)).isSome then
           continue
+        -- past the write to a read of `S` with a fact: that fact is carried below, not read back
+        if c.reads.contains (← normWidths v) then
+          continue
         -- the value's own reads of `S` by `S`'s facts
         let r ← simpState v c
         let (v, pf) := (r.expr, ← mkEqTrans pf (← r.getProof))
