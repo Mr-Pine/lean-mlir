@@ -181,52 +181,19 @@ def ty : MLIRType → Except String Ty
     | _ => throw s!"cannot decode the type {t}"
   | t => throw s!"unsupported type {t}"
 
-/-- Round `off` up to a multiple of `a`. -/
-def alignTo (off a : Nat) : Nat :=
-  ((off + a - 1) / a) * a
-
-/-- `(size, alignment)` in bytes, in LLVM's default data layout. -/
-partial def Ty.sizeAlign : Ty → Except String (Nat × Nat)
-  | .bv bits =>
-    let sz := (bits + 7) / 8
-    if sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16 then return (sz, sz)
-    else throw s!"unsupported integer size i{bits}"
-  | .ptr => return (8, 8)
-  | .array n t => do
-    let (s, a) ← Ty.sizeAlign t
-    return (n * alignTo s a, a)
-  | .vec n w => do
-    let (s, _) ← Ty.sizeAlign (.bv w)
-    return (n * s, Nat.nextPowerOfTwo (n * s))
-  | .struct fields => do
-    let (off, al) ←
-      fields.foldlM (init := (0, 1)) fun (off, al) f => do
-          let (s, a) ← Ty.sizeAlign f
-          return (alignTo off a + s, max al a)
-    return (alignTo off al, al)
-
-/-- The padded size in bytes. -/
-def Ty.size (t : Ty) : Except String Nat := do
-  let (s, a) ← Ty.sizeAlign t
-  return alignTo s a
-
 /-- The byte offset of element `k` of `t`, and that element's type. -/
 def Ty.index (k : Nat) : Ty → Except String (Nat × Ty)
   | .struct fields => do
     let some f := fields[k]? | throw s!"struct field index {k} out of range"
-    let off ←
-      (fields.take k).foldlM (init := 0) fun off f => do
-          let (s, a) ← Ty.sizeAlign f
-          return alignTo off a + s
-    return (alignTo off (← Ty.sizeAlign f).2, f)
+    return (Ty.fieldOffset 0 k fields / 8, f)
   | .array n t => do
     unless k < n do
       throw s!"array index {k} out of range"
-    return (k * (← Ty.size t), t)
+    return (k * t.size, t)
   | .vec n w => do
     unless k < n do
       throw s!"vector index {k} out of range"
-    return (k * (← Ty.sizeAlign (.bv w)).1, .bv w)
+    return (k * ((w + 7) / 8), .bv w)
   | t => throw s!"cannot index into {repr t}"
 
 /-- The byte offset of `getelementptr`'s constant indices over `t`, and for its one dynamic index
@@ -242,16 +209,16 @@ def gepOffset (t : Ty) : List Int → Except String (Nat × Option Nat)
     -- the first index steps over whole `t`s, the others into `t`
     let (off, stride) ←
       if k₀ == dynamic then
-        pure (0, some (← Ty.size t))
+        pure (0, some t.size)
       else
-        pure ((← natIdx k₀) * (← Ty.size t), none)
+        pure ((← natIdx k₀) * t.size, none)
     let (off, stride, _) ←
       ks.foldlM (init := (off, stride, t)) fun (off, stride, t) k => do
           if k == dynamic then
             if stride.isSome then
               throw "only one dynamic index is supported"
             let .array _ et := t | throw "a dynamic index must index an array"
-            return (off, some (← Ty.size et), et)
+            return (off, some et.size, et)
           let (step, t) ← Ty.index (← natIdx k) t
           return (off + step, stride, t)
     return (off, stride)
@@ -588,7 +555,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless isOne do
         throw s!"the count %{count} must be the constant 1"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .alloca dst (← Ty.size (← ty et))
+      return .alloca dst (← ty et).size
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
     do
       let [(p, .ptr)] := args | throw "expected one pointer operand"

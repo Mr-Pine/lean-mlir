@@ -233,20 +233,72 @@ end
 
 public section
 
+/-- The bits that round `n` up to a multiple of `a`. -/
+@[expose]
+def padding (n a : Nat) : Nat :=
+  (a - n % a) % a
+
+/-- The least power of two at least `n`. -/
+@[expose]
+def pow2Ceil (n : Nat) : Nat :=
+  go n 1
+where go : Nat → Nat → Nat
+    | 0, p => p
+    | k + 1, p => if n ≤ p then p else go k (2 * p)
+
 mutual
+/-- Alignment in bits, in LLVM's x86-64 data layout: an integer's is the least of `i8 … i128`'s
+that fits it, a vector's its size up to a power of two. -/
+@[expose]
+def align : Ty → Nat
+  | bv w =>
+    if w ≤ 8 then 8 else if w ≤ 16 then 16 else if w ≤ 32 then 32 else if w ≤ 64 then 64 else 128
+  | ptr => 64
+  | vec l w => 8 * pow2Ceil ((w * l + 7) / 8)
+  | array _ t => t.align
+  | struct fields => fieldsAlign fields
+@[expose]
+def fieldsAlign : List Ty → Nat
+  | [] => 8
+  | t :: ts => max t.align (fieldsAlign ts)
+end
+
+mutual
+/-- Width in bits in memory: array elements and struct fields padded as LLVM lays them out. -/
 @[expose]
 def width : Ty → Nat
   | bv w => w
   | ptr => 64
   | vec l w => w * l
-  | array n t => t.width * n
-  | struct fields => fieldsWidth fields
+  | array n t => (padding t.width t.align + t.width) * n
+  | struct fields => fieldsWidth 0 (fieldsAlign fields) fields
+/-- The width of fields `ts` from bit `off`, each followed by padding to the next one's offset, the
+last to a multiple of `a`. -/
 @[expose]
-def fieldsWidth : List Ty → Nat
+def fieldsWidth (off a : Nat) : List Ty → Nat
   | [] => 0
-  | [t] => t.width
-  | t :: ts => fieldsWidth ts + t.width
+  | [t] => padding (off + t.width) a + t.width
+  | t :: t' :: ts =>
+    fieldsWidth (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a (t' :: ts) +
+      (padding (off + t.width) (max t.align t'.align) + t.width)
 end
+
+/-- The bits from one array element to the next: LLVM's allocation size. -/
+@[expose]
+def stride (t : Ty) : Nat :=
+  padding t.width t.align + t.width
+
+/-- The allocation size in bytes. -/
+@[expose]
+def size (t : Ty) : Nat :=
+  t.stride / 8
+
+/-- The bit offset of field `k` of fields `ts` from bit `off`. -/
+@[expose]
+def fieldOffset (off : Nat) : Nat → List Ty → Nat
+  | k + 1, t :: t' :: ts =>
+    fieldOffset (off + (padding (off + t.width) (max t.align t'.align) + t.width)) k (t' :: ts)
+  | _, _ => off
 
 mutual
 @[expose]
@@ -268,6 +320,9 @@ theorem width_bv : (bv w).width = w :=
 
 @[simp]
 theorem width_vec : (vec l w).width = w * l :=
+  rfl
+
+theorem width_array : (array n t).width = t.stride * n :=
   rfl
 
 @[simp]
@@ -335,16 +390,21 @@ def allValues [Inhabited α] (v : Vector (PoisonOr α) n) : PoisonOr (Vector α 
   else .poison
 
 mutual
+/-- A value's bits, with zero padding. -/
 def flattenRaw : (t : Ty) → ⟦t⟧ᵣ → BitVec t.width
   | bv _, x => x
   | ptr, _ => 0#_
   | vec _ _, v => BitVec.packLanes v
-  | array _ t, v => BitVec.packLanes (v.map (flattenRaw t))
-  | struct fields, v => flattenRawFields fields v
-def flattenRawFields : (ts : List Ty) → denoteFieldsRaw ts → BitVec (fieldsWidth ts)
+  | array _ t, v => BitVec.packLanes (v.map fun x => 0#(padding t.width t.align) ++ flattenRaw t x)
+  | struct fields, v => flattenRawFields 0 (fieldsAlign fields) fields v
+def flattenRawFields (off a : Nat) :
+    (ts : List Ty) → denoteFieldsRaw ts → BitVec (fieldsWidth off a ts)
   | [], _ => 0#0
-  | [t], v => flattenRaw t v
-  | t :: t' :: ts, (a, b) => (flattenRawFields (t' :: ts) b) ++ (flattenRaw t a)
+  | [t], v => 0#(padding (off + t.width) a) ++ flattenRaw t v
+  | t :: t' :: ts, (x, xs) =>
+    flattenRawFields (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a (t' :: ts)
+        xs ++
+      (0#(padding (off + t.width) (max t.align t'.align)) ++ flattenRaw t x)
 end
 
 theorem flattenRaw_bv (x : ⟦bv w⟧ᵣ) : flattenRaw (bv w) x = x := by rfl
@@ -352,16 +412,21 @@ theorem flattenRaw_bv (x : ⟦bv w⟧ᵣ) : flattenRaw (bv w) x = x := by rfl
 theorem flattenRaw_vec (v : ⟦vec l w⟧ᵣ) : flattenRaw (vec l w) v = BitVec.packLanes v := by rfl
 
 theorem flattenRaw_array (v : ⟦array n t⟧ᵣ) :
-    flattenRaw (array n t) v = BitVec.packLanes (v.map (flattenRaw t)) := by rfl
+    flattenRaw (array n t) v =
+      BitVec.packLanes (v.map fun x => 0#(padding t.width t.align) ++ flattenRaw t x) := by
+  rfl
 
 theorem flattenRaw_struct (v : ⟦struct fs⟧ᵣ) :
-    flattenRaw (struct fs) v = flattenRawFields fs v := by rfl
+    flattenRaw (struct fs) v = flattenRawFields 0 (fieldsAlign fs) fs v := by rfl
 
 theorem flattenRawFields_singleton (v : denoteFieldsRaw [t]) :
-    flattenRawFields [t] v = flattenRaw t v := by rfl
+    flattenRawFields off a [t] v = 0#(padding (off + t.width) a) ++ flattenRaw t v := by rfl
 
-theorem flattenRawFields_cons (a : ⟦t⟧ᵣ) (b : denoteFieldsRaw (t' :: ts)) :
-    flattenRawFields (t :: t' :: ts) (a, b) = flattenRawFields (t' :: ts) b ++ flattenRaw t a := by
+theorem flattenRawFields_cons (x : ⟦t⟧ᵣ) (xs : denoteFieldsRaw (t' :: ts)) :
+    flattenRawFields off a (t :: t' :: ts) (x, xs) =
+      flattenRawFields (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a
+          (t' :: ts) xs ++
+        (0#(padding (off + t.width) (max t.align t'.align)) ++ flattenRaw t x) := by
   rfl
 
 /-- A raw value's bits at its width `w`, a literal: what a global's block holds. -/
@@ -372,15 +437,18 @@ theorem flatBits_eq {r : ⟦t⟧ᵣ} {hw : t.width = w} :
     flatBits r (hw := hw) = (t.flattenRaw r).cast hw := by rfl
 
 /-- A slice of an array's bits inside one element is that element's slice. -/
-theorem extractLsb'_flattenRaw_array (v : ⟦array n t⟧ᵣ) (hi : s / t.width < n)
-    (hw : s % t.width + w ≤ t.width) :
+theorem extractLsb'_flattenRaw_array (v : ⟦array n t⟧ᵣ) (hi : s / t.stride < n)
+    (hw : s % t.stride + w ≤ t.width) :
     (flattenRaw (array n t) v).extractLsb' s w =
-      (flattenRaw t (v[s / t.width]'hi)).extractLsb' (s % t.width) w := by
-  rw [flattenRaw_array]
-  exact (BitVec.extractLsb'_packLanes_of_lt _ hi hw).trans (by rw [Vector.getElem_map])
+      (flattenRaw t (v[s / t.stride]'hi)).extractLsb' (s % t.stride) w := by
+  unfold stride at hi hw ⊢
+  refine (BitVec.extractLsb'_packLanes_of_lt _ hi (by omega)).trans ?_
+  rw [Vector.getElem_map]
+  exact BitVec.extractLsb'_append_eq_of_add_le hw
 
-theorem extractLsb'_flattenRaw_struct_singleton (v : ⟦struct [t]⟧ᵣ) :
-    (flattenRaw (struct [t]) v).extractLsb' s w = (flattenRaw t v).extractLsb' s w := by rfl
+theorem extractLsb'_flattenRaw_struct_singleton (v : ⟦struct [t]⟧ᵣ) (hw : s + w ≤ t.width) :
+    (flattenRaw (struct [t]) v).extractLsb' s w = (flattenRaw t v).extractLsb' s w :=
+  BitVec.extractLsb'_append_eq_of_add_le hw
 
 theorem extractLsb'_flattenRaw_bv (x : ⟦bv l⟧ᵣ) :
     (flattenRaw (bv l) x).extractLsb' s w = x.extractLsb' s w := by rfl
@@ -434,15 +502,18 @@ def unflatten : (t : Ty) → BitVec t.width → ⟦t⟧
   | bv _, x => .value x
   | ptr, _ => .poison
   | vec _ w, x => Vector.ofFn (fun i => .value (extractVecElem _ w i x))
-  | array n t, x => Vector.ofFn (fun i => unflatten t (extractVecElem n (t.width) i x))
-  | struct fields, x => unflattenFields fields x
-def unflattenFields : (ts : List Ty) → BitVec (fieldsWidth ts) → denoteFields ts
+  | array n t, x =>
+    Vector.ofFn fun i =>
+      unflatten t ((extractVecElem n (padding t.width t.align + t.width) i x).extractLsb' 0 t.width)
+  | struct fields, x => unflattenFields 0 (fieldsAlign fields) fields x
+def unflattenFields (off a : Nat) : (ts : List Ty) → BitVec (fieldsWidth off a ts) → denoteFields ts
   | [], _ => ()
-  | [t], x => unflatten t x
+  | [t], x => unflatten t (x.extractLsb' 0 t.width)
   | t :: t' :: ts, x =>
-    let v := x.extractLsb' 0 (t.width)
-    let vs := x.extractLsb' (t.width) (fieldsWidth (t' :: ts))
-    (unflatten t v, unflattenFields (t' :: ts) vs)
+    let w := padding (off + t.width) (max t.align t'.align) + t.width
+    let v := x.extractLsb' 0 t.width
+    let vs := x.extractLsb' w (fieldsWidth (off + w) a (t' :: ts))
+    (unflatten t v, unflattenFields (off + w) a (t' :: ts) vs)
 end
 
 @[simp]
@@ -507,21 +578,27 @@ theorem unflatten_flattenRaw {t : Ty} {v : ⟦t⟧ᵣ} {b : BitVec t.width} (hno
     simp_all [flattenRaw, unflatten, denote, ← h, extractVecElem_packLanes, wrap]
     ext i hi
     simp
-    rw [unflatten_flattenRaw (by simpa [hasPtr] using hnoptr)]
-    rfl
+    rw [unflatten_flattenRaw (by simpa [hasPtr] using hnoptr)
+        BitVec.extractLsb'_append_eq_right.symm]
   | struct fields => exact unflattenRawFields_flattenRawFields (by simpa [hasPtr] using hnoptr) h
 theorem unflattenRawFields_flattenRawFields (hnoptr : ∀ t ∈ ts, t.hasPtr = false)
-    (h : flattenRawFields ts v = b) : unflattenFields ts b = wrapFields v :=
+    (h : flattenRawFields off a ts v = b) : unflattenFields off a ts b = wrapFields v :=
   match ts with
   | [] => by simp [unflattenFields]
   | [t] => by
     simp [unflattenFields, wrapFields]
-    exact unflatten_flattenRaw (by simp [hnoptr]) h
+    subst h
+    rw [flattenRawFields_singleton]
+    exact unflatten_flattenRaw (by simp [hnoptr]) BitVec.extractLsb'_append_eq_right.symm
   | t₁ :: t₂ :: ts => by
     simp [unflattenFields, wrapFields, flattenRawFields] at ⊢ h
     subst h
     constructor
-    · exact unflatten_flattenRaw (hnoptr t₁ (by simp)) (BitVec.extractLsb'_append_eq_right).symm
+    · refine unflatten_flattenRaw (hnoptr t₁ (by simp)) ?_
+      -- the field, under its padding and the later fields
+      refine
+        ((BitVec.extractLsb'_append_eq_of_add_le ?_).trans BitVec.extractLsb'_append_eq_right).symm
+      omega
     · exact
         unflattenRawFields_flattenRawFields (by simp_all) (BitVec.extractLsb'_append_eq_left).symm
 end

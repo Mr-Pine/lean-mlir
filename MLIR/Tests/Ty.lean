@@ -15,6 +15,36 @@ open Ty
 
 #guard Ty.ptr.width == 64
 
+/-! ## Layout: LLVM's x86-64 padding -/
+
+-- the `i64` at byte 8, and 7 bytes of padding before it
+#guard (Ty.struct [.bv 8, .bv 64]).width == 128
+
+#guard Ty.fieldOffset 0 1 [.bv 8, .bv 64] == 64
+
+-- tail padding up to the struct's alignment
+#guard (Ty.struct [.bv 64, .bv 8]).width == 128
+
+#guard (List.range 3).map (Ty.fieldOffset 0 · [.bv 32, .bv 8, .bv 16]) == [0, 32, 48]
+
+#guard (Ty.struct [.bv 32, .bv 8, .bv 16]).width == 64
+
+-- an element's allocation size, not its store size: `i24` takes 4 bytes, `<3 x i32>` 16
+#guard Ty.fieldOffset 0 1 [.bv 24, .bv 8] == 32
+
+#guard (Ty.vec 3 32).size == 16
+
+#guard (Ty.array 2 (.struct [.bv 64, .bv 8])).width == 256
+
+#guard (Ty.array 4 (.bv 1)).width == 32
+
+-- naturally aligned structs need no padding
+#guard
+  (Ty.struct
+        [.array 128 (.bv 8), .array 8 (.bv 64), .bv 64, .bv 64, .bv 64, .bv 64,
+          .array 32 (.bv 8)]).size ==
+    256
+
 -- `decide` on types works downstream (needs the derived instance to be exposed)
 example : Ty.bv 3 ≠ Ty.ptr := by decide
 
