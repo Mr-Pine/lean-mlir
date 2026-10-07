@@ -449,10 +449,10 @@ theorem Fits.addBlock_allocaPtr {n : Nat} {s : GlobalState} {v : Nat} {x : BitVe
   exact (Fits.allocaPtr (Nat.le_refl _)).storeAt
 
 /-- A new block reads back its bits. -/
-theorem MemoryState.readAt_addBlock_allocaPtr {n : Nat} {s : GlobalState} {x : BitVec (8 * n)} :
-    (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt s.allocaPtr (8 * n) = x := by
+theorem MemoryState.readAt_addBlock_allocaPtr {w n : Nat} {s : GlobalState} {x : BitVec w}
+    (hw : w ≤ 8 * n) : (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt s.allocaPtr w = x := by
   rw [← GlobalState.alloca_storeAt_allocaPtr]
-  exact MemoryState.readAt_storeAt_self (Fits.allocaPtr (Nat.le_refl _)) x
+  exact MemoryState.readAt_storeAt_self (Fits.allocaPtr hw) x
 
 /-- A read of a block that fits before a new one: the read before it. -/
 @[mlir_read]

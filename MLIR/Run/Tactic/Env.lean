@@ -202,8 +202,8 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
           argsSimprocs facts[0]
         else
           Simp.getSimprocs,
-      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs,
-      ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
+      ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false),
+      ← memSimprocs (← MemCtx.build), ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   return (←
@@ -211,27 +211,20 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
 
 /-- The state equations `S = …` in context -/
 def stateFacts : MetaM (Array FVarId) := do
-  (← getLCtx).foldlM (init := #[]) fun acc d => do
-      if d.isImplementationDetail then
-        return acc
-      let some (_, l, _) := (← instantiateMVars d.type).eq? | return acc
-      return if l.isFVar && (← inferType l).isConstOf ``GlobalState then acc.push d.fvarId else acc
+  (← localEqs).filterMapM fun e => do
+      let state := e.lhs.isFVar && (← inferType e.lhs).isConstOf ``GlobalState
+      return if state then some e.decl.fvarId else none
 
 /-- The equations `x = _` of the locals in `e`: the state `S = …` and the step values `v = …`
 it reads, but not those of values named with `with` (`tagNamed`) or of stack slots, which stay
 folded. -/
 private def valueStateFacts (e : Expr) : MetaM (Array FVarId) := do
   let xs := (collectFVars {} e).fvarSet
-  (← getLCtx).foldlM (init := #[]) fun acc d => do
-      if d.isImplementationDetail then
-        return acc
-      let ty ← instantiateMVars d.type
-      let some (_, .fvar x, _) := ty.consumeMData.eq? | return acc
-      unless xs.contains x do
-        return acc
-      if isNamedEq ty then
-        return acc
-      return acc.push d.fvarId
+  (← localEqs).filterMapM fun q => do
+      let .fvar x := q.lhs | return none
+      if !xs.contains x || isNamedEq (← instantiateMVars q.decl.type) then
+        return none
+      return some q.decl.fvarId
 
 /-- The local facts `E.read r = v` (a pattern lemma's inputs): read resolution goes through them as
 through `hE`. -/

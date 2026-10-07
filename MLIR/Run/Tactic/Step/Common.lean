@@ -93,12 +93,11 @@ def clearStaleBodyFacts : TacticM Unit :=
   withMainContext do
     let .ok run ← (getRunBodyFrom? (← getMainTarget)).run | return
     let mut g ← getMainGoal
-    for d in ← getLCtx do
-      let some (_, lhs, _) := (← instantiateMVars d.type).eq? | continue
-      let_expr List.drop _ n body := lhs | continue
+    for e in ← localEqs do
+      let_expr List.drop _ n body := e.lhs | continue
       let_expr BasicBlock.body _ _ _ _ b := body | continue
       if (← isDefEq b run.block) && !(← isDefEq n run.idx) then
-        g ← g.tryClear d.fvarId
+        g ← g.tryClear e.decl.fvarId
     replaceMainGoal [g]
 
 def finishStep (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool)

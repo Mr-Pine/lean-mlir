@@ -16,8 +16,8 @@ facts name the slot `x`, not the state's `allocaPtr`. -/
 syntax (name := stepAlloca) "step_alloca" (stepNames)? (stepConsuming)? : tactic
 
 /-- `q.id ≠ S.allocaPtr.id` for each pointer `q` with a `Fits` fact about the state `S`, before
-the `alloca` of `S`'s next slot. -/
-def addAllocaFreshness : TacticM Unit := do
+the tactic `tac` allocates `S`'s next block. -/
+def addAllocaFreshness (tac : String) : TacticM Unit := do
   Tactic.ensureStateEq
   withMainContext do
       let (g, goal) ← Tactic.getGoalType
@@ -27,7 +27,7 @@ def addAllocaFreshness : TacticM Unit := do
         (← getLCtx).findDeclM? fun d => do
             if !d.isImplementationDetail && (← withReducible (isDefEq d.type wfTy)) then
               return some d.toExpr
-            return none | throwError "`step_alloca`: no hypothesis `{wfTy}`"
+            return none | throwError "`{tac}`: no hypothesis `{wfTy}`"
       let memS ← mkAppM ``GlobalState.mem #[S]
       let a ← mkAppM ``Pointer.id #[← mkAppM ``GlobalState.allocaPtr #[S]]
       -- the earlier slots' ids, newest first, in `hslots : [...].Nodup`
@@ -91,14 +91,13 @@ def nameAllocaSlot : TacticM Unit :=
   withMainContext do
     let mut g ← getMainGoal
     -- the slot: the newest local `x` with `hx : x = _.allocaPtr`
-    let some (x, hx, p) ←
-      (← getLCtx).foldlM (init := none) fun acc d => do
-          let some (_, .fvar x, p) := (← instantiateMVars d.type).consumeMData.eq? | return acc
-          return if p.isAppOf ``GlobalState.allocaPtr then some (x, d.fvarId, p) else acc | return
+    let some e :=
+      (← Tactic.localEqs).findRev? fun e =>
+        e.lhs.isFVar && e.rhs.isAppOf ``GlobalState.allocaPtr | return
+    let (x, hx, p) := (e.lhs.fvarId!, e.decl.fvarId, e.rhs)
     let xName ← x.getUserName
     -- the slot stays folded where memory steps take it, as the facts name it
-    g ←
-      g.replaceLocalDeclDefEq hx (Tactic.tagNamed (← instantiateMVars (← hx.getType)).consumeMData)
+    g ← g.replaceLocalDeclDefEq hx (Tactic.tagNamed e.type)
     let pf ← mkEqSymm (.fvar hx)
     for d in ← getLCtx do
       if d.isImplementationDetail || d.fvarId == hx then
@@ -112,10 +111,8 @@ def nameAllocaSlot : TacticM Unit :=
       let ty' := motive.beta #[.fvar x]
       let name :=
         if ty.isAppOf ``Fits then (`h).appendAfter s!"{xName}_fits"
-        -- the state's equation keeps its name: `addressof`'s state stores at the slot
-        else
-          if d.userName == `hslots || d.userName == `hS then d.userName
-          else d.userName.appendAfter s!"_{xName}"
+        -- the slots' `Nodup` keeps its name
+        else if ty.isAppOf ``List.Nodup then d.userName else d.userName.appendAfter s!"_{xName}"
       let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
       g ← g'.clear d.fvarId
     -- its offset, `0`: offsets into the slot (`x.add 24`) stay in range
@@ -138,13 +135,13 @@ def reduceSlotPtr : TacticM Unit :=
       unless Tactic.isNamedEq ty do
         continue
       let some (_, x, p) := ty.consumeMData.eq? | continue
-      let some p' ← Tactic.slotPtr? p | continue
+      let some p' := Tactic.slotPtr? p | continue
       g ← g.replaceLocalDeclDefEq d.fvarId (Tactic.tagNamed (← mkEq x p'))
     replaceMainGoal [g]
 
 @[tactic stepAlloca]
 def evalStepAlloca : Tactic := fun stx => do
-  addAllocaFreshness
+  addAllocaFreshness "step_alloca"
   runStep (StepArgs.parse mkNullNode stx[1] stx[2] mkNullNode (named := true))
       (← `(tacticSeq| exact run_alloca))
   nameAllocaSlot

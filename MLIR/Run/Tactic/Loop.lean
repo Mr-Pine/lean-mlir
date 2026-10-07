@@ -105,23 +105,14 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   -- then `S` (kept for applying the lemma) substituted by its definition, so later
   -- generalizations do not nest over it
   withMainContext do
-      let mut g ← getMainGoal
-      let S' := (← Tactic.getFuncRunFromGoal (← instantiateMVars (← g.getType))).state
-      let some hS' ← Tactic.findEqWithLhs? S' m!"" | return
+      let S' := (← Tactic.getFuncRunFromGoal (← getMainTarget)).state
+      let some hS' ← Tactic.findEqWithLhs? S' m!"`{S'} = _`" | return
       let some (_, _, s) := (← instantiateMVars (← hS'.getType)).eq? | return
-      for x in (collectFVars {} s).fvarIds do
-        unless (← inferType (.fvar x)).isConstOf ``GlobalState do
-          continue
-        if let some h← Tactic.findEqWithLhs? (.fvar x) m!"" then
-          g := (← substCore g h (symm := false)).2
-      -- the substituted state's projections reduced, as a step's
-      g ←
-        g.withContext do
-            let S' := (← Tactic.getFuncRunFromGoal (← instantiateMVars (← g.getType))).state
-            let some hS' ← Tactic.findEqWithLhs? S' m!"" | return g
-            let some (_, l, r) := (← instantiateMVars (← hS'.getType)).eq? | return g
-            g.replaceLocalDeclDefEq hS' (← mkEq l (← Tactic.dsimpState r))
+      let g ← Tactic.substStates (← getMainGoal) s
       replaceMainGoal [g]
+      -- the substituted state's projections reduced, as a step's
+      let some hS' ← g.withContext (Tactic.findEqWithLhs? S' m!"`{S'} = _`") | return
+      replaceMainGoal [← Tactic.dsimpStateEq g hS']
 
 /-- Close a read goal `E.read r = v` through `E`'s write chain (`walkRead`, else `simpValue`);
 unless the result is `v` itself, leave `result = v` open. -/
@@ -273,6 +264,20 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
     open_ := open_ ++ (← getGoals)
   setGoals open_.toList
 
+/-- Whether the loop lemma `stx` is about a fixed state: its run's state mentions a local, not only
+the lemma's binders (an induction hypothesis, a continuation). -/
+def fixedStateLemma (stx : Syntax) : TacticM Bool :=
+  withoutModifyingState <|
+    withMainContext do
+      try
+        let e ← Term.withoutErrToSorry (elabTerm stx none (mayPostpone := true))
+        forallTelescopeReducing (← instantiateMVars (← inferType e)) fun xs concl => do
+            let some run := concl.find? (·.isAppOfArity ``Func.runFrom 4) | return false
+            let bound := xs.map (·.fvarId!)
+            return run.appArg!.hasAnyFVar (!bound.contains ·)
+      catch _ =>
+        return false
+
 @[tactic stepLoop]
 def evalStepLoop : Tactic := fun stx => do
   -- keep the state `S` when the lemma applies to it: its facts stay usable; an induction
@@ -283,14 +288,9 @@ def evalStepLoop : Tactic := fun stx => do
       stepLoopApply stx false
     catch ex =>
       saved.restore
-      -- a warning, unless the lemma is a local (an induction hypothesis or continuation about a
-      -- fixed state, which needs `S` substituted): the steps after a loop lemma would work on `S`'s
-      -- definition, not on `S`
-      let head := stx[2].getHead?.getD stx[2]
-      let isLocal ←
-        withMainContext do
-            return head.isIdent && ((← getLCtx).findFromUserName? head.getId).isSome
-      unless isLocal do
+      -- a warning, unless the lemma is about a fixed state, which needs `S` substituted: the steps
+      -- after a loop lemma would work on `S`'s definition, not on `S`
+      unless ← fixedStateLemma stx[2] do
         logWarning
             m!"`step_loop`: the lemma does not apply to the state `S`, so `S` is \
           substituted by its definition:{indentD ex.toMessageData}"

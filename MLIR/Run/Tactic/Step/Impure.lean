@@ -33,8 +33,8 @@ syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
-unproved ones are returned as goals) and dropping the `consumed` ones. -/
-def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) := do
+unproved ones are returned as goals). -/
+def sealStep (inState : Expr) : TacticM (Array MVarId) := do
   -- the new state's memory facts, about it as a term over `inState`, then generalized with it
   let (mem, olds) ←
     withMainContext do
@@ -46,13 +46,6 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
   -- the old read facts: carried over by `memFactsOf`, used by `sealState`'s simplification
   withMainContext do
       replaceMainGoal [← (← getMainGoal).tryClearMany olds]
-  -- Drop the consumed facts, where nothing else depends on them
-  withMainContext do
-      let mut g ← getMainGoal
-      for h in consumed do
-        let fvarId ← getFVarId h
-        g ← g.clear fvarId
-      replaceMainGoal [g]
   -- Get facts to preserve
   let goals ←
     withMainContext do
@@ -134,10 +127,7 @@ def sealStep (inState : Expr) (consumed : Array Ident) : TacticM (Array MVarId) 
         let hNew := (fs.get hS').fvarId!
         g ← g.rename hNew `hS
         -- the substituted old state's projections reduced
-        g ←
-          g.withContext do
-              let some (_, l, r) := (← instantiateMVars (← hNew.getType)).eq? | return g
-              g.replaceLocalDeclDefEq hNew (← mkEq l (← Tactic.dsimpState r))
+        g ← Tactic.dsimpStateEq g hNew
         setGoals [g]
         return goals
   return goals
@@ -170,7 +160,7 @@ def runStepImpure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Sy
         unless (← getUnsolvedGoals).isEmpty do
           throwError "`step_impure =>` left `insn` unsolved"
         setGoals [main]
-        let goals ← sealStep inState #[]
+        let goals ← sealStep inState
         finishStep value hyp only simpArgs expand tag
         -- the consumed facts last: the value may read through them
         withMainContext do

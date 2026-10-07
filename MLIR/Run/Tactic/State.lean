@@ -25,17 +25,18 @@ def transportDischarge (fuel : Nat) (p : Expr) : MetaM (Option Expr) := do
   transportWith (← contextFactMap) (← labelled `mlir_transport) fuel (← instantiateMVars p)
 
 /-- The new state simplified by `mlir_state` and the memory simprocs (reads through stores, by read
-facts, through `hS`); side conditions are discharged from the context, at reducible transparency. -/
-def simpState (e : Expr) : MetaM Simp.Result := do
+facts, through `hS`); side conditions are discharged from the context (`c?`, else gathered), at
+reducible transparency. -/
+def simpState (e : Expr) (c? : Option MemCtx := none) : MetaM Simp.Result := do
   let some ext ← getSimpExtension? `mlir_state | throwError "no `mlir_state` simp set"
   let ctx ←
     Simp.mkContext (simpTheorems := #[← ext.getTheorems]) (congrTheorems := ← getSimpCongrTheorems)
+  let c ← c?.getDM MemCtx.build
   let dischProcs :=
     #[← Simp.getSimprocs, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true)]
-  let procs := dischProcs.push (← memSimprocs)
-  -- the context's facts, once for all side conditions
-  let facts ← contextFactMap
-  let lemmas ← labelled `mlir_transport
+  let procs := dischProcs.push (← memSimprocs c)
+  let facts := c.factMap
+  let lemmas := c.transport
   -- reducible: a side condition's `assumption` must not unfold memory chains
   let disch : Simp.Discharge := fun p => do
     -- a fact, as is or `mlir_state`-normalized (a store chain's `LimbsFit` is its base's); the
@@ -52,17 +53,30 @@ def simpState (e : Expr) : MetaM Simp.Result := do
     transportWith facts lemmas 64 p
   return (← simp e ctx (simprocs := procs) (discharge? := disch)).1
 
+/-- Substitute each state local of `e` that has an equation `x = _` by it. -/
+def substStates (g : MVarId) (e : Expr) : MetaM MVarId := do
+  let mut g := g
+  for x in (collectFVars {} e).fvarIds do
+    g ←
+      g.withContext do
+          unless (← getLCtx).contains x && (← x.getType).isConstOf ``GlobalState do
+            return g
+          let some h ← findEqWithLhs? (.fvar x) m!"`{Expr.fvar x} = _`" | return g
+          return (← substCore g h (symm := false)).2
+  return g
+
+/-- `h : l = r` with `r`'s projections reduced (`dsimpState`). -/
+def dsimpStateEq (g : MVarId) (h : FVarId) : MetaM MVarId :=
+  g.withContext do
+    let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | return g
+    g.replaceLocalDeclDefEq h (← mkEq l (← dsimpState r))
+
 /-- Close the goal by `transportDischarge`: a fact of the context, through `mlir_transport`
 lemmas. -/
 elab "transport_fact" : tactic =>
   withMainContext do
-    let mut g ← getMainGoal
     -- a state `S` with `hS : S = e` in the goal: the facts are about `e`
-    for x in (collectFVars {} (← instantiateMVars (← g.getType))).fvarIds do
-      unless (← g.withContext (inferType (.fvar x))).isConstOf ``GlobalState do
-        continue
-      if let some h← g.withContext (findEqWithLhs? (.fvar x) m!"") then
-        g := (← substCore g h (symm := false)).2
+    let g ← substStates (← getMainGoal) (← instantiateMVars (← getMainTarget))
     g.withContext do
         let some pf ←
           transportDischarge 64
@@ -70,59 +84,50 @@ elab "transport_fact" : tactic =>
         g.assign pf
     replaceMainGoal []
 
-/-- `addressof`'s new state `⟨_, S.mem.addBlock _ n x⟩`: `n` and `x`. -/
-def addressofBlock? (new : Expr) : Option (Expr × Expr) := do
-  let_expr GlobalState.mk _ m := new | none
-  let_expr MemoryState.addBlock _ _ n _ x := m | none
-  return (n, x)
+/-- `addressof`'s new state `⟨_, X.mem.addBlock ⟨X.alloc.nextFreeBlock⟩ n x⟩`: `X`, `n` and `x`. -/
+def addressofBlock? (new : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
+  let_expr GlobalState.mk _ m := new | return none
+  let_expr MemoryState.addBlock m' b n _ x := m | return none
+  let some X := m'.app1? ``GlobalState.mem | return none
+  let next ←
+    mkAppM ``BlockId.mk #[← mkAppM ``AllocState.nextFreeBlock #[← mkAppM ``GlobalState.alloc #[X]]]
+  unless ← withReducible (isDefEq b next) do
+    return none
+  return some (X, n, x)
 
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
-`h : motive new`: every write an `mlir_read` lemma reads back, and every read fact of `S` the
-writes miss (one they overwrite is dropped). Asserted in `g`; the old read facts returned, for
-clearing once the state is sealed. Read through the writes while `S`'s facts hold. -/
+`h : motive new`: a new block's size and bits, every write an `mlir_read` lemma reads back, and
+every read fact of `S` the writes miss (one they overwrite is dropped). Asserted in `g`; the old
+read facts returned, for clearing once the state is sealed. Read through the writes while `S`'s
+facts hold. -/
 def memFactsOf (g : MVarId) (S new : Expr) :
     MetaM (Array (FVarId × Expr) × Array FVarId × MVarId) :=
   g.withContext do
     let newMem ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[new]))
     let oldMem ← mkAppM ``GlobalState.mem #[S]
     let c ← MemCtx.build
-    -- the fact `read e = v` at `new`: `motive new` with `motive s := read (e at s.mem) = v`
-    let motiveOf (e v : Expr) : MetaM Expr := memMotive e newMem (mkEq · v)
-    let mut g := g
-    let mut hyps := #[]
-    -- an `alloca`'s fresh slot fits its bytes: `Fits (S.alloca n).mem S.allocaPtr (8 * n)`
+    -- `(name, fact about newMem, proof)`, asserted last
+    let mut facts : Array (Name × Expr × Expr) := #[]
+    -- an `alloca`'s fresh slot fits its bytes: `Fits (X.alloca n).mem X.allocaPtr (8 * n)`
     if new.isAppOfArity ``GlobalState.alloca 2 then
-      let n := new.getArg! 1
-      let ptr ← mkAppM ``GlobalState.allocaPtr #[S]
+      let X := new.appFn!.appArg!
+      let n := new.appArg!
       let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
-      let motive ←
-        withLocalDeclD `s (mkConst ``GlobalState) fun x => do
-            mkLambdaFVars #[x] (← mkAppM ``Fits #[← mkAppM ``GlobalState.mem #[x], ptr, w])
-      let pf ← mkAppOptM ``Fits.allocaPtr #[w, n, S, ← mkAppM ``Nat.le_refl #[w]]
-      let (h, g') ← (← g.assert `hfits (motive.beta #[new]) pf).intro1P
-      g := g'
-      hyps := hyps.push (h, motive)
-    -- `addressof`'s new block fits its bytes and reads back its bits:
-    -- `Fits (S.mem.addBlock _ n x) S.allocaPtr (8 * n)`, `(…).readAt S.allocaPtr (8 * n) = x`
-    if let some (n, x) := addressofBlock? new then
-      let ptr ← mkAppM ``GlobalState.allocaPtr #[S]
+      let ptr ← mkAppM ``GlobalState.allocaPtr #[X]
+      let pf ← mkAppOptM ``Fits.allocaPtr #[w, n, X, ← mkAppM ``Nat.le_refl #[w]]
+      facts := facts.push (`hfits, ← mkAppM ``Fits #[newMem, ptr, w], pf)
+    -- `addressof`'s new block fits its bytes and reads back its bits `x : BitVec v`:
+    -- `Fits (X.mem.addBlock _ n x) X.allocaPtr (8 * n)`, `(…).readAt X.allocaPtr v = x`
+    if let some (X, n, x)← addressofBlock? new then
+      let ptr ← mkAppM ``GlobalState.allocaPtr #[X]
       let w ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
-      let motive ←
-        withLocalDeclD `s (mkConst ``GlobalState) fun s => do
-            mkLambdaFVars #[s] (← mkAppM ``Fits #[← mkAppM ``GlobalState.mem #[s], ptr, w])
-      let pf ← mkAppOptM ``Fits.addBlock_allocaPtr #[n, S, none, x]
-      let (h, g') ← (← g.assert `hfits (motive.beta #[new]) pf).intro1P
-      g := g'
-      hyps := hyps.push (h, motive)
-      let motive ←
-        withLocalDeclD `s (mkConst ``GlobalState) fun s => do
-            mkLambdaFVars #[s]
-                (←
-                  mkEq (← mkAppM ``MemoryState.readAt #[← mkAppM ``GlobalState.mem #[s], ptr, w]) x)
-      let pf ← mkAppOptM ``MemoryState.readAt_addBlock_allocaPtr #[n, S, x]
-      let (h, g') ← (← g.assert `hread (motive.beta #[new]) pf).intro1P
-      g := g'
-      hyps := hyps.push (h, motive)
+      let pf ← mkAppOptM ``Fits.addBlock_allocaPtr #[n, X, none, x]
+      facts := facts.push (`hfits, ← mkAppM ``Fits #[newMem, ptr, w], pf)
+      let_expr BitVec v := ← whnfR (← inferType x) | pure ()
+      let v ← normWidths v
+      if let some hv← decideWithOffsets? #[] (← mkAppM ``LE.le #[v, w]) then
+        let pf ← mkAppOptM ``MemoryState.readAt_addBlock_allocaPtr #[v, n, X, x, hv]
+        facts := facts.push (`hread, ← mkEq (← mkAppM ``MemoryState.readAt #[newMem, ptr, v]) x, pf)
     let mut seen : Array Expr := #[]
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
     for w in ← writesOf newMem do
@@ -147,9 +152,8 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         if v == e || (v.find? (· == newMem)).isSome then
           continue
         -- the value's own reads of `S` by `S`'s facts
-        let r ← simpState v
+        let r ← simpState v c
         let (v, pf) := (r.expr, ← mkEqTrans pf (← r.getProof))
-        let motive ← motiveOf e v
         -- named after the pointer read, so facts at distinct pointers stay accessible
         -- (`q.add k` after `q` and `k`)
         let ptr? ←
@@ -169,9 +173,7 @@ def memFactsOf (g : MVarId) (S new : Expr) :
               pure ((`hread).appendAfter s!"_{← x.getUserName}_{k.getD 0}")
           | none =>
             pure `hread
-        let (h, g') ← (← g.assert name (motive.beta #[new]) pf).intro1P
-        g := g'
-        hyps := hyps.push (h, motive)
+        facts := facts.push (name, ← mkEq e v, pf)
     -- the read facts of `S` carried through the writes; the old ones kept for sealing the state
     let mut olds := #[]
     for d in ← getLCtx do
@@ -187,12 +189,17 @@ def memFactsOf (g : MVarId) (S new : Expr) :
       if
           (r.find? (· == l)).isSome && (y'.find? (· == S)).isNone &&
             (y'.find? (· == newMem)).isNone then
-        let motive ← motiveOf e y'
         let pf ← mkEqTrans pf (← mkCongrArg at_ d.toExpr)
-        let (h, g') ← (← g.assert d.userName (motive.beta #[new]) pf).intro1P
-        g := g'
-        hyps := hyps.push (h, motive)
+        facts := facts.push (d.userName, ← mkEq e y', pf)
       olds := olds.push d.fvarId
+    -- each fact as `h : motive new`, `motive s` the fact with `s.mem` for the new memory
+    let mut g := g
+    let mut hyps := #[]
+    for (name, ty, pf) in facts do
+      let motive ← memMotive ty newMem
+      let (h, g') ← (← g.assert name (motive.beta #[new]) pf).intro1P
+      g := g'
+      hyps := hyps.push (h, motive)
     return (hyps, olds, g)
 
 def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM SealedState :=
@@ -247,6 +254,8 @@ def ensureStateEq : TacticM Unit :=
     let mut carried := #[]
     let mut olds := #[]
     let mut seen : Std.HashSet Expr := {}
+    let facts ← contextFactMap
+    let lemmas ← labelled `mlir_transport
     let bases := (← IO.mkRef #[])
     s.forEachWhere
         (fun e => e.isAppOfArity ``GlobalState.mem 1 || e.isAppOfArity ``GlobalState.alloc 1)
@@ -266,7 +275,7 @@ def ensureStateEq : TacticM Unit :=
         if seen.contains ty' then
           continue
         seen := seen.insert ty'
-        let some pf ← transportDischarge 64 ty' | continue
+        let some pf ← transportWith facts lemmas 64 ty' | continue
         let (h, g') ← (← g.assert d.userName ty' pf).intro1P
         g := g'
         carried := carried.push h
