@@ -91,4 +91,20 @@ public theorem fd_int_min.call_eq (x : BitVec 32) (s : GlobalState) (hwf : s.WF)
   finish_block
   rw [hS, fd_int_min.spec]
 
+/-- `%0` written behind an abbreviation, as a loop header's constants are. -/
+abbrev withMax (E : ⟪fd_int_min.Γ⟫) : ⟪fd_int_min.Γ⟫ :=
+  E[%0 := .value 14#32]
+
+-- an abbreviation under the block env's writes: `block_init` unfolds it, so the steps seal over a
+-- local root
+example (E : ⟪fd_int_min.Γ⟫) (S : GlobalState) (x : BitVec 32)
+    (hArgs : E.args = (fd_int_min.args (.value x)).get) :
+    fd_int_min.runFrom ((withMax E)[%1 := .value 0#32]) 0 S =
+      .value (.cons (.value (fd_int_min.spec x)) .nil, S) := by
+  block_init
+  step_pure
+  step_pure
+  finish_block
+  rw [fd_int_min.spec]
+
 end LeanMLIR.RIR.Tests.Syntax

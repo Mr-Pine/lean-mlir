@@ -289,7 +289,12 @@ def runSeal : TacticM Unit :=
       g ← g.clear h
     replaceMainGoal [g]
     let (_, g') ← generalizeOpaque g (hyps := #[r.fvarId] ++ facts) E₀' `E₀ #[]
-    g ← g'.clear E₀.fvarId!
+    -- the old root, now unused, if a local
+    g ←
+      if E₀.isFVar then
+        g'.clear E₀.fvarId!
+      else
+        pure g'
     replaceMainGoal [g]
     -- Clear away unused values: the dead writes', then, until nothing changes, those only their
     -- own `hv` mentions (clearing `v21` frees the `v20` that `hv21` used)
