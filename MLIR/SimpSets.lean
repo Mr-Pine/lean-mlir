@@ -41,6 +41,10 @@ read m p`), side conditions allowed. The step tactics record a write's read back
 new state, and carry read facts past writes -/
 register_label_attr mlir_read
 
+/-- A fresh block fits its bytes (`Fits m p w`, `m` an allocating write): the step tactics record
+it about an allocating step's new memory -/
+register_label_attr mlir_fresh
+
 /-- A program constant (`def quadMask : Vector (BitVec 64) 8 := #v[…]`): the step tactics write it
 into the env by its name, not its unfolded value -/
 register_label_attr mlir_const
