@@ -1,5 +1,5 @@
 import SSA.Projects.Agave.Ed25519.Proof.DoubleBase.ExecutionAvx2ContractDefs
-import SSA.Projects.Agave.Ed25519.Proof.DoubleBase.ExecutionAvx2Ladder
+import SSA.Projects.Agave.Ed25519.Proof.DoubleBase.ExecutionAvx2AdditionDefs
 import SSA.Projects.Agave.Ed25519.Proof.DoubleBase.ExecutionAvx2ScanLoop
 import SSA.Projects.Agave.Ed25519.Proof.Avx2PointDouble.CFGExecution
 
@@ -115,32 +115,6 @@ theorem double_block_post (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals)
         hready.control.digitsA hready.cursor
   · exact ⟨hready.control.of_frame hf, cursor_of_frame pos hf hready.cursor, hdigits,
       hs E E' s' (hf.weaken (by decide) (Nat.le_refl _)) (hcontext P hP)⟩
-
-/-- Arithmetic residuals after linking bb18 to its imported implementation.
-Only the four signed addition blocks remain as execution obligations. -/
-structure AdditionBlocks (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals)
-    (ctx : LocalContext) (a b : Nat) (da db : Pointer)
-    (table : TableIndex → Extended F) : Prop where
-  subA : ∀ E s pos Q, LadderReady ctx a b da db E s pos → PointAt .doubled E Q →
-    nafDigits 5 a pos.val < 0 →
-    E.read (%527) = .value (BitVec.ofNat 64 ((nafMagnitude5 a pos.val).val / 2)) →
-    ∃ E' s', ArithmeticBlockPost p g ctx a b da db 22 26 .afterA
-      (signedPoint table false (nafDigits 5 a pos.val) Q) E s pos E' s'
-  addA : ∀ E s pos Q, LadderReady ctx a b da db E s pos → PointAt .doubled E Q →
-    0 < nafDigits 5 a pos.val →
-    E.read (%625) = .value (BitVec.ofNat 64 ((nafMagnitude5 a pos.val).val / 2)) →
-    ∃ E' s', ArithmeticBlockPost p g ctx a b da db 25 26 .afterA
-      (signedPoint table false (nafDigits 5 a pos.val) Q) E s pos E' s'
-  subB : ∀ E s pos Q, LadderReady ctx a b da db E s pos → PointAt .afterA E Q →
-    nafDigits 8 b pos.val < 0 →
-    E.read (%708) = .value (BitVec.ofNat 64 ((nafMagnitude8 b pos.val).val / 2)) →
-    ∃ E' s', ArithmeticBlockPost p g ctx a b da db 29 30 .afterB
-      (signedPoint table true (nafDigits 8 b pos.val) Q) E s pos E' s'
-  addB : ∀ E s pos Q, LadderReady ctx a b da db E s pos → PointAt .afterA E Q →
-    0 < nafDigits 8 b pos.val →
-    E.read (%813) = .value (BitVec.ofNat 64 ((nafMagnitude8 b pos.val).val / 2)) →
-    ∃ E' s', ArithmeticBlockPost p g ctx a b da db 33 30 .afterB
-      (signedPoint table true (nafDigits 8 b pos.val) Q) E s pos E' s'
 
 /-- Explicit live-in and scratch-store obligations for bb18. All functional
 point doubling and branch correctness are absent from these premises. -/
