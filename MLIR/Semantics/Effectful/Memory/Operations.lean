@@ -412,6 +412,13 @@ theorem MemoryState.storeAt_eraseFrom_of_le {m : MemoryState} {p : Pointer} {x :
     intro _ _; omega
   simp [MemoryState.storeAt, this]
 
+/-- A store into the frame, dropped before the erase moves past it: moved first, it stays above a
+store outside the frame, where `storeAt_eraseFrom_of_le` cannot reach it. -/
+@[mlir_erase high]
+theorem MemoryState.eraseFrom_storeAt_of_le {m : MemoryState} {p : Pointer} {x : BitVec w}
+    (h : n ≤ p.id.id) : (m.storeAt p x).eraseFrom n = m.eraseFrom n := by
+  rw [eraseFrom_storeAt, storeAt_eraseFrom_of_le h]
+
 /-- In a `WF` state nothing sits at or above the counter: erasing from it changes nothing. -/
 @[mlir_frame]
 theorem GlobalState.WF.eraseFrom {s : GlobalState} (h : s.WF) :
