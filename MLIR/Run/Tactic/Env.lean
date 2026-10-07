@@ -155,7 +155,7 @@ simproc_decl readThroughWrites (Env.read _ _) := fun e => do
   let some (v, pf) ← walkRead env reg | return .continue
   return .visit { expr := v, proof? := pf }
 
-/-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and `readThroughStore`.
+/-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and the memory simprocs.
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
 def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) (c : MemCtx) :
     TacticM Simp.Result := do
@@ -186,7 +186,6 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
         else
           Simp.getSimprocs,
       ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
-      ← ({} : Simp.Simprocs).add ``readThroughStore (post := true),
       ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   return (←

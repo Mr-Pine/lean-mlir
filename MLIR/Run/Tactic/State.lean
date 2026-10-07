@@ -30,8 +30,7 @@ reducible transparency. -/
 def simpState (e : Expr) (c? : Option MemCtx := none) : MetaM Simp.Result := do
   let ctx ← simpSetContext #[`mlir_state]
   let c ← c?.getDM MemCtx.build
-  let dischProcs :=
-    #[← Simp.getSimprocs, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true)]
+  let dischProcs := #[← Simp.getSimprocs]
   let procs := dischProcs.push (← memSimprocs c)
   let facts := c.factMap
   let lemmas := c.transport
