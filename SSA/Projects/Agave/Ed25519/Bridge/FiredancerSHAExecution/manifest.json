@@ -1,0 +1,276 @@
+{
+  "source_commit": "292f89b338a634e23e9f45c3dfdd5383ddcae624",
+  "source_repository": "firedancer",
+  "source_files_sha256": {
+    "src/ballet/fd_ballet_base.h": "a99ae22ec5dde5c201045d65a6d77af42f99f556ad2408d383250e523fb8596c",
+    "src/ballet/sha512/fd_sha512.c": "d922b9c49f334aa54b8dcc4305121375b7b2fb298fb5b12decb613a326c5b29f",
+    "src/ballet/sha512/fd_sha512.h": "61a2475deee6e9c1c766363519cd5f3d334abb7a49622a39c1c95d23ca6683e8",
+    "src/util/alloc/fd_alloc.h": "af764e1b02653db0a6069fd540112fc5f9b554bd5af5e952c01a2749830ac48e",
+    "src/util/bits/fd_bits.h": "b471f8bb2effa323cdd0ec00c35a2695c346ceb675eae1e72bb4b1bc056e7df6",
+    "src/util/bits/fd_bits_find_lsb.h": "22dae97fa9b49f91b5d01fa55618d50426e8e5f114b486a091d9152bdcca2aec",
+    "src/util/bits/fd_bits_find_msb.h": "3a768f21a8e5114860b99da0d68553dd63aed9fe6cc361ca57f144892c880a7d",
+    "src/util/bits/fd_bits_tg.h": "2f00ba914179f1bf4bddc03163637702d6c6319af5722257b85bebdd7d5441c1",
+    "src/util/bits/fd_sat.h": "8ad819d39dabd50bdf58aa40a2c5cb7439beccc2275fdbf009caa93257e7d636",
+    "src/util/cstr/fd_cstr.h": "792358d9c72a17b95ec22800c7e7244e5f848ca2f24c650aab61602a40c8c198",
+    "src/util/env/fd_env.h": "74ca010717c835ee1cf737796d9026d3d501cbb7208bf1490e4ac7e86c77d94e",
+    "src/util/fd_util.h": "41159b47717dedb457290bd0a3795c58b96d5f1876738784a60686ce62c2f496",
+    "src/util/fd_util_base.h": "8d82903c0e151015c0fc0bd3c98e26ea9ca8b8d74773327f99c8c9d5196dbd61",
+    "src/util/fd_version.h": "9401328f2d5728b20b8f3080a685197f833546aaf08887bb9199a9bb001b87ff",
+    "src/util/io/fd_io.h": "b2aa4d36a86168efa375475173140d1da44609de1c4004abfa18a370cf45c162",
+    "src/util/log/fd_log.h": "55fbd4b25119a6f717970aec9c2933ec077a67145324af3ee1a98071ccb0a073",
+    "src/util/rng/fd_rng.h": "bbdf4cb0dac1a436d8fc5593a70ce6e712c806c3e42fbb95cc4a8d6502e2744f",
+    "src/util/sandbox/fd_sandbox.h": "b3abb0a9b2e4918a50468fc0ec7c2fc815a238e6df9d9e018969ef9b5b5a50a1",
+    "src/util/sanitize/fd_asan.h": "4272dfd5eb55412cbdf2d311b889e0899621021835ffca534ee148c33dab446b",
+    "src/util/sanitize/fd_msan.h": "08c5d7f22ea480a8eba45bb5cabfc5c80a46bd56f2bd341c4554ca76d8bfd276",
+    "src/util/sanitize/fd_sanitize.h": "aa8eaa2f036c8b793024970c08bf56e9d3f72a0069fdccdecaba33e208a37ebb",
+    "src/util/sanitize/fd_tsa.h": "a0e5d82c488b7e09bcc94e08f7b6eb7983cbb34f062e78208a97b779b6973d5c",
+    "src/util/scratch/fd_scratch.h": "725e90489fa0bfe6815afbf3a79460163fa82af0fb36da33a4084e00563e4d8f",
+    "src/util/shmem/fd_shmem.h": "1403de8f1a5d378dcf089c1d4d8298b8a8de5d9df728d7dffdde39beb0094863",
+    "src/util/tile/fd_tile.h": "f801eab8583f6b6573b2564248b4d623a758128dea23132ee7669039427545a8",
+    "src/util/wksp/fd_wksp.h": "de1e46a01d566f70a8a4cf9c0dce3b3d4b43a15571d57ee14752dc6bccf42160"
+  },
+  "target": "x86_64-pc-linux-gnu, LP64, little-endian, scalar FD_SHA512_CORE_IMPL=0",
+  "tools": {
+    "/usr/bin/clang": "Ubuntu clang version 21.1.8 (6ubuntu1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-21/bin\n",
+    "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+    "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n  Default target: x86_64-pc-linux-gnu\n  Host CPU: meteorlake\n",
+    "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n"
+  },
+  "commands": [
+    [
+      "/usr/bin/clang",
+      "-S",
+      "-emit-llvm",
+      "-O1",
+      "-fno-vectorize",
+      "-fno-slp-vectorize",
+      "-fno-unroll-loops",
+      "-DFD_SHA512_CORE_IMPL=0",
+      "-DFD_HAS_AVX=0",
+      "-DFD_HAS_AVX512=0",
+      "-MMD",
+      "-MF",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.d",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.ll",
+      "src/ballet/sha512/fd_sha512.c"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=fd_sha512_init",
+      "-S",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_init.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=fd_sha512_init",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_init.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_init.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_init.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_init.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=fd_sha512_core_ref",
+      "-S",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_core_ref.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=fd_sha512_core_ref",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_core_ref.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_core_ref.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_core_ref.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_core_ref.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=fd_sha512_append",
+      "-S",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_append.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=fd_sha512_append",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_append.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_append.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_append.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_append.mlir"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=fd_sha512_fini",
+      "-S",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_fini.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=fd_sha512_fini",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_fini.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_fini.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_fini.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/generated/fd_sha512_fini.mlir"
+    ]
+  ],
+  "regions": {
+    "Init": {
+      "symbol": "fd_sha512_init",
+      "blocks": 1,
+      "region_sha256": "879bdcadd70bbb90adcfe1b13e3d6a79d0974d6fffa2185ea3226ff5b76edcca",
+      "external_calls": [],
+      "global_addresses": [],
+      "operations": {
+        "llvm.getelementptr": 9,
+        "llvm.intr.memset": 1,
+        "llvm.mlir.constant": 19,
+        "llvm.return": 1,
+        "llvm.store": 8
+      }
+    },
+    "Core": {
+      "symbol": "fd_sha512_core_ref",
+      "blocks": 6,
+      "region_sha256": "7da198e8c56856a374ff62417b1b4ab65664fe3e813574a0969622d3b37fc1cd",
+      "external_calls": [],
+      "global_addresses": [
+        "fd_sha512_core_ref.K"
+      ],
+      "operations": {
+        "llvm.add": 30,
+        "llvm.alloca": 1,
+        "llvm.and": 12,
+        "llvm.br": 2,
+        "llvm.cond_br": 3,
+        "llvm.getelementptr": 16,
+        "llvm.icmp": 3,
+        "llvm.intr.bswap": 1,
+        "llvm.intr.fshl": 16,
+        "llvm.intr.lifetime.end": 1,
+        "llvm.intr.lifetime.start": 1,
+        "llvm.load": 15,
+        "llvm.lshr": 2,
+        "llvm.mlir.addressof": 1,
+        "llvm.mlir.constant": 27,
+        "llvm.or": 2,
+        "llvm.return": 1,
+        "llvm.shl": 1,
+        "llvm.store": 10,
+        "llvm.xor": 18
+      }
+    },
+    "Append": {
+      "symbol": "fd_sha512_append",
+      "blocks": 11,
+      "region_sha256": "4ee21ae35e87e8262777f34830b379cec673f16559d0d67918a6d6fffad89991",
+      "external_calls": [
+        "fd_sha512_core_ref"
+      ],
+      "global_addresses": [],
+      "operations": {
+        "llvm.add": 4,
+        "llvm.and": 2,
+        "llvm.br": 4,
+        "llvm.call": 2,
+        "llvm.cond_br": 6,
+        "llvm.getelementptr": 7,
+        "llvm.icmp": 6,
+        "llvm.intr.memcpy": 3,
+        "llvm.load": 3,
+        "llvm.lshr": 2,
+        "llvm.mlir.constant": 11,
+        "llvm.return": 1,
+        "llvm.shl": 1,
+        "llvm.store": 4,
+        "llvm.sub": 2,
+        "llvm.zext": 1
+      }
+    },
+    "Finish": {
+      "symbol": "fd_sha512_fini",
+      "blocks": 3,
+      "region_sha256": "8b4b3afe4be957fb1d3ff47e88f32b3f03bb64cc32578079e9cef00a14d347e9",
+      "external_calls": [
+        "fd_sha512_core_ref"
+      ],
+      "global_addresses": [],
+      "operations": {
+        "llvm.add": 1,
+        "llvm.br": 1,
+        "llvm.call": 2,
+        "llvm.cond_br": 1,
+        "llvm.getelementptr": 23,
+        "llvm.icmp": 1,
+        "llvm.intr.bswap": 10,
+        "llvm.intr.memset": 2,
+        "llvm.load": 11,
+        "llvm.mlir.constant": 25,
+        "llvm.return": 1,
+        "llvm.store": 11,
+        "llvm.sub": 2
+      }
+    }
+  },
+  "boundary": "Pinned scalar C compilation and LLVM/MLIR translation are trusted. Only body regions are imported; function attributes and target ABI are recorded artifacts, not RIR theorems. K global initialization is a separate memory obligation. Append/Finish expose exactly one typed core call boundary. No equivalence to the older unpinned SLLVM Firedancer lift is asserted.",
+  "artifacts_sha256": {
+    "import.py": "2f71485d1b7e3df78847f84c0413defd2dce76a92ca42e744814befd6d21fac4",
+    "Program.lean": "0289d40cb4871a8288dca31cbd67960f2b6f7fc6223cf072f0b39d83910e0708",
+    "InitializerData.lean": "fcdbefca93d1867b2f816fb4451680bd8009a3ed66f1d92254d67169f3cc10ae",
+    "generated/fd_sha512.ll": "f68da62d1b677b199ab182529eccce2fbfc58b4607291255b3681a84a672d713",
+    "generated/fd_sha512_append.ll": "609d240a76616dd83d2b02049aee36cfc237a1c1b51ff83ee1dd7d388cdcc20a",
+    "generated/fd_sha512_core_ref.ll": "dc2da814a3d71c0226a2c34d16a7eeb7ba7f311be12184b1b7aa4ac219285b28",
+    "generated/fd_sha512_fini.ll": "a7acb2f321aefad9a889168a275848996492af7a883b2ae37161cef236721874",
+    "generated/fd_sha512_init.ll": "bd67f1e5c295a518e437fc6175e1a9bb7a70c0ca49f1f6141e941145fc27c02b",
+    "generated/fd_sha512_append.mlir": "bed91ba322f5f05a43dfeadf7508c8de825b8e4c587232f48c2282959b1f62f1",
+    "generated/fd_sha512_core_ref.mlir": "476e232080e05f8738904cfa0ee18759ee567b94e3fe3cc8f512b07870f90cca",
+    "generated/fd_sha512_fini.mlir": "cc419facee5e5e9d818c8c3f88dcf4197277e3c67455b55c6f503643f00f81f0",
+    "generated/fd_sha512_init.mlir": "4821e0f47af6dae34c2eec1fd06c5047467720be2c64cb5860c3b1f7deb50473"
+  }
+}
