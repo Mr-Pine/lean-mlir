@@ -293,6 +293,16 @@ def globalTerm (ref : Syntax) (binders : Array (TSyntax ``Lean.Parser.Term.brack
 end MlirDef
 
 open MlirDef in
+/-- A match over `Fin n` by its literals `⟨0, _⟩ … ⟨n - 1, _⟩`, with an impossible last arm
+`⟨k + n, h⟩` from `16` arms on, where Lean's exhaustiveness check no longer finds it empty; below
+that, as Lean compiles the plain match. -/
+def finAlts (n : Nat) (alts : Array (TSyntax ``Lean.Parser.Term.matchAlt)) :
+    CommandElabM (Array (TSyntax ``Lean.Parser.Term.matchAlt)) := do
+  if n < 16 then
+    return alts
+  return alts.push (← `(Lean.Parser.Term.matchAltExpr| | ⟨_ + $(num n), h⟩ => absurd h (by omega)))
+
+open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
 def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
@@ -382,7 +392,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
           let ds ← consStx (← b.params.mapM (dstStx tys))
           `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $ds)
         `(abbrev $blockParams : (k : Fin $(num n)) → Dsts $Γ ($blockTys k) :=
-            fun $alts:matchAlt*)
+            fun $(← finAlts n alts):matchAlt*)
     let blockDefs ← p.blocks.toArray.mapM fun b => do
       let (bs, _) := blockBinders b
       let body ← b.body.toArray.mapM (instrStx tys callee global)
@@ -394,7 +404,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (x : 
         let alts ← (fins.zip p.blocks).toArray.mapM fun (k, b) => do
           let (_, args) := blockBinders b
           `(Lean.Parser.Term.matchAltExpr| | ⟨$(num k), _⟩ => $(blockName b) $args*)
-        `(fun $alts:matchAlt*)
+        `(fun $(← finAlts n alts):matchAlt*)
     let funcDef ←
       `($[$doc?:docComment]? @[reducible] def $x $binders* : Func :=
           { Γ := $Γ, tRets := $tRets, n := $(num n), blockTys := $blockTys,
