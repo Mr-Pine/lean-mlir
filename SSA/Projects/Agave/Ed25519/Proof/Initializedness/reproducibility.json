@@ -1,0 +1,49 @@
+{
+  "devbox": "liam@htz-hel1-seceng-dev-liam1.nodes.asymmetric.re",
+  "mirror": "/tmp/lmf-rir-ed25519-sha-complete-validate",
+  "local_static_counts": {
+    "files": 62,
+    "regions": 105,
+    "root_import_reachable_regions": 69,
+    "allocations": 324,
+    "covered": 32,
+    "unresolved_reads": 357,
+    "unresolved_calls": 166,
+    "unknown_pointer_reads": 19
+  },
+  "remote_static_counts": {
+    "files": 61,
+    "regions": 102,
+    "root_import_reachable_regions": 68,
+    "allocations": 324,
+    "covered": 32,
+    "unresolved_reads": 357,
+    "unresolved_calls": 166,
+    "unknown_pointer_reads": 19
+  },
+  "remote_static_exit_code": 0,
+  "remote_targeted_exit_code": 0,
+  "targeted_reports_identical": true,
+  "common_program_sources": 61,
+  "different_common_program_sources": [],
+  "local_only_program_sources": [
+    "SSA/Projects/Agave/Ed25519/Proof/SourceMemoryAudit/Translation.lean"
+  ],
+  "remote_missing_import_roots": [
+    "SSA/Projects/Agave/Ed25519/Bridge/CrossClientReadyUnderAudit.lean",
+    "SSA/Projects/Agave/Ed25519/Bridge/CrossClientGuardedCaller.lean",
+    "SSA/Projects/Agave/Ed25519/Bridge/CrossClientPointwiseDigestAudit.lean",
+    "SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/PointwiseVerifier.lean",
+    "SSA/Projects/Agave/Ed25519/Bridge/CrossClientBackendReadyAudit.lean",
+    "SSA/Projects/Agave/Ed25519/Proof/Encoding/DecompressExecution/DecoderSemanticReadyAudit.lean",
+    "SSA/Projects/Agave/Ed25519/Proof/Encoding/DecompressExecution/DecoderSqrtPrefixBridgeAudit.lean",
+    "SSA/Projects/Agave/Ed25519/Proof/Encoding/DecompressValidPointAudit.lean"
+  ],
+  "dependency_source_hashes_matched": 153,
+  "different_dependency_sources": [],
+  "local_static_report_sha256": "cc0e98c22ab3c0a706a31eb2824f01c760a3bcf95a915097adedec90ae34f8d2",
+  "remote_static_report_sha256": "137a31e21ccaa7c73a2e49f6f8b6287c2be7b4088f32bacd3a4d6805ce66bad2",
+  "targeted_report_sha256": "10cff408193f04f31e0abc455ec0d3b8897687caa2eda9b46aa6736e524e8645",
+  "validation_report_sha256": "dd36c7323b2f94064b18fed526fa283881d7de6f16b1b491b999987b2c0399a0",
+  "limitation": "The devbox mirror lacks eight new root modules and three non-production source-memory importer audit regions. Its 61 common program-source hashes are identical and its allocation/read/call inventory counts are identical; full local import-root reachability is recorded only in the local static report. New Lean modules were built against existing dependency oleans, not a fresh dependency rebuild."
+}
