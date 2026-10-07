@@ -42,6 +42,8 @@ In the proof:
 | `generalize`/`subst` of a computed value | kernel evaluates it back ("deep recursion") | `obtain ⟨b, hb⟩ : ∃ b, e = b := ⟨_, rfl⟩` |
 | `obtain`/`rcases` on big goals | reverts the goal per layer | continuation-form lemmas, `refine` |
 | editing a module many files import | every importer rebuilds | stage new lemmas in the working file, move them when done |
+| inputs read below many `alloca`s | each read walks every layer, each step (a call 860 ms) | read facts of the inputs right after `func_init` (220 ms) |
+| a callee premise derived from a composite fact (`LimbsFit (a.add 80)` from `PointFit a`) | `mem_fact`'s transport search, ~290 ms per premise | the coordinate facts as locals before the calls |
 
 In the framework (fixed; check these first if a step itself is slow):
 
