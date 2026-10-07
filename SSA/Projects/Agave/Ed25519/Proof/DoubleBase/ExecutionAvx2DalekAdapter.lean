@@ -24,16 +24,43 @@ theorem dalekContext_stable (i : Conformance.BackendExecution.Invocation) (s : G
   intro E E' state hf h
   exact ⟨backendReady_stable E E' state hf h.1, h.2⟩
 
+/-- The real prefix's retained observations establish the chosen loop
+invariant. This predicate contains no backend or loop execution assertion. -/
+def PrefixContext (g : Avx2CFG.Globals) (i : Conformance.BackendExecution.Invocation)
+    (s : GlobalState) (ctx : LocalContext) : Prop :=
+  ∀ ES st,
+    RegisterFrame 268 421 (entryLoopEnv (Env.init i.args.get) g s) ES →
+    TableFrame (prefixState s (s.mem.readAt i.scalarA 256) (s.mem.readAt i.scalarB 256))
+      st (avx2StackPtr s 27) →
+    (∀ k : Fin 8,
+      Avx2PointAdd.pointReduced (packedPoint st.mem
+        ((avx2StackPtr s 27).add (BitVec.ofNat 64 (160 * k.val)))) ∧
+      Avx2PointAdd.pointValue (packedPoint st.mem
+        ((avx2StackPtr s 27).add (BitVec.ofNat 64 (160 * k.val)))) =
+        avx2Cache (Tables.avx2Width5 (readPoint s i.pointA) k)) →
+    ctx (tableSetupResult ES (stackSetupSlots s) (avx2StackPtr s 27)
+      (scalarStartIndex (s.mem.readAt i.scalarA 256) (s.mem.readAt i.scalarB 256))) st
+
+theorem prefix_dalekContext (g : Avx2CFG.Globals)
+    (i : Conformance.BackendExecution.Invocation) (s : GlobalState) (hinput : Input i s) :
+    PrefixContext g i s (DalekContext i s) := by
+  intro ES st hf ht hv
+  exact ⟨prefix_backendReady g i s hinput ES st hf ht hv,
+    prefix_callerFrame s _ _ hinput.wellFormed ht⟩
+
 set_option maxHeartbeats 1000000 in
 /-- Actual entry, constructor, descending ladder and return, with both the
 frame and a valid machine representation retained through function return. -/
-theorem backend_validPoint_of_framed_blocks
+theorem backend_validPoint_of_local_blocks
     (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals) (htable : TableContract p.call0)
     (i : Conformance.BackendExecution.Invocation) (s : GlobalState) (hinput : Input i s)
-    (hc : ArithmeticBlocks p g (DalekContext i s)
+    (ctx : LocalContext) (hstable : ContextStable ctx)
+    (hcontext : ∀ E st, ctx E st → DalekContext i s E st)
+    (hc : ArithmeticBlocks p g ctx
       (s.mem.readAt i.scalarA 256).toNat (s.mem.readAt i.scalarB 256).toNat
       (avx2StackPtr s 29) (avx2StackPtr s 28)
       (finiteTable (Tables.avx2DoubleBaseTable (readPoint s i.pointA))))
+    (hinitial : PrefixContext g i s ctx)
     (V : GroupPoint) (hA : Represents (readPoint s i.pointA) V)
     (ha : (s.mem.readAt i.scalarA 256).toNat < 2^255)
     (hb : (s.mem.readAt i.scalarB 256).toNat < 2^255) :
@@ -70,12 +97,11 @@ theorem backend_validPoint_of_framed_blocks
   have hdigits : DigitMemory st (avx2StackPtr s 29) (avx2StackPtr s 28) a.toNat b.toNat :=
     (prefixState_digits s a b hinput.wellFormed).of_tableFrame htableFrame
       (avx2Stack_separate s 29 27 (by decide)) (avx2Stack_separate s 28 27 (by decide))
-  have hready : LadderReady (DalekContext i s) a.toNat b.toNat (avx2StackPtr s 29) (avx2StackPtr s 28)
+  have hready : LadderReady ctx a.toNat b.toNat (avx2StackPtr s 29) (avx2StackPtr s 28)
       EL st (scalarStartIndex a b) :=
     ⟨hcontrol, by simp [EL, tableSetupResult, mlir_env], hdigits,
-      ⟨prefix_backendReady g i s hinput ES st hframe htableFrame hvalues,
-        prefix_callerFrame s a b hinput.wellFormed htableFrame⟩⟩
-  obtain ⟨EF, sf, hrun, hr, hp⟩ := ladder_run hc (dalekContext_stable i s)
+      hinitial ES st hframe htableFrame hvalues⟩
+  obtain ⟨EF, sf, hrun, hr, hp⟩ := ladder_run hc hstable
     (scalarStartIndex a b).val (scalarStartIndex a b).isLt EL st identityPoint hready
     (tableSetupResult_point ES _ _ _)
   have hmath : Represents
@@ -84,9 +110,10 @@ theorem backend_validPoint_of_framed_blocks
       (a.toNat • V + b.toNat • Tables.baseGroup) := by
     change Represents (avx2Math a.toNat (readPoint s i.pointA) b.toNat) _
     simpa only [natCast_zsmul] using avx2Math_represents_direct hA a.toNat b.toNat ha hb
+  have hfinalContext := hcontext EF sf hr.localContext
   obtain ⟨P, final, hreturn, hframe, hcurve, hbytes⟩ := unpack_run_validPoint p g EF sf
-    i.output _ _ hr.localContext.1.wellFormed hr.localContext.1.outputRegisters
-      hr.localContext.1.output hp hmath
+    i.output _ _ hfinalContext.1.wellFormed hfinalContext.1.outputRegisters
+      hfinalContext.1.output hp hmath
   have hfull : (avx2Kernel p g).run i.args s = .value (.nil, final) := by
     rw [Func.run_runFrom_eq]
     exact hprefix.trans (hrun.trans hreturn)
@@ -94,8 +121,31 @@ theorem backend_validPoint_of_framed_blocks
     hinput.wellFormed.lt hinput.output.fits.mem
   refine ⟨P, {final with mem := final.mem.eraseFrom s.alloc.nextFreeBlock},
     Func.call_of_run hfull,
-    (hr.localContext.2.thenOutput hframe).erase hinput.wellFormed, hcurve,
+    (hfinalContext.2.thenOutput hframe).erase hinput.wellFormed, hcurve,
     smallRange_eraseFrom hbytes.1 hcaller, ?_⟩
   exact (readAt_eraseFrom final.mem i.output 1280 hcaller).trans hbytes.2
+
+
+/-- Actual entry, constructor, descending ladder and return, with both the
+frame and a valid machine representation retained through function return. -/
+theorem backend_validPoint_of_framed_blocks
+    (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals) (htable : TableContract p.call0)
+    (i : Conformance.BackendExecution.Invocation) (s : GlobalState) (hinput : Input i s)
+    (hc : ArithmeticBlocks p g (DalekContext i s)
+      (s.mem.readAt i.scalarA 256).toNat (s.mem.readAt i.scalarB 256).toNat
+      (avx2StackPtr s 29) (avx2StackPtr s 28)
+      (finiteTable (Tables.avx2DoubleBaseTable (readPoint s i.pointA))))
+    (V : GroupPoint) (hA : Represents (readPoint s i.pointA) V)
+    (ha : (s.mem.readAt i.scalarA 256).toNat < 2^255)
+    (hb : (s.mem.readAt i.scalarB 256).toNat < 2^255) :
+    ∃ (P : ValidPoint) (after : GlobalState),
+      (avx2Kernel p g).call i.args s = .value (.nil, after) ∧
+      Dalek.OutputFrame s after i.output 160 ∧
+      P.curve = (s.mem.readAt i.scalarA 256).toNat • V +
+        (s.mem.readAt i.scalarB 256).toNat • Tables.baseGroup ∧
+      Dalek.ReadBytes after i.output 160 P.bytes :=
+  backend_validPoint_of_local_blocks p g htable i s hinput
+    (DalekContext i s) (dalekContext_stable i s) (fun _ _ h => h) hc
+    (prefix_dalekContext g i s hinput) V hA ha hb
 
 end Agave.Ed25519.DoubleBase.ExecutionAvx2

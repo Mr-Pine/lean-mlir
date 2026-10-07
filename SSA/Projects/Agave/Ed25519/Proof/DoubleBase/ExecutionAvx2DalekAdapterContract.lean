@@ -52,18 +52,24 @@ theorem validPoint_input_bounds (s : GlobalState) (q : Pointer) (P : ValidPoint)
 /-- No separate output, full-backend, or representation contract is assumed.
 The five local blocks must preserve the caller-memory invariant, in addition
 to their existing arithmetic and control obligations. -/
-theorem doubleBaseContractUnder_of_blocks
+theorem doubleBaseContractUnder_of_local_blocks
     (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals)
     (cofactor : ValidPoint → ValidPoint)
     (ready : Pointer → Pointer → Pointer → Pointer → GlobalState → Prop)
     (htable : TableContract p.call0)
+    (ctx : Conformance.BackendExecution.Invocation → GlobalState → LocalContext)
+    (hstable : ∀ i state, ContextStable (ctx i state))
+    (hcontext : ∀ i initial E state, ctx i initial E state → DalekContext i initial E state)
     (hblocks : ∀ (i : Conformance.BackendExecution.Invocation) (state : GlobalState),
       ready i.output i.scalarA i.pointA i.scalarB state → Input i state →
-      ArithmeticBlocks p g (DalekContext i state)
+      ArithmeticBlocks p g (ctx i state)
         (state.mem.readAt i.scalarA 256).toNat (state.mem.readAt i.scalarB 256).toNat
         (avx2StackPtr state 29) (avx2StackPtr state 28)
         (finiteTable (Tables.avx2DoubleBaseTable
-          (Conformance.BackendExecution.readPoint state i.pointA)))) :
+          (Conformance.BackendExecution.readPoint state i.pointA))))
+    (hinitial : ∀ (i : Conformance.BackendExecution.Invocation) (state : GlobalState),
+      ready i.output i.scalarA i.pointA i.scalarB state → Input i state →
+      PrefixContext g i state (ctx i state)) :
     Dalek.DoubleBaseContractUnder ready (avx2Kernel p g).call
       (ValidPoint.layout cofactor) ValidPoint.doubleBase := by
   intro out hptr aptr sptr state hval sval aval hwf hr hout hh hA hs _ _ _
@@ -81,10 +87,34 @@ theorem doubleBaseContractUnder_of_blocks
     rw [hS, CanonicalScalar.encode_toNat]
     exact CanonicalScalar.bound sval
   obtain ⟨P, after, hcall, hframe, hcurve, hbytes⟩ :=
-    backend_validPoint_of_framed_blocks p g htable i state hi (hblocks i state hr hi)
+    backend_validPoint_of_local_blocks p g htable i state hi (ctx i state)
+      (hstable i state) (hcontext i state) (hblocks i state hr hi)
+      (hinitial i state hr hi)
       aval.curve (validPoint_readPoint_represents state aptr aval hA) hHbound hSbound
   refine ⟨after, P.bytes, hcall, hframe, hbytes, P, ?_, rfl⟩
   change P.curve = hval.val • aval.curve + sval.val • Tables.baseGroup
   simpa only [i, hH, hS, CanonicalScalar.encode_toNat] using hcurve
+
+
+/-- No separate output, full-backend, or representation contract is assumed.
+The five local blocks must preserve the caller-memory invariant, in addition
+to their existing arithmetic and control obligations. -/
+theorem doubleBaseContractUnder_of_blocks
+    (p : Avx2CFG.Primitives) (g : Avx2CFG.Globals)
+    (cofactor : ValidPoint → ValidPoint)
+    (ready : Pointer → Pointer → Pointer → Pointer → GlobalState → Prop)
+    (htable : TableContract p.call0)
+    (hblocks : ∀ (i : Conformance.BackendExecution.Invocation) (state : GlobalState),
+      ready i.output i.scalarA i.pointA i.scalarB state → Input i state →
+      ArithmeticBlocks p g (DalekContext i state)
+        (state.mem.readAt i.scalarA 256).toNat (state.mem.readAt i.scalarB 256).toNat
+        (avx2StackPtr state 29) (avx2StackPtr state 28)
+        (finiteTable (Tables.avx2DoubleBaseTable
+          (Conformance.BackendExecution.readPoint state i.pointA)))) :
+    Dalek.DoubleBaseContractUnder ready (avx2Kernel p g).call
+      (ValidPoint.layout cofactor) ValidPoint.doubleBase :=
+  doubleBaseContractUnder_of_local_blocks p g cofactor ready htable DalekContext
+    dalekContext_stable (fun _ _ _ _ h => h) hblocks
+    (fun i state _ hi => prefix_dalekContext g i state hi)
 
 end Agave.Ed25519.DoubleBase.ExecutionAvx2
