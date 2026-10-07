@@ -15,11 +15,16 @@ residue preservation still needs the column bound.
 compiler-generated MLIR regions imported into RIR. The extraction files and
 compiler provenance are under `../../MLIR/`.
 
-**Remaining obligation:** no theorem here yet connects execution of these RIR
-programs (including vector lane packing and memory effects) to `Word.reduce`.
-The imported programs and the proven word model are distinct artifacts until
-that bridge is supplied. This directory is not a complete reduce64 RIR
-correctness proof, nor a complete Ed25519 verification proof.
+`Execution/Kernel.lean` connects actual execution of the standalone reduction
+program, including vector lane packing and memory effects, to `Word.reduce`.
+`Execution/Readback.lean` proves the stored integer limbs and field residues
+under the column bound. The wrapping execution theorem requires only valid
+caller memory ranges and a well-formed global state. These endpoints passed
+direct Lean validation through `Execution/Audit.lean` on 2026-10-07.
+
+The proof boundary remains the extracted RIR program. LLVM alias metadata,
+physical alignment, and the source-to-RIR validity contract remain separate
+obligations; this is not a complete Ed25519 verification proof.
 
 `Audit.lean` guards the standard-three-axiom inventories of the residue,
 output-bounds, word-refinement, and scalar poison-flag endpoints.
