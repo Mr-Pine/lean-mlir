@@ -3,6 +3,8 @@ import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Terminal
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Constants
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Sign
 import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.Input
+import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.ByteHelpersAudit
+import SSA.Projects.Agave.Ed25519.Proof.Encoding.DecompressExecution.CutpointAudit
 
 /-!
 Execution progress for the manifest-pinned decompressor:
@@ -15,13 +17,17 @@ Execution progress for the manifest-pinned decompressor:
 * the existing actual serial multiplication kernel establishes field value and
   tight output bounds; exact global bytes denote D and SQRT_M1;
 * sign extraction and its flagged mask subtraction have kernel-checked
-  arithmetic laws. Conditional limb assignment/negation remains outstanding.
+  arithmetic laws; exact to_bytes serialization and byte equality are checked;
+* actual rejection/tag control and the success suffix from Y/Z initialization
+  through payload copy are checked, with exact overlapping caller reads;
+* invocation-local initialized D/SQRT_M1 memory is explicit and frame-stable.
+  Conditional limb assignment/negation remains outstanding.
 
 This is not yet an execution proof of `linkedProgram` against `decompress`.
 Outstanding: pow2k loop execution/termination and limb bounds; pow22501 stack
-and call composition; the complete to_bytes and byte-comparison memory proofs;
-all sqrt_ratio_i comparisons and stores; decompression entry/success blocks,
-frame preservation, and X/Y/Z/T payload readback. The existing source-formula
+and call composition; all sqrt_ratio_i comparisons and stores; decompression
+entry and conditional-sign execution; full caller-frame erasure and composition
+from input through the checked X/Y/Z/T payload suffix. The existing source-formula
 soundness/completeness theorem does not discharge any of these obligations.
 
 RIR models sequential memory values. In the preserved black_box region,
