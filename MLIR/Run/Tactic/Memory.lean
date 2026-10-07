@@ -343,26 +343,26 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
 def dsimpState (e : Expr) : MetaM Expr := do
   return (← dsimp e (← Simp.mkContext)).1
 
-/-- `p` from the facts `facts` (by instantiated type) and the `mlir_transport` lemmas `lemmas`, at
-reducible transparency, `fuel` lemmas deep. -/
+/-- `p` from the facts `facts` (by instantiated type), the `mlir_transport` lemmas `lemmas` and the
+local implications `locals`, at reducible transparency, `fuel` lemmas deep. -/
 partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) (fuel : Nat)
-    (p : Expr) : MetaM (Option Expr) := do
+    (p : Expr) (locals : Array Expr := #[]) : MetaM (Option Expr) := do
   if let some h := facts[p]? then
     return some h
   if fuel = 0 then
     return none
-  for n in lemmas do
+  for lem in lemmas.map (mkConstWithFreshMVarLevels ·) ++ locals.map pure do
     let saved ← saveState
     let m ← mkFreshExprMVar p
     let pf? ←
       (do
-            let gs ← withReducible (m.mvarId!.apply (← mkConstWithFreshMVarLevels n))
+            let gs ← withReducible (m.mvarId!.apply (← lem))
             for g in gs do
               if ← g.isAssigned then
                 continue
               let some pf ←
-                transportWith facts lemmas (fuel - 1)
-                    (← instantiateMVars (← g.getType)) | return none
+                transportWith facts lemmas (fuel - 1) (← instantiateMVars (← g.getType))
+                    locals | return none
               g.assign pf
             return some (← instantiateMVars m)) <|>
           pure none
@@ -409,6 +409,15 @@ def memReadFact? (heads : Array Name) (s ty : Expr) : Option (Expr × Expr) := d
   guard (heads.contains h)
   guard (l.getAppArgs.any fun a => a.isAppOfArity ``GlobalState.mem 1 && a.appArg! == s)
   return (l, x)
+
+/-- The context's implications, as lemmas for `transportWith` (`hpost : ∀ s, s.WF → (post s).WF`, a
+callee's). -/
+def localImplications : MetaM (Array Expr) := do
+  (← getLCtx).foldlM (init := #[]) fun acc d => do
+      if d.isImplementationDetail then
+        return acc
+      let ty ← instantiateMVars d.type
+      return if ty.isForall && (← isProp ty) then acc.push d.toExpr else acc
 
 /-- What a side condition is discharged from (`factDischarge`), gathered once: the transport
 lemmas, the context's facts (split, and by type), and its named slots. -/
