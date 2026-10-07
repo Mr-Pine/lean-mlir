@@ -251,15 +251,15 @@ partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option
     return none
   decideProof? ne
 
-/-- `(Range.of p v).Disjoint (Range.of q w)`; by offsets in one block (`omega`) only if
-`offsets`. -/
-def disjointProof? (facts : Array (Expr × Expr)) (p v q w : Expr) (offsets := true) :
-    MetaM (Option Expr) := do
+/-- `(Range.of p v).Disjoint (Range.of q w)`: distinct blocks by `ne?` (`neProof?` by default), else
+by offsets in one block (`omega`) if `offsets`. -/
+def disjointProof? (facts : Array (Expr × Expr)) (p v q w : Expr) (offsets := true)
+    (ne? : Expr → Expr → MetaM (Option Expr) := neProof? facts) : MetaM (Option Expr) := do
   let goal ← mkAppM ``Range.Disjoint #[← mkAppM ``Range.of #[p, v], ← mkAppM ``Range.of #[q, w]]
   -- different blocks
   let pid ← mkAppM ``Pointer.id #[p]
   let qid ← mkAppM ``Pointer.id #[q]
-  if let some h← neProof? facts pid qid then
+  if let some h← ne? pid qid then
     return some (mkAppN (mkConst ``Range.disjoint_of_id_ne) #[p, q, v, w, h])
   -- the same block: offsets, by `omega`
   unless offsets do
@@ -425,15 +425,15 @@ structure FactCtx where
   transport : Array Name
   facts : Array (Expr × Expr)
   factMap : Std.HashMap Expr Expr
-  /-- `b.slot k ↦ (x, hx : x = b.slot k)`, for the named slots `x`. -/
+  /-- `x ↦ (b.slot k, hx : x = b.slot k)`, for the named slots `x`. -/
   slots : Std.HashMap Expr (Expr × Expr)
 
-/-- The named slots `hx : x = b.slot k` among `eqs`, by slot. -/
+/-- The named slots `hx : x = b.slot k` among `eqs`, by name. -/
 def namedSlots (eqs : Array LocalEq) : MetaM (Std.HashMap Expr (Expr × Expr)) := do
   let mut slots := {}
   for e in eqs do
-    if e.lhs.isFVar && e.rhs.isAppOfArity ``GlobalState.slot 2 && !slots.contains e.rhs then
-      slots := slots.insert e.rhs (e.lhs, ← mkExpectedTypeHint e.decl.toExpr e.type)
+    if e.lhs.isFVar && e.rhs.isAppOfArity ``GlobalState.slot 2 && !slots.contains e.lhs then
+      slots := slots.insert e.lhs (e.rhs, ← mkExpectedTypeHint e.decl.toExpr e.type)
   return slots
 
 def FactCtx.build : MetaM FactCtx := do
@@ -464,36 +464,77 @@ def MemCtx.build : MetaM MemCtx := do
   return { lemmas, heads, transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
            factMap := ← contextFactMap, slots := ← namedSlots eqs, reads, mems := ← IO.mkRef {} }
 
-/-- `a ≠ b` for block ids `p.id` of slots spelled by their state (`(S.alloca n).allocaPtr`): by the
-facts about the named slots `x` they are. -/
-def neBySlots? (c : FactCtx) (a b : Expr) : MetaM (Option Expr) := do
-  let side (e : Expr) : Option (Expr × Expr) := do
-    let p ← e.app1? ``Pointer.id
-    guard !p.isFVar
-    c.slots[← slotPtr? p]?
-  let sa := side a
-  let sb := side b
-  if sa.isNone && sb.isNone then
+/-- `p` without its `.add` offsets: the same block. -/
+partial def stripAdds (p : Expr) : Expr :=
+  match p.app2? ``Pointer.add with
+  | some (q, _) => stripAdds q
+  | none => p
+
+/-- The slot `s.slot k` whose block id `e` (`p.id`) is: `p` spelled as one, as an `allocaPtr`
+(`slotPtr?`), or a named slot, with its `hx : x = s.slot k`. -/
+def slotOfId? (c : FactCtx) (e : Expr) : Option (Expr × Option Expr) := do
+  let p := stripAdds (← e.app1? ``Pointer.id)
+  if let some (s, hx) := c.slots[p]? then
+    return (s, some hx)
+  if p.isAppOfArity ``GlobalState.slot 2 then
+    return (p, none)
+  return (← slotPtr? p, none)
+
+/-- `a ≠ b` for block ids of which one is a slot (`slotOfId?`): two slots of one state at distinct
+literal indices, else by the facts about the named slot a slot is (`q.id ≠ x.id`). -/
+def neSlots? (c : FactCtx) (a b : Expr) : MetaM (Option Expr) := do
+  let sa? := slotOfId? c a
+  let sb? := slotOfId? c b
+  if sa?.isNone && sb?.isNone then
     return none
-  let a' := sa.elim a fun (x, _) => mkApp (mkConst ``Pointer.id) x
-  let b' := sb.elim b fun (x, _) => mkApp (mkConst ``Pointer.id) x
-  let some pf ← neProof? c.facts a' b' | return none
-  -- back along each `hx : x = s`, `s` the slot as `p` is, up to `rfl`
-  let slotId (h : Expr) : MetaM Expr := do
-    let some (_, _, s) := (← inferType h).eq? | throwError "not an equation"
-    return mkApp (mkConst ``Pointer.id) s
-  let rewrite (pf hx : Expr) (side : Expr → Expr) : MetaM Expr := do
+  let idOf (p : Expr) := mkApp (mkConst ``Pointer.id) p
+  let sides (hx : Expr) : MetaM (Expr × Expr) := do
+    let some (_, x, s) := (← inferType hx).eq? | throwError "not an equation"
+    return (x, s)
+  -- `pf : ¬l = r`, its left (or right) pointer moved along `h : y = y'`
+  let move (pf h : Expr) (left : Bool) (l r : Expr) : MetaM Expr := do
     let motive ←
       withLocalDeclD `y (mkConst ``Pointer) fun y => do
-          mkLambdaFVars #[y] (mkNot (side (mkApp (mkConst ``Pointer.id) y)))
-    mkEqNDRec motive pf hx
+          mkLambdaFVars #[y]
+              (mkNot
+                (←
+                  if left then
+                    mkEq (idOf y) r
+                  else
+                    mkEq l (idOf y)))
+    mkEqNDRec motive pf h
+  -- one state's slots at distinct literal indices, then back to the named slots
+  if let (some (sa, ha), some (sb, hb)) := (sa?, sb?) then
+    if let (some i, some j) := (sa.appArg!.nat?, sb.appArg!.nat?) then
+      if sa.appFn!.appArg! == sb.appFn!.appArg! && i != j then
+        let hij ← mkDecideProof (← mkAppM ``Ne #[sa.appArg!, sb.appArg!])
+        let mut pf ←
+          mkAppOptM ``GlobalState.slot_id_ne #[sa.appFn!.appArg!, sa.appArg!, sb.appArg!, hij]
+        let mut l := idOf sa
+        if let some hx := ha then
+          pf ← move pf (← mkEqSymm hx) true l (idOf sb)
+          l := idOf (← sides hx).1
+        if let some hx := hb then
+          pf ← move pf (← mkEqSymm hx) false l (idOf sb)
+        return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
+  -- a slot spelled by its state as the named slot `x` it is, by the facts `q.id ≠ x.id`
+  let named (s? : Option (Expr × Option Expr)) : Option Expr := do
+    let (s, none) ← s? | none
+    c.slots.fold (init := none) fun acc _ (s', hx) => acc <|> if s' == s then some hx else none
+  let na := named sa?
+  let nb := named sb?
+  if na.isNone && nb.isNone then
+    return none
+  let la ← na.elim (pure a) fun hx => return idOf (← sides hx).1
+  let lb ← nb.elim (pure b) fun hx => return idOf (← sides hx).1
+  let some pf ← neProof? c.facts la lb | return none
   let mut pf := pf
-  let mut a'' := a'
-  if let some (_, hx) := sa then
-    pf ← rewrite pf hx fun y => mkApp3 (mkConst ``Eq [1]) (mkConst ``BlockId) y b'
-    a'' ← slotId hx
-  if let some (_, hx) := sb then
-    pf ← rewrite pf hx fun y => mkApp3 (mkConst ``Eq [1]) (mkConst ``BlockId) a'' y
+  let mut l := la
+  if let some hx := na then
+    pf ← move pf hx true l lb
+    l := idOf (← sides hx).2
+  if let some hx := nb then
+    pf ← move pf hx false l lb
   return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
 
 /-- A side condition from the facts `c`, cheapest first: a fact; `decide`, the offsets replaced by
@@ -515,7 +556,12 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
     let_expr Range.of q w := b | return none
-    return ← disjointProof? c.facts p v q w
+    -- distinct blocks also as slots
+    let ne? (a b : Expr) : MetaM (Option Expr) := do
+      if let some h← neProof? c.facts a b then
+        return some h
+      neSlots? c a b
+    return ← disjointProof? c.facts p v q w (ne? := ne?)
   | _ =>
     -- no lemma concludes `≠`: its searches, or a local `h : b ≠ a` for `simp`; not for flags
     -- (`¬x.uaddOverflow k = true`), which `neProof?` would unfold against each flag fact
@@ -523,7 +569,7 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
       unless (← inferType a).isConstOf ``Bool do
         if let some pf← neProof? c.facts a b then
           return some (mkExpectedPropHint pf goal)
-        if let some pf← neBySlots? c a b then
+        if let some pf← neSlots? c a b then
           return some pf
         if fuel = 0 then
           return ← local?
