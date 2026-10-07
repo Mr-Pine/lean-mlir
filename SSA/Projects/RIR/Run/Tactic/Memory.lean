@@ -287,6 +287,8 @@ def disjointProof? (facts : Array (Expr × Expr)) (p v q w : Expr) (offsets := t
   catch _ =>
     return none
 
+/-- A read past one store, by the facts: for `simp only` outside the steps, which read through
+writes with `readPastWrites`. -/
 simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ _) := fun e => do
   let_expr MemoryState.readAt mm q w := e | return .continue
   let_expr MemoryState.storeAt m p v x := mm | return .continue
@@ -488,7 +490,7 @@ def dischargeRead (c : MemCtx) (goal : Expr) : MetaM (Option Expr) := do
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
     let_expr Range.of q w := b | return none
-    disjointProof? c.facts p v q w (offsets := false)
+    disjointProof? c.facts p v q w
   | Ne _ a b =>
     if let some pf← neProof? c.facts a b then
       return some pf
@@ -612,7 +614,18 @@ def readThroughState (c : MemCtx) : Simp.Simproc := fun e => do
   let h₁ := mkExpectedPropHint (← mkCongrArg (← memMotive e m) (.fvar hS)) (← mkEq e e')
   return .visit { expr := v, proof? := some (← mkEqTrans h₁ pf) }
 
-/-- `readMemFact` and `readThroughState` for one `simp` call, keyed on the registered reads. -/
+/-- A registered read of a written memory: through the writes by the `mlir_read` lemmas, as far as
+they go. -/
+def readPastWrites (c : MemCtx) : Simp.Simproc := fun e => do
+  unless e.getAppArgs.any fun a => c.lemmas.any (a.isAppOf ·.write) do
+    return .continue
+  let (v, pf) ← readThrough c e
+  if v == e then
+    return .continue
+  return .visit { expr := v, proof? := some pf }
+
+/-- `readMemFact`, `readThroughState` and `readPastWrites` for one `simp` call, keyed on the
+registered reads. -/
 def memSimprocs (c : MemCtx) : MetaM Simp.Simprocs := do
   let mut procs : Simp.Simprocs := {}
   for h in c.heads do
@@ -624,6 +637,7 @@ def memSimprocs (c : MemCtx) : MetaM Simp.Simprocs := do
     let keys ← DiscrTree.mkPath (mkAppN l.lhs.getAppFn args)
     procs := procs.addCore keys `readMemFact false (.inl (readMemFact c))
     procs := procs.addCore keys `readThroughState true (.inl (readThroughState c))
+    procs := procs.addCore keys `readPastWrites true (.inl (readPastWrites c))
   return procs
 
 end
