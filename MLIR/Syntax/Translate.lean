@@ -225,22 +225,32 @@ def Ty.index (k : Nat) : Ty → Except String (Nat × Ty)
     return (k * (← Ty.sizeAlign (.bv w)).1, .bv w)
   | t => throw s!"cannot index into {repr t}"
 
-/-- The byte offset of constant `getelementptr` indices: the first steps over whole `t`s, the
-rest into `t`. -/
-def gepOffset (t : Ty) : List Int → Except String Nat
-  | [] => return 0
+/-- The byte offset of `getelementptr`'s constant indices over `t`, and for its one dynamic index
+(`-2147483648`) the stride it steps by: the size of what it indexes. -/
+def gepOffset (t : Ty) : List Int → Except String (Nat × Option Nat)
+  | [] => return (0, none)
   | k₀ :: ks => do
+    let dynamic := -2147483648
     let natIdx (k : Int) : Except String Nat := do
-      if k == -2147483648 then
-        throw "dynamic indices are not supported"
       unless 0 ≤ k do
         throw s!"negative index {k}"
       return k.toNat
-    let (off, _) ←
-      ks.foldlM (init := ((← natIdx k₀) * (← Ty.size t), t)) fun (off, t) k => do
+    -- the first index steps over whole `t`s, the others into `t`
+    let (off, stride) ←
+      if k₀ == dynamic then
+        pure (0, some (← Ty.size t))
+      else
+        pure ((← natIdx k₀) * (← Ty.size t), none)
+    let (off, stride, _) ←
+      ks.foldlM (init := (off, stride, t)) fun (off, stride, t) k => do
+          if k == dynamic then
+            if stride.isSome then
+              throw "only one dynamic index is supported"
+            let .array _ et := t | throw "a dynamic index must index an array"
+            return (off, some (← Ty.size et), et)
           let (step, t) ← Ty.index (← natIdx k) t
-          return (off + step, t)
-    return off
+          return (off + step, stride, t)
+    return (off, stride)
 
 /-! ## Attributes -/
 
@@ -590,9 +600,14 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let (dst, t) ← res
       unless t == .ptr do
         throw "expected a pointer result"
-      let [(p, .ptr)] := args | throw "only constant indices are supported"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .unop (.gepConst (← gepOffset (← ty et) (← arrayInts op "rawConstantIndices"))) dst p
+      match args, ← gepOffset (← ty et) (← arrayInts op "rawConstantIndices") with
+      | [(p, .ptr)], (off, none) =>
+        return .unop (.gepConst off) dst p
+      | [(p, .ptr), (i, .bv 64)], (off, some stride) =>
+        return .binop (.gepDyn off stride) dst p i
+      | _, _ =>
+        throw "expected a pointer, and an `i64` operand for the dynamic index"
   | "llvm.shufflevector" =>
     do
       let (dst, .vec l₂ wₒ) ← res | throw "expected vector output type"

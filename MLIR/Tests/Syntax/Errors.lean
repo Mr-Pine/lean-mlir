@@ -191,12 +191,12 @@ mlir_def notTerminated := {
 }
 
 /--
-error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: only constant indices are supported
+error: ^bb0: %0 = "llvm.getelementptr"(%arg0, %arg1) : (!llvm.ptr, i64) -> !llvm.ptr: a dynamic index must index an array
 -/
 #guard_msgs in
-mlir_def gepDynamic := {
+mlir_def gepDynamicField := {
   ^bb0(%arg0: !llvm.ptr, %arg1: i64):
-    %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = i64, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = !llvm.struct<(i64, i64)>, rawConstantIndices = array<i32: 0, -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
     "llvm.return"(%0) : (!llvm.ptr) -> ()
 }
 

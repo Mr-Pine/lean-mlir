@@ -62,6 +62,14 @@ theorem run_addressof_wrap {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty
 theorem gep_value {ptr} (h : ¬ptr.offset.uaddOverflow off) :
     Operation.gep (.value off) (.value ptr) = .value (ptr.add off) := by simp [Operation.gep, h]
 
+/-- `gepDyn` by an index whose offset fits, from a pointer whose offset does not overflow. -/
+@[mlir_operation]
+theorem gepDyn_value {ptr} {i : BitVec 64} (h : byteOff + i.toNat * stride < 2 ^ 64)
+    (hov : ¬ptr.offset.uaddOverflow (BitVec.ofNat 64 (byteOff + i.toNat * stride))) :
+    Operation.gepDyn byteOff stride (.value ptr) (.value i) =
+      .value (ptr.add (BitVec.ofNat 64 (byteOff + i.toNat * stride))) := by
+  simp [Operation.gepDyn, h, gep_value hov]
+
 end
 
 end MLIR

@@ -39,6 +39,8 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
+  /-- `getelementptr` with one `i64` index: `byteOff + index * stride` bytes on. -/
+  | gepDyn (byteOff stride : Nat) : BinOp .ptr (.bv 64) .ptr
   /-- `icmp eq` (`ne := false`) or `icmp ne` on pointers. -/
   | ptrcmp (ne : Bool) : BinOp .ptr .ptr (.bv 1)
   |
