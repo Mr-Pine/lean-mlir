@@ -36,6 +36,12 @@ def GlobalState.alloca (s : GlobalState) (bytes : Nat) : GlobalState :=
   { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
     mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0⟩⟩ }
 
+/-- Add a block of `bytes` zero bytes under `b`, holding `x` from its start: an `alloca` stored
+into at once. -/
+def MemoryState.addBlock (m : MemoryState) (b : BlockId) (bytes : Nat) {w : Nat} (x : BitVec w) :
+    MemoryState :=
+  ⟨m.mem.insert b ⟨bytes, spliceBits 0 0 x⟩⟩
+
 /-- Remove every block with id `n` or above: a returning callee's frame. -/
 def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
   { mem := m.mem.filter fun id _ => id.id < n }
@@ -309,7 +315,7 @@ theorem MemoryState.readAt_alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem
     GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_fits hwf h)]
 
 /-- Erasing a frame commutes with a store: a store into the frame is lost either way. -/
-@[mlir_frame]
+@[mlir_frame, mlir_erase]
 theorem MemoryState.eraseFrom_storeAt {m : MemoryState} {p : Pointer} {x : BitVec w} :
     (m.storeAt p x).eraseFrom n = (m.eraseFrom n).storeAt p x := by
   have hg : (m.eraseFrom n)[p.id]? = m[p.id]?.filter (fun _ => decide (p.id.id < n)) := by
@@ -335,7 +341,7 @@ theorem MemoryState.eraseFrom_storeAt {m : MemoryState} {p : Pointer} {x : BitVe
       · rename_i h; simp at h; subst h; simp [hlt, MemoryState.getElem?_eq] at hm ⊢
       · rfl
 
-@[mlir_frame]
+@[mlir_frame, mlir_erase]
 theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
     (s.alloca b).mem.eraseFrom s.alloc.nextFreeBlock = s.mem.eraseFrom s.alloc.nextFreeBlock := by
   simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
@@ -347,7 +353,7 @@ theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
   · rfl
 
 /-- An `alloca` at or above `n` is gone once the frame from `n` is erased. -/
-@[mlir_frame]
+@[mlir_frame, mlir_erase]
 theorem GlobalState.eraseFrom_alloca_of_le {s : GlobalState} (h : n ≤ s.alloc.nextFreeBlock) :
     (s.alloca b).mem.eraseFrom n = s.mem.eraseFrom n := by
   simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
@@ -359,7 +365,7 @@ theorem GlobalState.eraseFrom_alloca_of_le {s : GlobalState} (h : n ≤ s.alloc.
   · rfl
 
 /-- A store into an erased block does nothing. -/
-@[mlir_frame]
+@[mlir_frame, mlir_erase]
 theorem MemoryState.storeAt_eraseFrom_of_le {m : MemoryState} {p : Pointer} {x : BitVec w}
     (h : n ≤ p.id.id) : (m.eraseFrom n).storeAt p x = m.eraseFrom n := by
   have : (m.eraseFrom n)[p.id]? = none := by
@@ -391,6 +397,74 @@ theorem GlobalState.WF.storeAt_allocaPtr {s : GlobalState} (h : s.WF) (hp : p.id
     have := h _ hm
     simp [hp, GlobalState.allocaPtr] at this
   simp [MemoryState.storeAt, this]
+
+/-! ### `addBlock`: an `alloca` stored into at once, as `addressof` does -/
+
+/-- An `alloca` stored into from its start: the block added with the bits. -/
+theorem GlobalState.alloca_storeAt_allocaPtr {s : GlobalState} {x : BitVec w} :
+    (s.alloca n).mem.storeAt s.allocaPtr x = s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x := by
+  simp only [MemoryState.storeAt, GlobalState.alloca, GlobalState.allocaPtr,
+    MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert_self, MemoryState.addBlock,
+    Pointer.offsetInBits]
+  congr 1
+  apply Std.ExtHashMap.ext_getElem?
+  intro k
+  simp only [Std.ExtHashMap.getElem?_insert]
+  split <;> simp
+
+/-- A new block keeps what fits. -/
+@[mlir_transport]
+theorem Fits.addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF) (h : Fits s.mem q w) :
+    Fits (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) q w := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact (Fits.alloca hwf h).storeAt
+
+/-- A new block keeps the state `WF`. -/
+@[mlir_transport]
+theorem GlobalState.WF.addBlock {s : GlobalState} {x : BitVec v} (h : s.WF) :
+    ({ alloc := ⟨s.alloc.nextFreeBlock + 1⟩, mem := s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x } :
+        GlobalState).WF := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact GlobalState.WF.storeAt (s := s.alloca n) h.alloca
+
+/-- A new block holds its `8 * n` bits. -/
+theorem Fits.addBlock_allocaPtr {n : Nat} {s : GlobalState} {v : Nat} {x : BitVec v} :
+    Fits (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) s.allocaPtr (8 * n) := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact (Fits.allocaPtr (Nat.le_refl _)).storeAt
+
+/-- A new block reads back its bits. -/
+theorem MemoryState.readAt_addBlock_allocaPtr {n : Nat} {s : GlobalState} {x : BitVec (8 * n)} :
+    (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt s.allocaPtr (8 * n) = x := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact MemoryState.readAt_storeAt_self (Fits.allocaPtr (Nat.le_refl _)) x
+
+/-- A read of a block that fits before a new one: the read before it. -/
+@[mlir_read]
+theorem MemoryState.readAt_addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF)
+    (h : Fits s.mem q w') :
+    (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt q w = s.mem.readAt q w := by
+  have hne := GlobalState.ne_allocaPtr_of_fits hwf h
+  have hget : (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x)[q.id]? = s.mem[q.id]? := by
+    simp only [MemoryState.addBlock, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
+    split
+    · rename_i heq
+      exact absurd (by simpa [GlobalState.allocaPtr] using (beq_iff_eq.mp heq).symm) hne
+    · rfl
+  unfold MemoryState.readAt
+  rw [hget]
+
+/-- A block at or above `n` is gone once the frame from `n` is erased. -/
+@[mlir_frame, mlir_erase]
+theorem MemoryState.eraseFrom_addBlock_of_le {m : MemoryState} {b : BlockId} {x : BitVec v}
+    (h : n ≤ b.id) : (m.addBlock b bytes x).eraseFrom n = m.eraseFrom n := by
+  simp only [MemoryState.addBlock, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  apply Std.ExtHashMap.ext_getElem?
+  intro k
+  simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
+  split
+  · rename_i h'; simp at h'; subst h'; simp [show ¬b.id < n by omega]
+  · rfl
 
 @[simp]
 theorem GlobalState.alloca_alloc {s : GlobalState} :

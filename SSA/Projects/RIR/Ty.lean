@@ -192,15 +192,15 @@ theorem unwrap_wrap {v : ⟦t⟧ᵣ} : unwrap (wrap v) = .value v := by
   | bv _ => exact unwrap_wrap_bv
   | ptr => simp [unwrap, wrap]
   | vec => simp [unwrap, wrap, PoisonOr.pure_def ▸ Vector.mapM_pure]
-  | array => simp [unwrap, wrap, Function.comp_def, unwrap_wrap, PoisonOr.pure_def ▸ Vector.mapM_pure]
+  | array =>
+    simp [unwrap, wrap, Function.comp_def, unwrap_wrap, PoisonOr.pure_def ▸ Vector.mapM_pure]
   | struct => exact unwrapFields_wrapFields
-
 @[simp]
-theorem unwrapFields_wrapFields : ∀ {fs : List Ty} {v : denoteFieldsRaw fs},
-      unwrapFields (wrapFields v) = .value v
+theorem unwrapFields_wrapFields :
+    ∀ {fs : List Ty} {v : denoteFieldsRaw fs}, unwrapFields (wrapFields v) = .value v
   | [], () => rfl
   | [_], _ => unwrap_wrap
-  | _::_::_, (a, b) => by simp [unwrapFields, wrapFields, unwrap_wrap, unwrapFields_wrapFields]
+  | _ :: _ :: _, (a, b) => by simp [unwrapFields, wrapFields, unwrap_wrap, unwrapFields_wrapFields]
 end
 
 mutual
@@ -228,6 +228,7 @@ theorem wrapFields_of_unwrapFields :
     obtain ⟨rfl, rfl⟩ := h
     simp [wrapFields, wrap_of_unwrap hx, wrapFields_of_unwrapFields hxs]
 end
+
 end
 
 public section
@@ -315,6 +316,18 @@ theorem _root_.BitVec.extractLsb'_packLanes {we : Nat} :
     rw [key, BitVec.extractLsb'_packLanes v.tail i hi]
     simp [Nat.add_comm]
 
+/-- A slice inside one lane of a packed bitvector is that lane's slice. -/
+theorem _root_.BitVec.extractLsb'_packLanes_of_lt {we n : Nat} (v : Vector (BitVec we) n)
+    {s w : Nat} (hi : s / we < n) (hw : s % we + w ≤ we) :
+    (BitVec.packLanes v).extractLsb' s w = v[s / we].extractLsb' (s % we) w := by
+  rw [← BitVec.extractLsb'_packLanes v (s / we) hi]
+  ext k hk
+  simp only [BitVec.getElem_extractLsb', BitVec.getLsbD_extractLsb']
+  have := Nat.div_add_mod' s we
+  simp only [show s % we + k < we by omega, decide_true, Bool.true_and]
+  congr 1
+  omega
+
 end BitVecs
 
 def allValues [Inhabited α] (v : Vector (PoisonOr α) n) : PoisonOr (Vector α n) :=
@@ -334,22 +347,64 @@ def flattenRawFields : (ts : List Ty) → denoteFieldsRaw ts → BitVec (fieldsW
   | t :: t' :: ts, (a, b) => (flattenRawFields (t' :: ts) b) ++ (flattenRaw t a)
 end
 
-@[simp]
+theorem flattenRaw_bv (x : ⟦bv w⟧ᵣ) : flattenRaw (bv w) x = x := by rfl
+
+theorem flattenRaw_vec (v : ⟦vec l w⟧ᵣ) : flattenRaw (vec l w) v = BitVec.packLanes v := by rfl
+
+theorem flattenRaw_array (v : ⟦array n t⟧ᵣ) :
+    flattenRaw (array n t) v = BitVec.packLanes (v.map (flattenRaw t)) := by rfl
+
+theorem flattenRaw_struct (v : ⟦struct fs⟧ᵣ) :
+    flattenRaw (struct fs) v = flattenRawFields fs v := by rfl
+
+theorem flattenRawFields_singleton (v : denoteFieldsRaw [t]) :
+    flattenRawFields [t] v = flattenRaw t v := by rfl
+
+theorem flattenRawFields_cons (a : ⟦t⟧ᵣ) (b : denoteFieldsRaw (t' :: ts)) :
+    flattenRawFields (t :: t' :: ts) (a, b) = flattenRawFields (t' :: ts) b ++ flattenRaw t a := by
+  rfl
+
+/-- A raw value's bits at its width `w`, a literal: what a global's block holds. -/
+def flatBits {t : Ty} (r : ⟦t⟧ᵣ) {w : Nat} {hw : t.width = w} : BitVec w :=
+  (t.flattenRaw r).cast hw
+
+theorem flatBits_eq {r : ⟦t⟧ᵣ} {hw : t.width = w} :
+    flatBits r (hw := hw) = (t.flattenRaw r).cast hw := by rfl
+
+/-- A slice of an array's bits inside one element is that element's slice. -/
+theorem extractLsb'_flattenRaw_array (v : ⟦array n t⟧ᵣ) (hi : s / t.width < n)
+    (hw : s % t.width + w ≤ t.width) :
+    (flattenRaw (array n t) v).extractLsb' s w =
+      (flattenRaw t (v[s / t.width]'hi)).extractLsb' (s % t.width) w := by
+  rw [flattenRaw_array]
+  exact (BitVec.extractLsb'_packLanes_of_lt _ hi hw).trans (by rw [Vector.getElem_map])
+
+theorem extractLsb'_flattenRaw_struct_singleton (v : ⟦struct [t]⟧ᵣ) :
+    (flattenRaw (struct [t]) v).extractLsb' s w = (flattenRaw t v).extractLsb' s w := by rfl
+
+theorem extractLsb'_flattenRaw_bv (x : ⟦bv l⟧ᵣ) :
+    (flattenRaw (bv l) x).extractLsb' s w = x.extractLsb' s w := by rfl
+
+@[expose, simp]
 def hasPtr : Ty → Bool
   | ptr => true
   | bv _ | vec _ _ => false
   | array _ t => t.hasPtr
-  | struct fs => fs.attach.any fun ⟨t, _⟩ => t.hasPtr   -- or a mutual hasPtrFields
+  | struct fs => fs.attach.any fun ⟨t, _⟩ => t.hasPtr -- or a mutual hasPtrFields
 
 theorem hasPtr_bv : (bv w).hasPtr = false := by simp [hasPtr]
+
 theorem hasPtr_array : (array n t).hasPtr = t.hasPtr := by simp [hasPtr]
+
 theorem hasPtr_struct0 : (struct []).hasPtr = false := by simp [hasPtr]
-theorem hasPtr_struct : (struct (t::ts)).hasPtr = (t.hasPtr || (struct ts).hasPtr) := by
+
+theorem hasPtr_struct : (struct (t :: ts)).hasPtr = (t.hasPtr || (struct ts).hasPtr) := by
   simp [hasPtr]
 
 def flatten (t : Ty) (v : ⟦t⟧) : PoisonOr (BitVec t.width) := do
   let unwrapped ← t.unwrap v
-  if hasPtr t then .poison
+  if hasPtr t then
+    .poison
   return flattenRaw t unwrapped
 
 theorem flatten_wrap (h : t.hasPtr = false) : flatten t (wrap v) = .value (flattenRaw t v) := by
@@ -438,8 +493,8 @@ theorem allValues_eq_value [Inhabited α] (v : Vector (PoisonOr α) n) :
     simp [this, PoisonOr.poison_ne_value]
 
 mutual
-theorem unflatten_flattenRaw {t : Ty} {v : ⟦t⟧ᵣ} {b : BitVec t.width} (hnoptr : t.hasPtr = false) (h : flattenRaw t v = b) :
-    unflatten t b = Ty.wrap v := by
+theorem unflatten_flattenRaw {t : Ty} {v : ⟦t⟧ᵣ} {b : BitVec t.width} (hnoptr : t.hasPtr = false)
+    (h : flattenRaw t v = b) : unflatten t b = Ty.wrap v := by
   cases t with
   | bv w =>
     cases v; simp_all [flattenRaw, unflatten, wrap]
@@ -452,22 +507,23 @@ theorem unflatten_flattenRaw {t : Ty} {v : ⟦t⟧ᵣ} {b : BitVec t.width} (hno
     simp_all [flattenRaw, unflatten, denote, ← h, extractVecElem_packLanes, wrap]
     ext i hi
     simp
-    rw [unflatten_flattenRaw (show t.hasPtr = false by simp [hasPtr] at hnoptr; assumption)]
+    rw [unflatten_flattenRaw (by simpa [hasPtr] using hnoptr)]
     rfl
-  | struct fields =>
-    exact unflattenRawFields_flattenRawFields (by simpa [hasPtr] using hnoptr) h
-theorem unflattenRawFields_flattenRawFields (hnoptr : ∀ t ∈ ts, t.hasPtr = false) (h : flattenRawFields ts v = b) :
-    unflattenFields ts b = wrapFields v := match ts with
-    | [] => by simp [unflattenFields]
-    | [t] => by
-      simp [unflattenFields, wrapFields]
-      exact unflatten_flattenRaw (by simp [hnoptr]) h
-    | t₁::t₂::ts => by
-      simp [unflattenFields, wrapFields, flattenRawFields] at ⊢ h
-      subst h
-      constructor
-      · exact unflatten_flattenRaw (hnoptr t₁ (by simp)) (BitVec.extractLsb'_append_eq_right).symm
-      · exact unflattenRawFields_flattenRawFields (by simp_all) (BitVec.extractLsb'_append_eq_left).symm
+  | struct fields => exact unflattenRawFields_flattenRawFields (by simpa [hasPtr] using hnoptr) h
+theorem unflattenRawFields_flattenRawFields (hnoptr : ∀ t ∈ ts, t.hasPtr = false)
+    (h : flattenRawFields ts v = b) : unflattenFields ts b = wrapFields v :=
+  match ts with
+  | [] => by simp [unflattenFields]
+  | [t] => by
+    simp [unflattenFields, wrapFields]
+    exact unflatten_flattenRaw (by simp [hnoptr]) h
+  | t₁ :: t₂ :: ts => by
+    simp [unflattenFields, wrapFields, flattenRawFields] at ⊢ h
+    subst h
+    constructor
+    · exact unflatten_flattenRaw (hnoptr t₁ (by simp)) (BitVec.extractLsb'_append_eq_right).symm
+    · exact
+        unflattenRawFields_flattenRawFields (by simp_all) (BitVec.extractLsb'_append_eq_left).symm
 end
 
 theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatten t v = .value b) :
