@@ -335,6 +335,13 @@ theorem MemoryState.readAt_alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem
   simp only [MemoryState.readAt,
     GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_fits hwf h)]
 
+/-- `readAt_alloca` with the read's own width fitting: found among `Fits` conjuncts and wider
+facts, which `readAt_alloca`'s open width never matches. -/
+@[mlir_read]
+theorem MemoryState.readAt_alloca_of_fits {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
+    (s.alloca n).mem.readAt q w = s.mem.readAt q w :=
+  MemoryState.readAt_alloca hwf h
+
 /-- Erasing a frame commutes with a store: a store into the frame is lost either way. -/
 @[mlir_frame, mlir_erase]
 theorem MemoryState.eraseFrom_storeAt {m : MemoryState} {p : Pointer} {x : BitVec w} :
