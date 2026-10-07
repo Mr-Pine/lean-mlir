@@ -1,7 +1,6 @@
 # RIR tactics: technical reference
 
-Source: `SSA/Projects/RIR/Run/Tactic/**` in `~/lean-mlir-nightly-port` (branch `new-semantics`).
-Import `SSA.Projects.RIR.Run.Tactic`. For when to use what, see `tactics-guide.md`.
+Source: `SSA/Projects/RIR/Run/Tactic/**`. Import `SSA.Projects.RIR.Run.Tactic`. For when to use what, see `tactics-guide.md`.
 
 ## The proof state the tactics maintain
 

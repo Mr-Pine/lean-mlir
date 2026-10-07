@@ -1,7 +1,7 @@
 # RIR tactics: user guide
 
-The tactics in the order a proof uses them, each with a minimal example from `~/rir-programs`
-and the mistakes that cost the most time. Exact behaviour, names and failure messages are in
+The tactics in the order a proof uses them, each with a minimal example from the existing proofs
+(named by file) and the mistakes that cost the most time. Exact behaviour, names and failure messages are in
 `tactics.md`.
 
 ## The shape of every proof
@@ -113,8 +113,9 @@ Mistakes:
 Mistakes:
 - "operand … is not known to be `.value _`": the pointer or value is still an `if … then .poison`
   (a `gep` whose no-wrap was not shown, a flagged operation). Fix the step that produced it.
-- `consuming` a read fact you still need later; use it only for facts that would otherwise be
-  carried through every later step for nothing:
+- Leaving dead facts in the state: each one is carried through every later step. Consume a fact
+  on the step that uses it last (here: the read facts of two loaded inputs; the loaded values are
+  named, so the facts say nothing new):
 
 ```lean
 -- Avx512/fd_r43x6_pow22523_2.lean
@@ -158,8 +159,8 @@ Mistakes:
   before the step (`have hzero_limbs := MemoryState.LimbsFit.of_fits hzero_fits hzero_off`).
 - A fact that does not survive the call shows up as an extra goal after the main one: register a
   `mlir_transport` lemma for the callee's result state (`MemoryState.LimbsFit.storeLimbs`).
-- Large spec terms in the state: name the callee's result right after the call (`name_limbs x`
-  in `Programs/Common.lean`).
+- Large spec terms in the state: name the callee's result right after the call (`name_limbs x`,
+  a project tactic: `conventions.md`).
 
 ## 7. `step_alloca`, `step_addressof`, `erase_frame`
 
@@ -310,6 +311,5 @@ The goal is `.value (rets, S) = .value (rets', s')` with `hS` in context. In ord
 2. `subst_vars` then `simp [read/store lemmas, *]`;
 3. `rw [hS, spec]; congr` and lane/limb goals by `simp [*]` or `bv_decide`.
 
-Framed functions add `erase_frame` (or `simp [mlir_frame, *]`). `clear_reads`
-(`Programs/Common.lean`) before `subst_vars` keeps `subst` from rewriting values by their read
-facts.
+Framed functions add `erase_frame` (or `simp [mlir_frame, *]`). `clear_reads` (a project tactic)
+before `subst_vars` keeps `subst` from rewriting values by their read facts.
