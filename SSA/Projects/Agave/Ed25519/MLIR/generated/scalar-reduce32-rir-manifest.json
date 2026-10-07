@@ -1,0 +1,38 @@
+{
+  "target_symbol": "_RNvMso_NtCsjK63O35OHGN_14solana_ed255196scalarNtB5_6Scalar6reduce",
+  "source": "generated/agave_scalar_reduce32.mlir",
+  "source_sha256": "0c7a9dc89204288a4cb04b3a5b5955f82c6b641fd7d48731f64414fbd89b3553",
+  "extraction_manifest_sha256": "5b1586fec99c0f1f829ee7dcb73b3b6e09d9b7ef07cebfb2ef7bc44faa1a81e0",
+  "region_sha256": "c6728cfed78cb6055b7a9314cdf418411b56ae047e846d456a204c0fa10a160b",
+  "region_lines": 624,
+  "normalizations": [],
+  "linked_callees": {
+    "_RINvCsh8VEmffyqhs_6subtle9black_boxhECsjK63O35OHGN_14solana_ed25519": "Agave.Ed25519.Encoding.Decompress.Execution.BlackBox.program.call"
+  },
+  "operations": {
+    "llvm.add": 60,
+    "llvm.alloca": 33,
+    "llvm.and": 24,
+    "llvm.ashr": 4,
+    "llvm.call": 1,
+    "llvm.fence": 15,
+    "llvm.getelementptr": 47,
+    "llvm.intr.experimental.noalias.scope.decl": 2,
+    "llvm.intr.fshl": 3,
+    "llvm.intr.lifetime.end": 33,
+    "llvm.intr.lifetime.start": 33,
+    "llvm.load": 27,
+    "llvm.lshr": 44,
+    "llvm.mlir.constant": 62,
+    "llvm.mul": 45,
+    "llvm.or": 15,
+    "llvm.return": 1,
+    "llvm.shl": 20,
+    "llvm.store": 82,
+    "llvm.sub": 1,
+    "llvm.trunc": 43,
+    "llvm.zext": 28
+  },
+  "import_script_sha256": "3b260ac6193a2ba4b90735c41832c2978ca8ae9f6ce759de3de1216788e3515c",
+  "output_sha256": "0fa0af074f16a7d43f1e1623c7cea790fbc6183a0b1780272d8f87c8a4bb3858"
+}

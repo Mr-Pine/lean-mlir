@@ -1,0 +1,76 @@
+{
+  "base_manifest_sha256": "a5df0990047876600f4644a4ef6754f2d11a1c348e204d5a82515d71efb24277",
+  "crate_llvm_ir_sha256": "2ea5bd097be748ddb48c0361700c0dacb5ee7146c87f29543001e78261c82dcc",
+  "extraction_script_sha256": "96c7395f34c17e0cf37218f65757ba9ae881256e576edaee0565c5015e15ea05",
+  "tools": {
+    "llvm-extract": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n",
+    "opt": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n  Default target: x86_64-pc-linux-gnu\n  Host CPU: meteorlake\n",
+    "mlir-translate": "Ubuntu LLVM version 22.1.2\n  Optimized build.\n"
+  },
+  "commands": [
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/llvm-extract",
+      "--keep-const-init",
+      "--func=_RNvMso_NtCsjK63O35OHGN_14solana_ed255196scalarNtB5_6Scalar6reduce",
+      "-S",
+      "/tmp/ed25519-rir-extract/final/build/target/release/deps/solana_ed25519-7a5ccd2d9f9b85be.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_scalar_reduce32.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/opt",
+      "-S",
+      "--passes=internalize,globaldce",
+      "--internalize-public-api-list=_RNvMso_NtCsjK63O35OHGN_14solana_ed255196scalarNtB5_6Scalar6reduce",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_scalar_reduce32.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_scalar_reduce32.ll"
+    ],
+    [
+      "/tmp/ed25519-rir-extract/tools/root/usr/lib/llvm-22/bin/mlir-translate",
+      "--import-llvm",
+      "--mlir-print-op-generic",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_scalar_reduce32.ll",
+      "-o",
+      "/home/nine/Documents/anza-code/.lmf-rir-ed25519/SSA/Projects/Agave/Ed25519/MLIR/generated/agave_scalar_reduce32.mlir"
+    ]
+  ],
+  "kernels": {
+    "agave_scalar_reduce32": {
+      "target_symbol": "_RNvMso_NtCsjK63O35OHGN_14solana_ed255196scalarNtB5_6Scalar6reduce",
+      "original_definition_sha256": "211bdea259b8e56fe0ec181a943d3607bc57ff75f12e22249768c74af72b2fb9",
+      "llvm_inlining_applied": false,
+      "mlir_operations": {
+        "llvm.add": 60,
+        "llvm.alloca": 33,
+        "llvm.and": 24,
+        "llvm.ashr": 4,
+        "llvm.call": 1,
+        "llvm.fence": 15,
+        "llvm.func": 3,
+        "llvm.getelementptr": 47,
+        "llvm.intr.experimental.noalias.scope.decl": 2,
+        "llvm.intr.fshl": 3,
+        "llvm.intr.lifetime.end": 33,
+        "llvm.intr.lifetime.start": 33,
+        "llvm.load": 27,
+        "llvm.lshr": 44,
+        "llvm.mlir.constant": 62,
+        "llvm.module_flags": 1,
+        "llvm.mul": 45,
+        "llvm.or": 15,
+        "llvm.return": 1,
+        "llvm.shl": 20,
+        "llvm.store": 82,
+        "llvm.sub": 1,
+        "llvm.trunc": 43,
+        "llvm.zext": 28
+      },
+      "files_sha256": {
+        "agave_scalar_reduce32.ll": "d354ffbb3ed73523d6c159063adc61babc7deace91fef8cdb9c1eb7160c13608",
+        "agave_scalar_reduce32.mlir": "0c7a9dc89204288a4cb04b3a5b5955f82c6b641fd7d48731f64414fbd89b3553"
+      }
+    }
+  },
+  "boundary": "Original pinned Rust definitions selected from the identical complete crate LLVM artifact. No body rewrite or further inlining. Compilation and MLIR import remain trusted. External declarations retain explicit proof obligations."
+}
