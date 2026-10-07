@@ -28,5 +28,30 @@ def evalStepReduceGep : Tactic := fun stx => withMainContext do
   let args := LeanMLIR.RIR.StepArgs.parse stx[1] mkNullNode mkNullNode mkNullNode
   LeanMLIR.RIR.finishStep .inline .inline false args.simpArgs true
 
+/-- Resolve a staged interface through writes without simplifying the arithmetic
+values. The resulting equalities are proved explicitly lane by lane. -/
+private partial def closeReduceReads (g : MVarId) : TacticM (List MVarId) :=
+  g.withContext do
+    let ty ← whnfR (← instantiateMVars (← g.getType))
+    if let some (a, b) := ty.and? then
+      let ga ← mkFreshExprSyntheticOpaqueMVar a
+      let gb ← mkFreshExprSyntheticOpaqueMVar b
+      g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
+      return (← closeReduceReads ga.mvarId!) ++ (← closeReduceReads gb.mvarId!)
+    let some (_, lhs, rhs) := ty.eq? | return [g]
+    unless lhs.isAppOfArity ``Env.read 4 do return [g]
+    let some (v, pf) ← LeanMLIR.RIR.Tactic.walkRead (lhs.getArg! 2) (lhs.getArg! 3)
+      | return [g]
+    let rest ← mkFreshExprSyntheticOpaqueMVar (← mkEq v rhs)
+    g.assign (← mkEqTrans pf rest)
+    try
+      rest.mvarId!.refl
+      return []
+    catch _ =>
+      return [rest.mvarId!]
+
+elab "reduce_env_reads" : tactic => do
+  replaceMainGoal (← closeReduceReads (← getMainGoal))
+
 end
 end Agave.Ed25519.Reduce64.Execution
