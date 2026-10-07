@@ -39,8 +39,21 @@ def contextFactMap : MetaM (Std.HashMap Expr Expr) := do
       facts := facts.insert (← instantiateMVars d.type) d.toExpr
   return facts
 
+/-- The type of the sides of `a = b`, `a ≠ b` or `¬a = b`. -/
+def eqSideType? (p : Expr) : Option Expr :=
+  let p := p.cleanupAnnotations
+  match p.ne? with
+  | some (α, _, _) => some α
+  | none => ((p.not?.getD p).eq?).map (·.1)
+
 def findFact? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Option Expr) := do
+  let α? := eqSideType? goal
   for (pf, ty) in facts do
+    -- an equation over another type is skipped first: `isDefEq` compares the sides before their
+    -- type, and would unfold `x.uaddOverflow 512#64` one by one against a `BlockId`
+    if let (some α, some β) := (α?, eqSideType? ty) then
+      unless ← withNewMCtxDepth (withReducible (isDefEq α β)) do
+        continue
     if ← withNewMCtxDepth (withTransparency .default (isDefEq ty goal)) then
       return some pf
   return none
