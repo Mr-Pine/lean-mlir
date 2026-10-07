@@ -37,6 +37,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | ashr exact => Operation.ashr exact
   | smin => Operation.smin
   | icmp p => Operation.icmp p
+  | ptrcmp ne => Operation.ptrcmp ne
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm

@@ -39,6 +39,8 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
+  /-- `icmp eq` (`ne := false`) or `icmp ne` on pointers. -/
+  | ptrcmp (ne : Bool) : BinOp .ptr .ptr (.bv 1)
   |
   vector {l w₁ w₂ w : Nat} (op : BinOp (.bv w₁) (.bv w₂) (.bv w)) :
     BinOp (.vec l w₁) (.vec l w₂) (.vec l w)

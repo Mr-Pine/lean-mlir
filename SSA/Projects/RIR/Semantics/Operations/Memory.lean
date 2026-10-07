@@ -44,6 +44,13 @@ def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪
   _ ← set updated
   return env
 
+/-- `icmp eq`/`ne` on pointers: the same block and offset, or not. -/
+@[mlir_operation]
+def ptrcmp (ne : Bool) (x y : PoisonOr Pointer) : IntW 1 := do
+  let a ← x
+  let b ← y
+  return BitVec.ofBool ((a == b) != ne)
+
 def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
   let ptr ← ptr
   let off ← byteOff
