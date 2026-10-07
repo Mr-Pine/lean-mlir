@@ -26,19 +26,16 @@ def dsimpPureInstr (m : MVarId) : MetaM Unit := do
     return ()
 
 /-- Step a pure instruction, extending the env with the new value -/
-def runStepPure (value : EnvName) (hyp : EnvName) (only : Bool) (simpArgs : Syntax) (expand : Bool)
-    (tag : Bool) : TacticM Unit :=
+def runStepPure (args : StepArgs) : TacticM Unit :=
   withMainContext do
     let ⟨stepGoal, main⟩ ← rewriteStep (← getMainGoal) ``BasicBlock.runBodyFrom_step_pure
     -- `h : Instr.run E instr = pure ?E'`: unfolding `Instr.run` makes both sides `pure`
     dsimpPureInstr stepGoal
     replaceMainGoal [main]
-    finishStep value hyp only simpArgs expand tag
+    finishStep args
 
 @[tactic stepPure]
-def evalStepPure : Tactic := fun stx =>
-  let args := StepArgs.parse stx[2] stx[3] mkNullNode stx[1]
-  runStepPure args.value args.hyp args.only args.simpArgs args.expand args.tag
+def evalStepPure : Tactic := fun stx => runStepPure (StepArgs.parse stx[2] stx[3] mkNullNode stx[1])
 
 end
 

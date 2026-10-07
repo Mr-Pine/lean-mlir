@@ -31,17 +31,6 @@ syntax stepConsuming := &" consuming" (ppSpace colGt ident)+
 ones never unfold. -/
 syntax stepOpaque := colGt &" opaque"
 
-/-- The arguments shared by the stepping tactics. -/
-structure StepArgs where
-  value : EnvName := .auto
-  hyp : EnvName := .auto
-  only : Bool := false
-  simpArgs : Syntax := mkNullNode
-  consumed : Array Ident := #[]
-  expand : Bool := true
-  /-- Tag the value's equation, so later steps keep it folded. -/
-  tag : Bool := false
-
 /-- The first atom in `s`, trimmed. -/
 private partial def firstAtom (s : Syntax) : String :=
   match s with
