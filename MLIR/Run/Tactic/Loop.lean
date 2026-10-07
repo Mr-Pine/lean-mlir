@@ -41,8 +41,7 @@ a step. `E`, its chain and the step values only it read are cleared. -/
 def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   let (hE?, hArgs?) ←
     g.withContext do
-        return (← Tactic.findLocalEq? E m!"`{E} = _`",
-            ← Tactic.findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"`{E}.args = _`")
+        return (← Tactic.findLocalEq? E, ← Tactic.findEqWithLhs? (← mkAppM ``Env.args #[E]))
   let (fvs, g) ← g.introN 2 [`E₀, `hArgs₀]
   -- the lemma's env and state may be functions of `E₀`, applied, or abbreviations: unfolded
   let g ←
@@ -103,11 +102,11 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   -- generalizations do not nest over it
   withMainContext do
       let S' := (← Tactic.getFuncRunFromGoal (← getMainTarget)).state
-      let some hS' ← Tactic.findLocalEq? S' m!"`{S'} = _`" | return
+      let some hS' ← Tactic.findLocalEq? S' | return
       let g ← Tactic.substStates (← getMainGoal) hS'.rhs
       replaceMainGoal [g]
       -- the substituted state's projections reduced, as a step's
-      let some hS' ← g.withContext (Tactic.findEqWithLhs? S' m!"`{S'} = _`") | return
+      let some hS' ← g.withContext (Tactic.findEqWithLhs? S') | return
       replaceMainGoal [← Tactic.dsimpStateEq g hS']
 
 /-- Close a read goal `E.read r = v` through `E`'s write chain (`walkRead`, else `simpValue`);
@@ -176,7 +175,7 @@ def stepLoopApply (stx : Syntax) (subst : Bool) : TacticM (Expr × MVarId × Lis
         let (g, goal) ← Tactic.getGoalType
         let S := (← Tactic.getFuncRunFromGoal goal).state
         if S.isFVar then
-          if let some hS← Tactic.findEqWithLhs? S m!"`{S} = _`" then
+          if let some hS← Tactic.findEqWithLhs? S then
             -- eliminate `S`, keeping the name the lemma's premises use
             replaceMainGoal [(← substCore g hS (symm := false)).2]
   let E ←

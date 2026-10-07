@@ -59,7 +59,7 @@ def substStates (g : MVarId) (e : Expr) : MetaM MVarId := do
       g.withContext do
           unless (← getLCtx).contains x && (← x.getType).isConstOf ``GlobalState do
             return g
-          let some h ← findEqWithLhs? (.fvar x) m!"`{Expr.fvar x} = _`" | return g
+          let some h ← findEqWithLhs? (.fvar x) | return g
           return (← substCore g h (symm := false)).2
   return g
 
@@ -203,7 +203,7 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal
     let S' := runBodyFrom.state
-    let hS ← findEqWithLhs S m!"of the form `{S} = _`"
+    let hS ← findEqWithLhs S
     -- the new state over the old one, `S`, whose facts the simplification's side conditions use
     -- widths as literals, as the facts have them: transport lemmas unify at reducible transparency
     let new ← Tactic.normWidths (← dsimpState S')
@@ -242,7 +242,7 @@ def ensureStateEq : TacticM Unit :=
         pure (← getRunBodyFrom goal).state
       catch _ =>
         pure (← getFuncRunFromGoal goal).state
-    if (← findEqWithLhs? s m!"`{s} = _`").isSome then
+    if (← findEqWithLhs? s).isSome then
       return
     -- a state built on an earlier one `b` (`b.mem`, `b.alloc`): `b`'s facts, carried to it
     let mut g := g

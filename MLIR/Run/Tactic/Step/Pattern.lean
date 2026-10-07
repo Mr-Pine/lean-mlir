@@ -35,7 +35,7 @@ def unfoldLocals (v pf : Expr) : MetaM (Expr × Expr) := do
   let mut v := v
   let mut pf := pf
   for x in (collectFVars {} v).fvarIds do
-    let some h ← Tactic.findLocalEq? (.fvar x) m!"" | continue
+    let some h ← Tactic.findLocalEq? (.fvar x) | continue
     pf ← mkEqTrans pf (← mkCongrArg (← mkLambdaFVars #[.fvar x] v) h.decl.toExpr)
     v := v.replaceFVar (.fvar x) h.rhs
   return (v, pf)

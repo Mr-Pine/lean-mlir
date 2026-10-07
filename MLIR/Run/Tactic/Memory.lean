@@ -596,7 +596,7 @@ def readThroughState (c : MemCtx) : Simp.Simproc := fun e => do
     | none =>
       let mem? ←
         do
-          let some hS ← findLocalEq? m.appArg! m!"" | pure none
+          let some hS ← findLocalEq? m.appArg! | pure none
           pure
               (some
                 (hS.decl.fvarId,
