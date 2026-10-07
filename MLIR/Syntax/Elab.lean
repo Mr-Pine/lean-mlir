@@ -24,7 +24,8 @@ defines it in the shape of a hand lift:
 The block bodies name value registers by `rir_reg%`/`rir_dst%`, whose types the kernel alone
 checks.
 
-A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`; an `llvm.mlir.addressof`
+A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`, or `t` for a function of the
+call's type (with a warning: no lifted region backs it); an `llvm.mlir.addressof`
 of `@g` stores the value of the `GlobalInitializer` bound by `with @g := t` in a fresh block and
 returns its address. The terms may use the binders. Every called or addressed symbol needs a
 binding, and a symbol cannot be both.
@@ -317,34 +318,49 @@ partial def idents (stx : Syntax) : Array Name :=
   | .node _ _ args => args.flatMap idents
   | _ => #[]
 
-/-- The `Func` bound to `@name`. -/
+/-- The term bound to `@name`. -/
 def calleeTerm (ref : Syntax) (table : List (String × TSyntax `term)) (name : String) :
     CommandElabM (TSyntax `term) := do
   let some t := table.lookup name
     | throwErrorAt ref "llvm.call to @{name}: no callee bound; add `with @{name} := …`"
   return t
 
-/-- Check that `t` is a `Func` whose `call` has the type the calls to `@name` need, under the
-binders. -/
+/-- The callee term for `t`, bound to `@name`: `t.call` for a `Func` whose `call` has the type the
+calls need, under the binders; or `t` itself for a function of that type, with a warning. -/
 def checkCallee (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder)) (name : String)
-    (t : TSyntax `term) (ts us : List Ty) : CommandElabM Unit := do
+    (t : TSyntax `term) (ts us : List Ty) : CommandElabM (TSyntax `term) := do
   let expected ← `(Vals $(← tysStx ts) → EffectM (Vals $(← tysStx us)))
-  runTermElabM fun _ =>
-      Term.elabBinders binders fun _ => do
-        let ty ← Term.elabType expected
-        let g ← Term.elabTermEnsuringType t (mkConst ``Func)
-        Term.synthesizeSyntheticMVarsNoPostponing
-        let ety ← Meta.inferType (mkApp (mkConst ``Func.call) g)
-        unless ← Meta.isDefEq ety ty do
-          -- `g.Γ.args` and `g.tRets` as lists
-          let args ← Meta.mkAppM ``Ctx.args #[← Meta.mkAppM ``Func.Γ #[g]]
-          let rets ← Meta.mkAppM ``Func.tRets #[g]
-          let (args', rets') := (← Meta.reduce args, ← Meta.reduce rets)
-          let ety :=
-            (← instantiateMVars ety).replace fun e =>
-              if e == args then some args' else if e == rets then some rets' else none
-          throwErrorAt t "@{name}: the call sites need a callee of type{indentExpr ty}\nbut \
-        `{t}.call` has type{indentExpr ety}"
+  let isFunc ←
+    runTermElabM fun _ =>
+        Term.elabBinders binders fun _ => do
+          let ty ← Term.elabType expected
+          let g ← Term.elabTerm t none
+          Term.synthesizeSyntheticMVarsNoPostponing
+          let gty ← Meta.inferType g
+          if (← Meta.whnfR gty).isConstOf ``Func then
+            let ety ← Meta.inferType (mkApp (mkConst ``Func.call) g)
+            unless ← Meta.isDefEq ety ty do
+              -- `g.Γ.args` and `g.tRets` as lists
+              let args ← Meta.mkAppM ``Ctx.args #[← Meta.mkAppM ``Func.Γ #[g]]
+              let rets ← Meta.mkAppM ``Func.tRets #[g]
+              let (args', rets') := (← Meta.reduce args, ← Meta.reduce rets)
+              let ety :=
+                (← instantiateMVars ety).replace fun e =>
+                  if e == args then some args' else if e == rets then some rets' else none
+              throwErrorAt t "@{name}: the call sites need a callee of type{indentExpr ty}\nbut \
+          `{t}.call` has type{indentExpr ety}"
+            return true
+          unless ← Meta.isDefEq gty ty do
+            throwErrorAt t "@{name}: expected a `Func`, or a function of type{indentExpr ty}\nbut \
+        `{t}` has type{indentExpr gty}"
+          logWarningAt t
+              m!"@{name} is bound to a function, not a `Func`: the calls run it as given, \
+          not a lifted region"
+          return false
+  if isFunc then
+    `(($t).call)
+  else
+    `(($t))
 
 /-- The `GlobalInitializer` bound to `@name`. -/
 def globalTerm (ref : Syntax) (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
@@ -456,8 +472,7 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
   for (f, ts, us) in calls do
     if (terms.lookup f).isNone then
       let t ← calleeTerm r table f
-      checkCallee binders f t ts us
-      terms := terms ++ [(f, ← `(($t).call))]
+      terms := terms ++ [(f, ← checkCallee binders f t ts us)]
 
   -- every global's term, checked to be a `GlobalInitializer`
   let addrs := p.blocks.flatMap fun b => b.body.filterMap fun

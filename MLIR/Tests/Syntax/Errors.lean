@@ -1,6 +1,7 @@
 module
 
 public import MLIR.Syntax.Elab
+meta import MLIR.Semantics.Func
 
 /-! # `mlir_def`: errors name the operation, its types and what is wrong -/
 
@@ -153,16 +154,32 @@ mlir_def calleeType := {
     "llvm.return"(%0) : (i64) -> ()
 } with @g := id32
 
+-- a function of the call's type, not a `Func`: called as given
+/-- warning: @g is bound to a function, not a `Func`: the calls run it as given, not a lifted region -/
+#guard_msgs in
+mlir_def calleeFn (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) := {
+  ^bb0(%arg0: i64):
+    %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+} with @g := g
+
+/-- `x + 1`, as `@g`. -/
+def succ64 (v : Vals [.bv 64]) : EffectM (Vals [.bv 64]) :=
+  match v with
+  | .cons x .nil => pure (.cons ((· + 1) <$> x) .nil)
+
+#guard (match (calleeFn succ64).eval 1 (calleeFn.args (.value 41)) ⟨⟨1⟩, ⟨∅⟩⟩ with
+  | .value (some (.cons (.value v) .nil), _) => some v
+  | _ => none) == some 42
+
 /--
-error: Type mismatch
-  g
-has type
+error: @g: expected a `Func`, or a function of type
   Vals [Ty.bv 64] → EffectM (Vals [Ty.bv 64])
-but is expected to have type
-  Func
+but `g` has type
+  Vals [Ty.bv 32] → EffectM (Vals [Ty.bv 32])
 -/
 #guard_msgs in
-mlir_def calleeNotFunc (g : Vals [.bv 64] → EffectM (Vals [.bv 64])) := {
+mlir_def calleeFnType (g : Vals [.bv 32] → EffectM (Vals [.bv 32])) := {
   ^bb0(%arg0: i64):
     %0 = "llvm.call"(%arg0) <{callee = @g}> : (i64) -> i64
     "llvm.return"(%0) : (i64) -> ()
