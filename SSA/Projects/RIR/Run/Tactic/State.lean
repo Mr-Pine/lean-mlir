@@ -28,9 +28,7 @@ def transportDischarge (fuel : Nat) (p : Expr) : MetaM (Option Expr) := do
 facts, through `hS`); side conditions are discharged from the context (`c?`, else gathered), at
 reducible transparency. -/
 def simpState (e : Expr) (c? : Option MemCtx := none) : MetaM Simp.Result := do
-  let some ext ← getSimpExtension? `mlir_state | throwError "no `mlir_state` simp set"
-  let ctx ←
-    Simp.mkContext (simpTheorems := #[← ext.getTheorems]) (congrTheorems := ← getSimpCongrTheorems)
+  let ctx ← simpSetContext #[`mlir_state]
   let c ← c?.getDM MemCtx.build
   let dischProcs :=
     #[← Simp.getSimprocs, ← ({} : Simp.Simprocs).add ``readThroughStore (post := true)]
@@ -182,9 +180,7 @@ def memFactsOf (g : MVarId) (S new : Expr) :
       let (r, pf) ← readThrough c e
       -- past the writes, or through one inside it (`spliceBits (S.mem.readAt p v) off x`): the
       -- old read by its value
-      let at_ ←
-        withLocalDeclD `z (← inferType l) fun z => do
-            mkLambdaFVars #[z] (r.replace fun t => if t == l then some z else none)
+      let at_ ← motiveOver r l (← inferType l)
       let y' ← Tactic.normWidths (at_.beta #[y])
       if
           (r.find? (· == l)).isSome && (y'.find? (· == S)).isNone &&
@@ -214,8 +210,7 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
     let r ← simpState new
     let hNew := mkExpectedPropHint (← mkEqRefl S') (← mkEq S' new)
     let (fvs, g) ←
-      generalizeOpaque g (hyps := #[]) S' `S'
-          #[⟨`hS', (mkEq · r.expr), ← mkEqTrans hNew (← r.getProof)⟩]
+      generalizeOpaque g S' `S' #[⟨`hS', (mkEq · r.expr), ← mkEqTrans hNew (← r.getProof)⟩]
     -- `hyps`, `h : motive (S'`'s term)`, about `S'`: `S'`'s term `= S'` by `hS'`
     let mut g := g
     if !hyps.isEmpty then
@@ -330,16 +325,14 @@ def ensureStateEq : TacticM Unit :=
               if seen.contains (q, w) then
                 continue
               seen := seen.push (q, w)
-              let motive ←
-                withLocalDeclD `x (mkConst ``GlobalState) fun x => do
-                    mkLambdaFVars #[x]
-                        (← mkAppM ``MemoryState.readAt #[← mkAppM ``GlobalState.mem #[x], q, w])
+              let read ← mkAppM ``MemoryState.readAt #[m, q, w]
               -- not where a read fact already gives the value
-              if known.contains (motive.beta #[S]) then
+              if known.contains read then
                 continue
+              let motive ← memMotive read m
               let pf ← mkCongrArg motive (mkFVar fvs[1]!)
               let name := (`hread).appendAfter s!"_{← q.fvarId!.getUserName}"
-              let ty ← mkEq (motive.beta #[S]) (motive.beta #[s])
+              let ty ← mkEq read (motive.beta #[s])
               let (_, g') ← (← g₁.assert name ty pf).intro1P
               g₁ := g'
             return g₁

@@ -41,7 +41,7 @@ a step. `E`, its chain and the step values only it read are cleared. -/
 def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   let (hE?, hArgs?) ←
     g.withContext do
-        return (← Tactic.findEqWithLhs? E m!"`{E} = _`",
+        return (← Tactic.findLocalEq? E m!"`{E} = _`",
             ← Tactic.findEqWithLhs? (← mkAppM ``Env.args #[E]) m!"`{E}.args = _`")
   let (fvs, g) ← g.introN 2 [`E₀, `hArgs₀]
   -- the lemma's env and state may be functions of `E₀`, applied, or abbreviations: unfolded
@@ -64,14 +64,11 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
           pure (some (← mkEqTrans (mkFVar hA) (mkFVar hArgs)))
         | none, some hE =>
           do
-            let some (_, _, chain) := (← instantiateMVars (← hE.getType)).eq? | pure none
-            let mut root := chain
-            while root.isAppOfArity ``Env.write 5 do
-              root := root.getArg! 2
+            let root := Tactic.envRoot hE.rhs
             let args ←
               withLocalDeclD `e (← inferType E) fun e => do
                   mkLambdaFVars #[e] (← mkAppM ``Env.args #[e])
-            let pf ← mkEqTrans (mkFVar hA) (← mkCongrArg args (mkFVar hE))
+            let pf ← mkEqTrans (mkFVar hA) (← mkCongrArg args hE.decl.toExpr)
             let some (_, l, _) := (← inferType pf).eq? | pure none
             pure (some (mkExpectedPropHint pf (← mkEq l (← mkAppM ``Env.args #[root]))))
         | none, none =>
@@ -91,8 +88,8 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   withMainContext do
       let mut g ← getMainGoal
       let some hE := hE? | return
-      let some (_, _, chain) := (← instantiateMVars (← hE.getType)).eq? | return
-      for x in #[hE] ++ hArgs?.toArray ++ E.fvarId?.toArray do
+      let chain := hE.rhs
+      for x in #[hE.decl.fvarId] ++ hArgs?.toArray ++ E.fvarId?.toArray do
         g ← g.tryClear x
       -- the chain's locals: its root, and the values with their `v = …`
       for x in (collectFVars {} chain).fvarIds do
@@ -106,9 +103,8 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   -- generalizations do not nest over it
   withMainContext do
       let S' := (← Tactic.getFuncRunFromGoal (← getMainTarget)).state
-      let some hS' ← Tactic.findEqWithLhs? S' m!"`{S'} = _`" | return
-      let some (_, _, s) := (← instantiateMVars (← hS'.getType)).eq? | return
-      let g ← Tactic.substStates (← getMainGoal) s
+      let some hS' ← Tactic.findLocalEq? S' m!"`{S'} = _`" | return
+      let g ← Tactic.substStates (← getMainGoal) hS'.rhs
       replaceMainGoal [g]
       -- the substituted state's projections reduced, as a step's
       let some hS' ← g.withContext (Tactic.findEqWithLhs? S' m!"`{S'} = _`") | return
@@ -141,11 +137,8 @@ partial def closeReads (g : MVarId) : TacticM (List MVarId) := do
   let ty ←
     g.withContext do
         whnfR (← instantiateMVars (← g.getType))
-  if let some (a, b) := ty.and? then
-    let ga ← g.withContext (mkFreshExprSyntheticOpaqueMVar a)
-    let gb ← g.withContext (mkFreshExprSyntheticOpaqueMVar b)
-    g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
-    return (← closeReads ga.mvarId!) ++ (← closeReads gb.mvarId!)
+  if let some (ga, gb)← Tactic.splitAnd? g ty then
+    return (← closeReads ga) ++ (← closeReads gb)
   let mut open_ := []
   for g' in ← closeRead g do
     unless

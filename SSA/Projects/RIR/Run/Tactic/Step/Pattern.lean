@@ -35,13 +35,9 @@ def unfoldLocals (v pf : Expr) : MetaM (Expr × Expr) := do
   let mut v := v
   let mut pf := pf
   for x in (collectFVars {} v).fvarIds do
-    let some h ← Tactic.findEqWithLhs? (.fvar x) m!"" | continue
-    let some (_, _, t) := (← instantiateMVars (← h.getType)).consumeMData.eq? | continue
-    let motive ←
-      withLocalDeclD `y (← x.getType) fun y => do
-          mkLambdaFVars #[y] (v.replaceFVar (.fvar x) y)
-    pf ← mkEqTrans pf (← mkCongrArg motive (.fvar h))
-    v := v.replaceFVar (.fvar x) t
+    let some h ← Tactic.findLocalEq? (.fvar x) m!"" | continue
+    pf ← mkEqTrans pf (← mkCongrArg (← mkLambdaFVars #[.fvar x] v) h.decl.toExpr)
+    v := v.replaceFVar (.fvar x) h.rhs
   return (v, pf)
 
 /-- Close a pattern read `E.read r = v`: the value the env's writes give `r`, as is or with locals'
@@ -92,11 +88,10 @@ def isContinuation (ty : Expr) : MetaM Bool :=
 /-- Close a decidable side condition by `decide`, failing loudly when it is false. -/
 def closeByDecide (g : MVarId) : MetaM Unit := do
   let ty ← instantiateMVars (← g.getType)
-  let inst ← synthInstance (← mkAppM ``Decidable #[ty])
-  let value ← withDefault <| whnf (mkApp2 (mkConst ``Decidable.decide) ty inst)
-  unless value.isConstOf ``Bool.true do
-    throwError "step_pattern: side condition does not hold{indentExpr ty}"
-  g.assign (← mkDecideProof ty)
+  let some pf ←
+    Tactic.decideProof?
+        ty | throwError "step_pattern: side condition false or undecidable{indentExpr ty}"
+  g.assign pf
 
 /-- Close a side condition by a local hypothesis (a fact about the pattern's inputs, like a flag
 being `0` or `1`), a `≠` from a `Nodup`, or one about an earlier state through `transport_fact`,
@@ -116,12 +111,9 @@ def closeSide (g : MVarId) : TacticM Unit := do
 a conjunction of them (`E ⊨ [r := v, …]`), split. -/
 partial def closePremise (g : MVarId) : TacticM Unit := do
   let ty ← instantiateMVars (← g.getType)
-  if let some (a, b) := ty.and? then
-    let ga ← mkFreshExprMVar a
-    let gb ← mkFreshExprMVar b
-    g.assign (mkApp4 (mkConst ``And.intro) a b ga gb)
-    closePremise ga.mvarId!
-    closePremise gb.mvarId!
+  if let some (ga, gb)← Tactic.splitAnd? g ty then
+    closePremise ga
+    closePremise gb
   else if ty.eq?.any (·.2.1.isAppOfArity ``Env.read 4) then
     closePatternRead g
   else

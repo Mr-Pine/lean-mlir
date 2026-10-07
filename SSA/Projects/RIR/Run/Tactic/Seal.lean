@@ -250,9 +250,8 @@ def runSeal : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let runBodyFrom ← getRunBodyFrom goal
-    let some hE ← findEqWithLhs? runBodyFrom.env m!"`{runBodyFrom.env} = _`" | return
-    let some (_, _, E₀chain) :=
-      (← inferType (.fvar hE)).eq? | throwError "swap proof is not an equation"
+    let some hE ← findLocalEq? runBodyFrom.env m!"`{runBodyFrom.env} = _`" | return
+    let (hE, E₀chain) := (hE.decl.fvarId, hE.rhs)
     -- the function, for the blocks after this one: `Func.continue`'s first argument
     -- without `Func.continue` (a lemma about a bare `runBodyFrom`), liveness is unknown: keep all
     let some cont := goal.find? (·.isAppOf ``Func.continue) | return
