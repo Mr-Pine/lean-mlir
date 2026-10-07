@@ -63,10 +63,9 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
               return !ty.containsFVar S' && inState.occurs rest
         let mut g ← getMainGoal
         let mut goals := #[]
-        let hSId := mkIdent (← hS.getUserName)
-        let hS'Id := mkIdent (← hS'.getUserName)
-        let mlirMem := mkIdent `mlir_mem
+        let facts ← contextFactMap
         let transport ← labelled `mlir_transport
+        let locals ← Tactic.localImplications
         let new? := (← instantiateMVars (← hS'.getType)).eq?.map (·.2.2)
         for hyp in preserveHyps do
           let decl ← hyp.getDecl
@@ -77,45 +76,18 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
           let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
           let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
           g ← g'.clear hyp
-          -- without elaborating tactics: `P S`, one or two transport lemmas to `P (new state)`,
-          -- then `hS'` back
-          let fast? ←
+          -- `P (new state)` carried from `P S`, then `hS'` back; else left open
+          let pf? ←
             observing? do
                 let some new := new? | failure
-                -- `P S`, keyed as is, and `dsimp`ed like the new state
-                let facts : Std.HashMap Expr Expr :=
-                  (({} : Std.HashMap Expr Expr).insert key (.fvar hyp)).insert
-                    (← Tactic.dsimpState key) (.fvar hyp)
-                let some pf ← Tactic.transportWith facts transport 2 (motive.beta #[new]) | failure
+                let some pf ←
+                  Tactic.carryFact facts transport locals (.fvar hyp) key
+                      (motive.beta #[new]) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
-          if let some pf := fast? then
+          match pf? with
+          | some pf =>
             pg.mvarId!.assign pf
-            continue
-          setGoals [pg.mvarId!]
-          let hId := mkIdent decl.userName
-          evalTactic
-              (←
-                `(tactic|
-                    first
-                    | ( subst $hS'Id:ident $hSId:ident
-                        first
-                        -- the old fact and one transport lemma; the context (`*`) only when a
-                        -- lemma needs a side fact
-                        |
-                          solve_by_elim (transparency := .reducible) only [$hId:ident] using
-                            $(mkIdent `mlir_transport):ident
-                        |
-                          solve_by_elim (transparency := .reducible) only [$hId:ident, *] using
-                            $(mkIdent `mlir_transport):ident
-                        -- a chain of transports, still at reducible transparency
-                        | mem_fact)
-                    | ( subst $hSId:ident
-                        try simp at $hId:ident
-                        simp [$mlirMem:ident, $hS'Id:ident, $hId:ident]
-                        done)
-                    | (subst $hSId:ident $hS'Id:ident; assumption)
-                    | skip))
-          unless ← pg.mvarId!.isAssigned do
+          | none =>
             goals := goals.push pg.mvarId!
         -- substitute, not clear: a written value may mention the old state (`alloca`).
         -- `substCore` reverts and reintroduces what follows `S`, so `S'`/`hS'` get new ids

@@ -239,6 +239,16 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
     replaceMainGoal [g]
     return ⟨fvs[0]!, fvs[1]!, hS⟩
 
+/-- `target`, the fact `h : ty` restated about a later state, by `mlir_transport` lemmas and the
+local implications `locals` from `h` (also `dsimp`ed as states are) and the facts `facts`: two
+lemmas deep, else deeper. -/
+def carryFact (facts : Std.HashMap Expr Expr) (transport : Array Name) (locals : Array Expr)
+    (h ty target : Expr) : MetaM (Option Expr) := do
+  let facts := (facts.insert ty h).insert (← dsimpState ty) h
+  if let some pf← transportWith facts transport 2 target locals then
+    return some pf
+  transportWith facts transport 64 target locals
+
 /-- Name the goal's state `S`, with `hS : S = s`, unless it has an equation already: a loop's
 proof starts from a bare state `s`, a loop's continuation from a term over an earlier state. The
 facts of `s` (or of the earlier state) are carried over to `S`, and `s` is simplified as a step's
@@ -261,6 +271,7 @@ def ensureStateEq : TacticM Unit :=
     let mut seen : Std.HashSet Expr := {}
     let facts ← contextFactMap
     let lemmas ← labelled `mlir_transport
+    let locals ← localImplications
     let bases := (← IO.mkRef #[])
     s.forEachWhere
         (fun e => e.isAppOfArity ``GlobalState.mem 1 || e.isAppOfArity ``GlobalState.alloc 1)
@@ -281,7 +292,7 @@ def ensureStateEq : TacticM Unit :=
         if seen.contains ty' then
           continue
         seen := seen.insert ty'
-        let some pf ← transportWith facts lemmas 64 ty' | continue
+        let some pf ← carryFact facts lemmas locals d.toExpr ty ty' | continue
         let (h, g') ← (← g.assert d.userName ty' pf).intro1P
         g := g'
         carried := carried.push h
