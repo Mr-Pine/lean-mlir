@@ -240,6 +240,27 @@ After `sqr l1; sqr l2; mul l4 …`, `hS` is `storeLimbs t1 l2 (storeLimbs t0 l1 
 `hl2 : l2 = fiat_25519_carry_square.spec l1`, and the final equation closes by `clear_reads;
 subst_vars; rfl` against the spec's `let`s.
 
+## P13. Aliased arguments (`fd_f25519_set.lean`, `fd_ed25519_point_neg.lean`)
+
+When a caller passes the same object twice (`fd_ed25519_point_neg(A, A)` in verify), state one
+theorem whose separation premise allows it, `hsep : dst = src ∨ dst.id ≠ src.id`, and prove it by
+`rcases hsep with rfl | hsep` with the same steps in both branches. `mem_fact` cannot prove a
+disjunction, so a caller names the case: `step_call using (fd_f25519_set.call_eq (hsep := .inr ?_))`
+(the `?_` is closed like any premise) or `(hsep := .inl rfl)`.
+
+## P14. Objects made of objects (`Common/Point.lean`)
+
+A struct of field elements gets its own read/store functions and fit predicate (`readPoint`,
+`storePoint` in the order the code stores, `PointFit`), plus:
+- `mlir_transport` projections from the predicate to each component's (`PointFit.limbsFit_Y`),
+  so `mem_fact` proves a callee's `LimbsFit (r.add 40#64)`;
+- `mlir_read` lemmas for reading one component past a store to another
+  (`readLimbs_storeLimbs_coord`), with premises the steps discharge: the object predicate of the
+  memory before the store, and literal offset conditions by `decide`;
+- read-back lemmas for the whole store (`readLimbs_storePoint_Y`), transport and frame lemmas.
+
+Then `step_call` results compose into `storePoint r P` and the final equation closes by `rfl`.
+
 ## P12. Invariant arithmetic in transition lemmas
 
 When a loop invariant carries arithmetic (a digit sum, a bound), the invariant is a predicate
