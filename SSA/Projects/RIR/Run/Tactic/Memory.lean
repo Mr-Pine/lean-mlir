@@ -652,7 +652,7 @@ def readMemFact (c : MemCtx) : Simp.Simproc := fun e => do
   -- inside a known read: `S.mem.readAt (q.add off) w` from `S.mem.readAt q v = x`
   let_expr MemoryState.readAt m p w := e' | return .continue
   let some (q, off) := p.app2? ``Pointer.add | return .continue
-  for (l, x, h) in c.reads.toArray.map fun (l, (x, h)) => (l, x, h) do
+  for (l, h) in c.reads.toArray.map fun (l, (_, h)) => (l, h) do
     let_expr MemoryState.readAt m' q' v := l | continue
     unless m' == m && q' == q do
       continue

@@ -154,7 +154,7 @@ theorem MemoryState.readAt_add_of_readAt {off : BitVec 64} (hfits : Fits m p v)
 /-- A read over a store inside it: the bits read before, with the stored ones spliced in. -/
 @[mlir_read]
 theorem MemoryState.readAt_add_storeAt {off : BitVec 64} (hfits : Fits m p v)
-    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x : BitVec w) :
+    (hov : ¬p.offset.uaddOverflow off) (_hw : off.toNat * 8 + w ≤ v) (x : BitVec w) :
     (m.storeAt (p.add off) x).readAt p v = spliceBits (m.readAt p v) (off.toNat * 8) x := by
   obtain ⟨blk, hblk, hsz⟩ := hfits
   have hs :

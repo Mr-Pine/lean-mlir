@@ -152,7 +152,7 @@ theorem mk_map_toArray (l : List α) (f : α → β) (h : (l.map f).toArray.size
 open Lean Meta in
 /-- `#v[.value x₀, …, .value xₙ]` to `Ty.wrap #v[x₀, …, xₙ]`: the `PoisonOr` moves out of the lanes. -/
 simproc pullWrap (Vector.mk _ _) := fun e => do
-  let_expr Vector.mk α _ arr h := e | return .continue
+  let_expr Vector.mk α _ arr _ := e | return .continue
   let_expr PoisonOr β := α | return .continue
   let_expr BitVec w := β | return .continue
   let_expr List.toArray _ l := arr | return .continue
