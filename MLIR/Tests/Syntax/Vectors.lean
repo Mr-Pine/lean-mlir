@@ -65,6 +65,10 @@ example (x : Vector (BitVec 64) 2) (s : GlobalState) (hwf : s.WF)
   finish_block
   rw [hS]
 
+-- a lane at a literal index takes its bound by `decide`; a symbolic one by the context, as before
+example (x : Vector (BitVec 64) 8) (i : Nat) (hi : i < 8) : x[3] = x[3] ∧ x[i] = x[i] :=
+  ⟨rfl, rfl⟩
+
 end
 
 end MLIR.Tests.Syntax.Vectors
