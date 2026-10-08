@@ -13,8 +13,11 @@ namespace MLIR.Operation
 attribute [mlir_operation] PoisonOr.value_bind PoisonOr.poison_bind PoisonOr.bind_poison
   PoisonOr.pure_def
 
+/-- `⟦.bv w⟧`, spelled so `simp` indexes lemmas over it (`Vector.zipWith (Operation.and (w := 64))`) by
+`PoisonOr`, as the steps' values have it: global simp lemmas are indexed without reducing the
+`match` in `Ty.denote`. -/
 abbrev IntW w :=
-  (Ty.bv w).denote
+  PoisonOr (BitVec w)
 
 section BVBinOp
 
