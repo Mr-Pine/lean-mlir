@@ -73,9 +73,22 @@ elab "extract_env" : tactic => do
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
+/-- The conjuncts of `h : ty`, `ty` unfolded once (an abbreviation), the conjuncts themselves not. -/
+meta def topConjuncts (h ty : Expr) : MetaM (Array (Expr × Expr)) := do
+  let mut out := #[]
+  let mut h := h
+  let mut ty ← whnfR ty
+  while true do
+    let some (a, b) := ty.and? | break
+    out := out.push (mkApp3 (mkConst ``And.left) a b h, a)
+    h := mkApp3 (mkConst ``And.right) a b h
+    ty := b
+  return out.push (h, ty)
+
 /-- With the initial state `S₀` (`hS : S = S₀`), `hwf : S.WF` and each `h : Fits S.mem p w` also
-about `S₀` (`hwf₀`, `h₀`): the steps carry only facts of the current state, and reads through `hS`
-below a frame's new blocks, like removing the frame at the end, need the initial ones. -/
+about `S₀` (`hwf₀`, `h₀`; an object predicate's `Fits` conjuncts `h₀`, `h₀_1`, …): the steps carry
+only facts of the current state, and reads through `hS` below a frame's new blocks, like removing
+the frame at the end, need the initial ones. -/
 meta def addInitialFacts : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -85,12 +98,18 @@ meta def addInitialFacts : TacticM Unit :=
     for h in ← hypsMentioning S (except := #[hS]) do
       let d ← h.getDecl
       let ty ← instantiateMVars d.type
-      unless ty.isAppOfArity ``GlobalState.WF 1 || ty.isAppOfArity ``Fits 3 do
-        continue
-      let motive := .lam `s (← inferType S) (← kabstract ty S) .default
-      let pf ← mkEqNDRec motive d.toExpr (mkFVar hS)
-      facts :=
-        facts.push { userName := d.userName.appendAfter "₀", type := ← inferType pf, value := pf }
+      -- an object predicate unfolding to `Fits` conjuncts (`QuadFit`): each of them, one level
+      -- deep (copies of nested objects' conjuncts slowed point_add's steps past the heartbeats)
+      let parts ←
+        if ty.isAppOfArity ``GlobalState.WF 1 then
+          pure #[(d.toExpr, ty)]
+        else
+          pure ((← topConjuncts d.toExpr ty).filter (·.2.isAppOfArity ``Fits 3))
+      for ((pf, ty), k) in parts.toList.zipIdx do
+        let motive := .lam `s (← inferType S) (← kabstract ty S) .default
+        let pf ← mkEqNDRec motive pf (mkFVar hS)
+        let name := d.userName.appendAfter (if k == 0 then "₀" else s!"₀_{k}")
+        facts := facts.push { userName := name, type := ← inferType pf, value := pf }
     let (_, g) ← g.assertHypotheses facts
     replaceMainGoal [g]
 
