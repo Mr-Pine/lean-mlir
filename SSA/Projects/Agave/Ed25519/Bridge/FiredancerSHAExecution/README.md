@@ -1,13 +1,13 @@
-# Pinned Firedancer SHA execution work
+# Pinned Firedancer SHA execution proofs
 
-This directory imports all four scalar Firedancer SHA-512 bodies into RIR. It
-proves the complete initializer call, the zero-length append call, and the
-actual extracted constant table's equality to the existing SHA-512 specification.
-The frozen source leaves also prove the first/later round instruction bodies,
-circular schedule arithmetic and memory updates, the initialized streaming
-invariant, append's length-counter body, and finalizer padding/output slices.
-It does **not** provide `FiredancerShaInitBy`, `FiredancerShaAppendBy`,
-`FiredancerShaFinishBy`, or `DigestBy` witnesses.
+This directory imports all four scalar Firedancer SHA-512 bodies into RIR
+and SLLVM and proves their complete reachable calls. The RIR transcript
+endpoint is `TranscriptInvocation.fresh_correct`; the SLLVM core, append,
+and finalizer proofs supply the actual SHA calls in the existing reference
+verifier through `verifierTailCalls`. Both compute the standard original-byte
+`R || publicKey || message` digest without a compression/execution/digest premise.
+See [SLLVMSourceBoundary.md](SLLVMSourceBoundary.md) and the
+[parent proof ledger](../ProofClosureLedger.md) for final endpoints and validation.
 
 ## Source and reproduction
 
@@ -83,32 +83,24 @@ The LLVM core function uses `fastcc`; its two callers and definition agree in
 the artifacts. Linking here uses RIR's exactly typed parameter order
 `[ptr, ptr, bv64]` and its private-frame cleanup semantics.
 
-## Remaining dependency graph
+## Complete call proofs
 
-1. Prove the imported core's stack/schedule memory safety and its first-16 and
-   circular-schedule remaining-64 round loops refine
-   `Agave.Ed25519.SHA512.Spec.compressBlock`, then iterate over positive block
-   counts. The C core is a do-while loop; zero block count is not a valid
-   compression entry case. Reusing the Agave **specification and arithmetic**
-   is appropriate; an Agave machine-body theorem is not a theorem about this
-   different Firedancer CFG.
-2. Use that core refinement and the proved counter body to prove nonempty append's
-   partial-buffer/full-block split, and exact state/memory frame; establish the
-   invariant `buf_used < 128` and the 128-bit message-length interpretation.
-3. Compose the proved finalizer instruction slices with core calls; prove their
-   byte-level padding and digest observations and the required memory frames.
-   Compose into a streaming
-   SHA-512 result for `R || A || message`.
-4. Connect to the existing bridge contracts. `FiredancerShaPrograms` and
-   `FiredancerSha*By` currently quantify **SLLVM.Cfg**, SLLVM `GlobalState`, and
-   `LiveBlock` transformers. These new bodies are **RIR.Func** and RIR states.
-   A proved state/program simulation or independently imported/proved matching
-   SLLVM bodies is required; type-compatible witnesses cannot be obtained by
-   simply plugging these RIR definitions into those contracts.
-5. Establish correspondence of the pinned source/version to the legacy
-   verifier lift if reusing that exact SLLVM program. The legacy source file
-   names a local build path but contains no source-commit pin; no equality
-   between that lift and this newer pinned revision is asserted here.
-6. The established stream refinement can then inhabit `DigestBy` via the
-   existing `digestBy_of_stream` theorem. None of steps 1–5 is replaced by a
-   new axiom, assumed compression contract, or a legacy determinism axiom here.
+`CoreMultiBlocks` and its supporting loop/frame modules close RIR compression
+for every positive block count satisfying readiness. The zero-count entry is
+excluded because the extracted core uses a do-while loop. `AppendLinked`
+and the `AppendSemantic*` proofs establish append execution and the streaming
+invariant. `FinishCompositionSource` establishes actual padding/finalization and the
+standard digest. `TranscriptCorrect*` composes init and all three appends
+with finalization and supplies a fresh-context theorem.
+
+The `SLLVMSourceCore*`, `SLLVMAppend*`, and `SLLVMFinish*` modules independently
+prove the corresponding SLLVM calls; the two interpreters' states are not
+identified. The allocation-independence adapter supplies the exact block
+contract required by the reachable verifier proof. The existing broad
+contracts over malformed/unreachable states remain available as generic
+interfaces, but are not assumptions of the final comparison.
+
+Source extraction, native/compiler refinement, and identity of the older
+unpinned verifier lift with a newer source revision remain separate boundaries.
+The complete source-linked comparison and explicit-memory corollary are in
+`Bridge/CrossClientReachableConcrete.lean` and `Bridge/CrossClientLoaded.lean`.

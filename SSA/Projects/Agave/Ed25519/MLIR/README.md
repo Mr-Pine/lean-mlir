@@ -22,6 +22,18 @@ original manifests remain in `source/`. The extraction profile uses optimization
 level 3, one codegen unit, disabled overflow/debug checks, and `panic=abort`.
 This is a dedicated extraction build, not a byte-identical Agave release binary.
 
+## Completed implementation proof
+
+The strongest [loaded cross-client theorem](../Bridge/CrossClientLoaded.lean)
+now proves defined executions of the linked Agave RIR verifier and source-linked
+Firedancer reference verifier on arbitrary original caller bytes. It constructs
+both initialized memories; only the hardware contract, external bcmp32 contract,
+and message-length bound remain. Acceptance is exactly Firedancer success
+with canonical R, and agrees on canonical R. Decoder, both arithmetic backends,
+SHA execution, and scalar reduction are proved internally. This does not alter
+the compiler/native-semantics boundaries described below. The
+[proof ledger](../Bridge/ProofClosureLedger.md) records validation and scope.
+
 ## Reproduction
 
 ```bash

@@ -36,36 +36,45 @@ bound to the imported `SLLVMSource.core`.
 The dependency order is Init, Core, Append, Finish, Programs, Initialize,
 InitContract, InitObservation, Audit (all prefixed `SLLVMSource`).
 
-## Remaining proof boundary
+## Complete reachable calls
 
-These modules do not prove SLLVM core, append, or finish execution. Therefore
-`FiredancerShaAppendBy programs k appendModel`,
-`FiredancerShaFinishBy programs k finishModel finishBlock`, and the actual
-invocation's digest equality remain required by the verifier bridge. The
-initializer can now be instantiated with `initModel` and `init_contract`.
-Importing an identical source region is not a semantic RIR/SLLVM simulation.
+The imported core, append, and finalizer now have direct SLLVM execution
+proofs. They do not rely on an RIR/SLLVM interpreter simulation:
 
-A shortest sound next step is a narrow call relation that proves actual
-append/finalizer return, written context/output blocks, unchanged caller blocks,
-and allocator/global restoration from their reachable stream invariants. The
-single-store byte relation `rir_storeAt_block` and initializer observation give
-a checked starting point. RIR's frame cleanup erases private blocks while SLLVM
-marks them dead and restores the entry allocation counter, so a full-state
-equality would be unnecessary and generally false.
+- `Core.executes` proves arbitrary positive compression block counts with raw
+  initialized K bytes, small live ranges, separation, and complete caller framing.
+- The `SLLVMAppend*` modules prove the R32/A32 prefix and arbitrary message
+  append, preserving the completed/pending stream representation.
+- `MessageExecution.reachable_message` proves an exact context block result
+  independent of input allocation identity, supplying the verifier's third
+  reachable append contract.
+- `FinishCorrect.call_digest_source` and `reachable_finish_source` prove both
+  finalization branches, the standard transcript digest, and the output frame.
+- `verifierTailCalls` instantiates the message-append and finalizer contracts;
+  `CrossClientReachableConcrete` and `CrossClientLoaded` compose them with the
+  actual verifier. No SHA call or digest-equality premise remains there.
 
-The existing uniform `Sha512AppendBy` and `Sha512FiniBy` contracts also quantify
-malformed or unreachable contexts and inputs up to the 64-bit bound. Existing
-RIR linked-call theorems use `SmallRange` and initialized pending-count/stream
-facts. Instantiating those uniform contracts needs proofs for their larger
-domain; alternatively specialize the verifier proof to the reachable call
-sequence. Do not replace the larger-domain obligations with an assumed digest
-observation equality.
+The older uniform `FiredancerShaAppendBy`/`FiredancerShaFinishBy` interfaces
+quantify over additional malformed contexts. The closed comparison instead
+uses the exact reachable init/R/A/message/finalizer sequence. Generalizing to
+unreachable contexts is unnecessary for this verifier theorem.
+
+Strict transitive audits for the core, append, finalizer, adapters, and final
+comparison admit only `propext`, `Classical.choice`, and `Quot.sound`. The
+complete checks and source/artifact provenance are recorded in the
+[parent proof ledger](../ProofClosureLedger.md).
+
+## Interpretation boundary
 
 The original C-to-LLVM-to-MLIR extraction and imported-region interpretation
-remain trusted boundaries. SLLVM intentionally ignores GEP `inbounds`/no-wrap
-metadata, load/store alignment, and alias metadata; this is visible in its
-parser. The initializer cross-dialect theorem uses RIR's stronger `SmallRange`
-premise and proves only the stated defined executions. No native/compiler
-semantic preservation theorem, full-stream SHA theorem, SHA assembly theorem,
-or correspondence between the older verifier lift and the newly pinned SHA
-source version is asserted here.
+remain trusted boundaries. SLLVM ignores GEP `inbounds`/no-wrap metadata,
+load/store alignment, and alias metadata; explicit arithmetic overflow flags
+remain in the imported instructions. Small-allocation assumptions prove the
+addresses used by the executed paths. RIR frame cleanup erases private blocks;
+SLLVM marks them dead and restores the entry allocation counter. The proofs
+compare the relevant observations, not entire interpreter states.
+
+No native/compiler refinement, accelerated Firedancer SHA assembly theorem,
+or source-version identity between the older verifier lift and the newly
+pinned SHA region is asserted. The final result is the source-linked imported
+verifier's defined acceptance behavior, with the canonical-R policy explicit.

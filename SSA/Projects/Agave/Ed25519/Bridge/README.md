@@ -1,9 +1,10 @@
 # Ed25519 implementation and acceptance bridge
 
-The Agave proof reaches the actual linked RIR verifier. The source-linked
-Firedancer comparison still has four invocation-specific SHA call contracts
-to discharge. See [ProofClosureLedger.md](ProofClosureLedger.md) for the
-checked endpoints, remaining work, and validation status.
+The complete Agave RIR verifier is connected to the existing Firedancer
+reference verifier with concrete source-linked SHA calls. The strongest
+entry point is `CrossClientLoaded.runs` in [CrossClientLoaded.lean](CrossClientLoaded.lean).
+It constructs both loaded environments and proves that both actual executions
+return defined results for arbitrary key, signature, and message bytes.
 
 The exact acceptance relation is:
 
@@ -12,71 +13,90 @@ Agave accepts ↔ Firedancer succeeds ∧ CanonicalY R
 ```
 
 `CanonicalY R` requires the low 255 bits of the signature's R encoding to be
-below `2^255 - 19`. On canonical R, the returned acceptance Booleans agree.
-Unrestricted equivalence is not the proved policy: Agave compares the canonical
-computed encoding, while Firedancer compares decoded points. The mathematical
-witness in `PolicyWitness.lean` does not supply a signature for a real message
-or a SHA-512 preimage.
+below `2^255 - 19`. `CrossClientLoaded.runs_of_canonical` proves equal acceptance
+when that condition holds. Agave compares the canonical computed encoding;
+Firedancer compares decoded points. The specification-level witness in
+`PolicyWitness.lean` supplies neither a signature for a real message nor a
+SHA-512 preimage, so it is not evidence of a reachable acceptance divergence.
 
-## Current entry points
+## Strongest endpoints
 
-| Entry point | What it establishes |
+| Endpoint | Scope and assumptions |
 | --- | --- |
-| `AgaveReady.call_strict_bcmp` in `AgaveBcmpOnly.lean` | The concrete Agave wrapper returns the mathematical strict-verification Boolean, including malformed-input rejection. Its only external function is bcmp; other assumptions describe caller/global memory and hardware instruction behavior. |
-| `CrossClientReachableRawLoaded.observations` | Actual Agave and source-linked Firedancer observations agree with the canonical-R mask, assuming four reachable Firedancer SHA tail contracts. Literal base-table bytes discharge the group-table interpretation premise. |
-| `CrossClientReachableRawLoaded.runs` | Both executions return defined results with that same policy relation, under the same assumptions. |
-| `FiredancerSHAExecution.TranscriptInvocation.fresh_correct` | The actual Firedancer RIR init/append-R/append-A/append-message/finalizer sequence computes the standard SHA-512 transcript digest in a fresh context. |
-| `FiredancerSHAExecution.SLLVMSource.Core.executes` | The imported Firedancer SLLVM scalar compression core computes standard SHA-512 compression for any positive block count satisfying `Ready`, preserving all other caller-visible live memory. |
+| `CrossClientLoaded.runs` | Actual executions on arbitrary original bytes in explicit loaded memories. Assumes only the hardware instruction contract, external bcmp32 contract, and message length `< 2^63`. |
+| `CrossClientLoaded.runs_of_canonical` | The same executions have equal acceptance when R is canonical. |
+| `CrossClientReachableConcrete.observations` and `runs` | General caller-memory version: raw initialized constants/tables and ordinary live-memory conditions, hardware, and bcmp. All SHA calls and digest correctness are supplied internally. |
+| `AgaveReady.call_strict_bcmp` | The actual Agave wrapper returns the mathematical strict-verification Boolean, including malformed-input rejection. |
+| `RIRChallengeEquivalence.calls` | Actual Agave challenge execution and Firedancer RIR SHA transcript produce the same reduced challenge bytes. |
 
-Agave's theorem supplies decoder execution, scalar reduction, point operations,
-serial and AVX2 double-base execution, point compression, SHA dispatch and both
-SHA backends. It does not assume a valid key, scalar, or signature. Ordinary
-input and environment requirements include live buffers, ABI length bounds,
-well-formed memory, initialized constant/table bytes, legal cache bytes, and
-separation from mutable caches. The external bcmp contract says that a
-32-byte comparison returns zero exactly when the bytes agree and preserves
-caller memory. Hardware contracts describe state-preserving CPUID/gated XGETBV
-and sequential atomic stores; correct feature detection is unnecessary because
-both selected backends are proved.
+There is no decoder, backend, compression, hash-execution, digest-equality,
+result-equality, or valid-signature premise in the strongest endpoints.
+Serial and AVX2 double-base multiplication and both Agave SHA backends are
+proved. The byte transcript is the original `R || publicKey || message`,
+including any noncanonical input encoding; it is not reconstructed from
+curve points. Source scalar reduction is proved modulo the subgroup order.
 
-The Firedancer endpoint uses the existing reference verifier and arithmetic
-proof, with actual imported SHA CFGs from pinned revision
-`292f89b338a634e23e9f45c3dfdd5383ddcae624`. The remaining SHA assumptions concern
-only the three appends and finalization reached by this invocation. They are
-not a whole-verifier execution premise. The separate RIR transcript theorem
-does not automatically discharge contracts in the older SLLVM interpreter;
-direct SLLVM append/finalizer proofs and their adapters are being completed.
+`AgaveReadyEnvironmentWitness*` constructs Agave's literal globals and arbitrary
+caller buffers. `FiredancerFieldInitializer` proves the seven raw field
+initializers' values and bounds, removing the semantic `RefWF` assumption.
+`FiredancerEnvironmentWitness` constructs a simultaneous Firedancer environment
+with those fields, the base table, SHA constants, and arbitrary input buffers.
+`FiredancerEnvironmentReads` identifies the actual observed key/R/S/message
+bytes, including after the fresh SHA allocation.
 
-## Mathematical and legacy modules
+The bcmp contract requires a read-only 32-byte comparison that returns zero
+exactly when the bytes agree. Hardware contracts describe state-preserving
+CPUID/gated XGETBV and sequential atomic stores. Feature-detection accuracy is
+unnecessary because both selected backends are proved. Panic handlers remain
+arbitrary parameters, with no behavior assumption: the proved executions do
+not reach them.
 
-`Encoding.lean`, `SmallOrder.lean`, `Acceptance.lean`, `Equivalence.lean`, and
-`FiredancerSpec.lean` establish the policy bridge over Firedancer's existing
-`Edwards.Point Ed25519.curve` and proved group operations. They introduce no
-second curve model or new group axioms.
+## Proof organization and validation
 
-Earlier `CrossClient*` modules retain more local contracts for modular use.
-They are not the strongest endpoints. `CrossClientAgaveReady.lean` closes the
-Agave side but retains more general Firedancer SHA contracts and an explicit
-digest equation. The reachable source comparison narrows those obligations.
-Legacy adapters that use the old signature-only `fd_sha512_init`,
-`fd_sha512_append`, and `fd_sha512_fini` declarations have a separate axiom
-audit; they must not be described as standard-foundation-only results.
+The mathematical policy bridge in `Encoding`, `SmallOrder`, `Acceptance`,
+`Equivalence`, and `FiredancerSpec` reuses Firedancer's existing curve and group
+proofs. It introduces no second curve model or group axioms.
+
+The SHA directory proves the complete RIR transcript and independently proves
+the SLLVM calls needed by the older verifier interpreter. `verifierTailCalls`
+constructs the actual third-append/finalizer contracts from the proved prefix
+and stream representation. Allocation independence relates equal context and
+input bytes across different caller allocations; it is proved, not assumed.
+The [SHA boundary document](FiredancerSHAExecution/SLLVMSourceBoundary.md)
+describes the imported functions and extraction pin.
+
+Earlier `CrossClient*` modules remain available as more general conditional
+interfaces. Legacy adapters that use signature-only SHA declarations retain
+separate axiom audits and are not the strongest result.
+
+All strongest endpoints were kernel checked on the designated devbox using
+Lean `nightly-2026-09-16`. Independent validation reconciled the exact
+1,639-source loaded-audit closure and 1,644-source combined closure with the
+supporting audits. Both loaded endpoints depend on exactly `propext`,
+`Classical.choice`, and `Quot.sound`. See [ProofClosureLedger.md](ProofClosureLedger.md)
+for validation evidence and commits.
 
 ## Interpretation boundary
 
-These are theorems about the imported CFGs in the RIR and SLLVM interpreters.
-Compiler correctness and a native LLVM refinement are not proved. In
-particular, RIR's initialized allocation model needs a separate connection to
-LLVM undef/poison; alignment, alias metadata, volatile events, and concurrent
-atomic behavior are not established by the return-value theorem. The source
-and initializedness audits document these boundaries. Error-code equality,
-timing equality, and whole-validator behavior are outside the observation.
+The result concerns the imported RIR/SLLVM CFGs and returned acceptance.
+Compiler correctness, correspondence to a complete native validator binary,
+and native LLVM undef/poison refinement are not proved. RIR's initialized
+allocation model still needs that separate refinement. Physical alignment,
+alias metadata, volatile-event traces, concurrent atomics, timing, and
+error-code equality are outside the observation. The source and initializedness
+audits document those boundaries; passing the axiom audit does not remove them.
 
-The strict audits admit only `propext`, `Classical.choice`, and `Quot.sound`
-for the current clean endpoints. This checks their transitive logical
-dependencies; it does not discharge assumptions or prove source extraction
-correctness. Imported source consistency can be checked with:
+For a clean checkout with its locked dependencies, the final audit target is:
+
+```sh
+lake build SSA.Projects.Agave.Ed25519.Bridge.CrossClientLoadedAudit
+```
+
+Run heavy builds on the designated devbox. Reuse cached artifacts only with
+matching source and dependency provenance, including the nested LeanMLIR
+package's parser. Source consistency checks include:
 
 ```sh
 python3 SSA/Projects/Agave/Ed25519/Bridge/FiredancerSHAExecution/import_sllvm.py --check
+python3 SSA/Projects/Agave/Ed25519/Bridge/check_field_initializer.py
 ```
