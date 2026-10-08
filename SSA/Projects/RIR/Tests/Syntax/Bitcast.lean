@@ -14,6 +14,11 @@ namespace LeanMLIR.RIR.Tests.Syntax.Bitcast
 example (v : BitVec 8) : [#v[0#8, v][0] ++ 0#8, 1] = [0, 1] := by
   simp [mlir_operation]
 
+-- a lane at `⟨k, _⟩` or `↑⟨k, _⟩` is the lane at `k`, as specs write it
+example (x : Vector (BitVec 64) 8) :
+    (Vector.ofFn fun i : Fin 8 => x[i] + x[i.1])[3] = x[3] + x[3] := by
+  simp only [Vector.getElem_ofFn, reduceGetElemLit]
+
 end
 
 end LeanMLIR.RIR.Tests.Syntax.Bitcast

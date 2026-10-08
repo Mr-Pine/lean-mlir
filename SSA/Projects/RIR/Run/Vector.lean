@@ -16,8 +16,11 @@ dsimproc [mlir_operation]expandOfFn (Vector.ofFn _) := fun e => do
     let fi ← mkAppM ``Fin.mk #[mkNatLit i, ← mkDecideProof lt]
     let lane ←
       Meta.transform (f.beta #[fi]) (post := fun x => do
+          -- `↑fi` as the literal
+          if let some j := x.app2? ``Fin.val |>.map (·.2) then
+            return if j == fi then .done (mkNatLit i) else .continue
           let_expr GetElem.getElem _ _ _ _ _ xs j _ := x | return .continue -- (ofFn f)[j] -- xs[j]
-          unless j == fi do
+          unless j == fi || j == mkNatLit i do
             return .continue
           let xsTy ← whnfR (← inferType xs)
           let_expr Vector β m := xsTy | return .continue
@@ -98,26 +101,35 @@ meta def litIndex? (i : Expr) : MetaM (Option Nat) := do
       return none
 
 open Lean Meta in
-/-- A literal vector's lane at a literal index, by a proof step: as a `dsimp` step the kernel checks
-the read together with the `dsimp` steps after it, which in a module it may not unfold
-(`#v[0#8, x][0] ++ 0#8` to `0#16` needs `Nat.lor`); by `rfl` it may unfold the lanes. -/
+/-- A lane at a literal index: of a literal vector, that lane; of another vector at `⟨k, _⟩`,
+`↑⟨k, _⟩` or `(k : Fin n)`, `xs[k]`, as specs write it. A literal's lane is a proof step: as a `dsimp`
+step the kernel checks the read together with the `dsimp` steps after it, which in a module it may
+not unfold (`#v[0#8, x][0] ++ 0#8` to `0#16` needs `Nat.lor`); by `rfl` it may unfold the lanes. -/
 simproc ↓[mlir_operation]reduceGetElemLit (GetElem.getElem _ _ _) := fun e => do
   let_expr GetElem.getElem _ _ _ _ _ xs i _ := e | return .continue
   let i ← instantiateMVars i
-  let some (α, n, l, h, elems) := vecLit? xs | return .continue
-  let some k ← litIndex? i | return .continue
-  let some lane := elems[k]? | return .continue
-  if (← (evalNat n).run).isNone then
+  if let some (α, n, l, h, elems) := vecLit? xs then
+    let some k ← litIndex? i | return .continue
+    let some lane := elems[k]? | return .continue
+    if (← (evalNat n).run).isNone then
+      return .continue
+    let kE := mkNatLit k
+    let some u := (← inferType α).sortLevel!.dec | return .continue
+    let get? ← mkAppM ``GetElem?.getElem? #[l, kE]
+    let some' := mkApp2 (mkConst ``Option.some [u]) α lane
+    let hl ← mkExpectedTypeHint (← mkEqRefl some') (← mkEq get? some')
+    let pf :=
+      mkAppN (mkConst ``Vector.getElem_mk_of_getElem? [u])
+        #[α, n, l, h, kE, ← mkDecideProof (← mkAppM ``LT.lt #[kE, n]), lane, hl]
+    return .visit { expr := lane, proof? := ← mkExpectedTypeHint pf (← mkEq e lane) }
+  let finIndex :=
+    i.isAppOf ``Fin.val || i.isAppOf ``Fin.mk ||
+      i.isAppOfArity ``OfNat.ofNat 3 && i.appFn!.appFn!.appArg!.isAppOf ``Fin
+  unless finIndex do
     return .continue
-  let kE := mkNatLit k
-  let some u := (← inferType α).sortLevel!.dec | return .continue
-  let get? ← mkAppM ``GetElem?.getElem? #[l, kE]
-  let some' := mkApp2 (mkConst ``Option.some [u]) α lane
-  let hl ← mkExpectedTypeHint (← mkEqRefl some') (← mkEq get? some')
-  let pf :=
-    mkAppN (mkConst ``Vector.getElem_mk_of_getElem? [u])
-      #[α, n, l, h, kE, ← mkDecideProof (← mkAppM ``LT.lt #[kE, n]), lane, hl]
-  return .visit { expr := lane, proof? := ← mkExpectedTypeHint pf (← mkEq e lane) }
+  let some k ← litIndex? i | return .continue
+  let some lane ← mkVecGetElem xs k | return .continue
+  return .visit { expr := lane, proof? := ← mkExpectedTypeHint (← mkEqRefl lane) (← mkEq e lane) }
 
 open Lean Meta in
 /-- `shufflevector` with a literal mask, to its lanes: `a[k]`, `b[k - n]` or poison. Before the
