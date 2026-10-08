@@ -159,8 +159,14 @@ def finishStep (args : StepArgs) : TacticM Unit :=
         pure (some s.getId)
       | .auto =>
         do
-          let some idx ← dstIndex? dst | throwError m!"Could not get dst index from {dst}"
-          pure (some ((`v).appendAfter (toString idx)))
+          if let some idx← dstIndex? dst then
+            pure (some ((`v).appendAfter (toString idx)))
+          else
+            -- an abstract register (in a pattern lemma's proof): after its variable, `vy` for `y`
+            let xs ←
+              (collectFVars {} dst).fvarIds.filterM fun x => return (← x.getType).isAppOf ``Dst
+            let some x := xs[0]? | pure (some `v)
+            pure (some ((`v).appendAfter (← x.getUserName).toString))
     if let some x := name? then
       let hx :=
         match args.hyp with
