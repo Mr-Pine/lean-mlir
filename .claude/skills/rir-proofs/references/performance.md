@@ -36,13 +36,12 @@ In the proof:
 | facts about dead objects | every effectful step carries each fact | `consuming`, `clear` (`SKILL.md`) |
 | `simp_all`, `simp … at *`, `bv_omega` in a step context | normalizes hundreds of hypotheses (38 s for 10 sites once) | `decide` for literal goals; normalize the goal only, then `omega` |
 | `bv_decide`/`ring`/`omega` inside the step proof | runs in the big context | separate lemma, applied by name |
-| `x[i]` with a non-literal index | core's `get_elem_tactic` runs `rw … at *` over the context | literal indices, or the bound as a named fact |
+| `x[i]` with a non-literal index | core's `get_elem_tactic` runs `rw … at *` over the context (a literal index is decided) | literal indices, or the bound as a named fact |
 | `exact` of a whole-vector lemma that may not match | a failing unification unfolds under `ofFn` for minutes | check operand shapes first; pass arguments explicitly |
 | unifying pointers (`(f p k).id =?= p.id`) | `whnf` evaluates offset arithmetic; timeout at the declaration | `rfl` lemma `(f p k).id = p.id`, rewrite explicitly |
 | `generalize`/`subst` of a computed value | kernel evaluates it back ("deep recursion") | `obtain ⟨b, hb⟩ : ∃ b, e = b := ⟨_, rfl⟩` |
 | `obtain`/`rcases` on big goals | reverts the goal per layer | continuation-form lemmas, `refine` |
 | editing a module many files import | every importer rebuilds | stage new lemmas in the working file, move them when done |
-| inputs read below many `alloca`s | each read walks every layer, each step (a call 860 ms) | read facts of the inputs right after `func_init` (220 ms) |
 | a callee premise derived from a composite fact (`LimbsFit (a.add 80)` from `PointFit a`) | `mem_fact`'s transport search through `hS`, ~290 ms per premise | `mlir_transport` projection lemmas (tried two deep on the current facts first), or the coordinate facts as locals |
 
 In the framework (fixed; check these first if a step itself is slow):
