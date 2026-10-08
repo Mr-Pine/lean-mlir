@@ -73,19 +73,26 @@ elab "extract_env" : tactic => do
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
-/-- With the initial state `S₀` (`hS : S = S₀`) and `hwf : S.WF`, add `hwf₀ : S₀.WF`: the steps only
-carry `WF` of the current state, and removing the frame at the end needs the initial one. -/
-meta def addInitialWF : TacticM Unit :=
+/-- With the initial state `S₀` (`hS : S = S₀`), each fact `h : P S` (`hwf : S.WF`,
+`Fits S.mem p w`, an object's) also as `h₀ : P S₀`: the steps carry only facts of the current
+state, and reads through `hS` below a frame's `alloca`s, like removing the frame at the end, need
+the initial ones. -/
+meta def addInitialFacts : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
     let S := (← getFuncRunFromGoal goal).state
     let hS ← findEqWithLhs S
-    let some hwf ← withReducible (findLocalDeclWithType? (← mkAppM ``GlobalState.WF #[S])) | return
-    let hwf ← hwf.getDecl
-    let hwf₀ ← mkEqNDRec (mkConst ``GlobalState.WF) hwf.toExpr (mkFVar hS)
-    let (_, g) ←
-      g.assertHypotheses
-          #[{ userName := hwf.userName.appendAfter "₀", type := ← inferType hwf₀, value := hwf₀ }]
+    let mut facts := #[]
+    for h in ← hypsMentioning S (except := #[hS]) do
+      let d ← h.getDecl
+      let ty ← instantiateMVars d.type
+      if ty.isEq || ty.isForall || !(← isProp ty) then
+        continue
+      let motive := .lam `s (← inferType S) (← kabstract ty S) .default
+      let pf ← mkEqNDRec motive d.toExpr (mkFVar hS)
+      facts :=
+        facts.push { userName := d.userName.appendAfter "₀", type := ← inferType pf, value := pf }
+    let (_, g) ← g.assertHypotheses facts
     replaceMainGoal [g]
 
 /-- Start a proof of `f.call args s = .value (r, t)`: for a frame-free `f`, reduce it to `f.run` by
@@ -115,7 +122,7 @@ elab "func_init" : tactic =>
     evalTactic (← `(tactic | extract_state))
     evalTactic (← `(tactic | extract_env))
     if framed then
-      addInitialWF
+      addInitialFacts
 
 end FuncInit
 
