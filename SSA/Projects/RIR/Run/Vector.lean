@@ -7,9 +7,11 @@ namespace LeanMLIR.RIR
 public section
 
 open Lean Meta in
-dsimproc [mlir_operation]expandOfFn (Vector.ofFn _) := fun e => do
-  let_expr Vector.ofFn n α f := e | return .continue
-  let some k := (← instantiateMVars n).nat? | return .continue
+/-- `Vector.ofFn f` of a literal length as its lanes `#v[f 0, …]`, each lane's `xs[↑i]` as
+`xs[k]`; definitionally equal. -/
+meta def ofFnLanes? (e : Expr) : MetaM (Option Expr) := do
+  let_expr Vector.ofFn n α f := e | return none
+  let some k := (← instantiateMVars n).nat? | return none
   let mut elems := #[]
   for i in [0:k] do
     let lt ← mkAppM ``LT.lt #[mkNatLit i, n]
@@ -36,7 +38,12 @@ dsimproc [mlir_operation]expandOfFn (Vector.ofFn _) := fun e => do
     -- We rebuilt the single lane expression
     elems := elems.push lane
   let arr ← mkAppM ``List.toArray #[← mkListLit α elems.toList]
-  return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel α]) α n arr (← mkEqRefl n))
+  return some (mkApp4 (mkConst ``Vector.mk [← getDecLevel α]) α n arr (← mkEqRefl n))
+
+open Lean Meta in
+dsimproc [mlir_operation]expandOfFn (Vector.ofFn _) := fun e => do
+  let some lanes ← ofFnLanes? e | return .continue
+  return .visit lanes
 
 /-- `↑(k : Fin n)` of a literal: `simp` itself reduces it only for `k ≤ 2`. -/
 @[simp, mlir_operation]
@@ -370,6 +377,20 @@ attribute [mlir_operation] List.any_cons List.any_nil Bool.or_false Bool.false_o
 theorem zipWith_eq_ofFn {f : α → β → γ} {as : Vector α n} {bs : Vector β n} :
     Vector.zipWith f as bs = Vector.ofFn fun i => f as[i] bs[i] := by
   ext; simp
+
+open Lean Meta in
+/-- A vector operation's `zipWith` as its lanes `#v[f as[0] bs[0], …]`, as `expandOfFn` splits an
+`ofFn`: pass it with the lanes' facts (an `add nsw`'s no-overflow) where `zipWith_eq_ofFn` is off. -/
+simproc_decl expandZipWith (Vector.zipWith _ _ _) := fun e => do
+  let lem ← mkConstWithFreshMVarLevels ``zipWith_eq_ofFn
+  let (ms, _, ty) ← forallMetaTelescopeReducing (← inferType lem)
+  let some (_, lhs, rhs) := ty.eq? | return .continue
+  unless ← isDefEq lhs e do
+    return .continue
+  let pf ← instantiateMVars (mkAppN lem ms)
+  let rhs ← instantiateMVars rhs
+  let some lanes ← ofFnLanes? rhs | return .continue
+  return .visit { expr := lanes, proof? := mkExpectedPropHint pf (← mkEq e lanes) }
 
 /-- Rewrite under `Vector.mk arr h` proving the new size afresh: `simp` would cast `h` along the
 rewrite, tying the vector to that rewrite's hypotheses. -/

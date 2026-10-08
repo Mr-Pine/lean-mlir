@@ -40,6 +40,31 @@ example (x y : Vector (BitVec 64) 2) (s : GlobalState) (hwf : s.WF) :
   finish_block
   rw [hS]
 
+mlir_def addHalf :=
+{
+  ^bb0(%arg0: vector<2xi64>):
+    %0 = "llvm.mlir.poison"() : () -> vector<2xi64>
+    %1 = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> i64
+    %2 = "llvm.mlir.constant"() <{value = 0 : i64}> : () -> i64
+    %3 = "llvm.insertelement"(%0, %1, %2) : (vector<2xi64>, i64, i64) -> vector<2xi64>
+    %4 = "llvm.add"(%arg0, %3) <{overflowFlags = #llvm.overflow<nsw>}> : (vector<2xi64>, vector<2xi64>) -> vector<2xi64>
+    "llvm.return"(%4) : (vector<2xi64>) -> ()
+}
+
+-- an `add nsw` by a vector with a poison lane, to its lanes where its no-overflow fact is passed
+attribute [-mlir_operation] zipWith_eq_ofFn in
+example (x : Vector (BitVec 64) 2) (s : GlobalState) (hwf : s.WF)
+    (hok : x[0].saddOverflow 1#64 = false) :
+    addHalf.call (addHalf.args (Ty.wrap (t := .vec 2 64) x)) s =
+      .value (.cons #v[.value (x[0] + 1#64), .poison] .nil, s) := by
+  func_init
+  block_init
+  iterate 4 step_pure
+  step_pure [expandZipWith, hok]
+  guard_hyp hE : E = E₀[%4 := #v[.value (x[0] + 1#64), .poison]]
+  finish_block
+  rw [hS]
+
 end
 
 end LeanMLIR.RIR.Tests.Syntax.Vectors
