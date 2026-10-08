@@ -78,6 +78,23 @@ by position: each step asks for the next, and walking the instruction list again
 quadratic in the block's length. -/
 initialize blockSuffixCache : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Nat))) ← IO.mkRef {}
 
+/-- A closed block's instructions: each step takes the one at its position, where unfolding
+`body[pos]` walks the list to it. -/
+initialize blockInstrsCache : IO.Ref (Std.HashMap Expr (Array Expr)) ← IO.mkRef {}
+
+/-- Instruction `pos` of a closed `block` at a literal `pos`, from `blockInstrsCache`. -/
+def blockInstr? (block pos : Expr) : MetaM (Option Expr) := do
+  let block ← instantiateMVars block
+  if block.hasFVar || block.hasMVar then
+    return none
+  let pos ← instantiateMVars pos
+  let some i := pos.nat? <|> pos.rawNatLit? | return none
+  if let some instrs := (← blockInstrsCache.get)[block]? then
+    return instrs[i]?
+  let instrs := (← blockParts block (mkNatLit 0)).extract 1
+  blockInstrsCache.modify (·.insert block instrs)
+  return instrs[i]?
+
 /-- `exposedRegs (blockParts block pos)` for every `pos`, last position (the exit alone) last. -/
 def suffixExposed (block : Expr) : MetaM (Array (Std.HashSet Nat)) := do
   if let some r := (← blockSuffixCache.get)[block]? then
