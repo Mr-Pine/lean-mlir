@@ -154,7 +154,9 @@ simproc_decl readThroughWrites (Env.read _ _) := fun e => do
 
 /-- The vector-lane simprocs of `mlir_operation` every pass runs (`expandOfFn` stays opt-in). -/
 def laneSimprocs : MetaM Simp.Simprocs :=
-  [(``reduceGetElemLit, false)].foldlM (init := {}) fun procs (n, post) => procs.add n post
+  [(``reduceGetElemLit, false), (``reduceBitcast, false), (``reduceBitcastPoison, true),
+        (``reduceExtractPackLanes, false), (``reduceExtractPackLanes', true)].foldlM
+    (init := {}) fun procs (n, post) => procs.add n post
 
 /-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and the memory simprocs.
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
