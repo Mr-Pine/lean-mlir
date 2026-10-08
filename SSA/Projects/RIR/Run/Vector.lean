@@ -56,6 +56,70 @@ meta def mkVecGetElem (xs : Expr) (i : Nat) : MetaM (Option Expr) := do
   some <$> mkAppOptM ``GetElem.getElem #[xsTy, nat, β, valid, inst, xs, mkNatLit i, pf]
 
 open Lean Meta in
+/-- The type, size, list and elements of a literal `#v[…]`. -/
+meta def vecLit? (xs : Expr) : Option (Expr × Expr × Expr × Expr × Array Expr) := do
+  let_expr Vector.mk α n arr h := xs | none
+  let_expr List.toArray _ l := arr | none
+  let (_, elems) ← l.listLit?
+  return (α, n, l, h, elems.toArray)
+
+/-- A literal vector's lane, by `l[k]? = some a`: its `rfl` evaluates the list, not the lanes. -/
+theorem Vector.getElem_mk_of_getElem? {α : Type u} {n : Nat} (l : List α) (h : l.toArray.size = n)
+    (k : Nat) (hk : k < n) (a : α) (hl : l[k]? = some a) : (Vector.mk l.toArray h)[k] = a := by
+  have hk' : k < l.length := by simpa [← h] using hk
+  rw [List.getElem?_eq_getElem hk', Option.some.injEq] at hl
+  simpa using hl
+
+open Lean Meta in
+/-- The value of a literal index: `k`, `↑⟨k, _⟩`, `⟨k, _⟩` or `(k : Fin n)`. -/
+meta def litIndex? (i : Expr) : MetaM (Option Nat) := do
+  let i ← instantiateMVars i
+  let i :=
+    match_expr i with
+    | Fin.val _ j => j
+    | _ => i
+  match_expr i with
+  | Fin.mk _ k _ =>
+    (evalNat k).run
+  | OfNat.ofNat ty k _ =>
+    match_expr ← whnfR ty with
+    | Fin n =>
+      let some n ← (evalNat n).run | return none
+      let some k ← (evalNat k).run | return none
+      return if n = 0 then none else some (k % n)
+    | Nat =>
+      (evalNat k).run
+    | _ =>
+      return none
+  | _ =>
+    if (← whnfR (← inferType i)).isConstOf ``Nat then
+      (evalNat i).run
+    else
+      return none
+
+open Lean Meta in
+/-- A literal vector's lane at a literal index, by a proof step: as a `dsimp` step the kernel checks
+the read together with the `dsimp` steps after it, which in a module it may not unfold
+(`#v[0#8, x][0] ++ 0#8` to `0#16` needs `Nat.lor`); by `rfl` it may unfold the lanes. -/
+simproc ↓[mlir_operation]reduceGetElemLit (GetElem.getElem _ _ _) := fun e => do
+  let_expr GetElem.getElem _ _ _ _ _ xs i _ := e | return .continue
+  let i ← instantiateMVars i
+  let some (α, n, l, h, elems) := vecLit? xs | return .continue
+  let some k ← litIndex? i | return .continue
+  let some lane := elems[k]? | return .continue
+  if (← (evalNat n).run).isNone then
+    return .continue
+  let kE := mkNatLit k
+  let some u := (← inferType α).sortLevel!.dec | return .continue
+  let get? ← mkAppM ``GetElem?.getElem? #[l, kE]
+  let some' := mkApp2 (mkConst ``Option.some [u]) α lane
+  let hl ← mkExpectedTypeHint (← mkEqRefl some') (← mkEq get? some')
+  let pf :=
+    mkAppN (mkConst ``Vector.getElem_mk_of_getElem? [u])
+      #[α, n, l, h, kE, ← mkDecideProof (← mkAppM ``LT.lt #[kE, n]), lane, hl]
+  return .visit { expr := lane, proof? := ← mkExpectedTypeHint pf (← mkEq e lane) }
+
+open Lean Meta in
 /-- `shufflevector` with a literal mask, to its lanes: `a[k]`, `b[k - n]` or poison. Before the
 unfolded `Vector.ofFn` is simplified with a symbolic lane, which cannot decide the mask. -/
 dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _ _ _) := fun e => do

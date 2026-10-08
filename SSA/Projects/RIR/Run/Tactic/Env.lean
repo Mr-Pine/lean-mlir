@@ -152,6 +152,10 @@ simproc_decl readThroughWrites (Env.read _ _) := fun e => do
   let some (v, pf) ← walkRead env reg | return .continue
   return .visit { expr := v, proof? := pf }
 
+/-- The vector-lane simprocs of `mlir_operation` every pass runs (`expandOfFn` stays opt-in). -/
+def laneSimprocs : MetaM Simp.Simprocs :=
+  [(``reduceGetElemLit, false)].foldlM (init := {}) fun procs (n, post) => procs.add n post
+
 /-- One `mlir_env` pass over `e`, with `facts` as extra rewrite rules and the memory simprocs.
 The first fact is the one `argsSimprocs` reduces `Env.args` with. -/
 def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId) (c : MemCtx) :
@@ -183,7 +187,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
         else
           Simp.getSimprocs,
       ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
-      ← ({} : Simp.Simprocs).add ``gepValue (post := true)]
+      ← ({} : Simp.Simprocs).add ``gepValue (post := true), ← laneSimprocs]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   -- `decide` first, also with locals that do not block it (a vector's size); a closed goal it
   -- refutes (registers `r ≠ r`, at each write a read passes) only by a local, else the facts
