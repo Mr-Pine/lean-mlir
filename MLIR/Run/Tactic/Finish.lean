@@ -43,9 +43,20 @@ def rwIte (g : MVarId) (lem : Name) (ite : Expr) (h : FVarId) : MetaM MVarId :=
     let r ← g.rewrite (← g.getType) eq
     g.replaceTargetEq r.eNew r.eqProof
 
-/-- Split an `if` chain choosing between jumps into one goal per jump. Branch `i` gets only its
-condition, as `hbr`; the last branch gets every negation, as `hbr` for a single `if`, else as
-`hbr0`, `hbr1`, …. -/
+/-- A local proving `c` (`true`) or its negation (`false`), up to reducible unfolding. -/
+def decideByLocal? (c : Expr) : MetaM (Option (Bool × FVarId)) := do
+  if let some h← withReducible (findLocalDeclWithType? c) then
+    return some (true, h)
+  if let some h← withReducible (findLocalDeclWithType? (mkNot c)) then
+    return some (false, h)
+  if let some (_, a, b) := c.eq? then
+    if let some h← withReducible (findLocalDeclWithType? (← mkAppM ``Ne #[a, b])) then
+      return some (false, h)
+  return none
+
+/-- Split an `if` chain choosing between jumps into one goal per jump. A condition a local decides
+takes its branch; otherwise branch `i` gets only its condition, as `hbr`, and the last branch every
+negation, as `hbr` for a single `if`, else as `hbr0`, `hbr1`, …. -/
 def splitJumps : TacticM Unit :=
   withMainContext do
     let g ← getMainGoal
@@ -54,6 +65,15 @@ def splitJumps : TacticM Unit :=
     let mut negs := #[]
     let mut goals := #[]
     for ite in jumpItes c do
+      match ← g.withContext (decideByLocal? (ite.getArg! 1)) with
+      | some (true, h) =>
+        setGoals (goals.push (← (← rwIte g ``ite_eq_left ite h).tryClearMany negs)).toList
+        return
+      | some (false, h) =>
+        g ← rwIte g ``ite_eq_right ite h
+        continue
+      | none =>
+        pure ()
       let (pos, neg) ← g.byCases (ite.getArg! 1) `hbr
       -- this branch: its condition only
       goals := goals.push (← (← rwIte pos.mvarId ``ite_eq_left ite pos.fvarId).tryClearMany negs)

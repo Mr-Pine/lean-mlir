@@ -61,6 +61,26 @@ example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fit
   finish_block
   rw [hS]
 
+mlir_def isZero :=
+  {^bb0(%arg0:i32):%0 = "llvm.mlir.constant"()<{value =
+        0:i32}>:()->i32%1 = "llvm.icmp"(%arg0, %0)<{predicate = 0:i64}>:(i32,
+        i32)->i1"llvm.cond_br"(%1)[^bb1, ^bb2]<{operandSegmentSizes =
+        array<i32:1, 0,
+          0>}>:(i1)->()^bb1:%2 = "llvm.mlir.constant"()<{value =
+        1:i32}>:()->i32"llvm.return"(%2):(i32)->()^bb2:"llvm.return"(%0):(i32)->()}
+
+-- a jump decided by a negated fact: one goal
+example (x : BitVec 32) (s : GlobalState) (hwf : s.WF) (hx : ¬x = 0#32) :
+    isZero.call (isZero.args (.value x)) s = .value (.cons (.value 0#32) .nil, s) := by
+  func_init
+  block_init
+  step_pure
+  step_pure
+  finish_block
+  block_init
+  finish_block
+  rw [hS]
+
 end
 
 end MLIR.Tests.Syntax.Steps
