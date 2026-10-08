@@ -80,8 +80,12 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
                   Tactic.carryFact fc locals (.fvar hyp) key (motive.beta #[new]) (deep :=
                       !consumed.contains hyp) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
-          -- a consumed fact not carried stays about the old state, to be cleared after the step
+          -- a consumed fact not carried stays about the old state, to be cleared after the step;
+          -- an equation (`S.mem.eraseFrom b = m`) stays about it, true there, rather than a goal
           if pf?.isNone && consumed.contains hyp then
+            continue
+          if pf?.isNone && key.isEq then
+            trace[rir] m!"fact {decl.userName} kept about the state before the step"
             continue
           let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
           let (_, g') ← (← g.assert decl.userName newTy pg).intro1P

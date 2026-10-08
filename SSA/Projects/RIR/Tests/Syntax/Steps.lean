@@ -39,6 +39,19 @@ example (p : Pointer) (x : BitVec 64) (s : GlobalState) (m : MemoryState) (hwf :
   finish_block
   rw [hS]
 
+-- an equation about the state that the store cannot carry stays about the state before it
+example (p : Pointer) (x : BitVec 64) (b : Nat) (s : GlobalState) (hwf : s.WF)
+    (hp : Fits s.mem p 64) :
+    put.call (put.args (.value p) (.value x)) s =
+      .value (.nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  block_init
+  have hm : S.mem.eraseFrom b = S₀.mem.eraseFrom b := by rw [hS]
+  step_store
+  guard_hyp hm : S₀.mem.eraseFrom b = S₀.mem.eraseFrom b
+  finish_block
+  rw [hS]
+
 /-- `q` holds `y`. -/
 def Holds (m : MemoryState) (q : Pointer) (y : BitVec 64) : Prop :=
   m.readAt q 64 = y
