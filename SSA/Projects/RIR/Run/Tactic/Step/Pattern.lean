@@ -101,9 +101,16 @@ def closeSide (g : MVarId) : TacticM Unit := do
     closeByDecide g
 
 /-- A premise of a pattern lemma: a read (`closePatternRead`), a side condition (`closeSide`), or
-a conjunction of them (`E ⊨ [r := v, …]`), split. -/
+a conjunction of them (`E ⊨ [r := v, …]`, also through an abbreviation), split. -/
 partial def closePremise (g : MVarId) : TacticM Unit := do
   let ty ← instantiateMVars (← g.getType)
+  -- reads through an abbreviation (`abbrev Holds E … := E ⊨ […]`), unfolded
+  let ty' ← whnfR ty
+  let (g, ty) ←
+    if ty' != ty && (ty'.find? (·.isAppOfArity ``Env.read 4)).isSome then
+      pure (← g.replaceTargetDefEq ty', ty')
+    else
+      pure (g, ty)
   if let some (ga, gb)← Tactic.splitAnd? g ty then
     closePremise ga
     closePremise gb
