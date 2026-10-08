@@ -81,6 +81,24 @@ example (x : BitVec 32) (s : GlobalState) (hwf : s.WF) (hx : ¬x = 0#32) :
   finish_block
   rw [hS]
 
+mlir_def addTwo :=
+  {^bb0(%arg0:i32):%0 = "llvm.mlir.constant"()<{value =
+        0:i32}>:()->i32%1 = "llvm.mlir.constant"()<{value =
+        1:i32}>:()->i32"llvm.br"()[^bb1]:()->()^bb1:%2 = "llvm.add"(%arg0, %0):(i32,
+        i32)->i32%3 = "llvm.add"(%2, %1):(i32, i32)->i32"llvm.return"(%3):(i32)->()}
+
+-- a step leaves the env's other values as they are: `v[1]`, not unfolded to `List.get`
+example (E : ⟪addTwo.Γ⟫) (S : GlobalState) (x : BitVec 32) (v : Vector (BitVec 32) 2)
+    (hArgs : E.args = (addTwo.args (.value x)).get) :
+    addTwo.runFrom (E[%1 := .value v[1], %0 := .value v[0]]) 1 S =
+      .value (.cons (.value (x + v[0] + v[1])) .nil, S) := by
+  block_init
+  step_pure
+  fail_if_success simp only [List.get_eq_getElem] at hE
+  step_pure
+  finish_block
+  rfl
+
 end
 
 end LeanMLIR.RIR.Tests.Syntax.Steps
