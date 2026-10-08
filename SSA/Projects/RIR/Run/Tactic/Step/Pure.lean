@@ -35,7 +35,8 @@ def runStepPure (args : StepArgs) : TacticM Unit :=
     finishStep args
 
 @[tactic stepPure]
-def evalStepPure : Tactic := fun stx => runStepPure (StepArgs.parse stx[2] stx[3] mkNullNode stx[1])
+def evalStepPure : Tactic := fun stx =>
+  Tactic.atStepDepth <| runStepPure (StepArgs.parse stx[2] stx[3] mkNullNode stx[1])
 
 end
 
