@@ -287,6 +287,33 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
   erase_frame
   rfl
 
+/-- `p` and the word after it fit. -/
+abbrev PairFit (m : MemoryState) (p : Pointer) : Prop :=
+  Fits m p 64 ∧ Fits m (p.add 8#64) 64
+
+theorem PairFit.alloca {s : GlobalState} (hwf : s.WF) (h : PairFit s.mem p) :
+    PairFit (s.alloca n).mem p :=
+  ⟨h.1.alloca hwf, h.2.alloca hwf⟩
+
+attribute [local mlir_transport] PairFit.alloca
+
+-- the same with the pointer's `Fits` a conjunct of an object predicate
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : PairFit s.mem p) :
+    deepLoad.call (deepLoad.args (.value p)) s =
+      .value
+        (.cons (.value (s.mem.readAt p 64)) .nil,
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 6⟩ }) := by
+  func_init
+  block_init
+  step_pure
+  iterate 6 step_alloca
+  step_load with v
+  guard_hyp hv : v = S₀.mem.readAt p 64
+  finish_block
+  subst hS
+  erase_frame
+  rfl
+
 mlir_const_def answer :=
   {%0 = "llvm.mlir.constant"()<{value = 42:i64}>:()->i64"llvm.return"(%0):(i64)->()}
 
