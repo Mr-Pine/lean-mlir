@@ -236,16 +236,17 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
     return ⟨fvs[0]!, fvs[1]!, hS⟩
 
 /-- `target`, the fact `h : ty` restated about a later state, by `mlir_transport` lemmas and the
-local implications `locals` from `h` (also `dsimp`ed as states are) and the facts `facts`: two
-lemmas deep, else (`deep`) deeper. -/
-def carryFact (facts : Std.HashMap Expr Expr) (transport : Array Name) (locals : Array Expr)
-    (h ty target : Expr) (deep := true) : MetaM (Option Expr) := do
-  let facts := (facts.insert ty h).insert (← dsimpState ty) h
-  if let some pf← transportWith facts transport 2 target locals then
+local implications `locals` from `h` (also `dsimp`ed as states are), their premises from the facts
+`c` (also by `premiseSearch?`): two lemmas deep, else (`deep`) deeper. -/
+def carryFact (c : FactCtx) (locals : Array Expr) (h ty target : Expr) (deep := true) :
+    MetaM (Option Expr) := do
+  let facts := (c.factMap.insert ty h).insert (← dsimpState ty) h
+  let side := premiseSearch? c
+  if let some pf← transportWith facts c.transport 2 target locals side then
     return some pf
   if !deep then
     return none
-  transportWith facts transport 64 target locals
+  transportWith facts c.transport 64 target locals side
 
 /-- Name the goal's state `S`, with `hS : S = s`, unless it has an equation already: a loop's
 proof starts from a bare state `s`, a loop's continuation from a term over an earlier state. The
@@ -267,8 +268,7 @@ def ensureStateEq : TacticM Unit :=
     let mut carried := #[]
     let mut olds := #[]
     let mut seen : Std.HashSet Expr := {}
-    let facts ← contextFactMap
-    let lemmas ← labelled `mlir_transport
+    let fc ← FactCtx.build
     let locals ← localImplications
     let bases := (← IO.mkRef #[])
     s.forEachWhere
@@ -290,7 +290,7 @@ def ensureStateEq : TacticM Unit :=
         if seen.contains ty' then
           continue
         seen := seen.insert ty'
-        let some pf ← carryFact facts lemmas locals d.toExpr ty ty' | continue
+        let some pf ← carryFact fc locals d.toExpr ty ty' | continue
         let (h, g') ← (← g.assert d.userName ty' pf).intro1P
         g := g'
         carried := carried.push h

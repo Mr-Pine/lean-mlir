@@ -63,8 +63,7 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
               return !ty.containsFVar S' && inState.occurs rest
         let mut g ← getMainGoal
         let mut goals := #[]
-        let facts ← contextFactMap
-        let transport ← labelled `mlir_transport
+        let fc ← Tactic.FactCtx.build
         let locals ← Tactic.localImplications
         let new? := (← instantiateMVars (← hS'.getType)).eq?.map (·.2.2)
         for hyp in preserveHyps do
@@ -78,8 +77,8 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
             observing? do
                 let some new := new? | failure
                 let some pf ←
-                  Tactic.carryFact facts transport locals (.fvar hyp) key (motive.beta #[new])
-                      (deep := !consumed.contains hyp) | failure
+                  Tactic.carryFact fc locals (.fvar hyp) key (motive.beta #[new]) (deep :=
+                      !consumed.contains hyp) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
           -- a consumed fact not carried stays about the old state, to be cleared after the step
           if pf?.isNone && consumed.contains hyp then

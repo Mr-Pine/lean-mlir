@@ -343,11 +343,14 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
 def dsimpState (e : Expr) : MetaM Expr := do
   return (← dsimp e (← Simp.mkContext)).1
 
-/-- `p` from the facts `facts` (by instantiated type), the `mlir_transport` lemmas `lemmas` and the
-local implications `locals`, at reducible transparency, `fuel` lemmas deep. -/
+/-- `p` from the facts `facts` (by instantiated type), the searches `side`, the `mlir_transport`
+lemmas `lemmas` and the local implications `locals`, at reducible transparency, `fuel` lemmas deep. -/
 partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) (fuel : Nat)
-    (p : Expr) (locals : Array Expr := #[]) : MetaM (Option Expr) := do
+    (p : Expr) (locals : Array Expr := #[])
+    (side : Expr → MetaM (Option Expr) := fun _ => pure none) : MetaM (Option Expr) := do
   if let some h := facts[p]? then
+    return some h
+  if let some h← side p then
     return some h
   if fuel = 0 then
     return none
@@ -361,8 +364,8 @@ partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) 
               if ← g.isAssigned then
                 continue
               let some pf ←
-                transportWith facts lemmas (fuel - 1) (← instantiateMVars (← g.getType))
-                    locals | return none
+                transportWith facts lemmas (fuel - 1) (← instantiateMVars (← g.getType)) locals
+                    side | return none
               g.assign pf
             return some (← instantiateMVars m)) <|>
           pure none
@@ -537,6 +540,25 @@ def neSlots? (c : FactCtx) (a b : Expr) : MetaM (Option Expr) := do
     pf ← move pf hx false l lb
   return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
 
+/-- A transport lemma's premise by the searches needing no lemma: `≠` of block ids (facts, either
+way round, `List.Nodup`, distinct slots) and the disjointness of distinct blocks. -/
+def premiseSearch? (c : FactCtx) (goal : Expr) : MetaM (Option Expr) := do
+  let ne? (a b : Expr) : MetaM (Option Expr) := do
+    if let some h← neProof? c.facts a b then
+      return some h
+    neSlots? c a b
+  match_expr goal with
+  | Range.Disjoint a b =>
+    let_expr Range.of p v := a | return none
+    let_expr Range.of q w := b | return none
+    disjointProof? c.facts p v q w (offsets := false) (ne? := ne?)
+  | _ =>
+    let some (a, b) := neSides? goal | return none
+    if (← inferType a).isConstOf ``Bool then
+      return none
+    let some pf ← ne? a b | return none
+    return some (mkExpectedPropHint pf goal)
+
 /-- A side condition from the facts `c`, cheapest first: a fact; `decide`, the offsets replaced by
 their facts (an offset's `¬uaddOverflow`, a width bound); `Fits`, disjointness and `≠` by their
 searches; then `mlir_transport` lemmas `fuel` deep, or with no `fuel` a local up to reducible
@@ -576,7 +598,7 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
         return none
   if fuel = 0 then
     return ← local?
-  transportWith c.factMap c.transport fuel goal
+  transportWith c.factMap c.transport fuel goal (side := premiseSearch? c)
 
 /-- One `mlir_read` lemma on the read `e`: a stored value (`true`), or the read past a write, with
 the proof of `e = _`. Only lemmas for `e`'s read and write are tried. -/
