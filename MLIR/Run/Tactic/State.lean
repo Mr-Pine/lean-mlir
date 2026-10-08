@@ -232,12 +232,14 @@ def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM Sealed
 
 /-- `target`, the fact `h : ty` restated about a later state, by `mlir_transport` lemmas and the
 local implications `locals` from `h` (also `dsimp`ed as states are) and the facts `facts`: two
-lemmas deep, else deeper. -/
+lemmas deep, else (`deep`) deeper. -/
 def carryFact (facts : Std.HashMap Expr Expr) (transport : Array Name) (locals : Array Expr)
-    (h ty target : Expr) : MetaM (Option Expr) := do
+    (h ty target : Expr) (deep := true) : MetaM (Option Expr) := do
   let facts := (facts.insert ty h).insert (← dsimpState ty) h
   if let some pf← transportWith facts transport 2 target locals then
     return some pf
+  if !deep then
+    return none
   transportWith facts transport 64 target locals
 
 /-- Name the goal's state `S`, with `hS : S = s`, unless it has an equation already: a loop's
