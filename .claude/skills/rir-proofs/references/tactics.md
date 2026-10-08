@@ -38,7 +38,8 @@ ha : a = S₀.mem.readAt y 64               -- a named value
   new one, by the context's facts, the `mlir_transport` lemmas (their `≠`/disjointness premises
   also by `mem_fact`'s searches) and the context's implications; one that cannot be carried
   becomes a **new goal before the main goal**, named after the fact (a consumed one is cleared
-  instead).
+  instead; an equation, like `hm : S.mem.eraseFrom b = m`, stays about the previous state, where
+  it holds, and the sealing substitutes that state's term into it).
 - **Folded values.** A value named with `with x` (or `named`) is *tagged*: later steps, the state
   and `finish_block` keep `x` and never unfold `hx`. Default names (a load's `vN`) and
   `transparent` names are untagged and unfold into later values.
@@ -61,10 +62,12 @@ Every step simplifies the value it writes (or the operation it runs) in passes:
 Simprocs in these passes: `gepValue` (`gep (.value off) (.value p)` to `.value (p.add off)` when
 `p.offset + off` provably does not wrap: by the offsets' facts, a no-overflow fact
 `¬p.offset.uaddOverflow c` for a literal `c ≥ off`, or `omega` with the offsets' values
-(`x.offset = 0`) in: a symbolic index from a block's start needs no lemma), and the memory
+(`x.offset = 0`) in, a `% 2 ^ 64` it shows is below the modulus dropped first: a symbolic index
+from a block's start or a bounded multiple `192 * k` with `k < 8` needs no lemma), and the memory
 simprocs (a read `S.mem.readAt p w` by a read fact, through `hS`'s stores by the `mlir_read`
 lemmas, or inside a wider known read). Side conditions are discharged by `decide`, then from the
-facts (`mem_fact`'s search without transport).
+facts (`mem_fact`'s search; `Fits` and `WF` below `alloca`s and new blocks built layer by layer
+from the entry state's facts, so reads below a frame resolve without read facts of the inputs).
 
 Vector simprocs (`mlir_operation`, which every pass runs; elsewhere `simp [mlir_operation]`): a
 literal `#v[…]`'s lane at a literal index is that lane, and any vector's lane at `⟨k, _⟩`,
@@ -73,7 +76,13 @@ vectors step straight to their lanes. A bitcast lane is `poisonIf (bitcastPoison
 test reduces to the overlapping lanes' `x[i].isPoison` once `x`'s reads resolve, and
 `(packLanes v).extractLsb' s w` at a literal `s` to `v[i]`, its slice, or
 `v[i + m - 1] ++ … ++ v[i]`. No `Fin.exists_fin_succ` or byte lemmas are needed; `expandOfFn` still
-splits the other `Vector.ofFn` lanes.
+splits the other `Vector.ofFn` lanes, `expandZipWith` a vector operation's `zipWith` where
+`zipWith_eq_ofFn` is erased (pass the lanes' no-overflow facts with it). Lemmas over a vector
+operation (`Vector.zipWith (Operation.and (w := 64)) (Ty.wrap x) (Ty.wrap y) = Ty.wrap (f x y)`)
+fire as simp args or `local mlir_operation` lemmas. A lane at a literal `k` gets its bound by
+`decide` (`x[0]'h` with another proof too, so `simp only [reduceGetElemLit]` before `bv_decide`
+gives it one atom); `x[3]` written in a proof takes its bound by `decide`, never by searching the
+context.
 
 ## Step options
 
@@ -112,8 +121,9 @@ Defaults: `step_pure`, `step_call` inline; `step_load`, `step_alloca`, `step_add
   mem := p.2.mem.eraseFrom S₀.alloc.nextFreeBlock })`, closed at the end by `erase_frame`.
 - Leaves `S₀ S`, `hS : S = S₀`, every hypothesis about `s` restated about `S` (`hwf : S.WF`, …),
   `R` restated about `S₀`, `E₀ E`, `hE : E = E₀`, `hEargs : E.args = (f.args …).get`; framed
-  also `hwf₀ : S₀.WF` and each `h : Fits S.mem p w` as `h₀` about `S₀`: `erase_frame` needs
-  `hwf₀`, and reads through `hS` below the frame's `alloca`s and globals need the `Fits`.
+  also `hwf₀ : S₀.WF` and each `h : Fits S.mem p w` as `h₀` about `S₀` (an object predicate's
+  top-level `Fits` conjuncts as `h₀`, `h₀_1`, …: `QuadFit`'s three): `erase_frame` needs `hwf₀`,
+  and reads through `hS` below the frame's `alloca`s and globals need the `Fits`.
 - Fails with "`func_init` expects a goal `f.call args s = _`" on any other goal.
 
 ### `block_init`
@@ -142,9 +152,12 @@ be poison") and `Fits S.mem q w` by `mem_fact`, else `simp_all`. The loaded valu
 `store v, p`. Needs `p` and `v` as `.value _`, `Fits S.mem q w`, and `v`'s bits by
 `dsimp; try simp; rfl` (fails when the value is still an `if`/poison). New facts:
 `hread_<p> : S.mem.readAt p w = v` for a local pointer `p`, `hread_<p>_<k>` for `p.add k#64`,
-else `hread`. Read facts of the old state that the store misses are carried; one it overwrites,
-or may overwrite (no `mlir_read` lemma's side conditions hold: possible aliasing), is dropped;
-`set_option trace.rir true` names each dropped fact.
+else `hread`; of several read-backs at one pointer (an object's and its first field's) the last
+keeps the name, the others take their read's (`hread_r_readAt`). A stored value that is itself a
+read with a fact (a callee's `s.mem.readQuad a`) is read back too. Read facts of the old state
+that the store misses are carried; one it overwrites, or may overwrite (no `mlir_read` lemma's side
+conditions hold: possible aliasing), is dropped; `set_option trace.rir true` names each dropped
+fact.
 
 ### `step_memcpy [only] [args] [consuming …]` / `step_memset …`
 
@@ -181,15 +194,22 @@ the new block holds `r`'s bits: `hread_<x> : S.mem.readAt x w = Ty.flatBits …`
 Steps a run of instructions with a pattern lemma proved once over registers. `h` concludes
 `(blk.runBodyFrom E pos S >>= g) = K` and has:
 
-- a body fact `blk.body.drop pos = pat … ++ rest`: closed by unfolding; it fixes the registers,
-  and fails ("the body at the position is not the pattern of …") when the instructions differ;
-- reads `E.read r = v` (or `E ⊨ […]`): closed through the env's writes, locals' equations
-  unfolded if needed ("no value for the read …; add a fact `h : E.read %k = _`" when none);
+- a body fact `blk.body.drop pos = pat … ++ rest`: closed by unfolding, or inside another pattern
+  lemma's proof (an abstract block) by its body fact, carried past the pattern; it fixes the
+  registers, and fails ("the body at the position is not the pattern of …") when the instructions
+  differ;
+- reads `E.read r = v` (or `E ⊨ […]`, also as an `abbrev Holds E … := E ⊨ […]`): closed through
+  the env's writes, locals' equations unfolded if needed, an outer pattern's registers by the step
+  passes ("no value for the read …; add a fact `h : E.read %k = _`" when none);
 - decidable side conditions (`[r₁.i, …].Nodup`, flags `C = 0 ∨ C = 1`): from the facts, else
   `decide` ("side condition false or undecidable");
 - a continuation `∀ …, (blk.runBodyFrom E' pos' S >>= g) = K`: entered; its last write is named
-  per `[names]`, the pattern's dead intermediates are cleared, and a pattern that stores has its
-  new state sealed.
+  per `[names]` (an abstract register's after its variable: `vy` for `y`), the pattern's dead
+  intermediates are cleared, and a pattern that stores has its new state sealed.
+
+A pointer operand may be any register `p : Reg Γ .ptr` (an argument at one site, a value at
+another), with `hp : E.read p = .value P`: its reads pass writes of other types, and a write of a
+pointer register `q` given a premise `p ≠ .val q.i q.h` (`decide` closes it at the site).
 
 Pass implicit arguments the goal does not fix by name: `step_pattern using lem (B := 0x100000#64)`.
 
@@ -203,7 +223,8 @@ becomes `E`, each write a goal `E.read r = v`. Then:
   premises, by `with_reducible assumption`, `omega`, `mem_fact`, or `simp [*, mlir_env, gepValue]`
   (a premise about a run is only tried by `assumption`); what remains stays open;
 - a continuation premise `∀ E', E'.args = … → runFrom … = K` is entered as the **last** goal: `E₀`
-  and `hArgs₀` introduced, the env sealed, the state simplified and named `S` as after a step.
+  and `hArgs₀` introduced (binders between them, a state `S'`, under their own names), the env
+  sealed, the state simplified and named `S` as after a step.
 
 If `h` does not apply to the state `S` as is, `S` is substituted by its definition and the lemma
 retried, with a warning (none when `h` is about a fixed state, e.g. an induction hypothesis).

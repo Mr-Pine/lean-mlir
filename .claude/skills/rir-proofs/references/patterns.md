@@ -250,10 +250,11 @@ site (statement in `tactics-guide.md` §10). The lemma's conclusion is continuat
 intermediates universally quantified in the continuation so the site clears them.
 
 Abstract registers work when every operand is a `Dst` (a value register), kept apart by a
-`Nodup` premise. Function arguments (`Reg.arg`) cannot be told apart from the run's writes when
-abstract, and their reads stall: state such a run over the concrete block and position instead,
-with the arguments through `hArgs` and constants through `E ⊨ […]`
-(`fd_ed25519_verify.hash_run` over `bb5.runBodyFrom E 1 S`; `fiat_25519_to_bytes.store_bytes`).
+`Nodup` premise, or a pointer `p : Reg Γ .ptr` (an argument or a value, `Avx512/Common/Point.lean`'s
+`foldUnsignedStoreRun`), with `p ≠ .val q.i q.h` for each pointer register `q` written before a read
+of `p`. A pattern lemma's proof may step another pattern (`dblRun` nests `foldSignedRun`): its
+`Nodup` premise over the inner registers is then a premise of the outer lemma, closed by `decide`
+at the site. Repeated read premises can be an `abbrev … := E ⊨ […]` (`FoldSignedConsts`).
 
 ## P11. Callee results named (`fd_f25519_pow22523.lean`)
 

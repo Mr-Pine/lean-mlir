@@ -133,8 +133,9 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
     pow22523 by moving them up).
 11. **Reads through `hS` stall although the facts hold**: `hS`'s store chain starts at the entry
     state `S₀`, so a read lemma's premise about the base memory is about `S₀`, not `S`. A framed
-    `func_init` keeps the entry `Fits` facts about `S₀` (`hp₀`); keep the object facts the reads
-    need about `S₀` too (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right after `func_init`).
+    `func_init` keeps the entry `Fits` facts about `S₀` (`hp₀`, and an abbreviated object
+    predicate's `Fits` conjuncts); keep other object facts the reads need about `S₀` too
+    (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right after `func_init`).
 12. **`mem_fact` cannot see a conjunct of an object predicate** (`LimbsFit (p.add 40#64)` inside
     `PointFit p`): give the predicate `mlir_transport` projection lemmas.
 13. **Attributes in proof files are `local`** (`attribute [local mlir_state] …`); a global one
