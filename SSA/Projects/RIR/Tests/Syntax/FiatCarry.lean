@@ -73,7 +73,7 @@ abbrev fiat_25519_carry.Γ : Ctx :=
       .ptr, .bv 64, .bv 64,                    -- %17 … %19
       .bv 64, .bv 64, .bv 64, .bv 64, .bv 64, .bv 64, .bv 64,   -- %20 … %26
       .bv 64, .bv 64, .bv 64, .bv 64, .bv 64, .bv 64, .bv 64,   -- %27 … %33
-      .ptr, .ptr, .ptr, .ptr], rfl⟩                 -- %34 … %37
+      .ptr, .ptr, .ptr, .ptr], rfl, 0, 0⟩                 -- %34 … %37
 
 abbrev fiat_25519_carry.blockTys : Fin 1 → List Ty := fun _ => []
 

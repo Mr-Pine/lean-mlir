@@ -48,7 +48,7 @@ abbrev fd_f25519_sub.Γ : Ctx :=
   ⟨20, [.ptr, .ptr, .ptr],
     [.vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64,
       .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64,
-      .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64], rfl⟩
+      .vec 8 64, .vec 8 64, .vec 8 64, .vec 8 64], rfl, 0, 0⟩
 
 /-- The lanes of an `<8 x i64>`. -/
 abbrev V8 := Vector (BitVec 64) 8

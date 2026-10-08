@@ -7,12 +7,15 @@ namespace LeanMLIR.RIR
 @[expose] public section
 
 /-- A function's registers: `args`, and `n` values of types `vals`. The count is a literal, so
-indices `Fin Γ.n` never make the elaborator walk `vals`. -/
+indices `Fin Γ.n` never make the elaborator walk `vals`. Argument `i` is named `%arg(argBase + i)`
+and value `i` is `%(valBase + i)`, as the region numbers them. -/
 structure Ctx where
   n : Nat
   args : List Ty
   vals : List Ty
   hn : vals.length = n
+  argBase : Nat
+  valBase : Nat
 
 /-- The type of value register `i`. -/
 abbrev Ctx.ty (Γ : Ctx) (i : Fin Γ.n) : Ty :=

@@ -4,6 +4,7 @@ public import SSA.Projects.RIR.SimpSets
 public import SSA.Projects.RIR.Context
 public meta import Lean.Elab.Term
 public meta import Lean.Elab.SyntheticMVars
+public meta import Lean.PrettyPrinter.Delaborator.Basic
 
 namespace LeanMLIR.RIR
 
@@ -155,10 +156,21 @@ def expectedHead (ty? : Option Expr) (what : String) : TermElabM Expr := do
     throwError "`{what}` needs an expected type, got{indentExpr ty}"
   return ty
 
+/-- `Γ.argBase` or `Γ.valBase` (`base`) as a literal; `0` if `Γ` is no literal. -/
+def regBase (base : Name) (Γ : Expr) : MetaM Nat := do
+  return (← evalNat (← whnfD (mkApp (mkConst base) Γ))).getD 0
+
+/-- The register of `%k` or `%argk` in `Γ`: `k` less `base`. -/
+def regSlot (base : Name) (Γ : Expr) (k : TSyntax `num) : TermElabM (TSyntax `num) := do
+  let b ← regBase base Γ
+  unless b ≤ k.getNat do
+    throwErrorAt k "the registers of this context start at {b}"
+  return Syntax.mkNumLit (toString (k.getNat - b))
+
 @[term_elab valReg]
 def elabValReg : TermElab := fun stx ty? => do
-  let k : TSyntax `num := ⟨stx.getArg 1⟩
   let ty ← whnfR (← expectedHead ty? "%k")
+  let k ← regSlot ``Ctx.valBase ty.appFn!.appArg! ⟨stx.getArg 1⟩
   if ty.isAppOf ``Dst then
     elabTerm (← `(⟨$k, rfl⟩)) ty
   else
@@ -166,12 +178,16 @@ def elabValReg : TermElab := fun stx ty? => do
 
 @[term_elab argReg]
 def elabArgReg : TermElab := fun stx ty? => do
-  let k : TSyntax `num := ⟨stx.getArg 1⟩
   let ty ← whnfR (← expectedHead ty? "%k")
+  let k ← regSlot ``Ctx.argBase ty.appFn!.appArg! ⟨stx.getArg 1⟩
   elabTerm (← `(Reg.arg $k rfl)) ty
 
-/-- The type of value register `k` of `Γ`, if `Γ.vals` unfolds to a list. -/
+/-- The type of value `%k` of `Γ`, if `Γ.vals` unfolds to a list. -/
 def valTy? (Γ : Expr) (k : Nat) : MetaM (Option Expr) := do
+  let b ← regBase ``Ctx.valBase Γ
+  if k < b then
+    return none
+  let k := k - b
   let rec go (l : Expr) : Nat → MetaM (Option Expr)
     | k => do
       let l ← whnfD l
@@ -279,20 +295,28 @@ def elabEnvReads : TermElab := fun stx ty? => do
   let some last := reads.back? | throwError "`E ⊨ []`: no reads"
   ensureHasType ty? (reads.pop.foldr mkAnd last)
 
-@[app_unexpander Dst.mk]
-def unexpandDst : PrettyPrinter.Unexpander
-  | `($_ $k:num $_) => pure (mkNode ``valReg #[mkAtom "%", k])
-  | _ => throw ()
+open PrettyPrinter.Delaborator SubExpr in
+/-- A register `c Γ t i h` with a literal `i` as `%(b + i)`, or `%arg(b + i)`, `b` being `Γ`'s
+`base`. -/
+def delabReg (arg : Bool) (base : Name) : Delab := do
+  let e ← getExpr
+  guard (e.getAppNumArgs == 4)
+  let_expr OfNat.ofNat _ i _ := e.getArg! 2 | failure
+  let some i := i.rawNatLit? | failure
+  let k := Syntax.mkNumLit (toString ((← regBase base (e.getArg! 0)) + i))
+  return if arg then ⟨mkNode ``argReg #[mkAtom "%arg", k]⟩ else ⟨mkNode ``valReg #[mkAtom "%", k]⟩
 
-@[app_unexpander Reg.val]
-def unexpandRegVal : PrettyPrinter.Unexpander
-  | `($_ $k:num $_) => pure (mkNode ``valReg #[mkAtom "%", k])
-  | _ => throw ()
+@[delab app.LeanMLIR.RIR.Dst.mk]
+def delabDst : PrettyPrinter.Delaborator.Delab :=
+  delabReg false ``Ctx.valBase
 
-@[app_unexpander Reg.arg]
-def unexpandRegArg : PrettyPrinter.Unexpander
-  | `($_ $k:num $_) => pure (mkNode ``argReg #[mkAtom "%arg", k])
-  | _ => throw ()
+@[delab app.LeanMLIR.RIR.Reg.val]
+def delabRegVal : PrettyPrinter.Delaborator.Delab :=
+  delabReg false ``Ctx.valBase
+
+@[delab app.LeanMLIR.RIR.Reg.arg]
+def delabRegArg : PrettyPrinter.Delaborator.Delab :=
+  delabReg true ``Ctx.argBase
 
 end Syntax
 

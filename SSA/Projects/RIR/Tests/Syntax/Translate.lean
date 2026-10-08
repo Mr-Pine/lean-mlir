@@ -138,7 +138,7 @@ abbrev fd_f25519_is_zero.Γ : Ctx :=
       .ptr, .bv 64, .bv 1,                     -- ^bb6
       .ptr, .bv 64, .bv 1,                     -- ^bb7
       .ptr, .bv 64, .bv 1,                     -- ^bb8: %26 … %28
-      .bv 32], rfl⟩                                 -- %29
+      .bv 32], rfl, 0, 0⟩                                 -- %29
 
 /-- Only `^bb10` takes an argument, `%29`. -/
 abbrev fd_f25519_is_zero.blockTys : Fin 11 → List Ty :=

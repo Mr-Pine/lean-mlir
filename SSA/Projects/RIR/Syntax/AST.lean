@@ -42,6 +42,7 @@ inductive AttrValue where
   | list (vs : List AttrValue)
     /-- `#name`. -/
   | alias (a : String)
+    /-- `{k = v, …}`, or `#dialect<k = v, …>`. -/
   | dict (d : AttrDict)
     /-- `#dialect<value>`, e.g. `#llvm.overflow<nsw>`. -/
   | opaque_ (dialect value : String)

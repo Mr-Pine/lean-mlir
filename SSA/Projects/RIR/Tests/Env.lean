@@ -9,7 +9,7 @@ namespace LeanMLIR.RIR.Tests
 
 /-- One argument (`%arg0 : i8`) and three values (`%0 %1 %2`). -/
 private abbrev G : Ctx :=
-  ⟨3, [.bv 8], [.bv 8, .bv 8, .bv 8], rfl⟩
+  ⟨3, [.bv 8], [.bv 8, .bv 8, .bv 8], rfl, 0, 0⟩
 
 private def args (x : BitVec 8) : (i : Fin G.args.length) → ⟦G.args[i]⟧
   | ⟨0, _⟩ => .value x

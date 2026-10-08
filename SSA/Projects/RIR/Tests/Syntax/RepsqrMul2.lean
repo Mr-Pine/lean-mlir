@@ -21,7 +21,7 @@ abbrev MulFast := Vals [V, V] → EffectM (Vals [V])
 
 /-- The `Func` returning `sqr x`. -/
 @[reducible] def sqrFunc (sqr : SqrFast) : Func where
-  Γ := ⟨1, [V], [V], rfl⟩
+  Γ := ⟨1, [V], [V], rfl, 0, 0⟩
   tRets := [V]
   n := 1
   blockTys _ := []
@@ -34,7 +34,7 @@ abbrev MulFast := Vals [V, V] → EffectM (Vals [V])
 
 /-- The `Func` returning `mul x y`. -/
 @[reducible] def mulFunc (mul : MulFast) : Func where
-  Γ := ⟨1, [V, V], [V], rfl⟩
+  Γ := ⟨1, [V, V], [V], rfl, 0, 0⟩
   tRets := [V]
   n := 1
   blockTys _ := []
@@ -102,7 +102,7 @@ abbrev fd_r43x6_repsqr_mul2.Γ : Ctx :=
       V, V, .bv 64,                                        -- ^bb1: %7 … %9
       V, V, V, V, V, V, V, V, V, V, .bv 64, .bv 1,         -- %10 … %21
       V, V,                                                -- ^bb2: %22 %23
-      V, V, V, V, V, V, V, V, V, V], rfl⟩                       -- %24 … %33
+      V, V, V, V, V, V, V, V, V, V], rfl, 0, 0⟩                       -- %24 … %33
 
 abbrev fd_r43x6_repsqr_mul2.blockTys : Fin 3 → List Ty
   | ⟨1, _⟩ => [V, V, .bv 64]

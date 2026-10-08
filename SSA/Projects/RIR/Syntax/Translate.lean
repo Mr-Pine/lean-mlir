@@ -244,6 +244,10 @@ def overflowFlags (op : Op) : Except String OverflowFlags :=
     | s => throw s!"unknown overflow flag `{s}`"
   match op.getAttr? "overflowFlags" with
   | none => return {}
+  -- newer MLIR: a bit mask, `1` for `nsw` and `2` for `nuw`
+  | some (.int v _) =>
+    if 0 ≤ v && v < 4 then return { nsw := v % 2 == 1, nuw := v / 2 == 1 }
+    else throw s!"unknown overflow flags `{v}`"
   | some (.opaque_ "llvm.overflow" s) => flag s
   | some (.list fs) =>
     fs.foldlM (init := {}) fun acc f => do
@@ -284,12 +288,20 @@ structure Env where
   /-- The defining op of each value, for `alloca`'s count. -/
   defs : List (String × Op)
 
+/-- The register of value `%v`: its number less `Γ.valBase`. -/
+def valIdx (E : Env) (v : SSAVal) : Except String Nat := do
+  let some i := v.toNat? | throw s!"unsupported value name %{v}"
+  unless E.Γ.valBase ≤ i do
+    throw s!"%{v} is below the region's first value %{E.Γ.valBase}"
+  return i - E.Γ.valBase
+
 def reg (E : Env) (v : SSAVal) : Except String (RegRef × Ty) := do
   if v.startsWith "arg" then
     if let some i := (v.drop 3).toString.toNat? then
-      let some t := E.Γ.args[i]? | throw s!"%{v} is not an argument of the function"
-      return (.arg i, t)
-  let some i := v.toNat? | throw s!"unsupported value name %{v}"
+      let some t := if E.Γ.argBase ≤ i then E.Γ.args[i - E.Γ.argBase]? else none
+        | throw s!"%{v} is not an argument of the function"
+      return (.arg (i - E.Γ.argBase), t)
+  let i ← valIdx E v
   let some t := E.Γ.vals[i]? | throw s!"%{v} is not defined"
   return (.val i, t)
 
@@ -301,10 +313,9 @@ def operand (E : Env) (v : TypedSSAVal) : Except String (RegRef × Ty) := do
     throw s!"%{v.1} has type {t.toMLIR} but is used at {t'.toMLIR}"
   return (r, t)
 
-def result (op : Op) : Except String (Nat × Ty) := do
+def result (E : Env) (op : Op) : Except String (Nat × Ty) := do
   let [(v, t)] := op.res | throw s!"expected one result, found {op.res.length}"
-  let some i := v.toNat? | throw s!"unsupported result name %{v}"
-  return (i, ← ty t)
+  return (← valIdx E v, ← ty t)
 
 def target (E : Env) (name : String) : Except String Nat :=
   match E.blocks.idxOf? name with
@@ -351,7 +362,7 @@ def vec3 (resTy : Ty) : List (RegRef × Ty) → Except String (Nat × Nat × Reg
 
 def instr (E : Env) (op : Op) : Except String PInstr := do
   let args ← op.args.mapM (operand E)
-  let res := result op
+  let res := result E op
   let checkNotAtomic : Except String Unit := do
     if let some o := intAttr? op "ordering" then
       unless o == 0 do
@@ -559,7 +570,21 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
     do
       let [(p, .ptr)] := args | throw "expected one pointer operand"
-      let some size := intAttr? op "size" | throw "expected a `size` attribute"
+      -- newer LLVM drops `size`: the pointer is an `alloca`, and all of it
+      let size ←
+        match intAttr? op "size", op.args with
+        | some size, _ =>
+          pure size
+        | none, [(v, _)] =>
+          match E.defs.lookup v with
+          | some a@{ name := "llvm.alloca", .. } =>
+            let some (.type et) := a.getAttr? "elem_type"
+              | throw "expected an `elem_type` attribute"
+            pure ((← ty et).size : Int)
+          | _ =>
+            throw s!"without a `size`, %{v} must be an `alloca`"
+        | none, _ =>
+          throw "expected one pointer operand"
       unless 0 ≤ size do
         throw "negative `size`"
       if op.name == "llvm.intr.lifetime.start" then
@@ -655,10 +680,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.call" =>
     do
       let some (.symbol callee) := op.getAttr? "callee" | throw "expected a `callee` symbol"
-      let rets ←
-        op.res.mapM fun (v, _) => do
-            let some i := v.toNat? | throw s!"unsupported result name %{v}"
-            return i
+      let rets ← op.res.mapM (valIdx E ·.1)
       let us ← op.res.mapM (ty ·.2)
       return .call callee (args.map (·.2)) us (args.map (·.1)) rets
   | "llvm.mlir.addressof" =>
@@ -740,29 +762,38 @@ open Translate in
 /-- Check `rgn` and translate it. -/
 def Prog.ofRegion (rgn : Region) : Except String Prog := do
   let entry :: _ := rgn.blocks | throw "the region has no blocks"
-  -- `Γ.args`: the entry block's arguments, `%arg0 … %argN`
+  -- `Γ.args`: the entry block's arguments, `%argB … %arg(B + N)` for the first's `B`
+  let argBase :=
+    match entry.args with
+    | (v, _) :: _ => ((v.drop 3).toString.toNat?).getD 0
+    | [] => 0
   let args ←
     entry.args.zipIdx.mapM fun ((v, t), i) => do
-        unless v == s!"arg{i}" do
-          throw s!"the entry block's argument {i} must be %arg{i}, not %{v}"
+        unless v == s!"arg{argBase + i}" do
+          throw s!"the entry block's argument {i} must be %arg{argBase + i}, not %{v}"
         ty t |>.mapError (s!"%{v}: " ++ ·)
-  -- `Γ.vals`: every `%K`, block arguments and results, defined exactly once
+  -- `Γ.vals`: every `%K`, block arguments and results, defined exactly once, from the least `K`
   let defs : List TypedSSAVal :=
     (rgn.blocks.drop 1).flatMap (·.args) ++ rgn.blocks.flatMap fun b => b.ops.flatMap (·.res)
+  let nums ←
+    defs.mapM fun (v, _) => do
+        let some i := v.toNat? | throw s!"unsupported value name %{v}; values must be numbered"
+        return i
+  let valBase := nums.min?.getD 0
   let mut vals : Array (Option Ty) := #[]
-  for (v, t) in defs do
-    let some i := v.toNat? | throw s!"unsupported value name %{v}; values must be %0, %1, …"
+  for ((v, t), i) in defs.zip nums do
     let t ← ty t |>.mapError (s!"%{v}: " ++ ·)
+    let i := i - valBase
     if vals.size ≤ i then
       vals := vals ++ .replicate (i + 1 - vals.size) none
     if vals[i]!.isSome then
-      throw s!"%{i} is defined twice"
+      throw s!"%{v} is defined twice"
     vals := vals.set! i (some t)
   let valTys ←
     vals.toList.zipIdx.mapM fun (t, i) => do
-        let some t := t | throw s!"%{i} is not defined, but a higher value is"
+        let some t := t | throw s!"%{valBase + i} is not defined, but a higher value is"
         return t
-  let Γ : Ctx := ⟨valTys.length, args, valTys, rfl⟩
+  let Γ : Ctx := ⟨valTys.length, args, valTys, rfl, argBase, valBase⟩
   let names := rgn.blocks.map (·.name)
   unless names.eraseDups.length == names.length do
     throw "duplicate block name"
@@ -926,17 +957,19 @@ variable (Γ : Ctx)
 def mkReg (t : Ty) : RegRef → Except String (Reg Γ t)
   | .arg i =>
     if h : i < Γ.args.length then
-      if h' : Γ.args[i] = t then return .arg ⟨i, h⟩ h' else throw s!"%arg{i}: type mismatch"
-    else throw s!"%arg{i} out of range"
+      if h' : Γ.args[i] = t then return .arg ⟨i, h⟩ h'
+      else throw s!"%arg{Γ.argBase + i}: type mismatch"
+    else throw s!"%arg{Γ.argBase + i} out of range"
   | .val i =>
     if h : i < Γ.n then
-      if h' : Γ.ty ⟨i, h⟩ = t then return .val ⟨i, h⟩ h' else throw s!"%{i}: type mismatch"
-    else throw s!"%{i} out of range"
+      if h' : Γ.ty ⟨i, h⟩ = t then return .val ⟨i, h⟩ h'
+      else throw s!"%{Γ.valBase + i}: type mismatch"
+    else throw s!"%{Γ.valBase + i} out of range"
 
 def mkDst (t : Ty) (i : Nat) : Except String (Dst Γ t) :=
   if h : i < Γ.n then
-    if h' : Γ.ty ⟨i, h⟩ = t then return ⟨⟨i, h⟩, h'⟩ else throw s!"%{i}: type mismatch"
-  else throw s!"%{i} out of range"
+    if h' : Γ.ty ⟨i, h⟩ = t then return ⟨⟨i, h⟩, h'⟩ else throw s!"%{Γ.valBase + i}: type mismatch"
+  else throw s!"%{Γ.valBase + i} out of range"
 
 def mkRegs : (ts : List Ty) → List RegRef → Except String (Regs Γ ts)
   | [], [] => return .nil
