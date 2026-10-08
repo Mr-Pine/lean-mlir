@@ -256,6 +256,37 @@ example (p : Pointer) (k : Nat) (hp : p.offset.toNat + 192 * 8 < 2 ^ 64) (hk : k
       .value (p.add (BitVec.ofNat 64 (192 * k))) := by
   simp only [Tactic.gepValue]
 
+mlir_def deepLoad :=
+{
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> i64
+    %1 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %2 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %3 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %4 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %5 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %6 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %7 = "llvm.load"(%arg0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%7) : (i64) -> ()
+}
+
+-- a load below six `alloca`s: the entry `Fits` carried through each, not searched for
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+    deepLoad.call (deepLoad.args (.value p)) s =
+      .value
+        (.cons (.value (s.mem.readAt p 64)) .nil,
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 6⟩ }) := by
+  func_init
+  block_init
+  step_pure
+  iterate 6 step_alloca
+  step_load with v
+  guard_hyp hv : v = S₀.mem.readAt p 64
+  finish_block
+  subst hS
+  erase_frame
+  rfl
+
 mlir_const_def answer :=
   {%0 = "llvm.mlir.constant"()<{value = 42:i64}>:()->i64"llvm.return"(%0):(i64)->()}
 

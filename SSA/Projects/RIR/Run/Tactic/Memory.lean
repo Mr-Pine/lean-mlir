@@ -127,6 +127,39 @@ def addWithin? (facts : Array (Expr × Expr)) (q off w v : Expr) : MetaM (Option
     decideWithOffsets? facts (← mkAppM ``LE.le #[← mkAppM ``HAdd.hAdd #[off8, w], v]) | return none
   return some (hov, hw)
 
+/-- `goal` by the lemma `lem`, its explicit premises `prems` (the rest by unifying with `goal`). -/
+def proveBy? (lem : Name) (goal : Expr) (prems : Array Expr) : MetaM (Option Expr) := do
+  let c ← mkConstWithFreshMVarLevels lem
+  let (ms, bis, ty) ← forallMetaTelescopeReducing (← inferType c)
+  unless ← withReducible (isDefEq ty goal) do
+    return none
+  let explicit := (ms.zip bis).filter (·.2.isExplicit) |>.map (·.1)
+  for (m, p) in explicit.zip prems do
+    unless ← isDefEq m p do
+      return none
+  let pf ← instantiateMVars (mkAppN c ms)
+  return if pf.hasMVar then none else some pf
+
+/-- Prove `s.WF`: a fact, or below `alloca`s and new blocks (`addressof`) from one (`WF.alloca`,
+`WF.addBlock`), one lemma per layer instead of a search. -/
+partial def wfProof? (facts : Array (Expr × Expr)) (s : Expr) : MetaM (Option Expr) := do
+  for (pf, ty) in facts do
+    let_expr GlobalState.WF s' := ty | continue
+    if s' == s then
+      return some pf
+  let goal ← mkAppM ``GlobalState.WF #[s]
+  match_expr s with
+  | GlobalState.alloca t _ =>
+    let some h ← wfProof? facts t | return none
+    proveBy? ``GlobalState.WF.alloca goal #[h]
+  | GlobalState.mk _ m =>
+    let_expr MemoryState.addBlock m' _ _ _ _ := m | return none
+    let_expr GlobalState.mem t := m' | return none
+    let some h ← wfProof? facts t | return none
+    proveBy? ``GlobalState.WF.addBlock goal #[h]
+  | _ =>
+    return none
+
 /-- Prove `Fits m p w`: a fact with the same `m` and `p`, and the same width as a literal
 (`(Ty.vec 8 64).width` is `512`); not `isDefEq` on `Fits` itself, which unfolds the memory. An
 offset `q.add off` fits inside a fact for `q` (`Fits.add_of_le`) if `q.offset + off` does not wrap:
@@ -158,6 +191,22 @@ partial def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Op
         continue
       let some (hov, hw) ← addWithin? facts q off w₁ (← normWidths v) | continue
       return some (← mkAppOptM ``Fits.add_of_le #[none, none, none, none, off, hov, hw, pf])
+  -- below an `alloca` or a new block: `Fits.alloca`, `Fits.addBlock`, the state's `WF` by
+  -- `wfProof?` (not the transport search: a read below six `alloca`s needs twelve lemmas)
+  let goal ← mkAppM ``Fits #[m, p, w]
+  if let some t := m.app1? ``GlobalState.mem then
+    let_expr GlobalState.alloca s _ := t | return none
+    let some hwf ← wfProof? facts s | return none
+    let some h ← fitsProof? facts (← mkAppM ``GlobalState.mem #[s]) p w | return none
+    return ← proveBy? ``Fits.alloca goal #[hwf, h]
+  if let some (m', s) :=
+      (do
+        let_expr MemoryState.addBlock m' _ _ _ _ := m | none
+        let_expr GlobalState.mem s := m' | none
+        return (m', s)) then
+    let some hwf ← wfProof? facts s | return none
+    let some h ← fitsProof? facts m' p w | return none
+    return ← proveBy? ``Fits.addBlock goal #[hwf, h]
   -- If not found directly, go through `Fits.storeAt`
   let_expr MemoryState.storeAt m' q _ x := m | return none
   let some h ← fitsProof? facts m' p w | return none
@@ -599,6 +648,9 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
   match_expr goal with
   | Fits m p w =>
     if let some pf← fitsProof? c.facts m p w then
+      return some pf
+  | GlobalState.WF s =>
+    if let some pf← wfProof? c.facts s then
       return some pf
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
