@@ -18,6 +18,8 @@ example (E : ⟪twice.Γ⟫) (S : GlobalState) (x : BitVec 32)
     twice.runFrom (E[%0 := .value 0#32]) 0 S = .value (.cons (.value (x + x)) .nil, S) := by
   block_init
   step_pure
+  -- the write it overwrites is dead
+  guard_hyp hE :~ E = E₀[%0 := .value (x + x)]
   finish_block
   rfl
 

@@ -192,22 +192,23 @@ private def swapN (env : Expr) (incoming : ChainWrite) : (liveWrites : List Chai
     let innerSwaps ← swapN innerBase incoming ws
     mkEqTrans outerSwap (← mkCongrArg (← chainFn [w] env) innerSwaps)
 
-/-- `env` with the writes `remaining` equal to it with the dead ones first, the live ones last;
-`writtenLive` the live writes over `env`, outermost first. -/
-private def partitionProof (env : Expr) (live : Std.HashSet Nat) (writtenLive : List ChainWrite) :
-    (remaining : List ChainWrite) → MetaM Expr
+/-- `env` with the writes `remaining` (each with its position in the chain) equal to it with the
+`dead` ones first, the live ones last; `writtenLive` the live writes over `env`, outermost first. A
+dead write never passes one to its register: those below it are dead too. -/
+private def partitionProof (env : Expr) (dead : Nat → Bool) (writtenLive : List ChainWrite) :
+    (remaining : List (ChainWrite × Nat)) → MetaM Expr
   | [] => do
     mkEqRefl env
-  | w :: ws =>
-    if w.idx ∈ live then do
-      partitionProof (← w.apply env) live (w :: writtenLive) ws
+  | (w, i) :: ws =>
+    if !dead i then do
+      partitionProof (← w.apply env) dead (w :: writtenLive) ws
     else do
       let swapProof ← swapN env w writtenLive
       let some (_, _, rhs) :=
         (← inferType swapProof).eq? | throwError "swap proof is not an equation"
-      let partProof ← partitionProof rhs live writtenLive ws
+      let partProof ← partitionProof rhs dead writtenLive ws
       -- the swap lifted to the remaining writes
-      let lifted ← mkCongrArg (← chainFn ws env) swapProof
+      let lifted ← mkCongrArg (← chainFn (ws.map (·.1)) env) swapProof
       mkEqTrans lifted partProof
 
 /-- Clear a value `x` and its hyp `hx : x = _` if possible -/
@@ -281,20 +282,32 @@ def runSeal : TacticM Unit :=
     let some cont := goal.find? (·.isAppOf ``Func.continue) | return
     let liveRegs ← liveRegs (cont.getArg! 0) runBodyFrom.block runBodyFrom.idx
     let (E₀, chain) ← splitChain E₀chain
-    let deadWrites := chain.filter (·.idx ∉ liveRegs)
-    let dead : Std.HashSet Nat := deadWrites.foldl (·.insert ·.idx) {}
-    let E₀' := (← chainFn deadWrites.toList E₀).beta #[E₀]
+    -- dead: not read later, or written again higher in the chain (a loop's next iteration)
+    let idxs := chain.map (·.idx)
+    let shadowed (i : Nat) := idxs.extract (i + 1) idxs.size |>.contains idxs[i]!
+    let isDead (shadow : Bool) (i : Nat) := idxs[i]! ∉ liveRegs || shadow && shadowed i
     -- the root's facts (a block lemma's inputs) carry over to the sealed root; any other mention (a
-    -- loop's continuation) keeps the root
-    let mut carried : Array (FVarId × Name × Expr) := #[]
-    if E₀.isFVar then
-      for h in ← hypsMentioning E₀ (except := #[hE]) do
-        let d ← h.getDecl
-        let ty ← instantiateMVars d.type
-        unless ← carriesOver E₀ dead ty do
-          return
-        carried := carried.push (d.fvarId, d.userName, ty.replaceFVar E₀ E₀')
-    let partitionProof ← partitionProof E₀ liveRegs [] chain.toList
+    -- loop's continuation) keeps the root. A fact about a shadowed write's register keeps it.
+    let rootFacts ←
+      if E₀.isFVar then
+        (← hypsMentioning E₀ (except := #[hE])).mapM fun h => do
+            let d ← h.getDecl
+            return (d.fvarId, d.userName, ← instantiateMVars d.type)
+      else
+        pure #[]
+    let carries (shadow : Bool) : MetaM Bool := do
+      let dead : Std.HashSet Nat :=
+        (List.range idxs.size).foldl (fun s i => if isDead shadow i then s.insert idxs[i]! else s)
+          {}
+      rootFacts.allM fun (_, _, ty) => carriesOver E₀ dead ty
+    let shadow ← carries true
+    unless shadow || (← carries false) do
+      return
+    let deadWrites := chain.toList.zipIdx.filter (isDead shadow ·.2) |>.map (·.1)
+    let E₀' := (← chainFn deadWrites E₀).beta #[E₀]
+    let mut carried : Array (FVarId × Name × Expr) :=
+      rootFacts.map fun (h, n, ty) => (h, n, ty.replaceFVar E₀ E₀')
+    let partitionProof ← partitionProof E₀ (isDead shadow) [] (chain.toList.zipIdx)
     let hE' ← mkEqTrans (.fvar hE) partitionProof
     let r ← g.assertAfter hE `hE (← inferType hE') hE'
     -- `assertAfter` reintroduces the locals after `hE`: the carried facts by their new ids
