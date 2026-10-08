@@ -305,14 +305,19 @@ simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ 
       return .visit { expr := r, proof? := pf }
   return .continue
 
-/-- `¬p.offset.uaddOverflow off`: unfold `uaddOverflow`, then `omega` from the facts. -/
+/-- `¬p.offset.uaddOverflow off`: unfold `uaddOverflow`, the offsets' values (`x.offset = 0`) in,
+then `omega` from the facts. -/
 def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Option Expr) := do
   let g ← mkFreshExprMVar (← noOverflowGoal p off)
   try
     -- `Pointer.add` too, so `omega` sees a moved pointer's offset through its base's
-    let thms ← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow
-    let thms ← thms.addDeclToUnfold ``Pointer.add
-    let thms ← thms.addConst ``BitVec.toNat_add
+    let mut thms ← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow
+    thms ← thms.addDeclToUnfold ``Pointer.add
+    for (pf, ty) in facts do
+      let some (_, l, r) := ty.eq? | continue
+      if l.isAppOfArity ``Pointer.offset 1 && !r.hasFVar && !r.hasMVar then
+        thms ← thms.add (.other `offsetFact) #[] pf
+    thms ← thms.addConst ``BitVec.toNat_add
     let ctx ← Simp.mkContext (simpTheorems := #[← thms.addConst ``BitVec.toNat_ofNat])
     let (r, _) ← simpGoal g.mvarId! ctx (simprocs := #[← Simp.getSimprocs])
     if let some (_, g') := r then
