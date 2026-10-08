@@ -249,6 +249,12 @@ an abstract block with the body fact, and `step_pattern using runBodyFrom_foldRu
 site (statement in `tactics-guide.md` §10). The lemma's conclusion is continuation-form, its
 intermediates universally quantified in the continuation so the site clears them.
 
+Abstract registers work when every operand is a `Dst` (a value register), kept apart by a
+`Nodup` premise. Function arguments (`Reg.arg`) cannot be told apart from the run's writes when
+abstract, and their reads stall: state such a run over the concrete block and position instead,
+with the arguments through `hArgs` and constants through `E ⊨ […]`
+(`fd_ed25519_verify.hash_run` over `bb5.runBodyFrom E 1 S`; `fiat_25519_to_bytes.store_bytes`).
+
 ## P11. Callee results named (`fd_f25519_pow22523.lean`)
 
 ```lean

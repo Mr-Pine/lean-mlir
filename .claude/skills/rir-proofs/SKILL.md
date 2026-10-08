@@ -94,6 +94,15 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
   object (`readLimbs`, `storeLimbs`), so facts, steps and `hS` speak about objects, not bytes.
 - **Abbreviate repeated structure.** A loop header's env as `abbrev hdr … E i := E[…]`, a block's
   effect as `abbrev mulSqr … S`, a callee's spec as a named function, never its unfolded body.
+- **A composite memory behind one function.** When a run of calls leaves stores the transport
+  lemmas cannot see through (a `def` over several store functions), name the resulting memory
+  (`hashMem m sha k X w`) and give it its own `Fits`/object transport, reads in other blocks,
+  read-back and frame-erase lemmas: every fact then carries across in one step
+  (`fd_ed25519_verify.lean`).
+- **Premises as terms, not facts.** A call premise about the current state
+  (`(S.mem.readSha sha).bufUsed.toNat < 128`) kept as a local is transported at the next step and,
+  when that fails, becomes a goal; `consuming` clears it only afterwards. Pass it in the theorem:
+  `step_call using (f.call_eq (hu := (congrArg g hread_sha).mpr h))`.
 - **Put arithmetic in lemmas.** Overflow facts, invariant transitions and limb identities are
   separate lemmas applied by name; nothing in the step context runs `bv_decide`, `omega` or
   `ring` over the whole context.
@@ -131,3 +140,10 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
 13. **Attributes in proof files are `local`** (`attribute [local mlir_state] …`); a global one
     changes every importer's simp sets. A `@[mlir_read]` lemma must be `public`: a private one
     breaks every importer's steps ("Unknown constant `_private…`").
+14. **Spec values evaluated by `func_init`**: a counter or result computed from the inputs
+    (`blocks n1 n2`, the whole `spec …`) is evaluated by the frame-free check (maximum
+    recursion). `generalize hres : spec … = res` before `func_init`; `subst hres` at the end.
+15. **"no application of `Func.runFrom` in the goal `S'.mem.ShaFit sha`"**: a fact the step
+    could not carry became a goal before the main one. Split abbreviated conjunctions first
+    (`obtain ⟨hfits, hoff⟩ := hsha`), add a transport lemma for the new state's shape, or clear
+    the fact if no later step needs it.

@@ -48,6 +48,9 @@ end LeanMLIR.RIR.<Lib>.<Impl>
 
 Tests import the proof file and sit in `Tests/<f>.lean`.
 
+`bv_decide` in a module needs `import Std.Tactic.BVDecide`, and for its fast path
+`meta import Std.Tactic.BVDecide.Reflect` (without it one lemma took 22 s of kernel time).
+
 ## Names
 
 | Thing | Name |
