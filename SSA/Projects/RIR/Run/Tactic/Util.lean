@@ -95,7 +95,9 @@ def replaceBySimp (m : MVarId) (e : Expr) (r : Simp.Result) : MetaM MVarId := do
   -- (`(f x).1` against `(f x).2`) unfolds `f` before failing
   let body ← withReducible <| kabstract (← instantiateMVars (← m.getType)) e
   let motive := Expr.lam `val (← inferType e) body .default -- As a lambda
-  let simpProof ← r.getProof' e
+  -- typed `e = r.expr`: a proof-free result is `Eq.refl e`, and without the hint the kernel checks
+  -- the congruence's two whole goals (a concrete block's run) against each other
+  let simpProof ← mkExpectedTypeHint (← r.getProof' e) (← mkEq e r.expr)
   let mvarProof ← mkCongrArg motive simpProof
   let newMVar := body.instantiate1 r.expr
   m.replaceTargetEq newMVar mvarProof -- Using congruence, get proof over goal
