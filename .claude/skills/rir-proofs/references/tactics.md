@@ -66,6 +66,15 @@ simprocs (a read `S.mem.readAt p w` by a read fact, through `hS`'s stores by the
 lemmas, or inside a wider known read). Side conditions are discharged by `decide`, then from the
 facts (`mem_fact`'s search without transport).
 
+Vector simprocs (`mlir_operation`, which every pass runs; elsewhere `simp [mlir_operation]`): a
+literal `#v[…]`'s lane at a literal index is that lane, and any vector's lane at `⟨k, _⟩`,
+`↑⟨k, _⟩` or `(k : Fin n)` is `v[k]`; `shufflevector` with a literal mask and `bitcast` between
+vectors step straight to their lanes. A bitcast lane is `poisonIf (bitcastPoison x w w' k) …`: the
+test reduces to the overlapping lanes' `x[i].isPoison` once `x`'s reads resolve, and
+`(packLanes v).extractLsb' s w` at a literal `s` to `v[i]`, its slice, or
+`v[i + m - 1] ++ … ++ v[i]`. No `Fin.exists_fin_succ` or byte lemmas are needed; `expandOfFn` still
+splits the other `Vector.ofFn` lanes.
+
 ## Step options
 
 Every step takes some of these, in this order:
