@@ -73,10 +73,9 @@ elab "extract_env" : tactic => do
   let g ← g.clear hE₀args'
   replaceMainGoal [g]
 
-/-- With the initial state `S₀` (`hS : S = S₀`), each fact `h : P S` (`hwf : S.WF`,
-`Fits S.mem p w`, an object's) also as `h₀ : P S₀`: the steps carry only facts of the current
-state, and reads through `hS` below a frame's `alloca`s, like removing the frame at the end, need
-the initial ones. -/
+/-- With the initial state `S₀` (`hS : S = S₀`), `hwf : S.WF` and each `h : Fits S.mem p w` also
+about `S₀` (`hwf₀`, `h₀`): the steps carry only facts of the current state, and reads through `hS`
+below a frame's new blocks, like removing the frame at the end, need the initial ones. -/
 meta def addInitialFacts : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -86,7 +85,7 @@ meta def addInitialFacts : TacticM Unit :=
     for h in ← hypsMentioning S (except := #[hS]) do
       let d ← h.getDecl
       let ty ← instantiateMVars d.type
-      if ty.isEq || ty.isForall || !(← isProp ty) then
+      unless ty.isAppOfArity ``GlobalState.WF 1 || ty.isAppOfArity ``Fits 3 do
         continue
       let motive := .lam `s (← inferType S) (← kabstract ty S) .default
       let pf ← mkEqNDRec motive d.toExpr (mkFVar hS)
