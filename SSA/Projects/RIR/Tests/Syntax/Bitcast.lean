@@ -2,6 +2,7 @@ module
 
 public import SSA.Projects.RIR.Syntax.Elab
 public import SSA.Projects.RIR.Run.Tactic
+import Std.Tactic.BVDecide
 
 /-! # Vector lanes: literal reads and bitcasts -/
 
@@ -18,6 +19,11 @@ example (v : BitVec 8) : [#v[0#8, v][0] ++ 0#8, 1] = [0, 1] := by
 example (x : Vector (BitVec 64) 8) :
     (Vector.ofFn fun i : Fin 8 => x[i] + x[i.1])[3] = x[3] + x[3] := by
   simp only [Vector.getElem_ofFn, reduceGetElemLit]
+
+-- a lane at `k` with its bound proved otherwise: the same atom for `bv_decide`
+example (x : Vector (BitVec 64) 8) (h : x[0]'(by omega) &&& 1 = 1) : x[0] &&& 1 = 1 := by
+  simp only [reduceGetElemLit] at h ⊢
+  bv_decide
 
 -- between vectors, lane by lane: the poison tests decided, the bits sliced from their lanes
 example (a : BitVec 64) :

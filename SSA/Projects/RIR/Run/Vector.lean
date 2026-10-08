@@ -109,9 +109,10 @@ meta def litIndex? (i : Expr) : MetaM (Option Nat) := do
 
 open Lean Meta in
 /-- A lane at a literal index: of a literal vector, that lane; of another vector at `⟨k, _⟩`,
-`↑⟨k, _⟩` or `(k : Fin n)`, `xs[k]`, as specs write it. A literal's lane is a proof step: as a `dsimp`
-step the kernel checks the read together with the `dsimp` steps after it, which in a module it may
-not unfold (`#v[0#8, x][0] ++ 0#8` to `0#16` needs `Nat.lor`); by `rfl` it may unfold the lanes. -/
+`↑⟨k, _⟩` or `(k : Fin n)`, `xs[k]` with its bound by `decide`, as specs write it (also at `k`, so
+`bv_decide` sees one atom). A literal's lane is a proof step: as a `dsimp` step the kernel checks
+the read together with the `dsimp` steps after it, which in a module it may not unfold
+(`#v[0#8, x][0] ++ 0#8` to `0#16` needs `Nat.lor`); by `rfl` it may unfold the lanes. -/
 simproc ↓[mlir_operation]reduceGetElemLit (GetElem.getElem _ _ _) := fun e => do
   let_expr GetElem.getElem _ _ _ _ _ xs i _ := e | return .continue
   let i ← instantiateMVars i
@@ -132,10 +133,13 @@ simproc ↓[mlir_operation]reduceGetElemLit (GetElem.getElem _ _ _) := fun e => 
   let finIndex :=
     i.isAppOf ``Fin.val || i.isAppOf ``Fin.mk ||
       i.isAppOfArity ``OfNat.ofNat 3 && i.appFn!.appFn!.appArg!.isAppOf ``Fin
-  unless finIndex do
+  -- at a `Nat` literal, a bound proved otherwise than by `decide`: `bv_decide` would see two atoms
+  unless finIndex || !e.appArg!.isAppOf ``of_decide_eq_true do
     return .continue
   let some k ← litIndex? i | return .continue
   let some lane ← mkVecGetElem xs k | return .continue
+  if lane == e then
+    return .continue
   return .visit { expr := lane, proof? := ← mkExpectedTypeHint (← mkEqRefl lane) (← mkEq e lane) }
 
 open Lean Meta in
