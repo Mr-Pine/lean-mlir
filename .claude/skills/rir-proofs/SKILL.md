@@ -100,8 +100,8 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
   read-back and frame-erase lemmas: every fact then carries across in one step
   (`fd_ed25519_verify.lean`).
 - **Premises as terms, not facts.** A call premise about the current state
-  (`(S.mem.readSha sha).bufUsed.toNat < 128`) kept as a local is transported at the next step and,
-  when that fails, becomes a goal; `consuming` clears it only afterwards. Pass it in the theorem:
+  (`(S.mem.readSha sha).bufUsed.toNat < 128`) kept as a local is transported at each later step
+  and, when that fails, becomes a goal (unless consumed on that step). Pass it in the theorem:
   `step_call using (f.call_eq (hu := (congrArg g hread_sha).mpr h))`.
 - **Put arithmetic in lemmas.** Overflow facts, invariant transitions and limb identities are
   separate lemmas applied by name; nothing in the step context runs `bv_decide`, `omega` or
@@ -132,9 +132,9 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
 10. **A `local macro` between theorems** waits for every proof above it (7.9 s → 6.3 s on
     pow22523 by moving them up).
 11. **Reads through `hS` stall although the facts hold**: `hS`'s store chain starts at the entry
-    state `S₀`, so a read lemma's premise about the base memory is about `S₀`, not `S`. Keep the
-    object facts the reads need about `S₀` (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right
-    after `func_init`).
+    state `S₀`, so a read lemma's premise about the base memory is about `S₀`, not `S`. A framed
+    `func_init` keeps the entry `Fits` facts about `S₀` (`hp₀`); keep the object facts the reads
+    need about `S₀` too (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right after `func_init`).
 12. **`mem_fact` cannot see a conjunct of an object predicate** (`LimbsFit (p.add 40#64)` inside
     `PointFit p`): give the predicate `mlir_transport` projection lemmas.
 13. **Attributes in proof files are `local`** (`attribute [local mlir_state] …`); a global one

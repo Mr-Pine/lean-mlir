@@ -29,13 +29,16 @@ ha : a = S₀.mem.readAt y 64               -- a named value
 ```
 
 - **Env sealing.** After every step `E` is a fresh local with `hE : E = E₀[…]` holding only the
-  writes some later instruction reads (in this block or a block reachable from it). Dead writes
-  move into the new root `E₀`, and a value nothing else mentions is cleared with its equation.
+  writes some later instruction reads (in this block or a block reachable from it) and no later
+  write in the chain overwrites. Dead writes move into the new root `E₀`, and a value nothing else
+  mentions is cleared with its equation.
   Before the first step the args fact is `hEargs`; from then on it is `hArgs`.
 - **State sealing.** Every effectful step leaves one state local `S` with `hS : S = <term over
   S₀>` (the previous state is substituted away). Facts about the old `S` are restated about the
-  new one, by the context's facts, the `mlir_transport` lemmas and the context's implications;
-  one that cannot be carried becomes a **new goal before the main goal**, named after the fact.
+  new one, by the context's facts, the `mlir_transport` lemmas (their `≠`/disjointness premises
+  also by `mem_fact`'s searches) and the context's implications; one that cannot be carried
+  becomes a **new goal before the main goal**, named after the fact (a consumed one is cleared
+  instead).
 - **Folded values.** A value named with `with x` (or `named`) is *tagged*: later steps, the state
   and `finish_block` keep `x` and never unfold `hx`. Default names (a load's `vN`) and
   `transparent` names are untagged and unfold into later values.
@@ -44,7 +47,8 @@ ha : a = S₀.mem.readAt y 64               -- a named value
 
 Every step simplifies the value it writes (or the operation it runs) in passes:
 
-1. argument reads `E.read %argk`, by `hArgs`;
+1. argument reads `E.read %argk`, by `hArgs` (before the env is first sealed, by the args fact of
+   its write chain's root: a block lemma's `hArgs : E.args = …`);
 2. register reads, through `hE` chains (`readThroughWrites`: one definitional step per run of
    writes, the written values never walked) and local read facts `E.read r = v` (also as
    `E ⊨ [r := v, …]` conjunctions);
@@ -56,10 +60,11 @@ Every step simplifies the value it writes (or the operation it runs) in passes:
 
 Simprocs in these passes: `gepValue` (`gep (.value off) (.value p)` to `.value (p.add off)` when
 `p.offset + off` provably does not wrap: by the offsets' facts, a no-overflow fact
-`¬p.offset.uaddOverflow c` for a literal `c ≥ off`, or `omega`), and the memory simprocs
-(a read `S.mem.readAt p w` by a read fact, through `hS`'s stores by the `mlir_read` lemmas, or
-inside a wider known read). Side conditions are discharged by `decide`, then from the facts
-(`mem_fact`'s search without transport).
+`¬p.offset.uaddOverflow c` for a literal `c ≥ off`, or `omega` with the offsets' values
+(`x.offset = 0`) in: a symbolic index from a block's start needs no lemma), and the memory
+simprocs (a read `S.mem.readAt p w` by a read fact, through `hS`'s stores by the `mlir_read`
+lemmas, or inside a wider known read). Side conditions are discharged by `decide`, then from the
+facts (`mem_fact`'s search without transport).
 
 ## Step options
 
@@ -80,7 +85,7 @@ step_xxx [opaque] [only] [simp args] [names] [consuming h₁ h₂ …]
 | `with x` | name it `x`, equation `hx`, tagged |
 | `with x h` | name it `x`, equation `h` |
 | `with transparent x` | name it `x`, untagged |
-| `consuming h₁ …` | clear these facts after the step (they are not carried to the new state) |
+| `consuming h₁ …` | clear these facts after the step: carried only if two transport lemmas do it, never a goal; a name may be the step's own read-back |
 
 Defaults: `step_pure`, `step_call` inline; `step_load`, `step_alloca`, `step_addressof`,
 `step_pattern` name `vN` untagged. A value that is already a local is never renamed. Only the
@@ -98,7 +103,8 @@ Defaults: `step_pure`, `step_call` inline; `step_load`, `step_alloca`, `step_add
   mem := p.2.mem.eraseFrom S₀.alloc.nextFreeBlock })`, closed at the end by `erase_frame`.
 - Leaves `S₀ S`, `hS : S = S₀`, every hypothesis about `s` restated about `S` (`hwf : S.WF`, …),
   `R` restated about `S₀`, `E₀ E`, `hE : E = E₀`, `hEargs : E.args = (f.args …).get`; framed
-  also `hwf₀ : S₀.WF` (from `hwf`), which `erase_frame` needs.
+  also `hwf₀ : S₀.WF` and each `h : Fits S.mem p w` as `h₀` about `S₀`: `erase_frame` needs
+  `hwf₀`, and reads through `hS` below the frame's `alloca`s and globals need the `Fits`.
 - Fails with "`func_init` expects a goal `f.call args s = _`" on any other goal.
 
 ### `block_init`
@@ -127,8 +133,9 @@ be poison") and `Fits S.mem q w` by `mem_fact`, else `simp_all`. The loaded valu
 `store v, p`. Needs `p` and `v` as `.value _`, `Fits S.mem q w`, and `v`'s bits by
 `dsimp; try simp; rfl` (fails when the value is still an `if`/poison). New facts:
 `hread_<p> : S.mem.readAt p w = v` for a local pointer `p`, `hread_<p>_<k>` for `p.add k#64`,
-else `hread`. Read facts of the old state that the store misses are carried; one it overwrites is
-dropped.
+else `hread`. Read facts of the old state that the store misses are carried; one it overwrites,
+or may overwrite (no `mlir_read` lemma's side conditions hold: possible aliasing), is dropped;
+`set_option trace.rir true` names each dropped fact.
 
 ### `step_memcpy [only] [args] [consuming …]` / `step_memset …`
 
@@ -183,9 +190,9 @@ Closes `f.runFrom E k S = K` (or `… >>= g = K`) with a loop lemma, a block lem
 hypothesis or a continuation hypothesis `hK`. `h`'s env is a write chain over a free base: the base
 becomes `E`, each write a goal `E.read r = v`. Then:
 
-- reads are closed through `E`'s writes; what is left of them, and `h`'s other premises, by
-  `with_reducible assumption`, `omega`, `mem_fact`, or `simp [*, mlir_env, gepValue]` (a premise
-  about a run is only tried by `assumption`); what remains stays open;
+- reads are closed through `E`'s writes, the rest of them by `rfl`; what is left, and `h`'s other
+  premises, by `with_reducible assumption`, `omega`, `mem_fact`, or `simp [*, mlir_env, gepValue]`
+  (a premise about a run is only tried by `assumption`); what remains stays open;
 - a continuation premise `∀ E', E'.args = … → runFrom … = K` is entered as the **last** goal: `E₀`
   and `hArgs₀` introduced, the env sealed, the state simplified and named `S` as after a step.
 
@@ -198,11 +205,12 @@ At the end of a block's body ("`finish_block`: instructions left at position N" 
 
 - `return`: resolves the returned registers; the goal becomes `.value (vals, S) = K` (framed: the
   erase bind still around it).
-- `br`/`cond_br`/`switch`: resolves the condition and the jump's arguments; a literal condition is
-  decided; otherwise one goal per target. A `cond_br` gives `isTrue` (`hbr : c`) and `isFalse`
-  (`hbr : ¬c`); a `switch` is an `if` chain, so its goals are `isTrue`, `isFalse.isTrue`, …, and
-  the default `isFalse.….isFalse` gets every negation as `hbr0`, `hbr1`, …. Each goal is
-  `f.runFrom E k S = K` with the target's parameters written into a sealed `E`.
+- `br`/`cond_br`/`switch`: resolves the condition and the jump's arguments; a literal condition,
+  or one a local `c` or `¬c` (`a ≠ b`) decides, takes its branch; otherwise one goal per target.
+  A `cond_br` gives `isTrue` (`hbr : c`) and `isFalse` (`hbr : ¬c`); a `switch` is an `if` chain,
+  so its goals are `isTrue`, `isFalse.isTrue`, …, and the default `isFalse.….isFalse` gets every
+  negation as `hbr0`, `hbr1`, …. Each goal is `f.runFrom E k S = K` with the target's parameters
+  written into a sealed `E`.
 
 ### `erase_frame`
 
@@ -222,8 +230,10 @@ Closes a side condition from the context: a local up to reducible unfolding; `de
 facts after replacing pointer offsets by their facts (`x.offset = 0`); `Fits` (same pointer and
 width, a wider literal width by `Fits.mono`, `q.add off` inside `q` by `Fits.add_of_le`, through
 `storeAt`); `Range.Disjoint` (distinct ids, else offsets by `omega`); `≠` of block ids (facts,
-either way round, `List.Nodup` literals, distinct slots, `decide`); then, with `S` substituted by
-`hS`, the `mlir_transport` lemmas 64 deep. "`mem_fact`: not from the facts" when all fail.
+either way round, `List.Nodup` literals, distinct slots, `decide`); then the `mlir_transport`
+lemmas two deep from the facts as they are (an object fact's projections), then, with `S`
+substituted by `hS`, 64 deep; a lemma's `≠`/disjointness premises also by the searches above.
+"`mem_fact`: not from the facts" when all fail.
 
 ### `env_reads`
 
@@ -241,7 +251,7 @@ tactic; the specific steps above are instances). Use them only to debug a step.
 | Attribute | Kind | Used by | Register |
 | --- | --- | --- | --- |
 | `mlir_mem` | simp set | `func_init` (WF), `step_call` premises | unfolding of fit predicates (`LimbsFit`), WF through writes |
-| `mlir_state` | simp set | state sealing | reads of your own read functions through your writes |
+| `mlir_state` | simp set | state sealing (also on `hS` once substituted) | reads of your own read functions through your writes; a write merged with the one below it (`(m.storeAt p u).storeAt (p.add k) y = …`) |
 | `mlir_frame` | simp set | `simp [mlir_frame, *]` at the end of a framed proof | `eraseFrom` past writes, reads through `alloca` |
 | `mlir_erase` | simp set | `erase_frame` | `eraseFrom` past a write; a write into an erased block dropped |
 | `mlir_env`, `mlir_operation`, `mlir_instr`, `mlir_effect` | simp sets | value resolution | framework only |
