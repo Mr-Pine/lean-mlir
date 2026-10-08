@@ -49,6 +49,20 @@ def ConstLit.ty : ConstLit → Ty
   | .null => .ptr
   | .agg t _ => t
 
+mutual
+/-- `t`'s all-zero constant, with null pointers: `llvm.mlir.zero`. -/
+def ConstLit.zero : Ty → ConstLit
+  | .bv w => .bv w 0
+  | .ptr => .null
+  | .vec l w => .splat l w 0
+  | .array n (.bv w) => .arraySplat n w 0
+  | t@(.array n et) => .agg t (.replicate n (ConstLit.zero et))
+  | t@(.struct fs) => .agg t (ConstLit.zeroFields fs)
+def ConstLit.zeroFields : List Ty → List ConstLit
+  | [] => []
+  | t :: ts => ConstLit.zero t :: ConstLit.zeroFields ts
+end
+
 /-- An `Instr` with registers as indices; `dst` and `rets` index `Γ.vals`. -/
 inductive PInstr
   | const (c : ConstLit) (dst : Nat)
@@ -381,17 +395,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.mlir.zero" =>
     do
       let (dst, t) ← res
-      match t with
-      | .ptr =>
-        return .const .null dst
-      | .bv w =>
-        return .const (.bv w 0) dst
-      | .vec l w =>
-        return .const (.splat l w 0) dst
-      | .array n (.bv w) =>
-        return .const (.arraySplat n w 0) dst
-      | t =>
-        throw s!"unsupported zero of type {t.toMLIR}"
+      return .const (.zero t) dst
   | "llvm.mlir.constant" =>
     do
       let (dst, t) ← res
@@ -856,6 +860,7 @@ def Folded.members (t : Ty) : Folded → Option (List Folded)
     | _ => none
   | .lit (.array _ w vs) => some (vs.map (.lit <| .bv w ·))
   | .lit (.arraySplat n w v) => some (.replicate n (.lit (.bv w v)))
+  | .lit (.agg _ ms) => some (ms.map .lit)
   | .lit _ => none
   | .agg _ ms => some ms
 
