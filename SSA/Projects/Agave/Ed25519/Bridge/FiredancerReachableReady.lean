@@ -74,8 +74,8 @@ theorem firedancerReachable_ready_executionRefines
     (firedancerFreshSha state) (firedancerWithSha state)
     args.msgFits args.sigBuf args.sBuf args.pkBuf args.sigNull
     firedancerSourceReduce kbits calls.initialized calls.afterR calls.afterA
-    calls.afterMessage calls.finished digest
-  obtain ⟨finalState, ret, hrun, _, _, _, _, _, _, hs, ha, hr, hdecoded⟩ :=
+    calls.afterMessage digest
+  obtain ⟨finalState, ret, hrun, _, _, _, _, _, hs, ha, hr, hdecoded⟩ :=
     hconforms args.sigOff args.msgOff args.shaPtr args.shaOff globals.shaConstantsWithSha
       args.shaSig args.shaPk args.shaMsg globals.referenceWithSha
       (small.withSha input globals) firedancerSourceReduce_by

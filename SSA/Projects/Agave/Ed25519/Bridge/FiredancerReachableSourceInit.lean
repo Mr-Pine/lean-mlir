@@ -18,18 +18,17 @@ The three append premises each mention their exact predecessor block and
 input. The finish premise is a local source execution/store theorem. -/
 def reachableCalls (before : Option LiveBlock) (off : BitVec 64)
     (k : BitVec (80 * 64)) (r a : BitVec 256) (message : List (BitVec 8))
-    (digest : BitVec 512) (afterR afterA afterMessage finished : Option LiveBlock)
+    (digest : BitVec 512) (afterR afterA afterMessage : Option LiveBlock)
     (hR : FiredancerReachableAppend programs k (initBlock before off) afterR off
       (bytesOf (n := 32) r))
     (hA : FiredancerReachableAppend programs k afterR afterA off (bytesOf (n := 32) a))
     (hM : FiredancerReachableAppend programs k afterA afterMessage off message)
-    (hF : FiredancerReachableFinish programs k afterMessage finished off digest) :
+    (hF : FiredancerReachableFinish programs k afterMessage off digest) :
     FiredancerReachableCalls programs k before off r a message digest where
   initialized := initBlock before off
   afterR := afterR
   afterA := afterA
   afterMessage := afterMessage
-  finished := finished
   init := reachableInit before off
   appendR := hR
   appendA := hA

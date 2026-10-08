@@ -15,9 +15,9 @@ theorem firedancerReachableSource_conforms (programs : FiredancerShaPrograms) (m
     (s : GlobalState) (hmsg : Fits s.mem msg (sz.toNat * 8)) (hr : IsByteBufPtr s.mem sig)
     (hS : IsByteBufPtr s.mem (sig.withOffset 32)) (ha : IsByteBufPtr s.mem pk)
     (hsignull : sig.id ≠ SLLVM.nullBlock) (f : BitVec (64 * 8) → Option (Fin 4 → BitVec 64))
-    (kbits : BitVec (80 * 64)) (b₀ b₁ b₂ b₃ b₄ : Option LiveBlock) (dig : BitVec 512) :
+    (kbits : BitVec (80 * 64)) (b₀ b₁ b₂ b₃ : Option LiveBlock) (dig : BitVec 512) :
     firedancerReachableSpec programs msg sz sig pk sha s hmsg hr hS ha f kbits
-      b₀ b₁ b₂ b₃ b₄ dig := by
+      b₀ b₁ b₂ b₃ dig := by
   simp only [firedancerReachableSpec, ← firedancerParameterizedProgram_eq,
     ParameterizedSource.Firedancer.Ref.fd_ed25519_verify, Cfg.denote]
   intro hsigoff hmsgoff hsha hshaoff hK hshasig hshapk hshamsg hm hsmall hf hInit hAppR hAppA hAppM hFini Bt hTbl hB w hw
@@ -447,7 +447,7 @@ theorem firedancerReachableSource_conforms (programs : FiredancerShaPrograms) (m
         rw [hkpoff]; simp)
       hkpsha hK₁₂
   rw [hblk₁₂, hkpblk₁₂, hkpoff] at hret₂₆
-  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hshaBlk₁₃, hk⟩ := hret₂₆ hSmallK₁₂ rfl rfl rfl rfl
+  obtain ⟨s₁₃, hrun₂₆, hwf₁₃, -, hg₁₃, fr₁₃, hk⟩ := hret₂₆ hSmallK₁₂ rfl rfl rfl rfl
   peel_call hrun₂₆
   -- `k` holds the digest
   obtain ⟨hk₁₃, hkval⟩ := hk
@@ -712,20 +712,6 @@ theorem firedancerReachableSource_conforms (programs : FiredancerShaPrograms) (m
       Nat.mod_eq_of_lt (hS₁₂.trans hℓ), smul_neg] at hrep'
     rw [readPoint_of_live?_eq hlRc hpt₁₆ hRc₁₆]
     exact samePoint_iff_of_represents hrep' hwfR
-  -- `sha`, the one block the hash wrote: nothing since `fini` has touched it
-  have hRcsha : Rc.id ≠ sha.id := hne Rc sha.id hRcge (hlt hsha)
-  have hsha₁₇ : (s.popFrame s₁₇.mem).mem.live? sha.id = s₁₃.mem.live? sha.id := by
-    show (s₁₇.mem.killFrom s.alloc.nextFreeBlock).live? sha.id = _
-    rw [live?_killFrom_of_lt (hlt hsha), ← heq₃₀.live sha.id, live?_of_equiv_mem heq₂₉.symm sha.id,
-      live?_splice_ne (p := Rc.withOffset 80) hRcsha,
-      live?_splice_ne (p := Rc.withOffset 120) hRcsha,
-      live?_splice_ne (p := Rc.withOffset 40) hRcsha, live?_splice_ne (p := Rc) hRcsha,
-      fr₁₅ _ hshaAp.symm, fr₁₄ _ hkpsha.symm]
-  have hshaChain : ∀ shaBlk, some b₄ = some shaBlk →
-      (s.popFrame s₁₇.mem).mem.live? sha.id = shaBlk := by
-    intro shaBlk hblk
-    rw [hsha₁₇, hshaBlk₁₃]
-    exact Option.some.inj hblk
   subst hv0
   by_cases hsame : (readPoint hRc₁₆).SamePoint (readPoint hRp₁₆) <;>
     simp only [hsame, ite_true, ite_false] <;>
@@ -733,7 +719,7 @@ theorem firedancerReachableSource_conforms (programs : FiredancerShaPrograms) (m
     simp [FD_ED25519_SUCCESS, FD_ED25519_ERR_SIG, FD_ED25519_ERR_PUBKEY, FD_ED25519_ERR_MSG, hS₁₂]
   all_goals
     refine
-      ⟨hshaChain b₄ rfl, ⟨_, encodes_toAffine decA⟩, fun _ _ => ⟨_, encodes_toAffine decR₁₆⟩,
+      ⟨⟨_, encodes_toAffine decA⟩, fun _ _ => ⟨_, encodes_toAffine decR₁₆⟩,
         fun A R hA' hR' => ?_⟩
     obtain ⟨hx, hy⟩ := coords_of_encodes decA hA'
     obtain ⟨hx', hy'⟩ := coords_of_encodes decR₇ hR'

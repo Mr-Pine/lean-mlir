@@ -72,7 +72,7 @@ def FiredancerReachableAppend (programs : FiredancerShaPrograms)
 64-byte output allocation. Digest correctness belongs to this concrete call,
 not to an assumed equality for the whole verifier or an abstract hash oracle. -/
 def FiredancerReachableFinish (programs : FiredancerShaPrograms)
-    (k : BitVec (80 * 64)) (before after : Option LiveBlock)
+    (k : BitVec (80 * 64)) (before : Option LiveBlock)
     (off : BitVec 64) (digest : BitVec 512) : Prop :=
   ∀ (sha output : Pointer) (s : GlobalState), s.WF →
     Fits s.mem output (64 * 8) → output.offset.toNat + 64 ≤ 2 ^ 64 →
@@ -87,7 +87,6 @@ def FiredancerReachableFinish (programs : FiredancerShaPrograms)
         .value ([.value output]ₕ, s') ∧
       s'.WF ∧ s'.alloc = s.alloc ∧ s'.globals = s.globals ∧
       (∀ b : BlockId, ¬(b = sha.id ∨ b = output.id) → s'.mem.live? b = s.mem.live? b) ∧
-      s'.mem.live? sha.id = after ∧
       ∃ h : Fits s'.mem output (64 * 8), readWord h = digest
 
 /-- Intermediate blocks are witnesses, not independent correctness premises:
@@ -99,11 +98,10 @@ structure FiredancerReachableCalls (programs : FiredancerShaPrograms)
   afterR : Option LiveBlock
   afterA : Option LiveBlock
   afterMessage : Option LiveBlock
-  finished : Option LiveBlock
   init : FiredancerReachableInit programs before initialized off
   appendR : FiredancerReachableAppend programs k initialized afterR off (bytesOf (n := 32) r)
   appendA : FiredancerReachableAppend programs k afterR afterA off (bytesOf (n := 32) a)
   appendMessage : FiredancerReachableAppend programs k afterA afterMessage off message
-  finish : FiredancerReachableFinish programs k afterMessage finished off digest
+  finish : FiredancerReachableFinish programs k afterMessage off digest
 
 end Agave.Ed25519.Bridge
