@@ -216,7 +216,7 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
   let mut rest : List MVarId := []
   for g in reads do
     unless ← g.isAssigned do
-      rest := rest ++ (← closeRead g)
+      rest := rest ++ (← g.withContext (closeReads g))
   let mut open_ := #[]
   let mut conts := #[]
   for g in rest ++ premises do
