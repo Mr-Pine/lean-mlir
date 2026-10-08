@@ -349,7 +349,8 @@ def dsimpState (e : Expr) : MetaM Expr := do
   return (← dsimp e (← Simp.mkContext)).1
 
 /-- `p` from the facts `facts` (by instantiated type), the searches `side`, the `mlir_transport`
-lemmas `lemmas` and the local implications `locals`, at reducible transparency, `fuel` lemmas deep. -/
+lemmas `lemmas` and the local implications `locals`, at reducible transparency, `fuel` lemmas
+deep. -/
 partial def transportWith (facts : Std.HashMap Expr Expr) (lemmas : Array Name) (fuel : Nat)
     (p : Expr) (locals : Array Expr := #[])
     (side : Expr → MetaM (Option Expr) := fun _ => pure none) : MetaM (Option Expr) := do
