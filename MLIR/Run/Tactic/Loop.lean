@@ -274,8 +274,7 @@ def fixedStateLemma (stx : Syntax) : TacticM Bool :=
       catch _ =>
         return false
 
-@[tactic stepLoop]
-def evalStepLoop : Tactic := fun stx => do
+def stepLoopAt (stx : Syntax) : TacticM Unit := do
   -- keep the state `S` when the lemma applies to it: its facts stay usable; an induction
   -- hypothesis about a fixed state needs `S` substituted first
   let saved ← saveState
@@ -292,6 +291,10 @@ def evalStepLoop : Tactic := fun stx => do
           substituted by its definition:{indentD ex.toMessageData}"
       stepLoopApply stx true
   stepLoopFinish E he premises
+
+@[tactic stepLoop]
+def evalStepLoop : Tactic := fun stx =>
+  Tactic.atStepDepth (stepLoopAt stx)
 
 end
 

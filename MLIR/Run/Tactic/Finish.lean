@@ -130,8 +130,7 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
     goals := goals ++ (← getGoals)
   setGoals goals
 
-@[tactic finishBlock]
-def evalFinishBlock : Tactic := fun stx =>
+def finishBlockAt (stx : Syntax) : TacticM Unit :=
   withMainContext do
     -- at the block's end: `body.drop pos` reduces to `[]` here, so a wrong position fails at the
     -- tactic; `hpos` itself by `decide`, for the kernel only, as each step's
@@ -157,6 +156,10 @@ def evalFinishBlock : Tactic := fun stx =>
     let env := ret.getArg! 2
     let r ← simpValue (only := !stx[1][0].isNone) (simpArgs := stx[1][1]) ret env true
     replaceMainGoal [← replaceBySimp g ret r]
+
+@[tactic finishBlock]
+def evalFinishBlock : Tactic := fun stx =>
+  Tactic.atStepDepth (finishBlockAt stx)
 
 /-- The pointers' equations in context (`hx : x = s.slot k`, a named slot's), as simp lemmas. -/
 def pointerEqs : TacticM (Array (TSyntax `Lean.Parser.Tactic.simpLemma)) := do

@@ -111,8 +111,7 @@ partial def closePremise (g : MVarId) : TacticM Unit := do
   else
     closeSide g
 
-@[tactic stepPattern]
-def evalStepPattern : Tactic := fun stx => do
+def stepPatternAt (stx : Syntax) : TacticM Unit := do
   -- the state as `S` with `hS`, to seal what the pattern stores
   Tactic.ensureStateEq
   withMainContext do
@@ -190,6 +189,10 @@ def evalStepPattern : Tactic := fun stx => do
       if outState != inState then
         let goals ← sealStep inState
         replaceMainGoal ((← getMainGoal) :: goals.toList)
+
+@[tactic stepPattern]
+def evalStepPattern : Tactic := fun stx =>
+  Tactic.atStepDepth (stepPatternAt stx)
 
 end
 
