@@ -83,6 +83,28 @@ example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fit
   finish_block
   rw [hS]
 
+/-- Two stores, as one write. -/
+def storeBoth (m : MemoryState) (p q : Pointer) (x : BitVec 64) : MemoryState :=
+  (m.storeAt p x).storeAt q x
+
+theorem storeAt_storeAt_both {m : MemoryState} {p q : Pointer} {x : BitVec 64} :
+    (m.storeAt p x).storeAt q x = storeBoth m p q x :=
+  rfl
+
+attribute [local mlir_state] storeAt_storeAt_both
+
+-- an `mlir_state` lemma over two writes merges a store with the one below it in `hS`
+example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (E : ⟪put2.Γ⟫) (hwf : s.WF)
+    (hp : Fits s.mem p 64) (hq : Fits s.mem q 64)
+    (hArgs : E.args = (put2.args (.value p) (.value q) (.value x)).get) :
+    put2.runFrom E 0 s = .value (.nil, { s with mem := storeBoth s.mem p q x }) := by
+  block_init
+  step_store
+  step_store
+  guard_hyp hS : S = { s with mem := storeBoth s.mem p q x }
+  finish_block
+  rw [hS]
+
 mlir_def isZero :=
   {^bb0(%arg0:i32):%0 = "llvm.mlir.constant"()<{value =
         0:i32}>:()->i32%1 = "llvm.icmp"(%arg0, %0)<{predicate = 0:i64}>:(i32,

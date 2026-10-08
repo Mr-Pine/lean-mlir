@@ -98,8 +98,9 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
         g ← g.rename (fs.get S').fvarId! `S
         let hNew := (fs.get hS').fvarId!
         g ← g.rename hNew `hS
-        -- the substituted old state's projections reduced
+        -- the substituted old state's projections reduced, its writes merged with the new ones
         g ← Tactic.dsimpStateEq g hNew
+        g ← Tactic.mergeStateEq g hNew
         setGoals [g]
         return goals
   return goals
