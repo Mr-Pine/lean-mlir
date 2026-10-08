@@ -278,12 +278,17 @@ def foldConsts (e : Expr) : MetaM Expr := do
             return .done c
       return .continue)
 
-/-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _`,
-then values, unfolding the write chain with `chainFact : E = _`.
-Unfolding first would send the argument reads past `E` down to the root env. -/
+/-- Resolve the reads in `e`: arguments first, against `argsFact : E.args = _` (or, before the env
+is first sealed, its write chain's root's), then values, unfolding the write chain with
+`chainFact : E = _`. Unfolding first would send the argument reads past `E` down to the root env. -/
 def simpValue (only : Bool) (simpArgs : Syntax) (e : Expr) (env : Expr) (expand : Bool) :
     TacticM Simp.Result := do
-  let argsFact := (← findEqWithLhs? (← mkAppM ``Env.args #[env])).toArray
+  let argsFact ←
+    match ← findEqWithLhs? (← mkAppM ``Env.args #[env]) with
+    | some h =>
+      pure #[h]
+    | none =>
+      pure (← findEqWithLhs? (← mkAppM ``Env.args #[envRoot env])).toArray
   let chainFact := (← findEqWithLhs? env).toArray
   let reads ← readFacts
   -- one memory context for every pass: they change no hypothesis
