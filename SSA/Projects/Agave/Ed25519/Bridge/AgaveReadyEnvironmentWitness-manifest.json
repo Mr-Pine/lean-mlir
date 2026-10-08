@@ -1,0 +1,95 @@
+{
+  "scope": "Explicit literal-global and arbitrary-caller memory witness for the closed Agave wrapper; actual loaded execution has no memory, readiness, separation, or signature-validity assumptions.",
+  "main_theorem": "Agave.Ed25519.Bridge.AgaveReady.EnvironmentWitness.call_strict_loaded",
+  "remaining_assumptions": [
+    "Dalek.Avx2Cache.Instructions.InstructionContracts hardware",
+    "Dalek.CompareContract compareCall",
+    "message.length < 2^63"
+  ],
+  "checked_at_utc": "2026-10-08T11:45:14.031672+00:00",
+  "remote_host": "liam@htz-hel1-seceng-dev-liam1.nodes.asymmetric.re",
+  "remote_root": "/tmp/lmf-crossclient-final-independent-20261008",
+  "source_sha256": {
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitness.lean": "3dc9c3e065963372c67d275feade703b0771f2b60260817143e6f6beae6359f5",
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessCaller.lean": "391628ba11af92d4f3ea1b925b8627469a4f095164e26569b29f185dff9d4c48",
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessAudit.lean": "9cadb04ad1165cfed012c94199a6f3e9929fa7ea3f94501b4b848bba1e40a7b7"
+  },
+  "artifact_sha256": {
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitness.olean": "8b8aefcbe914ea3c64189abdb0670fdc84ee2d1bb7e7fc3df353234e2676e4f4",
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessCaller.olean": "af926de3469b7ae0f93883a755292c2e956094adc19e7a73345481b86630f435",
+    "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessAudit.olean": "fae5ae1c7b953b8b0afbb39c192ab51cd4fd49c52213cfec413aecc5108843ba"
+  },
+  "verification": {
+    "command_template": "lake env lean -j1 -o .lake/build/lib/lean/<module>.olean <module>.lean",
+    "all_three_modules_returncode": 0,
+    "audit_module": "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessAudit.lean",
+    "axiom_inventory": {
+      "Agave.Ed25519.Bridge.AgaveReady.EnvironmentWitness.globals_jointly_satisfiable": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "Agave.Ed25519.Bridge.AgaveReady.EnvironmentWitness.caller_memory": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "Agave.Ed25519.Bridge.AgaveReady.EnvironmentWitness.environment_jointly_satisfiable": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "Agave.Ed25519.Bridge.AgaveReady.EnvironmentWitness.call_strict_loaded": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ]
+    },
+    "remote_manifest": "/tmp/agave-environment-validation-20261008/manifest.json",
+    "remote_manifest_sha256": "dcc9aded79de623300426f48a10cf5c2895c4b715c172ce8a15f15f11f91961a",
+    "remote_axiom_log": "/tmp/agave-environment-validation-20261008/axioms.log",
+    "remote_axiom_log_sha256": "e3d4a607ea66300ec26624fa016a1d49b03779a9c6bfca38f14ebdac06270bb7",
+    "module_logs": {
+      "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitness.lean": {
+        "path": "/tmp/agave-environment-validation-20261008/AgaveReadyEnvironmentWitness.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessCaller.lean": {
+        "path": "/tmp/agave-environment-validation-20261008/AgaveReadyEnvironmentWitnessCaller.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "SSA/Projects/Agave/Ed25519/Bridge/AgaveReadyEnvironmentWitnessAudit.lean": {
+        "path": "/tmp/agave-environment-validation-20261008/AgaveReadyEnvironmentWitnessAudit.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "independent_dependency_closure": {
+    "manifest": "SSA/Projects/Agave/Ed25519/Bridge/CrossClientReachableSource-independent-manifest.json",
+    "manifest_sha256": "42fe0a7b8435df9b4b77c22c85e51bda902ec7f7a5c7447925d7ca4fb3d6050c",
+    "remote_full_manifest": "/tmp/crossclient-independent-baseline-20261008.json",
+    "remote_full_manifest_sha256": "6bd68bc0ebdd429a6b0552de826d62f8da51c92e5e92a4ff342a4bfb50c3d100",
+    "baseline_repository_sources": 1526,
+    "witness_repository_import_closure_sources": 1258,
+    "witness_sources_from_verified_baseline": 1255,
+    "witness_closure_source_inventory_sha256": "91fc9f34ff0af761579a245da547f157b9052c251fea379f53b463a0bcc48203",
+    "all_witness_closure_source_hashes_match_current_checkout": true,
+    "baseline_missing_parser_affected_descendants_rebuilt": 77,
+    "clean_full_rebuild": false,
+    "method": "Reuse independently validated corrected artifacts and hash-verified unaffected artifacts; rebuild all uncovered parser-affected descendants, then compile these three witness modules.",
+    "resolved_generic_parser": {
+      "origin": "verified_challenge865",
+      "source_sha256": "03ea20768dd98d901d259d26a7733d18403cecf88deeeca63e2f537da4220271",
+      "artifact_path": "/tmp/lmf-crossclient-final-independent-20261008/LeanMLIR/.lake/build/lib/lean/LeanMLIR/MLIRSyntax/GenericParser.olean",
+      "artifact_sha256": "2273a69d3253227afbbde2c32baef618f29a5694d5a41318a722d5f73c6a5b5b"
+    },
+    "compiler_path": "/home/liam/.elan/toolchains/leanprover--lean4-nightly---nightly-2026-09-16/bin/lean",
+    "compiler_sha256": "bf8d54e4714cc4b03d3f6bb34c83b7202b87e49c8bfcbff6895c085bb90ceb38",
+    "toolchain_lock_sha256": {
+      "lean-toolchain": "70bc8001aae6a58e76a5cdcf401bc9a09f33e756894487690e3d761fbceba184",
+      "lakefile.toml": "c5f356252c83598fb47e64b93c99f38eaded97125f0d229f60cf3a11fbf77f7b",
+      "lake-manifest.json": "5a4d69f3514aafe48e11ac4b828a24b214bbf9b5012ff35509c1bb9ba82a929c"
+    },
+    "remote_witness_closure_source_inventory": "/tmp/agave-environment-validation-20261008/witness-closure-source-sha256.json"
+  }
+}

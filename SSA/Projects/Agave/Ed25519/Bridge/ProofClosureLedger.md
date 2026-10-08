@@ -75,7 +75,7 @@ lookup path. Correct `GenericParser.olean` SHA-256:
 Lake searches `LeanMLIR/.lake/build/lib/lean` before the root artifact directory;
 copying a corrected parser only into the root directory is insufficient.
 
-Retained working-tree validation manifests (untracked build evidence):
+Committed validation manifests (historical devbox evidence):
 
 | Manifest | SHA-256 |
 | --- | --- |
@@ -83,6 +83,14 @@ Retained working-tree validation manifests (untracked build evidence):
 | `CrossClientReachableConcrete-manifest.json` | `318953eacc9f95cb27a2fd2de832751e51274e1eba6deb2901196f5b0c94d963` |
 | `RIRChallengeEquivalence-manifest.json` | `85903732b495e293a2086191ef929c80d4be9c30b4f430faec88d4c3a3c68d7d` |
 | `AgaveReadyEnvironmentWitness-manifest.json` | `085627f371922acd6503151e0215e16958a5b2e9fb65431e536c9f5ea484855f` |
+
+These records were retained when importing the completed proof history onto
+`agave-ed25519-rir` in the main repository. All 1,644 recorded repository source
+hashes and the three toolchain/configuration hashes match the packaged files.
+Absolute paths in the records identify the original validation environment;
+they are not required checkout locations. Packaging did not rerun the Lean
+build or change any proof source. The existing `agave-lthash` branch is separate
+and unchanged; this branch retains the proof's RIR framework ancestry.
 
 The independent mirror is `/tmp/lmf-crossclient-final-independent-20261008` on
 `liam@htz-hel1-seceng-dev-liam1.nodes.asymmetric.re`. Manifests contain commands,
