@@ -61,6 +61,22 @@ def dsimpStateEq (g : MVarId) (h : FVarId) : MetaM MVarId :=
     let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | return g
     g.replaceLocalDeclDefEq h (← mkEq l (← dsimpState r))
 
+/-- `h : S = s` with `s`'s writes merged with the writes below them by the `mlir_state` lemmas
+(`(m.storeAt p u).storeAt (p.add k) y = …`): the new state's simplification sees no write below,
+the old state being a local. Side conditions from the facts. -/
+def mergeStateEq (g : MVarId) (h : FVarId) : MetaM MVarId :=
+  g.withContext do
+    let some (_, S, s) := (← instantiateMVars (← h.getType)).eq? | return g
+    let c ← FactCtx.build
+    let disch : Simp.Discharge := fun p => do
+      factDischarge c 0 (← instantiateMVars p)
+    let (r, _) ← simp s (← simpSetContext #[`mlir_state]) (discharge? := disch)
+    if r.expr == s then
+      return g
+    -- typed as the result: an `rfl` lemma's step has no proof
+    let ty ← mkEq S r.expr
+    return (← g.replace h (← mkEqTrans (mkFVar h) (← r.getProof)) (type? := ty)).mvarId
+
 /-- Close `g` by `factDischarge`: its searches, then the transport search, about a state `S` with
 `hS : S = s` from the facts about `s`. -/
 def memFact (g : MVarId) : MetaM Bool :=
