@@ -94,9 +94,9 @@ elab "mem_fact" : tactic =>
 
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
 `h : motive new`: a new block's size (`mlir_fresh`), every write an `mlir_read` lemma reads back,
-and every read fact of `S` the writes miss (one they overwrite is dropped). Asserted in `g`; the
-old read facts returned, for clearing once the state is sealed. Read through the writes while `S`'s
-facts hold. -/
+and every read fact of `S` the writes miss (the others dropped, traced by `trace.rir`). Asserted in
+`g`; the old read facts returned, for clearing once the state is sealed. Read through the writes
+while `S`'s facts hold. -/
 def memFactsOf (g : MVarId) (S new : Expr) :
     MetaM (Array (FVarId × Expr) × Array FVarId × MVarId) :=
   g.withContext do
@@ -188,6 +188,11 @@ def memFactsOf (g : MVarId) (S new : Expr) :
             (y'.find? (· == newMem)).isNone then
         let pf ← mkEqTrans pf (← mkCongrArg at_ d.toExpr)
         facts := facts.push (d.userName, ← mkEq e y', pf)
+      else
+        -- overwritten, or past a write not known to miss it (possibly aliasing)
+        let stuck := (← writesOf newMem).any fun w => (r.find? (· == w)).isSome
+        let why := if stuck then "a write not known to miss it" else "overwritten"
+        trace[rir] m!"read fact {d.userName} dropped ({why}):{indentExpr r}"
       olds := olds.push d.fvarId
     -- each fact as `h : motive new`, `motive s` the fact with `s.mem` for the new memory
     let mut g := g
