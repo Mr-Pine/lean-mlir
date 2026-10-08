@@ -187,6 +187,23 @@ def sext {w w' : Nat} (x : IntW w) : IntW w' := do
   let a : BitVec w ← x
   return a.signExtend w'
 
+/-- `poison` when `b`, else `x`: unlike `if`, `simp` simplifies `x` without a hypothesis `¬b`, so
+with its cache. -/
+def poisonIf (b : Bool) (x : PoisonOr α) : PoisonOr α :=
+  bif b then .poison else x
+
+@[mlir_operation]
+theorem poisonIf_true {x : PoisonOr α} : poisonIf true x = .poison :=
+  rfl
+
+@[mlir_operation]
+theorem poisonIf_false {x : PoisonOr α} : poisonIf false x = x :=
+  rfl
+
+/-- Whether `w'`-bit lane `j` of a bitcast shares a bit with a poison `w`-bit lane of `x`. -/
+def bitcastPoison (x : Vector (PoisonOr α) l) (w w' j : Nat) : Bool :=
+  (List.finRange l).any fun i => x[i].isPoison && i.1 * w < (j + 1) * w' && j * w' < (i.1 + 1) * w
+
 /-- The same bits at a type of the same width, lane 0 lowest. Between vectors, a result lane is
 poison exactly when an input lane sharing one of its bits is; into or out of a scalar, any poison
 poisons all. -/
@@ -194,17 +211,9 @@ poisons all. -/
 def bitcast {t t' : Ty} (h : t.width = t'.width) (x : ⟦t⟧) : ⟦t'⟧ :=
   match t, t', x with
   | .vec l w, .vec l' w', x =>
-    let bits : BitVec (w * l) :=
-      BitVec.packLanes
-        (x.map fun
-          | .value b => b
-          | .poison => 0)
+    let bits : BitVec (w * l) := BitVec.packLanes (x.map PoisonOr.getValue)
     Vector.ofFn fun j : Fin l' =>
-      if
-          (List.finRange l).any fun i =>
-            x[i].isPoison && i.1 * w < (j.1 + 1) * w' && j.1 * w' < (i.1 + 1) * w then
-        .poison
-      else .value (bits.extractLsb' (j.1 * w') w')
+      poisonIf (bitcastPoison x w w' j) (.value (bits.extractLsb' (j.1 * w') w'))
   | t, t', x =>
     match t.flatten x with
     | .value b => t'.unflatten (b.cast h)
