@@ -250,6 +250,12 @@ example (p : Pointer) (i : BitVec 64) (E : ⟪at8.Γ⟫) (S : GlobalState) (hp :
   finish_block
   rfl
 
+-- an offset `192 * k` for `k < 8` that does not wrap: `omega` alone misses it through `% 2 ^ 64`
+example (p : Pointer) (k : Nat) (hp : p.offset.toNat + 192 * 8 < 2 ^ 64) (hk : k < 8) :
+    Operation.gep (.value (BitVec.ofNat 64 (192 * k))) (.value p) =
+      .value (p.add (BitVec.ofNat 64 (192 * k))) := by
+  simp only [Tactic.gepValue]
+
 mlir_const_def answer :=
   {%0 = "llvm.mlir.constant"()<{value = 42:i64}>:()->i64"llvm.return"(%0):(i64)->()}
 

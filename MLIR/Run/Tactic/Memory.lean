@@ -321,7 +321,26 @@ def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Opti
     let ctx ← Simp.mkContext (simpTheorems := #[← thms.addConst ``BitVec.toNat_ofNat])
     let (r, _) ← simpGoal g.mvarId! ctx (simprocs := #[← Simp.getSimprocs])
     if let some (_, g') := r then
-      omegaFromFacts facts g'
+      -- `t % 2 ^ 64` as `t` where `omega` shows `t < 2 ^ 64`: with the `%` left in, `omega` (no
+      -- dark shadows) misses `192 * k % 2 ^ 64` for `k < 8`
+      let modCtx ←
+        Simp.mkContext (simpTheorems := #[← ({} : SimpTheorems).addConst ``Nat.mod_eq_of_lt])
+      let disch : Simp.Discharge := fun p => do
+        let m ← mkFreshExprMVar p
+        try
+          omegaFromFacts facts m.mvarId!
+          let pf ← instantiateMVars m
+          return if pf.hasMVar then none else some pf
+        catch _ =>
+          return none
+      let saved ← saveState
+      try
+        let (r', _) ← simpGoal g' modCtx (discharge? := disch)
+        if let some (_, g'') := r' then
+          omegaFromFacts facts g''
+      catch _ =>
+        saved.restore
+        omegaFromFacts facts g'
     return some (← instantiateMVars g)
   catch _ =>
     return none
