@@ -47,6 +47,11 @@ def generalizeOpaque (g : MVarId) (e : Expr) (xName : Name) (facts : Array Gener
       let (_, g) ← g.introNP reverted.size -- Revert reverting
       return (fvs, g)
 
+/-- `x` from recursion depth `0`: `maxRecDepth` bounds a step's own depth, not the nesting of the
+tactics around it (`iterate n`, one level per iteration). -/
+def atStepDepth (x : TacticM α) : TacticM α :=
+  MonadRecDepth.withRecDepth 0 x
+
 /-- The `Nat` behind a `Dst`'s index, when it is a literal. -/
 def dstIndex? (d : Expr) : MetaM (Option Nat) := do
   let i ← whnf (← mkAppM ``Dst.i #[d])

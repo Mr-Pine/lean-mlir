@@ -107,7 +107,7 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
 
 /-- Step an effectful instruction, proving it with `runTactics`; with `resolveFirst`, the written
 value's reads resolved before the state is sealed (a call's result, which reads the old state). -/
-def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : TacticM Unit :=
+def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : TacticM Unit :=
   focus do
     Tactic.ensureStateEq
     withMainContext do
@@ -159,6 +159,10 @@ def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : Ta
               g ← g.clear h
             replaceMainGoal [g]
         setGoals (goals.toList ++ (← getGoals))
+
+/-- `runStepAt` from recursion depth `0` (`Tactic.atStepDepth`). -/
+def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : TacticM Unit :=
+  Tactic.atStepDepth (runStepAt args runTactics resolveFirst)
 
 @[tactic stepImpure]
 def evalStepImpure : Tactic := fun stx =>
