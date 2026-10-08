@@ -69,7 +69,13 @@ def memFact (g : MVarId) : MetaM Bool :=
     if let some h← withReducible (findLocalDeclWithType? (← g.getType)) then
       g.assign (mkFVar h)
       return true
-    if let some pf← factDischarge (← FactCtx.build) 0 (← g.getType) then
+    -- the searches, then two lemmas deep from the facts as they are (an object fact's projections),
+    -- before the deep search through the states' equations
+    let c ← FactCtx.build
+    if let some pf← factDischarge c 0 (← g.getType) then
+      g.assign pf
+      return true
+    if let some pf← factDischarge c 2 (← g.getType) then
       g.assign pf
       return true
     let saved ← saveState
