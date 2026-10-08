@@ -33,8 +33,8 @@ syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
-unproved ones are returned as goals). -/
-def sealStep (inState : Expr) : TacticM (Array MVarId) := do
+unproved ones are returned as goals), except the `consumed` ones. -/
+def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array MVarId) := do
   -- the new state's memory facts, about it as a term over `inState`, then generalized with it
   let (mem, olds) ←
     withMainContext do
@@ -53,7 +53,7 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
         -- facts about `inState` only as `inState.allocaPtr`: a fixed pointer, not the state
         let allocaPtr ← mkAppM ``GlobalState.allocaPtr #[inState]
         let preserveHyps ←
-          (← hypsMentioning inState (except := #[hS', hS])).filterM fun h => do
+          (← hypsMentioning inState (except := #[hS', hS] ++ consumed)).filterM fun h => do
               let ty ← instantiateMVars (← h.getType)
               -- a continuation stays about its own state
               if ← Tactic.isContinuation ty then
@@ -131,12 +131,16 @@ def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : Ta
         setGoals [main]
         if resolveFirst then
           resolveWrittenValue args
-        let goals ← sealStep inState
+        let consumed ← withMainContext (args.consumed.mapM getFVarId)
+        let goals ← sealStep inState consumed
         finishStep args
-        -- the consumed facts last: the value may read through them. Their ids first: once a
-        -- `clear` assigns the main goal, its context is gone
+        -- the consumed facts last, not carried over: the value may read through them. By name (the
+        -- seal renews ids), those still there (a value's equation may be cleared with its value);
+        -- their ids first: once a `clear` assigns the main goal, its context is gone
         withMainContext do
-            let hs ← args.consumed.mapM getFVarId
+            let lctx ← getLCtx
+            let hs :=
+              args.consumed.filterMap fun h => (lctx.findFromUserName? h.getId).map (·.fvarId)
             let mut g ← getMainGoal
             for h in hs do
               g ← g.clear h
