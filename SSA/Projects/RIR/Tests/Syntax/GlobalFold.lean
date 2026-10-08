@@ -40,6 +40,28 @@ mlir_def readPairs := {
     "llvm.return"(%2) : (i64) -> ()
 } with @pairs := pairs
 
+/-- `fd_f25519_zero` as LLVM 23 builds it: one `zero` of the whole array. -/
+mlir_const_def zeros := {
+    %0 = "llvm.mlir.zero"() : () -> !llvm.array<1 x struct<"struct.fd_f25519", (array<5 x i64>)>>
+    "llvm.return"(%0) : (!llvm.array<1 x struct<"struct.fd_f25519", (array<5 x i64>)>>) -> ()
+}
+
+example : zeros.lit = #v[#v[0, 0, 0, 0, 0]] := rfl
+
+example (s : GlobalState) : zeros.value s = .value (Ty.wrap zeros.lit, s) :=
+  GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩
+
+/-- `(0, null, 7)`: a `zero` with one field inserted. -/
+mlir_const_def zeroThenSeven := {
+    %0 = "llvm.mlir.zero"() : () -> !llvm.struct<(i64, ptr, i64)>
+    %1 = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> i64
+    %2 = "llvm.insertvalue"(%0, %1) <{position = array<i64: 2>}> : (!llvm.struct<(i64, ptr, i64)>, i64) -> !llvm.struct<(i64, ptr, i64)>
+    "llvm.return"(%2) : (!llvm.struct<(i64, ptr, i64)>) -> ()
+}
+
+example : zeroThenSeven.Γ.n = 1 := rfl
+example : zeroThenSeven.lit = (0, Pointer.null, 7) := rfl
+
 /-- A struct whose second field stays `undef`: lifted as it is, not folded. -/
 mlir_const_def half := {
     %0 = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> i64
