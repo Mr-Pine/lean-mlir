@@ -26,6 +26,13 @@ structure Dst (Γ : Ctx) (t : Ty) where
   i : Fin Γ.n
   h : Γ.ty i = t
 
+/-- Registers are equal when their kind and index are: `decide` tells `%arg0 ≠ %2`. -/
+instance : DecidableEq (Reg Γ t)
+  | .arg i _, .arg j _ => decidable_of_iff (i = j) ⟨fun h => h ▸ rfl, Reg.arg.inj⟩
+  | .val i _, .val j _ => decidable_of_iff (i = j) ⟨fun h => h ▸ rfl, Reg.val.inj⟩
+  | .arg _ _, .val _ _ => isFalse nofun
+  | .val _ _, .arg _ _ => isFalse nofun
+
 end
 
 end LeanMLIR.RIR

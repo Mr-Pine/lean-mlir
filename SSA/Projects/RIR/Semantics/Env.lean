@@ -103,6 +103,28 @@ theorem read_write_ne' (env : ⟪Γ⟫) (hij : i ≠ j := by decide) :
   apply read_write_ne
   apply hij.symm
 
+/-- A write misses a read of another type: an abstract register's (a pattern's `p : Reg Γ .ptr`). -/
+@[mlir_env low]
+theorem read_write_of_ty_ne (env : ⟪Γ⟫) (dst : Dst Γ t) (r : Reg Γ t') (h : t ≠ t') :
+    (env.write dst v).read r = env.read r := by
+  cases r with
+  | arg => rfl
+  | val i hi =>
+    apply read_write_ne
+    rintro rfl
+    exact h (dst.h.symm.trans hi)
+
+/-- A write misses a read of another register: an abstract one's, by a fact `r ≠ %k`. -/
+@[mlir_env low]
+theorem read_write_of_ne (env : ⟪Γ⟫) (dst : Dst Γ t) (r : Reg Γ t) (h : r ≠ .val dst.i dst.h) :
+    (env.write dst v).read r = env.read r := by
+  cases r with
+  | arg => rfl
+  | val i hi =>
+    apply read_write_ne
+    rintro rfl
+    exact h rfl
+
 @[simp, mlir_env]
 theorem write_args (env : ⟪Γ⟫) (dst : Dst Γ t) : (env.write dst v).args = env.args := by rfl
 
