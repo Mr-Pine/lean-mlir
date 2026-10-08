@@ -33,8 +33,8 @@ syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
-unproved ones are returned as goals). -/
-def sealStep (inState : Expr) : TacticM (Array MVarId) := do
+unproved ones are returned as goals; `consumed` ones, two lemmas deep or not at all). -/
+def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array MVarId) := do
   -- the new state's memory facts, about it as a term over `inState`, then generalized with it
   let (mem, olds) ←
     withMainContext do
@@ -73,17 +73,20 @@ def sealStep (inState : Expr) : TacticM (Array MVarId) := do
           let key ← instantiateMVars decl.type
           let motive := .lam `s (← inferType inState) (← kabstract key inState) .default
           let newTy := motive.beta #[.fvar S']
-          let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
-          let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
-          g ← g'.clear hyp
           -- `P (new state)` carried from `P S`, then `hS'` back; else left open
           let pf? ←
             observing? do
                 let some new := new? | failure
                 let some pf ←
-                  Tactic.carryFact facts transport locals (.fvar hyp) key
-                      (motive.beta #[new]) | failure
+                  Tactic.carryFact facts transport locals (.fvar hyp) key (motive.beta #[new])
+                      (deep := !consumed.contains hyp) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
+          -- a consumed fact not carried stays about the old state, to be cleared after the step
+          if pf?.isNone && consumed.contains hyp then
+            continue
+          let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
+          let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
+          g ← g'.clear hyp
           match pf? with
           | some pf =>
             pg.mvarId!.assign pf
@@ -131,12 +134,26 @@ def runStep (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : Ta
         setGoals [main]
         if resolveFirst then
           resolveWrittenValue args
-        let goals ← sealStep inState
+        -- the consumed facts there before the step: carried only if cheaply, never as a goal
+        let before ←
+          withMainContext do
+              let lctx ← getLCtx
+              return args.consumed.filterMap fun h => (lctx.findFromUserName? h.getId).map (h, ·)
+        let goals ← sealStep inState (before.map (·.2.fvarId))
         finishStep args
-        -- the consumed facts last: the value may read through them. Their ids first: once a
-        -- `clear` assigns the main goal, its context is gone
+        -- the consumed facts last: the value may read through them. By name: the seal renews ids,
+        -- and a fact may be the step's own (a read-back). One there before may be gone with its
+        -- value. Their ids first: once a `clear` assigns the main goal, its context is gone
         withMainContext do
-            let hs ← args.consumed.mapM getFVarId
+            let lctx ← getLCtx
+            let mut hs := #[]
+            for h in args.consumed do
+              match lctx.findFromUserName? h.getId with
+              | some d =>
+                hs := hs.push d.fvarId
+              | none =>
+                unless before.any (·.1.getId == h.getId) do
+                  discard <| getFVarId h
             let mut g ← getMainGoal
             for h in hs do
               g ← g.clear h
