@@ -160,6 +160,38 @@ example (p : Pointer) (i : BitVec 64) (E : ⟪at8.Γ⟫) (S : GlobalState) (hp :
   finish_block
   rfl
 
+mlir_const_def answer :=
+  {%0 = "llvm.mlir.constant"()<{value = 42:i64}>:()->i64"llvm.return"(%0):(i64)->()}
+
+mlir_def frameLoad :=
+  {^bb0(%arg0:!llvm.ptr):%0 = "llvm.mlir.constant"()<{value =
+        1:i64}>:()->i64%1 = "llvm.mlir.addressof"()<{global_name =
+        @answer}>:()->!llvm.ptr%2 = "llvm.alloca"(%0)<{alignment = 8:i64, elem_type =
+        i64}>:(i64)->!llvm.ptr%3 = "llvm.load"(%arg0)<{alignment = 8:i64, ordering =
+        0:i64}>:(!llvm.ptr)->i64"llvm.return"(%3):(i64)->()} with
+  @answer := answer
+
+theorem answer.value_eq (s : GlobalState) : answer.value s = .value (Ty.wrap 42#64, s) :=
+  GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩
+
+-- a load below a frame's new blocks: by the entry facts about `S₀` that `func_init` keeps
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+    frameLoad.call (frameLoad.args (.value p)) s =
+      .value
+        (.cons (.value (s.mem.readAt p 64)) .nil,
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 2⟩ }) := by
+  func_init
+  block_init
+  step_pure
+  step_addressof answer.value_eq
+  step_alloca
+  step_load with v
+  guard_hyp hv : v = S₀.mem.readAt p 64
+  finish_block
+  subst hS
+  erase_frame
+  rfl
+
 end
 
 end LeanMLIR.RIR.Tests.Syntax.Steps
