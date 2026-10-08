@@ -169,8 +169,11 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         -- unresolved: a write no lemma reads back or past
         if v == e || (v.find? (· == newMem)).isSome then
           continue
-        -- past the write to a read of `S` with a fact: that fact is carried below, not read back
-        if c.reads.contains (← normWidths v) then
+        -- past the writes to the same read of `S`, with a fact: that fact is carried below, not
+        -- read back (a stored value that is a read of `S` is read back)
+        let v' ← normWidths v
+        let below ← normWidths (e.replace fun t => if t == newMem then some oldMem else none)
+        if v' == below && c.reads.contains v' then
           continue
         -- the value's own reads of `S` by `S`'s facts
         let r ← simpState v c
@@ -194,6 +197,14 @@ def memFactsOf (g : MVarId) (S new : Expr) :
               pure ((`hread).appendAfter s!"_{← x.getUserName}_{k.getD 0}")
           | none =>
             pure `hread
+        -- read-backs at one pointer (an object's and its first field's): all but the last
+        -- after their read
+        facts :=
+          facts.map fun (n, ty, pf) =>
+            if n != name then (n, ty, pf)
+            else
+              let read := (ty.eq?.bind (·.2.1.getAppFn.constName?)).getD `read
+              (n.appendAfter s!"_{read.getString!}", ty, pf)
         facts := facts.push (name, ← mkEq e v, pf)
     -- the read facts of `S` carried through the writes; the old ones kept for sealing the state
     let mut olds := #[]

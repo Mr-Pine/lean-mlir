@@ -52,6 +52,48 @@ example (p : Pointer) (x : BitVec 64) (b : Nat) (s : GlobalState) (hwf : s.WF)
   finish_block
   rw [hS]
 
+mlir_def copy :=
+{
+  ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr):
+    %0 = "llvm.load"(%arg1) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.store"(%0, %arg0) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    "llvm.return"() : () -> ()
+}
+
+theorem copy.call_eq (r a : Pointer) (s : GlobalState) (hwf : s.WF) (hr : Fits s.mem r 64)
+    (ha : Fits s.mem a 64) :
+    copy.call (copy.args (.value r) (.value a)) s =
+      .value (.nil, { s with mem := s.mem.storeAt r (s.mem.readAt a 64) }) := by
+  func_init
+  block_init
+  step_load
+  step_store
+  finish_block
+  subst_vars
+  rfl
+
+mlir_def copyTwice :=
+{
+  ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr):
+    "llvm.call"(%arg0, %arg1) <{callee = @copy}> : (!llvm.ptr, !llvm.ptr) -> ()
+    "llvm.call"(%arg2, %arg0) <{callee = @copy}> : (!llvm.ptr, !llvm.ptr) -> ()
+    "llvm.return"() : () -> ()
+} with @copy := copy
+
+-- a call's stored value that is a read with a fact is read back: the second call reads `x`
+example (r a q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hr : Fits s.mem r 64)
+    (ha : Fits s.mem a 64) (hq : Fits s.mem q 64)
+    (hx : s.mem.readAt a 64 = x) :
+    copyTwice.call (copyTwice.args (.value r) (.value a) (.value q)) s =
+      .value (.nil, { s with mem := (s.mem.storeAt r x).storeAt q x }) := by
+  func_init
+  block_init
+  step_call using copy.call_eq
+  guard_hyp hread_r : S.mem.readAt r 64 = x
+  step_call using copy.call_eq
+  finish_block
+  rw [hS]
+
 /-- `q` holds `y`. -/
 def Holds (m : MemoryState) (q : Pointer) (y : BitVec 64) : Prop :=
   m.readAt q 64 = y
