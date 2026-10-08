@@ -51,6 +51,9 @@ separate module (`Tests/<f>.lean`, importing the proof file), so the proofs neve
   | _ => false
 ```
 
+Keep block 0 free in test states: it is the null pointer's block, and a pointer there compares
+equal to `null`.
+
 The fuel of `f.eval fuel` counts block jumps (a loop of `n` iterations needs `n + 2` or so), not
 calls; out of fuel it returns `.value (none, _)`.
 
