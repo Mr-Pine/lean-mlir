@@ -58,7 +58,10 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
   stepGoal.setTag `insn
   -- Resolve block.body[idx]
   let ty ← instantiateMVars (← stepGoal.getType)
-  let some instr := ty.find? (·.isAppOf ``GetElem.getElem) | throwError "no body[pos]"
+  -- `block.body[pos]`, not a `getElem` in the env's written values (`H[7]`)
+  let some instr :=
+    ty.find? fun e => e.isAppOfArity ``GetElem.getElem 8 && (e.getArg! 5).isAppOf ``BasicBlock.body
+    | throwError "no body[pos]"
   let stepGoal ←
     match fact? with
     | some (h, _, _) =>
