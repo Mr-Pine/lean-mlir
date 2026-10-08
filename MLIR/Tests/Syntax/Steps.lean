@@ -121,6 +121,21 @@ example (E : ⟪addTwo.Γ⟫) (S : GlobalState) (x : BitVec 32) (v : Vector (Bit
   finish_block
   rfl
 
+mlir_def at8 :=
+  {^bb0(%arg0:!llvm.ptr,
+      %arg1:i64):%0 = "llvm.getelementptr"(%arg0, %arg1)<{elem_type = i64, rawConstantIndices =
+        array<i32:-2147483648>}>:(!llvm.ptr, i64)->!llvm.ptr"llvm.return"(%0):(!llvm.ptr)->()}
+
+-- a `gep` by a symbolic index from a block's start (`p.offset = 0`) does not wrap
+example (p : Pointer) (i : BitVec 64) (E : ⟪at8.Γ⟫) (S : GlobalState) (hp : p.offset = 0)
+    (hi : i.toNat * 8 < 2 ^ 64) (hArgs : E.args = (at8.args (.value p) (.value i)).get) :
+    at8.runFrom E 0 S =
+      .value (.cons (.value (p.add (BitVec.ofNat 64 (i.toNat * 8)))) .nil, S) := by
+  block_init
+  step_pure [hi]
+  finish_block
+  rfl
+
 end
 
 end MLIR.Tests.Syntax.Steps
