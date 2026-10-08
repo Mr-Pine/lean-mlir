@@ -72,7 +72,8 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
             throwError "body fact: unexpected side goals"
           stepGoal.replaceTargetEq rw.eNew rw.eqProof
     | none =>
-      stepGoal.replaceTargetDefEq ((← kabstract ty instr).instantiate1 (← whnfD instr))
+      let instr' ← whnfD ((← blockInstr? run.block run.idx).getD instr)
+      stepGoal.replaceTargetDefEq ((← kabstract ty instr).instantiate1 instr')
   let main ← g.replaceTargetEq (← instantiateMVars r.eNew) r.eqProof
   -- carry the body fact on to the next instruction
   let main ←
