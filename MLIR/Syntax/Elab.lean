@@ -517,7 +517,8 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
     let Γdef ←
       -- the kernel checks the count: the elaborator would recurse once per value
       `(abbrev $Γ : Ctx :=
-          ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), rir_tys% [$vals,*], by decide +kernel⟩)
+          ⟨$(num p.Γ.n), $(← tysStx p.Γ.args), rir_tys% [$vals,*], by decide +kernel,
+            $(num p.Γ.argBase), $(num p.Γ.valBase)⟩)
     let d := depth p.Γ.n
     let treeDef ← `(abbrev $tree : TyTree := rir_tree% $(numLit d) [$vals,*])
     -- the kernel checks the trie against `Γ.vals` once
@@ -559,7 +560,8 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
           { Γ := $Γ, tRets := $tRets, n := $(num n), blockTys := $blockTys,
             blockParams := $blockParams, hhasBlock := by decide, hentry := rfl,
             blocks := $blocksVal })
-    let argNames := (List.range p.Γ.args.length).map fun i => mkIdent (.mkSimple s!"arg{i}")
+    let argNames :=
+      (List.range p.Γ.args.length).map fun i => mkIdent (.mkSimple s!"arg{p.Γ.argBase + i}")
     let argBinders ← (argNames.zip p.Γ.args).toArray.mapM fun (a, t) => do
       `(Lean.Parser.Term.bracketedBinderF| ($a : ⟦($(← tyStx t) : Ty)⟧))
     let argsDef ←
@@ -590,6 +592,8 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let lit := name `lit
   let c? := p.constant?
   let vals := if c?.isSome then [t] else p.Γ.vals
+  -- a folded constant's one register is no value of the region
+  let valBase := if c?.isSome then 0 else p.Γ.valBase
   let tys : ValTys := { hty := name `hty }
   let d := depth vals.length
   let tStx ← tyStx t
@@ -606,7 +610,8 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let cmds ← do
     pure <| #[
       -- the kernel checks the count: the elaborator would recurse once per value
-      ← `(abbrev $Γ : Ctx := ⟨$(num vals.length), [], rir_tys% [$valStxs,*], by decide +kernel⟩),
+      ← `(abbrev $Γ : Ctx :=
+          ⟨$(num vals.length), [], rir_tys% [$valStxs,*], by decide +kernel, 0, $(num valBase)⟩),
       ← `(abbrev $tree : TyTree := rir_tree% $(numLit d) [$valStxs,*]),
       ← `(theorem $(tys.hty) (k : Fin ($Γ).n) (t : Ty) (h : ($tree).get k = t) : ($Γ).ty k = t :=
           (Ctx.ty_eq_get (d := $(num d)) rir_rfl% (by decide) k).trans h)] ++

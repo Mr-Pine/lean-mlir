@@ -107,7 +107,10 @@ syntax "@" (ident <|> str) : mlir_attr_val
 
 syntax "#" ident : mlir_attr_val
 
-syntax "#" ident "<" mlir_attr_val,* ">" : mlir_attr_val
+/-- `nsw`, or `argMem = read` as in `#llvm.memory_effects<…>`. -/
+syntax dialectArg := (atomic(ident " = "))? mlir_attr_val
+
+syntax "#" ident "<" dialectArg,* ">" : mlir_attr_val
 
 syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
 
@@ -234,13 +237,26 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
   | `(mlir_attr_val| # $x:ident) => return .alias x.getId.toString
   | `(mlir_attr_val| # $d:ident < $vs,* >) => do
     let dialect := d.getId.toString
-    let vs ← vs.getElems.toList.mapM fun (v : TSyntax `mlir_attr_val) => do
+    let vs ← vs.getElems.toList.mapM fun (a : TSyntax ``dialectArg) => do
+      match a with
+      | `(dialectArg| $k:ident = $v) => return (some k.getId.toString, v)
+      | `(dialectArg| $v:mlir_attr_val) => return (none, v)
+      | a => throwErrorAt a "malformed contents of '#{dialect}<…>'"
+    -- a keyword or string: `nsw`, `none`
+    let word (v : TSyntax `mlir_attr_val) : CoreM AttrValue := do
       match leaves v.raw with
       | #[x] =>
         if x.isIdent then return AttrValue.opaque_ dialect x.getId.toString
         if let some s := x.isStrLit? then return AttrValue.opaque_ dialect s
         throwErrorAt v "unsupported contents of '#{dialect}<…>'"
       | _ => throwErrorAt v "unsupported contents of '#{dialect}<…>'"
+    -- `k = v, …`: a dictionary
+    if vs.any (·.1.isSome) then
+      let es ← vs.mapM fun
+        | (some k, v) => return AttrEntry.mk k (← word v)
+        | (none, v) => throwErrorAt v "expected `key = value` inside '#{dialect}<…>'"
+      return .dict (.mk es)
+    let vs ← vs.mapM (word ·.2)
     match vs with
     | [v] => return v
     | vs => return .list vs
