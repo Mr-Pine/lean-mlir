@@ -56,7 +56,7 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   replaceMainGoal [g]
   withMainContext do
       let hA := fvs[1]!
-      -- `E`'s args fact, or else its chain's root's args: writes keep the args (`rfl`). Only for a
+      -- `E`'s args fact, or else its chain's root's args (`Tactic.argsRoot`). Only for a
       -- premise `E₀.args = E.args`: one naming the args (`(args …).get`) stays as it is
       let some (_, _, argsA) := (← inferType (mkFVar hA)).eq? | return
       let onE ← withReducible <| isDefEq argsA (← mkAppM ``Env.args #[E])
@@ -69,13 +69,11 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
             pure (some (← mkEqTrans (mkFVar hA) (mkFVar hArgs)))
           | none, some hE =>
             do
-              let root := Tactic.envRoot hE.rhs
               let args ←
                 withLocalDeclD `e (← inferType E) fun e => do
                     mkLambdaFVars #[e] (← mkAppM ``Env.args #[e])
               let pf ← mkEqTrans (mkFVar hA) (← mkCongrArg args hE.decl.toExpr)
-              let some (_, l, _) := (← inferType pf).eq? | pure none
-              pure (some (mkExpectedPropHint pf (← mkEq l (← mkAppM ``Env.args #[root]))))
+              pure (some (← mkEqTrans pf (← Tactic.argsRoot hE.rhs).2))
           | none, none =>
             pure none
       if let some pf := pf? then

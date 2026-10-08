@@ -19,6 +19,22 @@ section SealEnv
 partial def envRoot (e : Expr) : Expr :=
   if e.isAppOfArity ``Env.write 5 then envRoot (e.getArg! 2) else e
 
+/-- `e`'s root through writes and reducible abbreviations, and `e.args = root.args` by
+`Env.write_args` per write: a type hint over the chain has the kernel compare the written values. -/
+partial def argsRoot (e : Expr) : MetaM (Expr × Expr) := do
+  if e.isAppOfArity ``Env.write 5 then
+    let base := e.getArg! 2
+    let (root, pf) ← argsRoot base
+    let step ←
+      mkAppOptM ``Env.write_args #[e.getArg! 0, e.getArg! 1, e.getArg! 4, base, e.getArg! 3]
+    return (root, ← mkEqTrans step pf)
+  let e' ← whnfR e
+  if e' == e || !e'.isAppOfArity ``Env.write 5 then
+    return (e, ← mkEqRefl (← mkAppM ``Env.args #[e]))
+  let (root, pf) ← argsRoot e'
+  return (root,
+      mkExpectedPropHint pf (← mkEq (← mkAppM ``Env.args #[e]) (← mkAppM ``Env.args #[root])))
+
 def sealEnvAt (env : Expr) : TacticM Unit :=
   withMainContext do
     let g ← getMainGoal
@@ -42,7 +58,13 @@ def sealEnvAt (env : Expr) : TacticM Unit :=
     if let some hEargs := hEargs? then
       let stmtArgs (e) : MetaM _ := do
         mkEq (← mkAppM ``Env.args #[e]) hEargs.rhs
-      facts := facts.push ⟨`hArgs, stmtArgs, mkExpectedPropHint hEargs.decl.toExpr (← stmtArgs env)⟩
+      let (root, pf) ← argsRoot env
+      let pf ←
+        if root == E then
+          mkEqTrans pf hEargs.decl.toExpr
+        else
+          pure (mkExpectedPropHint hEargs.decl.toExpr (← stmtArgs env))
+      facts := facts.push ⟨`hArgs, stmtArgs, pf⟩
     let (_, g) ←
       g.withContext do
           generalizeOpaque g env `E facts
