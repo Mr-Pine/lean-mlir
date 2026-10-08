@@ -41,6 +41,10 @@ theorem List.drop_succ_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) :
   rw [List.drop_eq_getElem_cons (List.lt_length_of_drop_eq_cons h)] at h
   injection h
 
+/-- A body fact `l.drop n = xs ++ ys`, past `xs`. -/
+theorem List.drop_add_of_drop_eq_append {l : List α} (h : l.drop n = xs ++ ys) :
+    l.drop (n + xs.length) = ys := by rw [← List.drop_drop, h, List.drop_left]
+
 def BasicBlock.runBodyFrom (block : BasicBlock Γ tRets bp) (env : ⟪Γ⟫) (n : Nat) : EffectM ⟪Γ⟫ :=
   List.foldlM Instr.run env (block.body.drop n)
 

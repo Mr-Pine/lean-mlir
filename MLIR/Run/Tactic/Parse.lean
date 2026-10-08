@@ -86,6 +86,18 @@ def bodyFact? (block idx : Expr) : MetaM (Option (Expr × Expr × Expr)) := do
     return some (mkExpectedPropHint e.decl.toExpr (← mkEq e.lhs rhs), x, xs)
   return none
 
+/-- `lhs = rhs` for a body `lhs := block.body.drop idx` that does not reduce, from a local body fact
+`block.body.drop idx = xs` whose `xs` unifies with `rhs` (a pattern's `pat ++ ?rest`). -/
+def bodyFactAs? (lhs rhs : Expr) : MetaM (Option Expr) := do
+  let some (idx, block) := bodyDrop? lhs | return none
+  for e in ← localEqs do
+    let some (n, b) := bodyDrop? e.lhs | continue
+    unless ← isDefEq b block <&&> isDefEq n idx do
+      continue
+    if ← withDefault (isDefEq e.rhs rhs) then
+      return some (mkExpectedPropHint e.decl.toExpr (← mkEq lhs (← instantiateMVars rhs)))
+  return none
+
 /-- `block.body.drop idx`, reduced to its first `cons`, by unfolding or from a body fact. -/
 def bodyFrom (block idx : Expr) : MetaM Expr := do
   let rest ← whnfD (← mkAppM ``List.drop #[idx, ← mkAppM ``BasicBlock.body #[block]])

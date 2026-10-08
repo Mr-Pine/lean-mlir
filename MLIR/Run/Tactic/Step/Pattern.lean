@@ -57,19 +57,20 @@ def closePatternRead (g : MVarId) : TacticM Unit :=
             return .done h
           | _ =>
             return .continue)
-    if reg.isAppOf ``Reg.arg then
-      let r ←
-        Tactic.simpValue true mkNullNode (← mkAppM ``Env.read #[lhs.getArg! 2, reg]) (lhs.getArg! 2)
-            false
-      unless ← withDefault (isDefEq r.expr rhs) do
+    let read ← mkAppM ``Env.read #[lhs.getArg! 2, reg]
+    -- an argument, or a register of an outer pattern (not a literal): by the step's simp passes
+    let bySimp : TacticM Unit := do
+      let r ← Tactic.simpValue true mkNullNode read (lhs.getArg! 2) false
+      if r.expr == read then
+        throwError "step_pattern: no value for the read{indentExpr read}\nthrough the writes; add \
+        a fact `h : E.read %k = _` about the block's entry env"
+      unless ← withReducible (isDefEq r.expr rhs) <||> withDefault (isDefEq r.expr rhs) do
         throwError "step_pattern: {lhs} is{indentExpr r.expr}\nnot{indentExpr rhs}"
       g.assign (mkExpectedPropHint (← r.getProof) (← mkEq lhs rhs))
+    if reg.isAppOf ``Reg.arg then
+      bySimp
       return
-    let some (v, pf) ← Tactic.walkRead (lhs.getArg! 2) reg |
-      do
-        let r ← mkAppM ``Env.read #[lhs.getArg! 2, reg]
-        throwError "step_pattern: no value for the read{indentExpr r}\nthrough the writes; add a fact \
-        `h : E.read %k = _` about the block's entry env"
+    let some (v, pf) ← Tactic.walkRead (lhs.getArg! 2) reg | bySimp
     -- reducible first: a default-transparency mismatch unfolds every definition before failing
     if ← withReducible (isDefEq v rhs) then
       g.assign (mkExpectedPropHint pf (← mkEq lhs rhs))
@@ -143,12 +144,18 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
       unless ← isDefEq concl (← instantiateMVars (← g.getType)) do
         throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
       -- the body first: it fixes the registers and arguments the other premises mention
+      let mut bodyFact? := none
       for m in ms do
         let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
         if lhs.isAppOf ``List.drop then
-          unless ← withDefault (isDefEq lhs rhs) do
+          if ← withDefault (isDefEq lhs rhs) then
+            m.mvarId!.assign (← mkEqRefl lhs)
+          else if let some h← bodyFactAs? lhs rhs then
+            -- an abstract block (a pattern lemma's proof): through its body fact
+            m.mvarId!.assign h
+            bodyFact? := some h
+          else
             throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
-          m.mvarId!.assign (← mkEqRefl lhs)
       let mut cont? := none
       for m in ms do
         let mv := m.mvarId!
@@ -173,6 +180,16 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
       -- the lemma's names: a kept fact is referred to by them
       let (dead, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
       replaceMainGoal [← Tactic.reduceIndex main]
+      -- an abstract block's body fact, carried past the pattern
+      if let some h := bodyFact? then
+        withMainContext do
+            let h ← instantiateMVars h
+            let h' ← mkAppM ``List.drop_add_of_drop_eq_append #[h]
+            let some (_, l, rest) := (← inferType h').eq? | throwError "body fact: not an equation"
+            let run ← getRunBodyFrom (← getMainTarget)
+            let ty ← mkEq (← mkAppM ``List.drop #[run.idx, l.appArg!]) rest
+            let (_, main) ← (← (← getMainGoal).assert `hbody ty (mkExpectedPropHint h' ty)).intro1P
+            replaceMainGoal [main]
       finishStep args
       -- the pattern's intermediates: sealed away, so unused; its facts about them kept
       let mut main ← getMainGoal
@@ -191,8 +208,7 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
         replaceMainGoal ((← getMainGoal) :: goals.toList)
 
 @[tactic stepPattern]
-def evalStepPattern : Tactic := fun stx =>
-  Tactic.atStepDepth (stepPatternAt stx)
+def evalStepPattern : Tactic := fun stx => Tactic.atStepDepth (stepPatternAt stx)
 
 end
 
