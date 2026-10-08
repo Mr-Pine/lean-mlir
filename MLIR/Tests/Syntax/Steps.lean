@@ -94,6 +94,41 @@ example (r a q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hr : F
   finish_block
   rw [hS]
 
+mlir_def jump :=
+{
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    "llvm.store"(%arg1, %arg0) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    "llvm.br"()[^bb1] : () -> ()
+  ^bb1:
+    "llvm.return"() : () -> ()
+}
+
+/-- The entry block, its exit's env and state given to a continuation. -/
+theorem jump.entry (p : Pointer) (x : BitVec 64) (S : GlobalState) (E : ⟪jump.Γ⟫)
+    (hArgs : E.args = (jump.args (.value p) (.value x)).get) (hwf : S.WF) (hp : Fits S.mem p 64)
+    (K : PoisonOr (Vals [] × GlobalState))
+    (hK :
+      ∀ (E' : ⟪jump.Γ⟫) (S' : GlobalState), E'.args = (jump.args (.value p) (.value x)).get →
+        S' = { S with mem := S.mem.storeAt p x } → jump.runFrom E' ^bb1 S' = K) :
+    jump.runFrom E ^bb0 S = K := by
+  block_init
+  step_store
+  finish_block
+  step_loop using hK
+
+-- a continuation's state binder keeps its name; the args fact is `hArgs₀`
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+    jump.call (jump.args (.value p) (.value x)) s =
+      .value (.nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  step_loop using jump.entry p x
+  guard_hyp hArgs₀ : E₀.args = (jump.args (.value p) (.value x)).get
+  intro hS'
+  block_init
+  finish_block
+  subst_vars
+  rfl
+
 /-- `q` holds `y`. -/
 def Holds (m : MemoryState) (q : Pointer) (y : BitVec 64) : Prop :=
   m.readAt q 64 = y
