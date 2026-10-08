@@ -42,7 +42,15 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
   let (hE?, hArgs?) ←
     g.withContext do
         return (← Tactic.findLocalEq? E, ← Tactic.findEqWithLhs? (← mkAppM ``Env.args #[E]))
-  let (fvs, g) ← g.introN 2 [`E₀, `hArgs₀]
+  let (_, g₁) ← g.intro `E₀
+  -- binders before the args fact (a state `S'`) keep their names
+  let mut g₁ := g₁
+  while true do
+    let .forallE n d _ _ ← whnfR (← g₁.getType) | break
+    if ← g₁.withContext (isProp d) then
+      break
+    g₁ := (← g₁.intro n).2
+  let (hA, g) ← g₁.intro `hArgs₀
   -- the lemma's env and state may be functions of `E₀`, applied, or abbreviations: unfolded
   let g ←
     g.withContext do
@@ -55,7 +63,6 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
               if e == r.env then some env' else if e == r.state then some st' else none)
   replaceMainGoal [g]
   withMainContext do
-      let hA := fvs[1]!
       -- `E`'s args fact, or else its chain's root's args (`Tactic.argsRoot`). Only for a
       -- premise `E₀.args = E.args`: one naming the args (`(args …).get`) stays as it is
       let some (_, _, argsA) := (← inferType (mkFVar hA)).eq? | return
@@ -293,8 +300,7 @@ def stepLoopAt (stx : Syntax) : TacticM Unit := do
   stepLoopFinish E he premises
 
 @[tactic stepLoop]
-def evalStepLoop : Tactic := fun stx =>
-  Tactic.atStepDepth (stepLoopAt stx)
+def evalStepLoop : Tactic := fun stx => Tactic.atStepDepth (stepLoopAt stx)
 
 end
 
