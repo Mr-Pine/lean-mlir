@@ -11,8 +11,8 @@ open Lean Elab Tactic Meta
 public meta section
 
 /-- `step_impure` for an `addressof` of a global `g`, closing it with `run_addressof_wrap` and
-`hv : ∀ s, g.value s = .value (Ty.wrap r, s)`. As with `step_alloca`, the new block is named `x` and
-kept apart from the pointers with `Fits` facts. -/
+`hv : ∀ s, g.value s = .value (Ty.wrap r, s)`, `g`'s type without padding. As with `step_alloca`,
+the new block is named `x` and kept apart from the pointers with memory facts. -/
 syntax (name := stepAddressof) "step_addressof" term:max (stepNames)? (stepConsuming)? : tactic
 
 /-- Close the run goal of `addressof` of a global `g` with `run_addressof_wrap (hv _)`, for
@@ -35,7 +35,7 @@ elab "addressof_value" hv:term:max : tactic =>
     evalTactic
         (← `(tactic|
             exact run_addressof_wrap (t := $(← Term.exprToSyntax t)) (w := $(quote w)) (n := $(quote n))
-              ($(← Term.exprToSyntax hv) _) (by simp) rfl rfl))
+              ($(← Term.exprToSyntax hv) _) (by simp) (by decide) rfl rfl))
 
 @[tactic stepAddressof]
 def evalStepAddressof : Tactic := fun stx => do

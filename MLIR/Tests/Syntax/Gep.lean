@@ -40,7 +40,7 @@ private def p : Pointer := ⟨⟨1⟩, 0⟩
 
 /-- Block `1`: the `i64`s `10, 20, 30, 40, 50`, lowest first. -/
 private def limbs : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, ⟨40, 50#64 ++ 40#64 ++ 30#64 ++ 20#64 ++ 10#64⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, .ofBytes 40 (50#64 ++ 40#64 ++ 30#64 ++ 20#64 ++ 10#64))]⟩⟩
 
 /-- `loadAt`'s `i64` at index `i`, or `none` for UB. -/
 private def at_ (i : BitVec 64) : Option (BitVec 64) :=
@@ -56,7 +56,7 @@ private def at_ (i : BitVec 64) : Option (BitVec 64) :=
 
 /-- Block `1`: the `struct<(i64, array<4 x i16>)>` `(7, [1, 2, 3, 4])`. -/
 private def record : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, ⟨16, 4#16 ++ 3#16 ++ 2#16 ++ 1#16 ++ 7#64⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, .ofBytes 16 (4#16 ++ 3#16 ++ 2#16 ++ 1#16 ++ 7#64))]⟩⟩
 
 /-- `loadField`'s `i16` at index `i` of the array field, or `none` for UB. -/
 private def field (i : BitVec 64) : Option (BitVec 16) :=

@@ -62,7 +62,8 @@ mlir_const_def zeroThenSeven := {
 example : zeroThenSeven.Γ.n = 1 := rfl
 example : zeroThenSeven.lit = (0, Pointer.null, 7) := rfl
 
-/-- A struct whose second field stays `undef`: lifted as it is, not folded. -/
+/-- A struct whose second field stays `undef`: folded with a zero there, then that field poisoned
+by one `insertvalue`. -/
 mlir_const_def half := {
     %0 = "llvm.mlir.constant"() <{value = 7 : i64}> : () -> i64
     %1 = "llvm.mlir.undef"() : () -> !llvm.struct<(i64, i64)>
@@ -70,7 +71,20 @@ mlir_const_def half := {
     "llvm.return"(%2) : (!llvm.struct<(i64, i64)>) -> ()
 }
 
+example : half.lit = (7, 0) := rfl
 example : half.Γ.n = 3 := rfl
+
+example (s : GlobalState) : half.value s = .value ((.value 7, .poison), s) :=
+  GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩
+
+/-- `half`'s fields, read through its address. -/
+mlir_def readHalf := {
+    %0 = "llvm.mlir.addressof"() <{global_name = @half}> : () -> !llvm.ptr
+    %1 = "llvm.load"(%0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %2 = "llvm.getelementptr"(%0) <{elem_type = !llvm.struct<(i64, i64)>, rawConstantIndices = array<i32: 0, 1>}> : (!llvm.ptr) -> !llvm.ptr
+    %3 = "llvm.load"(%2) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%1, %3) : (i64, i64) -> ()
+} with @half := half
 
 -- a noncomputable lift, and a function binding it, likewise noncomputable
 noncomputable mlir_const_def seven := {
@@ -122,7 +136,8 @@ private def ret (f : Func) (t : Ty) : Option ⟦t⟧ :=
 
 -- the folded constant's `value` is the literal
 #guard match (Prog.ofRegion pairs.region).toOption.bind Prog.constant? with
-  | some c => if h : c.ty = pairs.t then (h ▸ c.value : ⟦pairs.t⟧ᵣ) == pairs.lit else false
+  | some (c, []) => if h : c.ty = pairs.t then (h ▸ c.value : ⟦pairs.t⟧ᵣ) == pairs.lit else false
+  | some _ => false
   | none => false
 
 /-- What `readPairs` returns from an empty state, or `none` for UB. -/
@@ -132,6 +147,11 @@ private def out : Option (BitVec 64) :=
   | _ => none
 
 #guard out == some 9#64
+
+-- the undefined field's bytes are undefined: its load is poison, the other field's not
+#guard (match readHalf.eval 1 readHalf.args ⟨⟨0⟩, ⟨∅⟩⟩ with
+  | .value (some (.cons a (.cons b .nil)), _) => some (a, b)
+  | _ => none) == some (.value 7, .poison)
 
 end Tests
 

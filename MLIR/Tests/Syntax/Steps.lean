@@ -52,6 +52,62 @@ example (p : Pointer) (x : BitVec 64) (b : Nat) (s : GlobalState) (hwf : s.WF)
   finish_block
   rw [hS]
 
+-- an output needs only `Room`
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64) :
+    put.call (put.args (.value p) (.value x)) s =
+      .value (.nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  block_init
+  step_store
+  finish_block
+  rw [hS]
+
+mlir_def putGet :=
+{
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    "llvm.store"(%arg1, %arg0) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %0 = "llvm.load"(%arg0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+}
+
+-- a store into `Room` makes its bits known: the load after it reads them back
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64) :
+    putGet.call (putGet.args (.value p) (.value x)) s =
+      .value (.cons (.value x) .nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  block_init
+  step_store
+  guard_hyp hfits_p : Fits S.mem p 64
+  step_load
+  finish_block
+  rw [hS]
+
+mlir_def stackSlot :=
+{
+  ^bb0(%arg0: i64):
+    %0 = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> i64
+    %1 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    "llvm.store"(%arg0, %1) <{alignment = 8 : i64, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
+    %2 = "llvm.load"(%1) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%2) : (i64) -> ()
+}
+
+-- a fresh slot has `Room`, not `Fits`: it is undefined until stored to
+example (x : BitVec 64) (s : GlobalState) (hwf : s.WF) :
+    stackSlot.call (stackSlot.args (.value x)) s =
+      .value (.cons (.value x) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+  func_init
+  block_init
+  step_pure
+  step_alloca
+  guard_hyp hv1_room : Room S.mem v1 64
+  step_store
+  step_load with v
+  finish_block
+  subst hS
+  erase_frame
+  rfl
+
 mlir_def copy :=
 {
   ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr):

@@ -8,17 +8,15 @@ public import MLIR.Memory.Pointer
 
 namespace MLIR
 
-/-!
-**SIMPLIFICATION**
-We don't support storing poison, only fully-defined values!
--/
-
 @[expose] public section
 
-/-- `length` counts the length of the block in `bytes`  -/
+/-- A block of `length` bytes: its bits, which of them are `defined` (bit `i` set: bit `i` was
+written), and whether the object is `live` (inside its lifetime). -/
 structure MemoryBlock where
   (length : Nat)
   (bytes : BitVec (8 * length))
+  (defined : BitVec (8 * length))
+  (live : Bool)
 
 /--
 `AllocState` keeps a counter of available blockIds
@@ -45,6 +43,10 @@ structure GlobalState where
 instance : GetElem? MemoryState BlockId MemoryBlock (fun m i => i ∈ m.mem) where
   getElem mem id h := mem.mem[id]
   getElem? mem id := mem.mem[id]?
+
+/-- A live block holding `bytes`, all defined. -/
+def MemoryBlock.ofBytes (length : Nat) (bytes : BitVec (8 * length)) : MemoryBlock :=
+  ⟨length, bytes, BitVec.allOnes _, true⟩
 
 @[implicit_reducible]
 def MemoryBlock.lengthInBits (b : MemoryBlock) : Nat :=

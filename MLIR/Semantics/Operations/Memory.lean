@@ -12,6 +12,7 @@ namespace MLIR.Operation
 
 @[expose] public section
 
+/-- A load: UB outside its block, each leaf poison where a bit is undefined (a dead object's). -/
 def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let ptr ←
     match ptr with
@@ -20,11 +21,12 @@ def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM �
     | .value p =>
       pure p
   let state ← get
-  throwUBIf (¬Fits state.mem ptr τ.width)
-  let flattened := state.mem.readAt ptr τ.width
-  let value : ⟦τ⟧ := τ.unflatten flattened
+  throwUBIf (¬InBounds state.mem ptr τ.width)
+  let value : ⟦τ⟧ := τ.unflattenDef (state.mem.readAt ptr τ.width) (state.mem.definedAt ptr τ.width)
   return env.write dst value
 
+/-- A store: UB unless into a live object; poison leaves and padding stored undefined. A pointer
+has no bit pattern: storing one is UB. -/
 def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let ptr ←
     match ptr with
@@ -33,14 +35,10 @@ def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪
     | .value p =>
       pure p
   let state ← get
-  throwUBIf (¬Fits state.mem ptr τ.width)
-  let flattened ←
-    match τ.flatten v with
-    | .poison =>
-      throwUB
-    | .value v =>
-      pure v
-  let updated := { state with mem := state.mem.storeAt ptr flattened }
+  throwUBIf (¬Room state.mem ptr τ.width)
+  throwUBIf τ.hasPtr
+  let (bits, defined) := τ.flattenDef v
+  let updated := { state with mem := state.mem.storeDef ptr bits defined }
   _ ← set updated
   return env
 
@@ -80,7 +78,7 @@ def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ�
   let .value (dst, val, len) := do
     return (← dst, ← val, (← len).toNat) | throwUB
   let state ← get
-  throwUBIf (¬Fits state.mem dst (8 * len))
+  throwUBIf (¬Room state.mem dst (8 * len))
   let replacement := val.replicate len
   let updated := { state with mem := state.mem.storeAt dst replacement }
   _ ← set updated
@@ -92,11 +90,32 @@ def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env
     return (← dst, ← src, (← len).toNat) | throwUB
   throwUBIf (¬(Range.of dst (8 * len)).Disjoint (Range.of src (8 * len)))
   let state ← get
-  throwUBIf (¬Fits state.mem dst (8 * len))
-  throwUBIf (¬Fits state.mem src (8 * len))
+  throwUBIf (¬Room state.mem dst (8 * len))
+  -- reading a dead object is an access too
+  throwUBIf (¬Room state.mem src (8 * len))
   let replacement := state.mem.readAt src (8 * len)
-  let updated := { state with mem := state.mem.storeAt dst replacement }
+  let defined := state.mem.definedAt src (8 * len)
+  let updated := { state with mem := state.mem.storeDef dst replacement defined }
   _ ← set updated
+  return env
+
+/-- `llvm.lifetime.start` of `p`'s object; poison: no effect. -/
+def lifetimeStart (p : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  let .value p := p | return env
+  let state ← get
+  _ ← set { state with mem := state.mem.lifetimeStart p }
+  return env
+
+/-- `llvm.lifetime.end` of `p`'s object; poison: no effect. -/
+def lifetimeEnd (p : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  let .value p := p | return env
+  let state ← get
+  _ ← set { state with mem := state.mem.lifetimeEnd p }
+  return env
+
+/-- `llvm.assume`: UB unless the condition is `1`. -/
+def assume (c : IntW 1) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  throwUBIf (c ≠ .value 1#1)
   return env
 
 end

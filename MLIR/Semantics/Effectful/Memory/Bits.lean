@@ -47,6 +47,24 @@ theorem spliceBits_comm_of_disjoint {n w w' : Nat} (bytes : BitVec n) (off off' 
   apply BitVec.eq_of_getLsbD_eq
   grind [getLsbD_spliceBits]
 
+/-- Bits `s … s + w` of all ones: all ones. -/
+theorem _root_.BitVec.extractLsb'_allOnes {n s w : Nat} (h : s + w ≤ n) :
+    (BitVec.allOnes n).extractLsb' s w = BitVec.allOnes w := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', BitVec.getLsbD_allOnes]
+  simp only [hi, decide_true, Bool.true_and, decide_eq_true_eq]
+  omega
+
+/-- A slice of a slice. -/
+theorem _root_.BitVec.extractLsb'_extractLsb'_add {x : BitVec n} (h : s' + w' ≤ w) :
+    (x.extractLsb' s w).extractLsb' s' w' = x.extractLsb' (s + s') w' := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', hi, decide_true, Bool.true_and, show s' + i < w by omega]
+  congr 1
+  omega
+
 end
 
 end MLIR.Memory

@@ -177,7 +177,7 @@ private def x : Pointer := ⟨⟨1⟩, 0⟩
 
 /-- Two 40-byte blocks: `out` zeroed, `x` holding `bytes`. -/
 private def state (bytes : BitVec 320) : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨40, 0⟩), (⟨1⟩, ⟨40, bytes⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 40 0), (⟨1⟩, .ofBytes 40 bytes)]⟩⟩
 
 /-- Every limb `2^52 - 1`, so every limb carries. -/
 private def xBytes : BitVec 320 :=

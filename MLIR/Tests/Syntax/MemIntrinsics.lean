@@ -35,7 +35,7 @@ private def src : Pointer := ⟨⟨1⟩, 0⟩
 
 /-- `dst` zeroed, `src` holding `0xAABBCCDD`, both 4 bytes. -/
 private def s0 : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨4, 0⟩), (⟨1⟩, ⟨4, 0xAABBCCDD#32⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 4 0), (⟨1⟩, .ofBytes 4 0xAABBCCDD#32)]⟩⟩
 
 /-- `dst`'s bytes after the run, or `none` for UB. -/
 private def fillOut (v : BitVec 8) (n : Nat) : Option (BitVec 32) :=

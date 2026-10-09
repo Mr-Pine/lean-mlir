@@ -3,11 +3,11 @@ module
 import MLIR.Semantics.Operations.Memory
 meta import MLIR.Semantics.Operations.Memory
 
-/-! # Execution tests for `load`/`store`, `memset`/`memcpy`
+/-! # Execution tests for `load`/`store`, `memset`/`memcpy`, lifetimes and `assume`
 
-Everything is run against a single 8-byte block with id `0`; block `1` is never
-allocated, so it is the "dead pointer" case. `memcpy` adds block `2`, holding the bytes
-`01 … 08`. -/
+Everything is run against a single 8-byte block with id `0`, zeroed and defined; block `1` is not
+allocated, so it is the "dangling pointer" case, until an `alloca` adds it, undefined. `memcpy`
+adds block `2`, holding the bytes `01 … 08`. -/
 
 namespace MLIR.Tests
 
@@ -17,15 +17,15 @@ private abbrev Γ0 : Ctx :=
 private def env0 : ⟪Γ0⟫ :=
   Env.init (fun i => nomatch i)
 
-/-- A state with one live 8-byte block (id `0`), zero-filled. -/
+/-- A state with one live 8-byte block (id `0`), zero-filled and defined. -/
 private def s0 : GlobalState :=
-  ⟨⟨1⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨8, 0⟩)]⟩⟩
+  ⟨⟨1⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 8 0)]⟩⟩
 
 /-- Pointer into block `0` at byte offset `off`. -/
 private def p (off : Nat) : Pointer :=
   ⟨⟨0⟩, BitVec.ofNat 64 off⟩
 
-/-- Pointer into the never-allocated block `1`. -/
+/-- Pointer into the unallocated block `1`. -/
 private def pDead : Pointer :=
   ⟨⟨1⟩, 0⟩
 
@@ -81,8 +81,6 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
 -- poison pointer, poison value
 #guard (store? (τ := .bv 64) .poison (.value 0#64)).isNone
 
-#guard (store? (τ := .bv 64) (.value (p 0)) .poison).isNone
-
 -- a pointer at a type with no bit pattern cannot be stored
 #guard (store? (τ := .ptr) (.value (p 0)) (.value (p 0))).isNone
 
@@ -103,7 +101,7 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
       (fun s => load? (.bv 64) (.value (p 0)) s)) ==
     some (.value 0x1234#64)
 
--- a fresh block reads as zero
+-- a zeroed block reads as zero
 #guard load? (.bv 64) (.value (p 0)) == some (.value 0#64)
 
 -- load UB: poison pointer, dead block, out of bounds
@@ -149,7 +147,7 @@ private def memset? {w : Nat} (dst : ⟦Ty.ptr⟧) (val : ⟦Ty.bv 8⟧) (len : 
 
 /-- Blocks `0` (zeroed) and `2` (bytes `01 … 08`). -/
 private def s2 : GlobalState :=
-  ⟨⟨3⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨8, 0⟩), (⟨2⟩, ⟨8, 0x0807060504030201#64⟩)]⟩⟩
+  ⟨⟨3⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 8 0), (⟨2⟩, .ofBytes 8 0x0807060504030201#64)]⟩⟩
 
 /-- Pointer into block `2` at byte offset `off`. -/
 private def q (off : Nat) : Pointer :=
@@ -188,5 +186,116 @@ private def memcpy? (dst src : ⟦Ty.ptr⟧) (len : ⟦Ty.bv 64⟧) : Option (Bi
 #guard memcpy? .poison (.value (q 0)) (.value 1#64) == none
 
 #guard memcpy? (.value (p 0)) (.value (q 0)) .poison == none
+
+/-! ## Undefined bits -/
+
+/-- `s0` with block `1`, 8 bytes, fresh from an `alloca`: live, its bits undefined. -/
+private def sA : GlobalState :=
+  s0.alloca 8
+
+/-- Pointer into block `1` at byte offset `off`. -/
+private def a (off : Nat) : Pointer :=
+  ⟨⟨1⟩, BitVec.ofNat 64 off⟩
+
+-- a load of an uninitialized `alloca` is poison, not UB
+#guard load? (.bv 64) (.value (a 0)) sA == some .poison
+
+-- stored bits are defined, the others stay undefined
+#guard
+  ((store? (τ := .bv 32) (.value (a 0)) (.value 7#32) sA).bind (load? (.bv 32) (.value (a 0)) ·)) ==
+    some (.value 7#32)
+
+#guard
+  ((store? (τ := .bv 32) (.value (a 0)) (.value 7#32) sA).bind (load? (.bv 64) (.value (a 0)) ·)) ==
+    some .poison
+
+-- storing poison stores undefined bits, as LLVM does
+#guard
+  ((store? (τ := .bv 64) (.value (p 0)) .poison).bind (load? (.bv 8) (.value (p 3)) ·)) ==
+    some .poison
+
+-- a vector with a poison lane: that lane alone reads back poison
+#guard
+  ((store? (τ := .vec 2 32) (.value (p 0)) #v[.value 5#32, .poison]).bind
+      (load? (.vec 2 32) (.value (p 0)) ·)) ==
+    some #v[.value 5#32, .poison]
+
+/-- A `struct<(i8, i32)>`: the `i8` at bit `0`, 24 bits of padding, the `i32` at bit `32`. -/
+private def pair : ⟦Ty.struct [.bv 8, .bv 32]⟧ :=
+  (.value 1#8, .value 2#32)
+
+-- a struct's padding is undefined: a load across it is poison, the fields read back
+#guard
+  ((store? (τ := .struct [.bv 8, .bv 32]) (.value (p 0)) pair).bind
+      (load? (.bv 64) (.value (p 0)) ·)) ==
+    some .poison
+
+#guard
+  ((store? (τ := .struct [.bv 8, .bv 32]) (.value (p 0)) pair).bind
+      (load? (.struct [.bv 8, .bv 32]) (.value (p 0)) ·)) ==
+    some pair
+
+#guard
+  ((store? (τ := .struct [.bv 8, .bv 32]) (.value (p 0)) pair).bind
+      (load? (.bv 32) (.value (p 4)) ·)) ==
+    some (.value 2#32)
+
+/-- Block `0`'s 8 bytes as `memcpy dst src len` leaves them, loaded, or `none` for UB. -/
+private def memcpyLoad? (src : Pointer) (s : GlobalState) : Option ⟦Ty.bv 64⟧ :=
+  match Operation.memcpy (.value (p 0)) (.value src) (.value 8#64) env0 s with
+  | .value (_, s') => load? (.bv 64) (.value (p 0)) s'
+  | .poison => none
+
+-- `memcpy` copies which bits are defined: from an uninitialized block, poison
+#guard memcpyLoad? (a 0) sA == some .poison
+
+-- reading a dead object is UB
+#guard memcpyLoad? (a 0) (s0.alloca 8 true) == none
+
+/-! ## Lifetimes -/
+
+/-- The state after `lifetime.start` (`start`) or `lifetime.end` of `q`, or `none` for UB. -/
+private def lifetime? (start : Bool) (q : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Option GlobalState :=
+  match (if start then Operation.lifetimeStart q env0 else Operation.lifetimeEnd q env0) s with
+  | .value (_, s') => some s'
+  | .poison => none
+
+-- after `lifetime.end`, a load is poison and a store UB
+#guard ((lifetime? false (.value (p 0))).bind (load? (.bv 64) (.value (p 0)) ·)) == some .poison
+
+#guard
+  ((lifetime? false (.value (p 0))).bind
+      (store? (τ := .bv 64) (.value (p 0)) (.value 1#64) ·)).isNone
+
+-- `lifetime.start` makes it live again, its bits undefined
+#guard
+  (((lifetime? false (.value (p 0))).bind (lifetime? true (.value (p 0)) ·)).bind
+      (store? (τ := .bv 64) (.value (p 0)) (.value 1#64) ·)).isSome
+
+#guard ((lifetime? true (.value (p 0))).bind (load? (.bv 64) (.value (p 0)) ·)) == some .poison
+
+-- of a poison pointer: no effect
+#guard ((lifetime? false .poison).bind (load? (.bv 64) (.value (p 0)) ·)) == some (.value 0#64)
+
+-- a dead `alloca` (one with lifetime markers): a store is UB until `lifetime.start`
+#guard (store? (τ := .bv 64) (.value (a 0)) (.value 1#64) (s0.alloca 8 true)).isNone
+
+#guard
+  ((lifetime? true (.value (a 0)) (s0.alloca 8 true)).bind
+      (store? (τ := .bv 64) (.value (a 0)) (.value 1#64) ·)).isSome
+
+/-! ## `assume` -/
+
+/-- The state after `assume c`, or `none` for UB. -/
+private def assume? (c : ⟦Ty.bv 1⟧) : Option GlobalState :=
+  match Operation.assume c env0 s0 with
+  | .value (_, s) => some s
+  | .poison => none
+
+#guard (assume? (.value 1#1)).isSome
+
+#guard (assume? (.value 0#1)).isNone
+
+#guard (assume? .poison).isNone
 
 end MLIR.Tests

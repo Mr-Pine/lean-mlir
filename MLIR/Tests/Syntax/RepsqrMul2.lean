@@ -234,7 +234,7 @@ private def zb : Pointer := ⟨⟨1⟩, 0⟩
 
 /-- Two zeroed 64-byte blocks. -/
 private def state : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨64, 0⟩), (⟨1⟩, ⟨64, 0⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 64 0), (⟨1⟩, .ofBytes 64 0)]⟩⟩
 
 private def lanes8 (x : Nat) : ⟦V⟧ := (unreduced x).map .value
 

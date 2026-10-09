@@ -42,7 +42,9 @@ it by path.
 func_init / block_init done? ── no ──> func_init (once), block_init (each block)
 │
 next instruction (infoview "Instructions" panel)
-├─ constant, arithmetic, icmp, select, gep, cast, vector op, lifetime.* → step_pure
+├─ constant, arithmetic, icmp, select, gep, cast, vector op → step_pure
+├─ lifetime.start / lifetime.end → step_lifetime (step_pure dispatches to it)
+├─ assume c → step_assume [facts deciding c] (step_pure dispatches to it)
 │    └─ flagged op (nsw/nuw) or gep → no-overflow lemma as simp arg if the step leaves an `if`
 ├─ load → step_load            ├─ store → step_store
 ├─ memcpy / memset → step_memcpy / step_memset
@@ -84,7 +86,8 @@ facts, and `hS` as a short chain of named writes. Every fact about `S` is carrie
 later effectful step and scanned by the memory simprocs, so a cluttered state is also slow.
 
 - **Clear what is dead.** `consuming h` on the step that uses a fact for the last time (a read
-  fact once its value is loaded and named, a temporary's `Fits` once it is freed); `clear h` for
+  fact once its value is loaded and named, a temporary's `Fits` once it is freed; a lifetime
+  marker drops its object's facts itself); `clear h` for
   facts no later step needs (the entry state's facts once the end has what it needs);
   `clear_reads` before `subst_vars`.
 - **Name values, not expressions.** C variables `with x`; a callee's stored result named right
@@ -133,8 +136,9 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
     pow22523 by moving them up).
 11. **Reads through `hS` stall although the facts hold**: `hS`'s store chain starts at the entry
     state `S₀`, so a read lemma's premise about the base memory is about `S₀`, not `S`. A framed
-    `func_init` keeps the entry `Fits` facts about `S₀` (`hp₀`, and an abbreviated object
-    predicate's `Fits` conjuncts); keep other object facts the reads need about `S₀` too
+    `func_init` keeps the entry `Fits`/`Room`/`InBounds` facts about `S₀` (`hp₀`, and an
+    abbreviated object predicate's such conjuncts); keep other object facts the reads need about
+    `S₀` too
     (`have ha₀ : S₀.mem.PointFit a := hS ▸ ha` right after `func_init`).
 12. **`mem_fact` cannot see a conjunct of an object predicate** (`LimbsFit (p.add 40#64)` inside
     `PointFit p`): give the predicate `mlir_transport` projection lemmas.
@@ -151,3 +155,6 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
 
 16. **"maximum recursion depth" at a register in a long function** (past a few hundred
     registers): `%k` in a statement decides `Γ.ty k` by unfolding `Γ`. Write `rir_reg% X.hty k`.
+17. **`step_load`/`step_memcpy` find no `Fits`, only `Room` or `InBounds`**: the bits are
+    undefined (a fresh slot, an output, an object after `lifetime.start`; LLVM loads poison).
+    Load only what was stored (the store records `hfits_<p>`); a callee spec's outputs take `Room`.

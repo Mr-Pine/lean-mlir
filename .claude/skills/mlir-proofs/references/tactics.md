@@ -123,9 +123,10 @@ Defaults: `step_pure`, `step_call` inline; `step_load`, `step_alloca`, `step_add
   mem := p.2.mem.eraseFrom S₀.alloc.nextFreeBlock })`, closed at the end by `erase_frame`.
 - Leaves `S₀ S`, `hS : S = S₀`, every hypothesis about `s` restated about `S` (`hwf : S.WF`, …),
   `R` restated about `S₀`, `E₀ E`, `hE : E = E₀`, `hEargs : E.args = (f.args …).get`; framed
-  also `hwf₀ : S₀.WF` and each `h : Fits S.mem p w` as `h₀` about `S₀` (an object predicate's
-  top-level `Fits` conjuncts as `h₀`, `h₀_1`, …: `QuadFit`'s three): `erase_frame` needs `hwf₀`,
-  and reads through `hS` below the frame's `alloca`s and globals need the `Fits`.
+  also `hwf₀ : S₀.WF` and each `h : Fits S.mem p w` (or `Room`, `InBounds`) as `h₀` about `S₀`
+  (an object predicate's top-level such conjuncts as `h₀`, `h₀_1`, …: `QuadFit`'s three):
+  `erase_frame` needs `hwf₀`, and reads through `hS` below the frame's `alloca`s and globals need
+  them.
 - Fails with "`func_init` expects a goal `f.call args s = _`" on any other goal.
 
 ### `block_init`
@@ -137,22 +138,28 @@ and at the start of a loop or pattern lemma about a block.
 
 ### `step_pure [opaque] [only] [args] [names]`
 
-One pure instruction (constant, arithmetic, compare, `select`, `gep`, casts, vector ops,
-`lifetime.start/end`). Fails at the instruction goal (`rfl` after `dsimp [mlir_instr]`) when the
-instruction is effectful. A `gep` whose no-wrap cannot be shown stays `Operation.gep …`; a flagged
+One pure instruction (constant, arithmetic, compare, `select`, `gep`, casts, vector ops). On a
+`lifetime.start`/`lifetime.end` it steps as `step_lifetime`, on an `assume` as `step_assume`. Fails
+at the instruction goal (`rfl` after `dsimp [mlir_instr]`) when the instruction is effectful. A `gep` whose no-wrap cannot be shown stays `Operation.gep …`; a flagged
 operation (`add nsw`, `shl nuw`, …) whose overflow test does not simplify stays an
 `if … then .poison else …` (pass the no-overflow lemma as a simp arg).
 
 ### `step_load [only] [args] [names] [consuming …]`
 
 `%k = load p`. Needs `p` as `.value q` (else: "operand … is not known to be `.value _`; it may
-be poison") and `Fits S.mem q w` by `mem_fact`, else `simp_all`. The loaded value is
-`S₀.mem.readAt q w` as the memory simprocs resolve it (a stored value, or a read of `S₀`).
+be poison") and `Fits S.mem q w` (the `w` bits known: live, in bounds, defined) by `mem_fact`,
+else `simp_all`. The loaded value is `S₀.mem.readAt q w` as the memory simprocs resolve it (a
+stored value, or a read of `S₀`). A load of bits not known to be defined (an uninitialized slot,
+a dead object, a struct's padding) is poison: no `Fits`, the step fails.
 
 ### `step_store [only] [args] [consuming …]`
 
-`store v, p`. Needs `p` and `v` as `.value _`, `Fits S.mem q w`, and `v`'s bits by
-`dsimp; try simp; rfl` (fails when the value is still an `if`/poison). New facts:
+`store v, p`. Needs `p` and `v` as `.value _`, `Room S.mem q w` (live, in bounds: a `Fits` fact
+gives it), `v`'s bits by `dsimp; try simp; rfl` (fails when the value is still an `if`/poison),
+and its type without padding by `decide` (`run_store`; a padded struct or a value with poison
+leaves stores partly undefined bits, `run_storeDef`, which no step takes). New facts:
+`hfits_<p> : Fits S.mem p w` (the stored bits are known; named as the read-backs) unless a `Fits`
+fact says it already;
 `hread_<p> : S.mem.readAt p w = v` for a local pointer `p`, `hread_<p>_<k>` for `p.add k#64`,
 else `hread`; of several read-backs at one pointer (an object's and its first field's) the last
 keeps the name, the others take their read's (`hread_r_readAt`). A stored value that is itself a
@@ -163,9 +170,25 @@ fact.
 
 ### `step_memcpy [only] [args] [consuming …]` / `step_memset …`
 
-`memcpy(dst, src, len)`: `len.toNat = n` by `rfl`, `Range.Disjoint` of the two ranges, `Fits` of
-both, each by `mem_fact` else `simp_all`; the new memory stores `S.mem.readAt src (8 * n)` at
-`dst`. `memset(dst, val, len)`: `Fits` of `dst`; the new memory stores `val.replicate n`.
+`memcpy(dst, src, len)`: `len.toNat = n` by `rfl`, `Range.Disjoint` of the two ranges, `Room` of
+`dst` and `Fits` of `src`, each by `mem_fact` else `simp_all`; the new memory stores
+`S.mem.readAt src (8 * n)` at `dst` (`run_memcpy`; undefined source bits stay undefined,
+`run_memcpyDef`). `memset(dst, val, len)`: `Room` of `dst`; the new memory stores
+`val.replicate n`.
+
+### `step_lifetime [only] [args]`
+
+`lifetime.start p` / `lifetime.end p` (also by `step_pure`). The new memory is
+`S.mem.lifetimeStart q` / `S.mem.lifetimeEnd q` (a poison `p`: unchanged). After a start the
+object is live and undefined: `hroom_<q> : Room S.mem q w` from its `InBounds`/`Room` fact; after an
+end, dead. Facts mentioning `q` that the marker does not carry (its `Fits`, `Room`, object
+predicates) are dropped, traced by `trace.rir`; read facts are carried (the bits stay). Other
+objects' facts carry with `q.id ≠ _` (`step_alloca`'s `h<q>_ne`, distinct slots).
+
+### `step_assume [only] [args]`
+
+`assume c` (also by `step_pure`): `c` must resolve, with the simp arguments, to `.value 1#1`
+(`run_assume`); the state is unchanged.
 
 ### `step_call using thm [only] [args] [names] [consuming …]`
 
@@ -178,18 +201,22 @@ have an implication `hpost : ∀ s, s.WF → (post s).WF` in context).
 
 ### `step_alloca [names] [consuming …]`
 
-`%k = alloca n`. Needs `S.WF`. Before allocating, every local pointer `q` with a `Fits S.mem q w`
-fact (a conjunct of one counts) gets `h<q>_ne : q.id ≠ S.allocaPtr.id`. After: the slot `x`
-(default `vN`) with tagged `hx : x = b.slot k`, `h<x>_fits : Fits S.mem x (8 * n)`,
-`h<x>_off : x.offset = 0` (`hv6_fits`, `hv6_off` for `%6`); facts that mentioned `allocaPtr`
+`%k = alloca n`. Needs `S.WF`. Before allocating, every local pointer `q` with a `Fits`, `Room`
+or `InBounds` fact about `S.mem` (a conjunct of one counts) gets `h<q>_ne : q.id ≠ S.allocaPtr.id`.
+After: the slot `x` (default `vN`) with tagged `hx : x = b.slot k`, `h<x>_room : Room S.mem x
+(8 * n)` (its bits undefined: no `Fits` until stored), or for an `alloca` with lifetime markers
+(`alloca … true`, dead until `lifetime.start`) `h<x>_bounds : InBounds S.mem x (8 * n)`, and
+`h<x>_off : x.offset = 0` (`hv6_room`, `hv6_off` for `%6`); facts that mentioned `allocaPtr`
 are restated about `x` and named `<fact>_<x>`. Slots of one state are told apart by index
 (`GlobalState.slot_id_ne`).
 
 ### `step_addressof hv [names] [consuming …]`
 
 `%k = llvm.mlir.addressof @g`. `hv : ∀ s, g.value s = .value (Ty.wrap r, s)` (proved by
-`GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩`). Like `step_alloca`, and
-the new block holds `r`'s bits: `hread_<x> : S.mem.readAt x w = Ty.flatBits …`.
+`GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩`), `g`'s type without
+padding (`decide`). Like `step_alloca`, and the new block holds `r`'s bits: `h<x>_room` for its
+bytes, `h<x>_fits : Fits S.mem x w`, `hread_<x> : S.mem.readAt x w = Ty.flatBits …`. A global with
+`undef` members (poison leaves) has no `Ty.wrap r` value: no step takes it.
 
 ### `step_pattern using h [names]`
 
@@ -260,9 +287,10 @@ slots' equations (`hx : x = b.slot k`), then `omega`.
 ### `mem_fact`
 
 Closes a side condition from the context: a local up to reducible unfolding; `decide` on closed
-facts after replacing pointer offsets by their facts (`x.offset = 0`); `Fits` (same pointer and
-width, a wider literal width by `Fits.mono`, `q.add off` inside `q` by `Fits.add_of_le`, through
-`storeAt`); `Range.Disjoint` (distinct ids, else offsets by `omega`); `≠` of block ids (facts,
+facts after replacing pointer offsets by their facts (`x.offset = 0`); `InBounds`, `Room`, `Fits`
+(a fact of that kind or a stronger one, `Fits → Room → InBounds`: same pointer and width, a wider
+literal width by `.mono`, `q.add off` inside `q` by `.add_of_le`, through `alloca`, `addBlock`,
+`storeAt` (`Fits` of the stored range from `Room`), `storeDef`, lifetime markers); `Range.Disjoint` (distinct ids, else offsets by `omega`); `≠` of block ids (facts,
 either way round, `List.Nodup` literals, distinct slots, `decide`); then the `mlir_transport`
 lemmas two deep from the facts as they are (an object fact's projections), then, with `S`
 substituted by `hS`, 64 deep; a lemma's `≠`/disjointness premises also by the searches above.
@@ -290,7 +318,7 @@ tactic; the specific steps above are instances). Use them only to debug a step.
 | `mlir_env`, `mlir_operation`, `mlir_instr`, `mlir_effect` | simp sets | value resolution | framework only |
 | `mlir_transport` | label | carrying facts to a new state | `h : P s → P s'` for each fact predicate and state shape |
 | `mlir_read` | label | read facts after writes, reads through `hS` | `read (write m q x) p = x` (back) and `= read m p` (past), with side conditions |
-| `mlir_fresh` | label | a new block's `Fits` after an allocating step | `Fits m p w` for an allocating write `m` |
+| `mlir_fresh` | label | a step's new facts: a new block's `Room`/`InBounds`, a store's `Fits`, a started object's `Room` | a fact about a write `m` (its first `MemoryState` argument): `Fits m p w`, or an object's (`(m.storeLimbs p l).LimbsFit p` from `m.LimbsRoom p`); skipped where the old memory's fact carries; a premise with an open width is matched against the facts |
 | `mlir_const` | label | value resolution | a constant whose literal value should print as its name |
 
 A read lemma's left side must be `read (write …) …` with both heads constants: the tactics index

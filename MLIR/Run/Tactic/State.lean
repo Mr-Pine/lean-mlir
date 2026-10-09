@@ -114,6 +114,41 @@ elab "mem_fact" : tactic =>
       throwError "`mem_fact`: not from the facts{indentExpr (← g.getType)}"
     replaceMainGoal []
 
+/-- `base` after the local pointer `p`: `base_x` for `x`, `base_x_k` for `x.add k#64`; else
+`base`. -/
+def namedAfterPtr (base : Name) (p : Expr) : MetaM Name := do
+  match p with
+  | .fvar x =>
+    return base.appendAfter s!"_{← x.getUserName}"
+  | _ =>
+    let some (.fvar x, off) := p.app2? ``Pointer.add | return base
+    let k ←
+      (do
+            return (← getBitVecValue? off).map (·.2.toNat)) <|>
+          pure none
+    return base.appendAfter s!"_{← x.getUserName}_{k.getD 0}"
+
+/-- A fact matching `ty`, a premise with open values, by unification: a memory predicate from one
+of its kind or a stronger one (`weakenMemPred`). -/
+def factMatching? (facts : Array (Expr × Expr)) (ty : Expr) : MetaM (Option Expr) := do
+  for (pf, fty) in facts do
+    let pf? ←
+      observing? do
+          match memPred? ty, memPred? fty with
+          | some (j, _), some (k, m, p, w) =>
+            unless j ≤ k do
+              failure
+            unless ← withReducible (isDefEq ty (← mkAppM memPreds[j]! #[m, p, w])) do
+              failure
+            weakenMemPred pf k j
+          | _, _ =>
+            unless ← withReducible (isDefEq ty fty) do
+              failure
+            pure pf
+    if let some pf := pf? then
+      return some pf
+  return none
+
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
 `h : motive new`: a new block's size (`mlir_fresh`), every write an `mlir_read` lemma reads back,
 and every read fact of `S` the writes miss (the others dropped, traced by `trace.rir`). Asserted in
@@ -127,25 +162,53 @@ def memFactsOf (g : MVarId) (S new : Expr) :
     let c ← MemCtx.build
     -- `(name, fact about newMem, proof)`, asserted last
     let mut facts : Array (Name × Expr × Expr) := #[]
-    -- a new block's size: each `mlir_fresh` lemma's `Fits` at the new memory
+    -- a new block's size, a store's known bits, a started object's room: each `mlir_fresh`
+    -- lemma's fact about the new memory (its first `MemoryState` argument), unless a fact of the
+    -- old one says as much and is carried (all but through a lifetime marker)
+    let lifetime :=
+      newMem.isAppOf ``MemoryState.lifetimeStart || newMem.isAppOf ``MemoryState.lifetimeEnd
     for n in ← labelled `mlir_fresh do
-      let some fact ←
+      let some (fact, name) ←
         observing? do
             let lem ← mkConstWithFreshMVarLevels n
             let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
-            let_expr Fits m _ _ := concl | failure
+            let isMem (a : Expr) : MetaM Bool := return (← inferType a).isConstOf ``MemoryState
+            let some m ← concl.getAppArgs.findM? isMem | failure
             unless ← withReducible (isDefEq m newMem) do
               failure
+            if !lifetime then
+              let concl ← normWidths (← instantiateMVars concl)
+              let atOld := concl.replace fun t => if t == newMem then some oldMem else none
+              if c.factMap.contains atOld then
+                failure
+              if let some (k, _, p, w) := memPred? concl then
+                for (_, ty) in c.facts do
+                  let some (k', m', p', w') := memPred? ty | continue
+                  if k ≤ k' && m' == oldMem && p' == p && (← normWidths w') == w then
+                    failure
             for mv in ms do
               let mv := mv.mvarId!
               if !(← mv.isAssigned) && (← isProp (← mv.getType)) then
-                let some pf ← factDischarge c.toFactCtx 4 (← mv.getType) | failure
+                let ty ← instantiateMVars (← mv.getType)
+                -- a premise with an open value (a width): bound by the fact it matches
+                let some pf ←
+                  if ty.hasExprMVar then
+                    factMatching? c.facts ty
+                  else
+                    factDischarge c.toFactCtx 4 ty | failure
                 mv.assign pf
             unless ← ms.allM (·.mvarId!.isAssigned) do
               failure
-            return (← normWidths (← instantiateMVars concl),
-                ← instantiateMVars (mkAppN lem ms)) | continue
-      facts := facts.push (`hfits, fact)
+            let concl ← normWidths (← instantiateMVars concl)
+            -- named after its pointer, as read facts are
+            let name ←
+              match memPred? concl with
+              | some (k, _, p, _) =>
+                namedAfterPtr #[`hbounds, `hroom, `hfits][k]! p
+              | none =>
+                pure `hfresh
+            return ((concl, ← instantiateMVars (mkAppN lem ms)), name) | continue
+      facts := facts.push (name, fact)
     let mut seen : Array Expr := #[]
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
     for w in ← writesOf newMem do
@@ -183,20 +246,7 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         let ptr? ←
           e.getAppArgs.findM? fun a => do
               return (← inferType a).isConstOf ``Pointer
-        let name ←
-          match ptr? with
-          | some (.fvar x) =>
-            pure ((`hread).appendAfter s!"_{← x.getUserName}")
-          | some a =>
-            do
-              let some (.fvar x, off) := a.app2? ``Pointer.add | pure `hread
-              let k ←
-                (do
-                      return (← getBitVecValue? off).map (·.2.toNat)) <|>
-                    pure none
-              pure ((`hread).appendAfter s!"_{← x.getUserName}_{k.getD 0}")
-          | none =>
-            pure `hread
+        let name ← ptr?.elim (pure `hread) (namedAfterPtr `hread)
         -- read-backs at one pointer (an object's and its first field's): all but the last
         -- after their read
         facts :=

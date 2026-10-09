@@ -333,4 +333,14 @@ mlir_def undef := {
     "llvm.return"(%0) : (i32) -> ()
 }
 
+/--
+error: ^bb0: "llvm.intr.assume"(%arg0, %arg1) : (i1, !llvm.ptr) -> (): operand bundles are not supported
+-/
+#guard_msgs in
+mlir_def assumeBundle := {
+  ^bb0(%arg0: i1, %arg1: !llvm.ptr):
+    "llvm.intr.assume"(%arg0, %arg1) <{op_bundle_sizes = array<i32: 1>, op_bundle_tags = ["nonnull"]}> : (i1, !llvm.ptr) -> ()
+    "llvm.return"() : () -> ()
+}
+
 end MLIR.Tests.Syntax.Errors

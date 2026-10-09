@@ -88,12 +88,16 @@ inductive Instr (Γ : Ctx)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
   | memset (dst : Reg Γ .ptr) (val : Reg Γ (.bv 8)) (len : Reg Γ (.bv w))
   | memcpy (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
-  /-- A fresh, zeroed block of `bytes` bytes; `dst` points to its start. -/
-  | alloca (dst : Dst Γ .ptr) (bytes : Nat)
-  /-- `llvm.intr.lifetime.start`: the `bytes` at `p` become live. A no-op. -/
+  /-- A fresh block of `bytes` undefined bytes; `dst` points to its start. `dead` until a
+  `lifetimeStart`: an `alloca` with lifetime markers. -/
+  | alloca (dst : Dst Γ .ptr) (bytes : Nat) (dead : Bool := false)
+  /-- `llvm.intr.lifetime.start`: `p`'s object becomes live, its bytes undefined; `bytes` is
+  ignored. -/
   | lifetimeStart (p : Reg Γ .ptr) (bytes : Nat)
-  /-- `llvm.intr.lifetime.end`: the `bytes` at `p` become dead. A no-op. -/
+  /-- `llvm.intr.lifetime.end`: `p`'s object becomes dead; `bytes` is ignored. -/
   | lifetimeEnd (p : Reg Γ .ptr) (bytes : Nat)
+  /-- `llvm.intr.assume`: UB unless `c` is `1`. -/
+  | assume (c : Reg Γ (.bv 1))
   /-- The semantics of the calle `f` should generally be `Func.call` -/
   | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
   | addressof {t : Ty} (v : EffectM ⟦t⟧) (dst : Dst Γ .ptr)

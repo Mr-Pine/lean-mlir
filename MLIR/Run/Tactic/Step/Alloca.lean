@@ -11,11 +11,12 @@ open Lean Elab Tactic Meta
 public meta section
 
 /-- `step_impure` for an `alloca`, closing the instruction with `run_alloca`. Each pointer `q` with
-a `Fits` fact gets `hq_ne_x : q.id ≠ x.id` for the new slot `x`, and the slot `Fits` its bytes;
+an `InBounds`, `Room` or `Fits` fact gets `hq_ne_x : q.id ≠ x.id` for the new slot `x`; the slot has
+`Room` for its bytes (`hx_room`), or, dead until a `lifetime.start`, `InBounds` (`hx_bounds`);
 facts name the slot `x`, not the state's `allocaPtr`. -/
 syntax (name := stepAlloca) "step_alloca" (stepNames)? (stepConsuming)? : tactic
 
-/-- `q.id ≠ S.allocaPtr.id` for each pointer `q` with a `Fits` fact about the state `S`, before
+/-- `q.id ≠ S.allocaPtr.id` for each pointer `q` with a memory fact about the state `S`, before
 the tactic `tac` allocates `S`'s next block; not for the named slots of the new slot's base, apart
 from it by index (`neSlots?`). -/
 def addAllocaFreshness (tac : String) : TacticM Unit := do
@@ -34,14 +35,14 @@ def addAllocaFreshness (tac : String) : TacticM Unit := do
       let mut seen : Array Expr := #[]
       let mut hyps : Array Hypothesis := #[]
       for (pf, ty) in ← Tactic.splitConjunctedFacts do
-        let_expr Fits m q _ := ty | continue
+        let some (k, m, q, _) := Tactic.memPred? ty | continue
         unless q.isFVar && !seen.contains q && m == memS do
           continue
         seen := seen.push q
         if let some (s, _) := slots[q]? then
           if base == some s.appFn!.appArg! then
             continue
-        let ne ← mkAppM ``GlobalState.ne_allocaPtr_of_fits #[hwf, pf]
+        let ne ← mkAppM ``GlobalState.ne_allocaPtr_of_inBounds #[hwf, ← Tactic.weakenMemPred pf k 0]
         hyps :=
           hyps.push
             { userName := .mkSimple s!"h{(← q.fvarId!.getUserName).toString}_ne",
@@ -69,8 +70,9 @@ def nameAllocaSlot : TacticM Unit :=
       let motive ← Tactic.motiveOver ty p (mkConst ``Pointer)
       let ty' := motive.beta #[.fvar x]
       let name :=
-        if ty.isAppOf ``Fits then (`h).appendAfter s!"{xName}_fits"
-        else d.userName.appendAfter s!"_{xName}"
+        match Tactic.memPred? ty with
+        | some (k, _) => (`h).appendAfter s!"{xName}_{#["bounds", "room", "fits"][k]!}"
+        | none => d.userName.appendAfter s!"_{xName}"
       let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
       g ← g'.clear d.fvarId
     -- its offset, `0`: offsets into the slot (`x.add 24`) stay in range

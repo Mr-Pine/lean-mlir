@@ -3,6 +3,7 @@ module
 public import MLIR.SimpSets
 public import MLIR.Poison
 public import MLIR.Memory.Pointer
+public import MLIR.Semantics.Effectful.Memory.Bits
 public import Lean.ToExpr
 
 namespace MLIR
@@ -616,6 +617,284 @@ theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatt
     rw [unflatten_flattenRaw hp h, wrap_of_unwrap hr]
   · simp [hp] at h
     exact absurd h (PoisonOr.poison_ne_value b)
+
+/-! ### Partly defined values: poison leaves and padding as undefined bits -/
+
+mutual
+/-- `v`'s raw value, its poison leaves zero. -/
+def valueOrZero : (t : Ty) → ⟦t⟧ → ⟦t⟧ᵣ
+  | bv _, x => x.getValue
+  | ptr, x => x.getValue
+  | vec _ _, v => v.map PoisonOr.getValue
+  | array _ t, v => v.map (valueOrZero t)
+  | struct fs, v => valueOrZeroFields fs v
+def valueOrZeroFields : (fs : List Ty) → denoteFields fs → denoteFieldsRaw fs
+  | [], _ => ()
+  | [t], v => valueOrZero t v
+  | t :: _ :: _, (v, vs) => (valueOrZero t v, valueOrZeroFields _ vs)
+end
+
+mutual
+/-- Each of `v`'s integer leaves all ones if a value, zero if poison; pointers null. -/
+def definedness : (t : Ty) → ⟦t⟧ → ⟦t⟧ᵣ
+  | bv w, x => if x.isPoison then 0 else BitVec.allOnes w
+  | ptr, _ => Pointer.null
+  | vec _ w, v => v.map fun x => if x.isPoison then 0 else BitVec.allOnes w
+  | array _ t, v => v.map (definedness t)
+  | struct fs, v => definednessFields fs v
+def definednessFields : (fs : List Ty) → denoteFields fs → denoteFieldsRaw fs
+  | [], _ => ()
+  | [t], v => definedness t v
+  | t :: _ :: _, (v, vs) => (definedness t v, definednessFields _ vs)
+end
+
+mutual
+/-- All ones in every integer leaf, pointers null: a defined value's `definedness`. -/
+def onesRaw : (t : Ty) → ⟦t⟧ᵣ
+  | bv w => BitVec.allOnes w
+  | ptr => Pointer.null
+  | vec l w => Vector.replicate l (BitVec.allOnes w)
+  | array n t => Vector.replicate n t.onesRaw
+  | struct fs => onesRawFields fs
+def onesRawFields : (fs : List Ty) → denoteFieldsRaw fs
+  | [] => ()
+  | [t] => t.onesRaw
+  | t :: t' :: ts => (t.onesRaw, onesRawFields (t' :: ts))
+end
+
+mutual
+/-- Whether `t`'s layout has padding bits. -/
+@[expose]
+def hasPadding : Ty → Bool
+  | bv _ | ptr | vec _ _ => false
+  | array _ t => padding t.width t.align != 0 || t.hasPadding
+  | struct fs => fieldsHavePadding 0 (fieldsAlign fs) fs
+/-- Whether fields `ts` from bit `off`, laid out as `fieldsWidth` does, have padding bits. -/
+@[expose]
+def fieldsHavePadding (off a : Nat) : List Ty → Bool
+  | [] => false
+  | [t] => padding (off + t.width) a != 0 || t.hasPadding
+  | t :: t' :: ts =>
+    padding (off + t.width) (max t.align t'.align) != 0 || t.hasPadding ||
+      fieldsHavePadding (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a
+        (t' :: ts)
+end
+
+/-- A value's bits, its poison leaves zero, and which of them are defined: neither in a poison leaf
+nor padding. -/
+def flattenDef (t : Ty) (v : ⟦t⟧) : BitVec t.width × BitVec t.width :=
+  (flattenRaw t (valueOrZero t v), flattenRaw t (definedness t v))
+
+/-- Every bit set: a leaf's bits all defined. -/
+def allSet {w : Nat} (d : BitVec w) : Bool :=
+  d == BitVec.allOnes w
+
+@[simp]
+theorem allSet_allOnes : allSet (BitVec.allOnes w) = true := by simp [allSet]
+
+mutual
+/-- `unflatten` of the bits `x`, each leaf poison where any of its bits is undefined (clear in
+`d`). -/
+def unflattenDef : (t : Ty) → BitVec t.width → BitVec t.width → ⟦t⟧
+  | bv _, x, d => if allSet d then .value x else .poison
+  | ptr, _, _ => .poison
+  | vec l w, x, d =>
+    Vector.ofFn fun i =>
+      if allSet (extractVecElem l w i d) then .value (extractVecElem l w i x) else .poison
+  | array n t, x, d =>
+    Vector.ofFn fun i =>
+      unflattenDef t
+        ((extractVecElem n (padding t.width t.align + t.width) i x).extractLsb' 0 t.width)
+        ((extractVecElem n (padding t.width t.align + t.width) i d).extractLsb' 0 t.width)
+  | struct fields, x, d => unflattenDefFields 0 (fieldsAlign fields) fields x d
+def unflattenDefFields (off a : Nat) :
+    (ts : List Ty) → BitVec (fieldsWidth off a ts) → BitVec (fieldsWidth off a ts) → denoteFields ts
+  | [], _, _ => ()
+  | [t], x, d => unflattenDef t (x.extractLsb' 0 t.width) (d.extractLsb' 0 t.width)
+  | t :: t' :: ts, x, d =>
+    let w := padding (off + t.width) (max t.align t'.align) + t.width
+    (unflattenDef t (x.extractLsb' 0 t.width) (d.extractLsb' 0 t.width),
+      unflattenDefFields (off + w) a (t' :: ts)
+        (x.extractLsb' w (fieldsWidth (off + w) a (t' :: ts)))
+        (d.extractLsb' w (fieldsWidth (off + w) a (t' :: ts))))
+end
+
+theorem _root_.BitVec.allOnes_append_allOnes {a b : Nat} :
+    BitVec.allOnes a ++ BitVec.allOnes b = BitVec.allOnes (a + b) := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_append, BitVec.getLsbD_allOnes]
+  split <;> simp <;> omega
+
+/-- No padding before all ones: all ones. -/
+theorem _root_.BitVec.zero_append_allOnes {p w : Nat} (h : p = 0) :
+    0#p ++ BitVec.allOnes w = BitVec.allOnes (p + w) := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_append, BitVec.getLsbD_allOnes, BitVec.getLsbD_zero]
+  split <;> simp <;> omega
+
+theorem _root_.BitVec.packLanes_replicate_allOnes {we : Nat} :
+    ∀ {n : Nat}, BitVec.packLanes (Vector.replicate n (BitVec.allOnes we)) = BitVec.allOnes (we * n)
+  | 0 => by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    simp at hi
+  | n + 1 => by
+    have ht :
+      (Vector.replicate (n + 1) (BitVec.allOnes we)).tail =
+        Vector.replicate n (BitVec.allOnes we) := by
+      ext i hi
+      simp [Vector.tail]
+    unfold BitVec.packLanes
+    rw [ht]
+    erw [BitVec.packLanes_replicate_allOnes (n := n)]
+    rw [Vector.getElem_replicate, BitVec.allOnes_append_allOnes]
+    rfl
+
+mutual
+theorem valueOrZero_wrap : ∀ {t : Ty} {r : ⟦t⟧ᵣ}, valueOrZero t (wrap r) = r
+  | bv _, _ => rfl
+  | ptr, _ => rfl
+  | vec _ _, r => by
+    ext i hi; simp [valueOrZero, wrap, PoisonOr.getValue_value]
+  | array _ _, r => by
+    ext i hi; simp [valueOrZero, wrap, valueOrZero_wrap]
+  | struct _, _ => valueOrZeroFields_wrapFields
+theorem valueOrZeroFields_wrapFields :
+    ∀ {fs : List Ty} {r : denoteFieldsRaw fs}, valueOrZeroFields fs (wrapFields r) = r
+  | [], () => rfl
+  | [_], _ => valueOrZero_wrap
+  | _ :: _ :: _, (_, _) => by
+    simp only [wrapFields, valueOrZeroFields, valueOrZero_wrap, valueOrZeroFields_wrapFields]
+end
+
+mutual
+theorem definedness_wrap : ∀ {t : Ty} {r : ⟦t⟧ᵣ}, definedness t (wrap r) = t.onesRaw
+  | bv _, _ => rfl
+  | ptr, _ => rfl
+  | vec _ _, r => by
+    ext i hi; simp [definedness, wrap, onesRaw, PoisonOr.isPoison]
+  | array _ _, r => by
+    ext i hi; simp [definedness, wrap, onesRaw, definedness_wrap]
+  | struct _, _ => definednessFields_wrapFields
+theorem definednessFields_wrapFields :
+    ∀ {fs : List Ty} {r : denoteFieldsRaw fs},
+      definednessFields fs (wrapFields r) = onesRawFields fs
+  | [], () => rfl
+  | [_], _ => definedness_wrap
+  | _ :: _ :: _, (_, _) => by
+    simp only [wrapFields, definednessFields, onesRawFields, definedness_wrap,
+      definednessFields_wrapFields]
+end
+
+mutual
+/-- A type without pointers or padding: its all-ones value's bits are all ones. -/
+theorem flattenRaw_onesRaw :
+    ∀ {t : Ty},
+      t.hasPtr = false → t.hasPadding = false → flattenRaw t t.onesRaw = BitVec.allOnes t.width
+  | bv _, _, _ => rfl
+  | ptr, hp, _ => by simp [hasPtr] at hp
+  | vec _ _, _, _ => BitVec.packLanes_replicate_allOnes
+  | array _ t, hp, hpad => by
+    simp only [hasPadding, Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hpad
+    simp only [flattenRaw, onesRaw, Vector.map_replicate,
+      flattenRaw_onesRaw (t := t) (by simpa [hasPtr] using hp) hpad.2,
+      BitVec.zero_append_allOnes hpad.1]
+    exact BitVec.packLanes_replicate_allOnes
+  | struct _, hp, hpad =>
+    flattenRawFields_onesRawFields (by simpa [hasPtr] using hp) (by simpa [hasPadding] using hpad)
+theorem flattenRawFields_onesRawFields :
+    ∀ {off a : Nat} {fs : List Ty},
+      (∀ t ∈ fs, t.hasPtr = false) →
+        fieldsHavePadding off a fs = false →
+        flattenRawFields off a fs (onesRawFields fs) = BitVec.allOnes (fieldsWidth off a fs)
+  | _, _, [], _, _ => by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    simp [fieldsWidth] at hi
+  | _, _, [t], hp, hpad => by
+    simp only [fieldsHavePadding, Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hpad
+    simp only [flattenRawFields, onesRawFields, flattenRaw_onesRaw (hp t (by simp)) hpad.2]
+    exact BitVec.zero_append_allOnes hpad.1
+  | _, _, t :: t' :: ts, hp, hpad => by
+    simp only [fieldsHavePadding, Bool.or_eq_false_iff, bne_eq_false_iff_eq] at hpad
+    simp only [flattenRawFields, onesRawFields, flattenRaw_onesRaw (hp t (by simp)) hpad.1.2,
+      BitVec.zero_append_allOnes hpad.1.1,
+      flattenRawFields_onesRawFields (fun t h => hp t (List.mem_cons_of_mem _ h)) hpad.2,
+      BitVec.allOnes_append_allOnes]
+    rfl
+end
+
+theorem flattenDef_wrap {r : ⟦t⟧ᵣ} :
+    flattenDef t (wrap r) = (flattenRaw t r, flattenRaw t t.onesRaw) := by
+  simp [flattenDef, valueOrZero_wrap, definedness_wrap]
+
+/-- A value `flatten` stores has no pointers. -/
+theorem hasPtr_of_flatten {v : ⟦t⟧} {b : BitVec t.width} (h : flatten t v = .value b) :
+    t.hasPtr = false := by
+  simp only [flatten, PoisonOr.bind_eq_value] at h
+  obtain ⟨r, _, h⟩ := h
+  cases hp : t.hasPtr
+  · rfl
+  · simp [hp] at h
+    exact absurd h (PoisonOr.poison_ne_value b)
+
+/-- A value `flatten` stores, of a type without padding: its bits, all defined. -/
+theorem flattenDef_of_flatten {v : ⟦t⟧} {b : BitVec t.width} (h : flatten t v = .value b)
+    (hpad : t.hasPadding = false) : flattenDef t v = (b, BitVec.allOnes t.width) := by
+  simp only [flatten, PoisonOr.bind_eq_value] at h
+  obtain ⟨r, hr, h⟩ := h
+  cases hp : t.hasPtr
+  · simp only [hp, Bool.false_eq_true, ↓reduceIte, PoisonOr.pure_def, PoisonOr.value_inj] at h
+    rw [← wrap_of_unwrap hr, flattenDef_wrap, h, flattenRaw_onesRaw hp hpad]
+  · simp [hp] at h
+    exact absurd h (PoisonOr.poison_ne_value b)
+
+mutual
+/-- All bits defined: `unflatten`. -/
+theorem unflattenDef_allOnes :
+    ∀ {t : Ty} {x : BitVec t.width}, unflattenDef t x (BitVec.allOnes _) = unflatten t x
+  | bv _, _ => by simp [unflattenDef, unflatten]
+  | ptr, _ => rfl
+  | vec l w, x => by
+    ext i hi
+    have hs : i * w + w ≤ w * l := by
+      rw [Nat.mul_comm w l]; exact Nat.succ_mul i w ▸ Nat.mul_le_mul_right w hi
+    have h : allSet (extractVecElem l w ⟨i, hi⟩ (BitVec.allOnes (vec l w).width)) = true := by
+      unfold extractVecElem
+      erw [BitVec.extractLsb'_allOnes (n := w * l) hs]
+      exact allSet_allOnes
+    simp only [unflattenDef, unflatten, Vector.getElem_ofFn, h, ↓reduceIte]
+  | array n t, x => by
+    ext i hi
+    simp only [unflattenDef, unflatten, Vector.getElem_ofFn, extractVecElem]
+    have hs :
+      i * (padding t.width t.align + t.width) + (padding t.width t.align + t.width) ≤
+        (padding t.width t.align + t.width) * n := by
+      rw [Nat.mul_comm _ n]; exact Nat.succ_mul i _ ▸ Nat.mul_le_mul_right _ hi
+    erw [BitVec.extractLsb'_allOnes (n := (padding t.width t.align + t.width) * n) hs]
+    rw [BitVec.extractLsb'_allOnes (by omega)]
+    exact unflattenDef_allOnes
+  | struct _, _ => unflattenDefFields_allOnes
+theorem unflattenDefFields_allOnes :
+    ∀ {off a : Nat} {fs : List Ty} {x : BitVec (fieldsWidth off a fs)},
+      unflattenDefFields off a fs x (BitVec.allOnes _) = unflattenFields off a fs x
+  | _, _, [], _ => rfl
+  | _, _, [_], _ => by
+    simp only [unflattenDefFields, unflattenFields]
+    rw [BitVec.extractLsb'_allOnes (by simp [fieldsWidth])]
+    exact unflattenDef_allOnes
+  | _, _, _ :: _ :: _, _ => by
+    simp only [unflattenDefFields, unflattenFields]
+    rw [BitVec.extractLsb'_allOnes
+        (by
+          simp only [fieldsWidth]; omega),
+      BitVec.extractLsb'_allOnes
+        (by
+          simp only [fieldsWidth]; omega),
+      unflattenDef_allOnes, unflattenDefFields_allOnes]
+end
 
 end FlattenUnflatten
 

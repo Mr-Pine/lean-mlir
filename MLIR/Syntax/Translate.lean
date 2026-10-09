@@ -74,9 +74,11 @@ inductive PInstr
   | store (t : Ty) (p v : RegRef)
   | memset (w : Nat) (p v l : RegRef)
   | memcpy (w : Nat) (dst src l : RegRef)
-  | alloca (dst : Nat) (bytes : Nat)
+  /-- `dead` until a `lifetimeStart`: an `alloca` with lifetime markers. -/
+  | alloca (dst : Nat) (bytes : Nat) (dead : Bool)
   | lifetimeStart (p : RegRef) (bytes : Nat)
   | lifetimeEnd (p : RegRef) (bytes : Nat)
+  | assume (c : RegRef)
   /-- A call of the symbol `callee`, from argument types `ts` to result types `us`. -/
   | call (callee : String) (ts us : List Ty) (args : List RegRef) (rets : List Nat)
   | addressof (global : String) (dst : Nat)
@@ -299,6 +301,8 @@ structure Env where
   blocks : List String
   /-- The defining op of each value, for `alloca`'s count. -/
   defs : List (String × Op)
+  /-- The values a `lifetime.start` marks: `alloca`s that start dead. -/
+  started : List String := []
 
 /-- The register of value `%v`: its number less `Γ.valBase`. -/
 def valIdx (E : Env) (v : SSAVal) : Except String Nat := do
@@ -412,6 +416,8 @@ def opAttrUses : String → List (String × AttrUse)
     [("ordering", .modeled), ("alignment", .ignored), ("tbaa", .ignored)]
   | "llvm.intr.memset" | "llvm.intr.memcpy" => [("isVolatile", .modeled), ("arg_attrs", .ignored)]
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" => [("size", .modeled)]
+  | "llvm.intr.assume" => [("op_bundle_sizes", .modeled), ("op_bundle_tags", .modeled)]
+  | "llvm.intr.experimental.noalias.scope.decl" => [("scope", .inert)]
   | "llvm.call" =>
     [("callee", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
       ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
@@ -486,6 +492,9 @@ def checkOpAttrs (op : Op) : Except String Unit := do
   checkAttrs (opAttrUses op.name) op.attrs
   if let some b := op.getAttr? "op_bundle_sizes" then
     unless b matches .array _ [] do
+      throw "operand bundles are not supported"
+  if let some b := op.getAttr? "op_bundle_tags" then
+    unless b matches .list [] do
       throw "operand bundles are not supported"
   if let some (.bool true) := op.getAttr? "isVolatile" then
     throw "volatile accesses are not supported"
@@ -755,7 +764,8 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless isOne do
         throw s!"the count %{count} must be the constant 1"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      return .alloca dst (← ty et).size
+      let dead := op.res.any fun (v, _) => E.started.contains v
+      return .alloca dst (← ty et).size dead
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" =>
     do
       let [(p, .ptr)] := args | throw "expected one pointer operand"
@@ -780,6 +790,10 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
         return .lifetimeStart p size.toNat
       else
         return .lifetimeEnd p size.toNat
+  | "llvm.intr.assume" =>
+    do
+      let [(c, .bv 1)] := args | throw "expected one `i1` operand"
+      return .assume c
   | "llvm.getelementptr" =>
     do
       let (dst, t) ← res
@@ -973,6 +987,11 @@ def atOp {α : Type} (blk : String) (op : Op) (f : Except String α) : Except St
 def isTerminator (name : String) : Bool :=
   name ∈ ["llvm.return", "llvm.br", "llvm.cond_br", "llvm.switch"]
 
+/-- Operations translated to nothing: `noalias.scope.decl` only declares alias scopes, for alias
+analysis; the model has no alias analysis to inform. -/
+def isDropped (name : String) : Bool :=
+  name == "llvm.intr.experimental.noalias.scope.decl"
+
 end Translate
 
 open Translate in
@@ -1015,7 +1034,11 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
   unless names.eraseDups.length == names.length do
     throw "duplicate block name"
   let defs := rgn.blocks.flatMap fun b => b.ops.flatMap fun op => op.res.map fun (v, _) => (v, op)
-  let E : Env := { Γ, blocks := names, defs }
+  let started :=
+    rgn.blocks.flatMap fun b =>
+      b.ops.filterMap fun op =>
+        if op.name == "llvm.intr.lifetime.start" then op.args.getLast?.map (·.1) else none
+  let E : Env := { Γ, blocks := names, defs, started }
   -- block parameters
   let params ←
     (rgn.blocks.drop 1).mapM fun b =>
@@ -1035,11 +1058,14 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
     (rgn.blocks.zip params).mapM fun (b, ps) => do
         let some term := b.ops.getLast? | throw s!"^{b.name} is empty"
         let body ←
-          b.ops.dropLast.mapM fun op =>
+          b.ops.dropLast.filterMapM fun op =>
               atOp b.name op do
                 if isTerminator op.name then
                   throw "a terminator must end its block"
-                instr E op
+                if isDropped op.name then
+                  checkOpAttrs op
+                  return none
+                return some (← instr E op)
         let exit ←
           atOp b.name term do
               let x ← exit E blockTys term
@@ -1086,22 +1112,29 @@ def Folded.insert (v : Folded) (t : Ty) (f : Folded) : (path : List Nat) → Opt
     return .agg t (ms.set i m)
 
 mutual
-/-- `f`'s constant, if no member is undefined. -/
-def Folded.toLit : Folded → Option ConstLit
-  | .undef => none
-  | .lit c => some c
-  | .agg t ms => .agg t <$> toLits ms
-def Folded.toLits : List Folded → Option (List ConstLit)
-  | [] => some []
-  | f :: fs => return (← f.toLit) :: (← toLits fs)
+/-- `f`'s constant at type `t`, its undefined members zero, and their paths and types. -/
+def Folded.toLit (t : Ty) : Folded → Option (ConstLit × List (List Nat × Ty))
+  | .undef => some (.zero t, [([], t)])
+  | .lit c => some (c, [])
+  | .agg t ms => do
+    let (cs, us) ← toLits t 0 ms
+    return (.agg t cs, us)
+/-- `toLit` of the members `fs` of an aggregate of type `t`, from member `i`. -/
+def Folded.toLits (t : Ty) (i : Nat) : List Folded → Option (List ConstLit × List (List Nat × Ty))
+  | [] => some ([], [])
+  | f :: fs => do
+    let (c, us) ← f.toLit (← t.memberType [i])
+    let (cs, us') ← toLits t (i + 1) fs
+    return (c :: cs, us.map (fun (p, τ) => (i :: p, τ)) ++ us')
 end
 
 end Translate
 
 open Translate in
 /-- The constant `p` returns, if its one block builds it from constants, `undef`s and
-`insertvalue`s alone and leaves no member undefined. -/
-def Prog.constant? (p : Prog) : Option ConstLit := do
+`insertvalue`s alone and it is not all undefined: its undefined members zero, with their paths and
+types. -/
+def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
   let [b] := p.blocks | none
   let .ret [.val r] := b.exit | none
   -- registers start undefined, as `Env.init` starts them poison
@@ -1116,7 +1149,9 @@ def Prog.constant? (p : Prog) : Option ConstLit := do
           return vals.set! d (← (← vals[v]?).insert t (← vals[a]?) is)
         | _ =>
           none
-  (← vals[r]?).toLit
+  let (c, us) ← (← vals[r]?).toLit (← p.Γ.vals[r]?)
+  guard (!us.any (·.1.isEmpty))
+  return (c, us)
 
 /-! ## Building the `Func` -/
 
@@ -1213,9 +1248,10 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Gl
     return .memset (← mkReg Γ .ptr dst) (← mkReg Γ (.bv 8) v) (← mkReg Γ (.bv w) l)
   | .memcpy w dst src l =>
     return .memcpy (← mkReg Γ .ptr dst) (← mkReg Γ .ptr src) (← mkReg Γ (.bv w) l)
-  | .alloca d n => return .alloca (← mkDst Γ .ptr d) n
+  | .alloca d n dead => return .alloca (← mkDst Γ .ptr d) n dead
   | .lifetimeStart p n => return .lifetimeStart (← mkReg Γ .ptr p) n
   | .lifetimeEnd p n => return .lifetimeEnd (← mkReg Γ .ptr p) n
+  | .assume c => return .assume (← mkReg Γ (.bv 1) c)
   | .call name ts us args rets => do
     let some ⟨ts', us', f⟩ := callees name | throw s!"no callee bound for @{name}"
     if h : ts' = ts ∧ us' = us then

@@ -41,7 +41,7 @@ private def p : Pointer := ⟨⟨1⟩, 0⟩
 
 /-- Block `1`: 16 zero bytes, one `struct<(i8, i64)>`. -/
 private def blank : GlobalState :=
-  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, ⟨16, 0#128⟩)]⟩⟩
+  ⟨⟨2⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, .ofBytes 16 0#128)]⟩⟩
 
 #guard (match storeStruct.eval 1 (storeStruct.args (.value p) (.value 7) (.value 42)) blank with
   | .value (some (.cons (.value v) .nil), _) => some v

@@ -285,7 +285,7 @@ private def x : Pointer := ⟨⟨0⟩, 0⟩
 
 /-- One 40-byte block holding `bytes`. -/
 private def state (bytes : BitVec 320) : GlobalState :=
-  ⟨⟨1⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, ⟨40, bytes⟩)]⟩⟩
+  ⟨⟨1⟩, ⟨Std.ExtHashMap.ofList [(⟨0⟩, .ofBytes 40 bytes)]⟩⟩
 
 /-- `f`'s result at a pointer to `bytes`, if `f` takes a pointer and returns an `i32`. -/
 private def out (f : Func) (bytes : BitVec 320) (p : ⟦Ty.ptr⟧ := .value x) :

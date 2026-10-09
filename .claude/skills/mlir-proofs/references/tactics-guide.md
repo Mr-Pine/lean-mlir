@@ -22,8 +22,8 @@ next step runs, and the lift (`Mlir/f.lean`) has them all.
 
 ## 1. `func_init`
 
-Always first, on `f.call args s = R`. Give the theorem `hwf : s.WF` and every `Fits`/`LimbsFit`
-fact the steps will need; they arrive about `S`.
+Always first, on `f.call args s = R`. Give the theorem `hwf : s.WF` and every `Fits`/`Room`/
+`LimbsFit` fact the steps will need; they arrive about `S`.
 
 ```lean
 -- fd_f25519_add.lean
@@ -47,7 +47,8 @@ start of a loop or pattern lemma. Nothing to choose.
 
 ## 3. `step_pure`
 
-Constants, arithmetic, compares, `gep`, casts, vector ops, `lifetime.*`. Name the values a reader
+Constants, arithmetic, compares, `gep`, casts, vector ops (and, effectful, `lifetime.*` and
+`assume`: §7). Name the values a reader
 should see, after the C source's variables, and keep the others inline; `opaque` stops a step from
 unfolding the unnamed values it reads:
 
@@ -107,8 +108,10 @@ Mistakes:
   finish_block
 ```
 
-`Fits` comes from the facts: `LimbsFit` conjunctions are split, and `p.add k` inside a 320-bit
-`Fits` is found. After the stores, `hread_out`, `hread_out_8`, … hold the stored limbs.
+A load needs `Fits` (the bits known), a store only `Room` (live, in bounds); both come from the
+facts: `LimbsFit` conjunctions are split, `p.add k` inside a 320-bit fact is found, and a `Fits`
+fact gives `Room`. After the stores, `hread_out`, `hread_out_8`, … hold the stored limbs and
+`hfits_out`, `hfits_out_8`, … the stored ranges, so an output given only `Room` can be loaded back.
 
 Mistakes:
 - "operand … is not known to be `.value _`": the pointer or value is still an `if … then .poison`
@@ -136,7 +139,8 @@ Mistakes:
 ```
 
 `step_memcpy` needs the two ranges disjoint: give the theorem `p.id ≠ q.id` (or a `Nodup` list of
-ids) when they are not distinct slots.
+ids) when they are not distinct slots; `Room` of the destination, `Fits` of the source (`memset`:
+`Room`).
 
 ## 6. `step_call`
 
@@ -193,12 +197,38 @@ Mistakes:
 
 A function with an `alloca` or `addressof` is framed: its final state has
 `alloc := ⟨s.alloc.nextFreeBlock + k⟩` and the proof ends with `erase_frame` (or
-`simp [mlir_frame, …]`).
+`simp [mlir_frame, …]`). A slot is undefined until stored to: `step_alloca` gives `hv0_room`, not
+a `Fits`; a callee writing it takes `Room` for its output. An `alloca` with lifetime markers is
+dead until its `lifetime.start`:
+
+```lean
+-- Tests/Syntax/Lifetime.lean: alloca, lifetime.start, store, load, lifetime.end
+  step_pure
+  step_alloca -- hv1_bounds : InBounds S.mem v1 64
+  step_pure   -- lifetime.start: hroom_v1 : Room S.mem v1 64
+  step_store  -- hfits_v1 : Fits S.mem v1 64
+  step_load with v
+  step_lifetime -- lifetime.end: v1's Room and Fits dropped
+  finish_block
+  subst hS
+  erase_frame
+```
+
+The final state keeps the markers (`(… .lifetimeStart x).storeAt x v).lifetimeEnd x`) until
+`erase_frame` drops them with the frame's blocks.
 
 Mistakes:
 - No `hwf : s.WF`: `step_alloca` stops ("no hypothesis `S.WF`").
-- A pointer with no `Fits` fact (a `LimbsFit` conjunct counts) gets no `h<q>_ne`, and later
-  reads through it cannot pass the slot's stores: give it one before the `alloca`.
+- A pointer with no `Fits`/`Room`/`InBounds` fact (a `LimbsFit` conjunct counts) gets no
+  `h<q>_ne`, and later reads through it cannot pass the slot's stores: give it one before the
+  `alloca`.
+- A fact about a slot that a lifetime marker cannot carry (an object predicate over it) is
+  dropped at the marker; restate it after the stores (`Fits` from `hfits_<x>` facts, `Fits.append`).
+- `step_load` failing on a slot right after `step_alloca` or `lifetime.start`: the load reads
+  undefined bits (poison in LLVM), so the code reads before it writes, or the store was not
+  stepped yet.
+- `assume c`: give `step_assume` the facts that make `c` simplify to `1`; an `assume` the facts
+  cannot decide is UB in the cases they leave out.
 
 ## 8. `finish_block` and branches
 

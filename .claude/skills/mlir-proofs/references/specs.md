@@ -65,6 +65,12 @@ State exactly what the code needs, through named predicates:
 - **Fit**: one predicate per C object and pointer (`s.mem.LimbsFit p` for a field element, an
   `abbrev` over the `Fits` conjuncts and the offset bound, so the tactics split it). A raw
   `Fits s.mem p (8 * n)` with `¬p.offset.uaddOverflow n#64` for byte buffers.
+- **Inputs and outputs**: `Fits` (live, in bounds, every bit defined) for what the code reads;
+  `Room` (live, in bounds, contents not needed) for what it only writes: an output buffer, a
+  caller's fresh slot. A pointer read and written takes `Fits`. A spec that asks `Fits` of an
+  output cannot be called on an uninitialized slot. State the post-state's facts the caller
+  needs from what was stored (`Fits.storeAt_self : Room m p w → Fits (m.storeAt p x) p w`, a
+  `Fits.storeLimbs`-style lemma for an object's store, `mlir_fresh` so the steps record it).
 - **Separation**: only where the code's result depends on it: `r.id ≠ a.id`, or
   `[p.id, q.id, …].Nodup` for several.
 - **Value bounds**: only where the code has UB without them (an `nsw` that can fire) or the

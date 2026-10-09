@@ -290,12 +290,16 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String
     `(.memset $(← regStx tys dst) $(← regStx tys v) $(← regStx tys l))
   | .memcpy _ dst src l => do
     `(.memcpy $(← regStx tys dst) $(← regStx tys src) $(← regStx tys l))
-  | .alloca d n => do
+  | .alloca d n false => do
     `(.alloca $(← dstStx tys d) $(num n))
+  | .alloca d n true => do
+    `(.alloca $(← dstStx tys d) $(num n) true)
   | .lifetimeStart p n => do
     `(.lifetimeStart $(← regStx tys p) $(num n))
   | .lifetimeEnd p n => do
     `(.lifetimeEnd $(← regStx tys p) $(num n))
+  | .assume c => do
+    `(.assume $(← regStx tys c))
   | .call f _ _ args rets => do
     `(.call $(callee f) $(← consStx (← args.mapM (regStx tys)))
           $(← consStx (← rets.mapM (dstStx tys))))
@@ -585,7 +589,8 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
 open MlirDef in
 /-- Define `x : GlobalInitializer` from a constant global's initializer region, as `mlir_def`
 defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. A region that builds a
-constant (`Prog.constant?`) folds to `x.lit : ⟦x.t⟧ᵣ`, and its block to the one `const x.lit`.
+constant (`Prog.constant?`) folds to `x.lit : ⟦x.t⟧ᵣ`, and its block to the one `const x.lit`, then
+an `insertvalue` of poison for each undefined member.
 -/
 def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
     (r : Syntax) (rgn : Region) : CommandElabM Unit := do
@@ -603,7 +608,9 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let tree := name `tree
   let lit := name `lit
   let c? := p.constant?
-  let vals := if c?.isSome then [t] else p.Γ.vals
+  -- folded: the literal, then per undefined member its poison and the `insertvalue` of it
+  let undefs := (c?.map (·.2)).getD []
+  let vals := if c?.isSome then t :: undefs.flatMap fun (_, τ) => [τ, t] else p.Γ.vals
   -- a folded constant's one register is no value of the region
   let valBase := if c?.isSome then 0 else p.Γ.valBase
   let tys : ValTys := { hty := name `hty }
@@ -612,10 +619,19 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let noSymbol (f : String) : TSyntax `term := mkIdent (.mkSimple f)
   let (litDef, body, exit) ←
     match c? with
-    | some c =>
+    | some (c, _) => do
+      let mut body := #[← `(.const $lit $(← dstStx tys 0))]
+      for ((path, τ), k) in undefs.zipIdx do
+        let ins : PInstr ←
+          if h : t.memberType path == some τ then
+            pure (.binop (.insertvalue path t τ h) (2 * k + 2) (.val (2 * k)) (.val (2 * k + 1)))
+          else
+            throwErrorAt r "an undefined member at {path} is not of type {τ.toMLIR}"
+        body := body.push (← instrStx tys noSymbol noSymbol (.poison τ (2 * k + 1)))
+        body := body.push (← instrStx tys noSymbol noSymbol ins)
       pure
-        (#[← `(def $lit : Ty.denoteRaw $tStx := $(← constStx c))],
-          #[← `(.const $lit $(← dstStx tys 0))], ← exitStx tys (.ret [.val 0]))
+        (#[← `(def $lit : Ty.denoteRaw $tStx := $(← constStx c))], body,
+          ← exitStx tys (.ret [.val (2 * undefs.length)]))
     | none =>
       pure (#[], ← b.body.toArray.mapM (instrStx tys noSymbol noSymbol), ← exitStx tys b.exit)
   let valStxs ← vals.toArray.mapM tyStx

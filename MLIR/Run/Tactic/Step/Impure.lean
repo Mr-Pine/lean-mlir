@@ -32,9 +32,19 @@ syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 /-- `step_impure` for a `store`, closing the instruction with `run_store`. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
+/-- `step_impure` for a `lifetime.start` or `lifetime.end`: the state's memory as
+`S.mem.lifetimeStart p` or `S.mem.lifetimeEnd p`; the facts about `p`'s object it does not carry
+are dropped. -/
+syntax (name := stepLifetime) "step_lifetime" stepSimpArgs : tactic
+
+/-- `step_impure` for an `assume`: its condition, resolved by the simp arguments, must be `1`. -/
+syntax (name := stepAssume) "step_assume" stepSimpArgs : tactic
+
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
-unproved ones are returned as goals; `consumed` ones, two lemmas deep or not at all). -/
-def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array MVarId) := do
+unproved ones are returned as goals; `consumed` ones, two lemmas deep or not at all; those
+mentioning `about?`, a lifetime marker's pointer, dropped). -/
+def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option Expr := none) :
+    TacticM (Array MVarId) := do
   -- the new state's memory facts, about it as a term over `inState`, then generalized with it
   let (mem, olds) ←
     withMainContext do
@@ -84,6 +94,11 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) : TacticM (Array 
           -- an equation (`S.mem.eraseFrom b = m`) stays about it, true there, rather than a goal
           if pf?.isNone && consumed.contains hyp then
             continue
+          -- about the object a lifetime marker restarts or ends: gone with its old lifetime
+          if pf?.isNone && about?.any (fun q => (key.find? (· == q)).isSome) then
+            trace[rir] m!"fact {decl.userName} dropped at the lifetime marker"
+            g ← g.tryClear hyp
+            continue
           if pf?.isNone && key.isEq then
             trace[rir] m!"fact {decl.userName} kept about the state before the step"
             continue
@@ -130,6 +145,12 @@ def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : 
         let resultValue ←
           simpValue args.only args.simpArgs operation (← getRunBodyFrom goal).env args.expand
         let runGoal ← replaceBySimp runGoal operation resultValue
+        -- a lifetime marker's pointer, whose object's facts it ends
+        let about? := do
+          let op := resultValue.expr
+          guard (op.isAppOf ``Operation.lifetimeStart || op.isAppOf ``Operation.lifetimeEnd)
+          let_expr PoisonOr.value _ q := op.appArg! | none
+          return q
         -- Apply runTactics to runGoal
         setGoals [runGoal]
         evalTactic runTactics
@@ -143,7 +164,7 @@ def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : 
           withMainContext do
               let lctx ← getLCtx
               return args.consumed.filterMap fun h => (lctx.findFromUserName? h.getId).map (h, ·)
-        let goals ← sealStep inState (before.map (·.2.fvarId))
+        let goals ← sealStep inState (before.map (·.2.fvarId)) about?
         finishStep args
         -- the consumed facts last: the value may read through them. By name: the seal renews ids,
         -- and a fact may be the step's own (a read-back). One there before may be gone with its
@@ -185,23 +206,49 @@ elab "expect_values" : tactic =>
       if (← whnf (← inferType a)).isAppOf ``PoisonOr && !a.isAppOfArity ``PoisonOr.value 2 then
         throwError "operand{indentExpr a}\nis not known to be `.value _`; it may be poison"
 
-/-- A load or store, closed with `lem`: the pointer's `Fits` by `mem_fact`, the value by
-`dsimp`. -/
-def runAccess (args : StepArgs) (lem : Ident) : TacticM Unit := do
-  runStep args
+@[tactic stepLoad]
+def evalStepLoad : Tactic := fun stx => do
+  -- the pointer keeps the values named with `with`, as the facts about it do; its `Fits` by
+  -- `mem_fact`, the value by `dsimp`
+  runStep (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true))
       (←
         `(tacticSeq|
         expect_values
-        exact $lem (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
-
-@[tactic stepLoad]
-def evalStepLoad : Tactic := fun stx => do
-  -- the pointer keeps the values named with `with`, as the facts about it do
-  runAccess (StepArgs.parse stx[1] stx[2] stx[3] mkNullNode (named := true)) (mkCIdent ``run_load)
+        exact run_load (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
-  runAccess (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode) (mkCIdent ``run_store)
+  -- the pointer's `Room` by `mem_fact`, the value's bits by `dsimp`, its type's padding by `decide`
+  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
+      (←
+        `(tacticSeq|
+        expect_values
+        exact
+            run_store (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)
+              (by first | decide | simp_all)))
+
+/-- Step a `lifetime.start` or `lifetime.end`. -/
+def runLifetimeStep (args : StepArgs) : TacticM Unit := do
+  runStep args
+      (←
+        `(tacticSeq|
+        first
+        | exact run_lifetimeStart
+        | exact run_lifetimeEnd
+        | exact run_lifetimeStart_poison
+        | exact run_lifetimeEnd_poison))
+
+/-- Step an `assume`. -/
+def runAssumeStep (args : StepArgs) : TacticM Unit := do
+  runStep args (← `(tacticSeq| exact run_assume))
+
+@[tactic stepLifetime]
+def evalStepLifetime : Tactic := fun stx =>
+  runLifetimeStep (StepArgs.parse stx[1] mkNullNode mkNullNode mkNullNode)
+
+@[tactic stepAssume]
+def evalStepAssume : Tactic := fun stx =>
+  runAssumeStep (StepArgs.parse stx[1] mkNullNode mkNullNode mkNullNode)
 
 @[tactic stepMemcpy]
 def evalStepMemcpy : Tactic := fun stx => do
