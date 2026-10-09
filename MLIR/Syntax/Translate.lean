@@ -388,7 +388,8 @@ inductive AttrUse where
 
 /-- The attributes of the operation `name`, beyond `modeled` ones its translation reads.
 `ignored`: GEP `inbounds`/`nusw` (an offset that wraps unsigned is poison either way), access
-alignment and TBAA, call and intrinsic parameter attributes, memory effects and `tail`, loop
+alignment and TBAA, call and intrinsic parameter attributes, memory effects, `tail` and `nounwind`
+(the model has no unwinding), loop
 `mustProgress`; `alloca` alignment, as the model has no addresses. -/
 def opAttrUses : String → List (String × AttrUse)
   | "llvm.add" | "llvm.sub" | "llvm.mul" | "llvm.shl" | "llvm.trunc" =>
@@ -415,7 +416,7 @@ def opAttrUses : String → List (String × AttrUse)
     [("callee", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
       ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
       ("TailCallKind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored),
-      ("memory_effects", .ignored)]
+      ("memory_effects", .ignored), ("no_unwind", .ignored)]
   | "llvm.call_intrinsic" =>
     [("intrin", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
       ("fastmathFlags", .inert), ("arg_attrs", .ignored), ("res_attrs", .ignored)]

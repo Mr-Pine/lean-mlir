@@ -14,7 +14,8 @@ the other implementation's up to SSA numbering and the target attributes (`targe
 `--share-src` compares against another extraction's ops (another checkout or profile).
 `--header` names the op directory in each lift's first comment line when it is not `build/…`
 of the main checkout. A callee without an op file (an external declaration, e.g. assembly) is
-bound to the `Func` of its name in `--extern-prefix`'s module of that name, written by hand.
+bound to the `Func` of its name in `--extern-prefix`'s module of that name, written by hand (its
+callers are `noncomputable`, as an axiomatized body is).
 """
 import argparse, os, re
 
@@ -77,7 +78,7 @@ def big(f):
 def nc(f):
     """A big table, or a lift reaching one: noncomputable."""
     calls, globs = deps(f)
-    return big(f) or any(nc(d) for d in calls + globs)
+    return big(f) or any(external(d) or nc(d) for d in calls + globs)
 
 def with_lines(binds):
     """`with @f := f, …`, wrapped at 100 columns."""
