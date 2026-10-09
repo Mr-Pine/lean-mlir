@@ -24,6 +24,18 @@ syntax stepNames :=
   (" with" (stepTransparent)? ppSpace ident (colGt !&"consuming" ident)?) <|>
     &" inline" <|> (&" named" (stepTransparent)?)
 
+/-- A lemma applied to arguments, as a term; its arguments stop at `inline` and `named`, which
+start `stepNames` (a term would take them as identifiers). -/
+syntax stepLemma := term:max (!(&"inline" <|> &"named") Lean.Parser.Term.argument)*
+
+/-- A `stepLemma` as the term it spells. -/
+def stepLemmaTerm (stx : Syntax) : Term :=
+  if stx[1].getNumArgs == 0 then ⟨stx[0]⟩
+  else
+    -- each argument as a group behind its lookahead
+    let args := stx[1].getArgs.map fun a => if a.getKind == groupKind then a.getArgs.back! else a
+    ⟨mkNode ``Lean.Parser.Term.app #[stx[0], mkNullNode args]⟩
+
 /-- Facts about the old state that are not carried over to the new one. -/
 syntax stepConsuming := &" consuming" (ppSpace colGt ident)+
 
