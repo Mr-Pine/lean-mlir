@@ -397,6 +397,7 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.lshr" | "llvm.ashr" => [("isExact", .modeled)]
   | "llvm.zext" => [("nonNeg", .modeled)]
   | "llvm.icmp" => [("predicate", .modeled)]
+  | "llvm.intr.cttz" => [("is_zero_poison", .modeled)]
   | "llvm.select" => [("fastmathFlags", .inert)]
   | "llvm.mlir.constant" => [("value", .modeled)]
   | "llvm.insertvalue" => [("position", .modeled)]
@@ -599,6 +600,15 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless t == .bv w && w % 8 == 0 do
         throw "expected a result of the operand's type, a whole number of bytes"
       return .unop (.bswap (w := w)) dst a
+  | "llvm.intr.cttz" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w)] := args | throw "expected one integer operand"
+      unless t == .bv w do
+        throw "expected a result of the operand's type"
+      let some (.bool z) := op.getAttr? "is_zero_poison"
+        | throw "expected a boolean `is_zero_poison`"
+      return .unop (.cttz z (w := w)) dst a
   | "llvm.bitcast" =>
     do
       let (dst, t) ← res

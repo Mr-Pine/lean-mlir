@@ -4,9 +4,13 @@
         --prefix <Lib>.Ref.Mlir --ns MLIR.<Lib>.Ref fd_ed25519_verify
 
 writes `<out>/<f>.lean` for each `f` and every function and global it reaches, from
-`<src>/<impl>/region/<f>.mlir`. Each file quotes its
-region verbatim, binds every callee and global (`with @f := f`), and is `noncomputable` when it
+`<src>/<impl>/op/<f>.mlir`. Each file quotes its `"llvm.func"` or `"llvm.mlir.global"` op
+verbatim, binds every callee and global (`with @f := f`), and is `noncomputable` when it
 reaches a table too long for the code generator.
+
+With `--share-from ref --share-prefix <Lib>.Ref.Mlir --share-ns Ref`, a function whose op equals
+the other implementation's up to SSA numbering and the target attributes (`target_cpu`,
+`target_features`, `tune_cpu`, which have no IR semantics) is bound to that lift instead.
 """
 import argparse, os, re
 
@@ -16,12 +20,31 @@ ap.add_argument('--out', required=True)
 ap.add_argument('--prefix', required=True, help='module prefix of the lifts')
 ap.add_argument('--ns', required=True, help='namespace of the lifts')
 ap.add_argument('--src', required=True, help='the `mlir_canonicalized` directory')
+ap.add_argument('--share-from', choices=['ref', 'avx512'])
+ap.add_argument('--share-prefix')
+ap.add_argument('--share-ns')
 ap.add_argument('funcs', nargs='+')
 args = ap.parse_args()
-SRC = os.path.join(os.path.expanduser(args.src), args.impl, 'region')
+SRC = os.path.join(os.path.expanduser(args.src), args.impl, 'op')
+# the header names the op file from the build directory on, as the lifts quote it
+HDR = SRC[SRC.index('build/'):] if 'build/' in SRC else SRC
 
-def region(f):
-    return open(f'{SRC}/{f}.mlir').read().rstrip('\n')
+def region(f, src=None):
+    return open(f'{src or SRC}/{f}.mlir').read().rstrip('\n')
+
+TARGET = re.compile(r', (target_cpu = "[^"]*"|tune_cpu = "[^"]*"|'
+                    r'target_features = #llvm.target_features<\[[^\]]*\]>)|'
+                    r', \["(target-cpu|tune-cpu|target-features)", "[^"]*"\]')
+
+def shared(f):
+    """`f`'s op is the other implementation's, up to numbering and target attributes."""
+    if not args.share_from:
+        return False
+    other = os.path.join(os.path.expanduser(args.src), args.share_from, 'op')
+    if not os.path.exists(f'{other}/{f}.mlir'):
+        return False
+    norm = lambda t: TARGET.sub('', re.sub(r'%(?:arg)?\d+\b', '%', t))
+    return norm(region(f)) == norm(region(f, other))
 
 def deps(f):
     s = region(f)
@@ -33,9 +56,12 @@ def lean(f):
     """`f`'s Lean name: a symbol's dots would make it a namespace."""
     return f.replace('.', '_')
 
+def is_global(f):
+    return '"llvm.mlir.global"()' in region(f).split('({', 1)[0]
+
 def big(f):
     """A table too long for the code generator."""
-    return '^bb' not in region(f) and len(region(f)) > 20000
+    return is_global(f) and len(region(f)) > 20000
 
 def nc(f):
     """A big table, or a lift reaching one: noncomputable."""
@@ -61,14 +87,15 @@ def write(f, seen):
     seen.add(f)
     calls, globs = deps(f)
     for d in calls + globs:
-        write(d, seen)
-    glob = '^bb' not in region(f)
+        if not shared(d):
+            write(d, seen)
+    glob = is_global(f)
     base = 'GlobalInitializer' if glob else 'Func'
-    imps = [f'{args.prefix}.{lean(d)}' for d in calls + globs]
-    binds = [f'@{d} := {lean(d)}' for d in calls + globs]
+    imps = [f'{args.share_prefix if shared(d) else args.prefix}.{lean(d)}' for d in calls + globs]
+    binds = [f'@{d} := {args.share_ns + "." if shared(d) else ""}{lean(d)}' for d in calls + globs]
     cmd = ('noncomputable ' if nc(f) else '') + ('mlir_const_def' if glob else 'mlir_def')
     lines = ['module', '',
-             f'-- build/native/gcc/mlir_canonicalized/{args.impl}/region/{f}.mlir', '',
+             f'-- {HDR}/{f}.mlir', '',
              f'public import MLIR.Semantics.{base}',
              'public import MLIR.Syntax.Elab']
     lines += [f'public import {i}' for i in imps]

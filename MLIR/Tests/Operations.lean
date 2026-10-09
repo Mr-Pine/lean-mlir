@@ -107,6 +107,16 @@ open Operation
 
 #guard bswap (.value 0x0102030405060708#64) == PoisonOr.value 0x0807060504030201#64
 
+/-! ## `cttz` -/
+
+#guard cttz false (.value 0b101000#8) == PoisonOr.value 3#8
+
+#guard cttz false (.value 0#64) == PoisonOr.value 64#64
+
+#guard (cttz true (.value 0#64)).isPoison
+
+#guard cttz true (.value 0x8000000000000000#64) == PoisonOr.value 63#64
+
 /-! ## `bitcast` — lane 0 is the low bits; poison stays in its lanes, but poisons a whole scalar -/
 
 #guard

@@ -25,6 +25,7 @@ inductive UnOp : Ty → (out : Ty) → Type
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
   | bswap {w : Nat} : UnOp (.bv w) (.bv w)
+  | cttz (isZeroPoison : Bool) {w : Nat} : UnOp (.bv w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type

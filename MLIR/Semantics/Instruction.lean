@@ -23,6 +23,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | zext nneg => Operation.zext nneg
   | sext => Operation.sext
   | bswap => Operation.bswap
+  | cttz isZeroPoison => Operation.cttz isZeroPoison
   | bitcast h => Operation.bitcast h
 
 @[mlir_instr]

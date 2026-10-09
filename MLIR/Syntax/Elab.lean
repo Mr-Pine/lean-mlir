@@ -166,6 +166,8 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
   | .sext => do
     `((.sext))
   | .bswap => `(.bswap)
+  | .cttz z => do
+    `((.cttz $(← boolStx z)))
   | .bitcast (t := t) (t' := t') _ => do
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
 

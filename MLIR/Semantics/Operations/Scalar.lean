@@ -161,6 +161,15 @@ def bswap {w : Nat} (x : IntW w) : IntW w := do
   return (List.range (w / 8)).foldl
       (fun acc i => acc ||| ((a >>> (8 * i)) &&& 0xFF) <<< (w - 8 * (i + 1))) 0
 
+/-- `llvm.intr.cttz`: the number of trailing zero bits, `w` for `0`; `isZeroPoison`: poison for
+`0`. -/
+@[mlir_operation]
+def cttz (isZeroPoison : Bool) {w : Nat} (x : IntW w) : IntW w := do
+  let a ← x
+  if isZeroPoison ∧ a = 0 then
+    .poison
+  return a.ctz
+
 end Intrinsics
 
 section Cast
