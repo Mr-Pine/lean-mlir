@@ -1,5 +1,5 @@
 ---
-name: rir-proofs
+name: mlir-proofs
 description: Proving lifted LLVM/MLIR functions in the register-based IR (RIR, MLIR) — lifting with mlir_def, bv-level specs, call_eq theorems, loop and callee lemmas, the step tactics, proof patterns, performance and conventions. Use for any proof about a function defined with mlir_def.
 ---
 
