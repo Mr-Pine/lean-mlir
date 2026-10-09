@@ -17,7 +17,8 @@ namespace MLIR
 
 @[mlir_instr]
 def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
-  | gepConst byteOff => Operation.gep (.value byteOff)
+  | gepConst byteOff =>
+    if 0 ≤ byteOff then Operation.gep (.value byteOff.toNat) else Operation.gepBack byteOff.natAbs
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
   | sext => Operation.sext

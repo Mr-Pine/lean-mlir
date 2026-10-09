@@ -3,7 +3,7 @@ module
 public import MLIR.Syntax.Elab
 meta import MLIR.Semantics.Func
 
-/-! # `llvm.getelementptr` with a dynamic index -/
+/-! # `llvm.getelementptr` with a dynamic index, or a negative constant one -/
 
 namespace MLIR.Tests.Syntax.Gep
 
@@ -21,6 +21,13 @@ mlir_def loadField := {
     %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = !llvm.struct<(i64, array<4 x i16>)>, rawConstantIndices = array<i32: 0, 1, -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
     %1 = "llvm.load"(%0) <{alignment = 2 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i16
     "llvm.return"(%1) : (i16) -> ()
+}
+
+mlir_def loadBack := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.getelementptr"(%arg0) <{elem_type = i64, rawConstantIndices = array<i32: -1>}> : (!llvm.ptr) -> !llvm.ptr
+    %1 = "llvm.load"(%0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%1) : (i64) -> ()
 }
 
 end
@@ -58,6 +65,17 @@ private def field (i : BitVec 64) : Option (BitVec 16) :=
   | _ => none
 
 #guard (List.range 4).map (fun i => field (BitVec.ofNat 64 i)) == [1, 2, 3, 4].map some
+
+/-- `loadBack`'s `i64` before byte `off` of block `1`, or `none` for UB. -/
+private def back (off : BitVec 64) : Option (BitVec 64) :=
+  match loadBack.eval 1 (loadBack.args (.value ⟨⟨1⟩, off⟩)) limbs with
+  | .value (some (.cons (.value v) .nil), _) => some v
+  | _ => none
+
+#guard back 8 == some 10
+#guard back 40 == some 50
+-- before the block's start: a poison pointer
+#guard back 0 == none
 
 end Tests
 

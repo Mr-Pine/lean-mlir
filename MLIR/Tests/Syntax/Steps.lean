@@ -314,6 +314,21 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : PairFit s.mem p) :
   erase_frame
   rfl
 
+mlir_def back8 :=
+  {^bb0(%arg0:!llvm.ptr):%0 = "llvm.getelementptr"(%arg0)<{elem_type = i8, rawConstantIndices =
+        array<i32:16>}>:(!llvm.ptr)->!llvm.ptr%1 = "llvm.getelementptr"(%0)<{elem_type = i8,
+        rawConstantIndices = array<i32:-8>}>:(!llvm.ptr)->!llvm.ptr"llvm.return"(%1):(!llvm.ptr)->()}
+
+-- constant `gep`s forward and back, from a block's start
+example (p : Pointer) (E : ⟪back8.Γ⟫) (S : GlobalState) (hp : p.offset = 0)
+    (hArgs : E.args = (back8.args (.value p)).get) :
+    back8.runFrom E 0 S = .value (.cons (.value (p.add 8#64)) .nil, S) := by
+  block_init
+  step_pure
+  step_pure
+  finish_block
+  rfl
+
 mlir_const_def answer :=
   {%0 = "llvm.mlir.constant"()<{value = 42:i64}>:()->i64"llvm.return"(%0):(i64)->()}
 

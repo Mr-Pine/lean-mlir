@@ -58,6 +58,13 @@ def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Poi
     .poison
   return ptr.add off
 
+/-- `gep` back by `n` bytes, adding `-n`: poison when that leaves the block below its start. -/
+def gepBack (n : Nat) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
+  let ptr ← ptr
+  if ptr.offset.toNat < n then
+    .poison
+  return ptr.add (-BitVec.ofNat 64 n)
+
 /-- `gep` by `byteOff + index * stride` bytes, the index unsigned: poison when that does not fit in
 64 bits, as when the pointer's offset overflows. -/
 @[mlir_operation]

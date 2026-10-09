@@ -259,7 +259,10 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
                   | with_reducible assumption
                   | omega
                   | mem_fact
-                  | try simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident]))
+                  |
+                    try
+                      simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepValue):ident,
+                        $(mkIdent ``Tactic.gepBackValue):ident]))
       open_ := open_ ++ (← getGoals)
   for g in conts do
     setGoals [g]

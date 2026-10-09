@@ -211,8 +211,9 @@ def Ty.index (k : Nat) : Ty → Except String (Nat × Ty)
   | t => throw s!"cannot index into {repr t}"
 
 /-- The byte offset of `getelementptr`'s constant indices over `t`, and for its one dynamic index
-(`-2147483648`) the stride it steps by: the size of what it indexes. -/
-def gepOffset (t : Ty) : List Int → Except String (Nat × Option Nat)
+(`-2147483648`) the stride it steps by: the size of what it indexes. Only the first index, over
+whole `t`s, may be negative. -/
+def gepOffset (t : Ty) : List Int → Except String (Int × Option Nat)
   | [] => return (0, none)
   | k₀ :: ks => do
     let dynamic := -2147483648
@@ -221,11 +222,8 @@ def gepOffset (t : Ty) : List Int → Except String (Nat × Option Nat)
         throw s!"negative index {k}"
       return k.toNat
     -- the first index steps over whole `t`s, the others into `t`
-    let (off, stride) ←
-      if k₀ == dynamic then
-        pure (0, some t.size)
-      else
-        pure ((← natIdx k₀) * t.size, none)
+    let (off, stride) : Int × Option Nat :=
+      if k₀ == dynamic then (0, some t.size) else (k₀ * t.size, none)
     let (off, stride, _) ←
       ks.foldlM (init := (off, stride, t)) fun (off, stride, t) k => do
           if k == dynamic then
@@ -605,7 +603,9 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       | [(p, .ptr)], (off, none) =>
         return .unop (.gepConst off) dst p
       | [(p, .ptr), (i, .bv 64)], (off, some stride) =>
-        return .binop (.gepDyn off stride) dst p i
+        unless 0 ≤ off do
+          throw s!"negative offset {off} with a dynamic index"
+        return .binop (.gepDyn off.toNat stride) dst p i
       | _, _ =>
         throw "expected a pointer, and an `i64` operand for the dynamic index"
   | "llvm.shufflevector" =>

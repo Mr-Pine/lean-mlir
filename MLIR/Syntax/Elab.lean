@@ -156,7 +156,8 @@ def predStx : IntPred → CommandElabM (TSyntax `term)
   | .uge => `(.uge)
 
 def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
-  | .gepConst n => `((.gepConst $(num n)))
+  | .gepConst n => do
+    `((.gepConst $(← intLit n)))
   | .trunc f => do
     `((.trunc $(← flagsStx f)))
   | .zext nneg => do

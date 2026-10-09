@@ -20,7 +20,7 @@ inductive Dsts (Γ : Ctx) : List Ty → Type
   | cons (d : Dst Γ t) (ds : Dsts Γ ts) : Dsts Γ (t :: ts)
 
 inductive UnOp : Ty → (out : Ty) → Type
-  | gepConst (byteOff : Nat) : UnOp .ptr .ptr
+  | gepConst (byteOff : Int) : UnOp .ptr .ptr
   | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')

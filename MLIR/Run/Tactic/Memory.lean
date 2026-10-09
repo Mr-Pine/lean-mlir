@@ -354,10 +354,10 @@ simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ 
       return .visit { expr := r, proof? := pf }
   return .continue
 
-/-- `¬p.offset.uaddOverflow off`: unfold `uaddOverflow`, the offsets' values (`x.offset = 0`) in,
-then `omega` from the facts. -/
-def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Option Expr) := do
-  let g ← mkFreshExprMVar (← noOverflowGoal p off)
+/-- `goal` about offsets: unfold `uaddOverflow`, the offsets' values (`x.offset = 0`) in, then
+`omega` from the facts. -/
+def offsetProof? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Option Expr) := do
+  let g ← mkFreshExprMVar goal
   try
     -- `Pointer.add` too, so `omega` sees a moved pointer's offset through its base's
     let mut thms ← (← getSimpTheorems).addDeclToUnfold ``BitVec.uaddOverflow
@@ -394,6 +394,10 @@ def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Opti
   catch _ =>
     return none
 
+/-- `¬p.offset.uaddOverflow off`, by `offsetProof?`. -/
+def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Option Expr) := do
+  offsetProof? facts (← noOverflowGoal p off)
+
 /-- `gep` of a pointer and an offset that does not wrap is `.value (p.add off)`. -/
 simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
   let_expr Operation.gep bo pp := e | return .continue
@@ -411,6 +415,21 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
   return .visit
       { expr := ← mkAppM ``PoisonOr.value #[← mkAppM ``Pointer.add #[p, off]],
         proof? := ← mkAppM ``gep_value #[h] }
+
+/-- `gepBack n` of a pointer at least `n` bytes into its block is `.value (p.add (-n))`. -/
+simproc_decl gepBackValue (Operation.gepBack _ (.value _)) := fun e => do
+  let_expr Operation.gepBack n pp := e | return .continue
+  let_expr PoisonOr.value _ p := pp | return .continue
+  let facts ← splitConjunctedFacts
+  let goal ← mkAppM ``LE.le #[n, ← mkAppM ``BitVec.toNat #[← mkAppM ``Pointer.offset #[p]]]
+  let some h ←
+    (do
+        if let some h← decideWithOffsets? facts goal then
+          return some h
+        offsetProof? facts goal) | return .continue
+  let pf ← mkAppM ``gepBack_value #[h]
+  let some (_, _, r) := (← inferType pf).eq? | return .continue
+  return .visit { expr := r, proof? := pf }
 
 /-- The new state with its projections reduced -/
 def dsimpState (e : Expr) : MetaM Expr := do
