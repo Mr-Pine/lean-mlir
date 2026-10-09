@@ -72,7 +72,9 @@ from the entry state's facts, so reads below a frame resolve without read facts 
 Vector simprocs (`mlir_operation`, which every pass runs; elsewhere `simp [mlir_operation]`): a
 literal `#v[…]`'s lane at a literal index is that lane, and any vector's lane at `⟨k, _⟩`,
 `↑⟨k, _⟩` or `(k : Fin n)` is `v[k]`; `shufflevector` with a literal mask and `bitcast` between
-vectors step straight to their lanes. A bitcast lane is `poisonIf (bitcastPoison x w w' k) …`: the
+vectors step straight to their lanes. A `shufflevector` by a mask with locals (a pattern's parameter
+`m`) stays folded, for a lemma `Operation.shufflevector m (Ty.wrap x) y = …` as a simp arg; one by
+another closed mask unfolds to its `ofFn` after its operands. A bitcast lane is `poisonIf (bitcastPoison x w w' k) …`: the
 test reduces to the overlapping lanes' `x[i].isPoison` once `x`'s reads resolve, and
 `(packLanes v).extractLsb' s w` at a literal `s` to `v[i]`, its slice, or
 `v[i + m - 1] ++ … ++ v[i]`. No `Fin.exists_fin_succ` or byte lemmas are needed; `expandOfFn` still
@@ -212,6 +214,7 @@ another), with `hp : E.read p = .value P`: its reads pass writes of other types,
 pointer register `q` given a premise `p ≠ .val q.i q.h` (`decide` closes it at the site).
 
 Pass implicit arguments the goal does not fix by name: `step_pattern using lem (B := 0x100000#64)`.
+`[names]` follow the arguments: `step_pattern using lem 1 0 2 3 inline` (`inline`/`named` end them).
 
 ### `step_loop using h`
 
