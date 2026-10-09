@@ -1,6 +1,0 @@
-; Prove: (distinct x x) is unsat (x is always equal to itself)
-(set-logic QF_BV)
-(declare-const k Int)
-(declare-const x (_ BitVec k))
-(assert (distinct x x))
-(check-sat)

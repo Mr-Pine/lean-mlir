@@ -1,9 +1,0 @@
-*.xz
-*.jpeg
-*.pdf
-*.csv
-*.sqlite3
-.venv/
-*.sqlite3.log
-results/
-
