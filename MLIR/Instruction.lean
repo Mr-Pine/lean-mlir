@@ -26,7 +26,11 @@ inductive UnOp : Ty → (out : Ty) → Type
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
   | bswap {w : Nat} : UnOp (.bv w) (.bv w)
   | cttz (isZeroPoison : Bool) {w : Nat} : UnOp (.bv w) (.bv w)
+  | reduceOr {l w : Nat} : UnOp (.vec l w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
+  |
+  extractvalue (indices : List Nat) (tCont tVal : Ty) (h : tCont.memberType indices == some tVal) :
+    UnOp tCont tVal
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
@@ -63,6 +67,10 @@ inductive TernOp : Ty → Ty → Ty → (out : Ty) → Type
   | vpmadd52l {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
   /-- `vpmadd52huq`: `a + (b * c)`'s high part, of the multiplicands' low 52 bits. -/
   | vpmadd52h {l : Nat} : TernOp (.vec l 64) (.vec l 64) (.vec l 64) (.vec l 64)
+  /-- `pblendvb`: lane `i` is `b[i]` if `mask[i]`'s top bit is set, else `a[i]`. -/
+  | pblendvb {l : Nat} : TernOp (.vec l 8) (.vec l 8) (.vec l 8) (.vec l 8) -- (a, b, mask)
+  /-- `subborrow`: `(borrow out, a - b - borrow in)`, the borrow in being `c ≠ 0`. -/
+  | subborrow {w : Nat} : TernOp (.bv 8) (.bv w) (.bv w) (.struct [.bv 8, .bv w]) -- (c, a, b)
   | fshl {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
   | fshr {w : Nat} : TernOp (.bv w) (.bv w) (.bv w) (.bv w)
   |

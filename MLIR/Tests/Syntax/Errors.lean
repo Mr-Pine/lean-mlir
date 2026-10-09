@@ -84,6 +84,16 @@ mlir_def unsupportedOp := {
     "llvm.return"(%0) : (i32) -> ()
 }
 
+/--
+error: ^bb0: %0 = "llvm.extractvalue"(%arg0) : (!llvm.array<2 x vector<4xi8>>) -> i8: the position must not index into a vector
+-/
+#guard_msgs in
+mlir_def extractLane := {
+  ^bb0(%arg0: !llvm.array<2 x vector<4xi8>>):
+    %0 = "llvm.extractvalue"(%arg0) <{position = array<i64: 1, 3>}> : (!llvm.array<2 x vector<4xi8>>) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
 /-- error: unsupported MLIR type 'f32' -/
 #guard_msgs in
 mlir_def unsupportedType := {

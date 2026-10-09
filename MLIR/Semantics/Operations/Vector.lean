@@ -48,6 +48,33 @@ def vpermi2var {l w : Nat} (a idx b : ⟦.vec l w⟧) : ⟦.vec l w⟧ :=
       else
         b[idx - l])
 
+/-- `llvm.x86.avx2.pblendvb`: lane `i` is `b[i]` if `mask[i]`'s top bit is set, else `a[i]`; poison
+if `mask[i]` is. InstCombine's `select (icmp slt mask 0) b a`, lane-wise. -/
+@[mlir_operation]
+def pblendvb {l : Nat} (a b mask : ⟦.vec l 8⟧) : ⟦.vec l 8⟧ :=
+  Vector.ofFn (n := l) fun i => do
+    let m ← mask[i]
+    if m.msb then
+      b[i]
+    else
+      a[i]
+
+/-- The OR of lanes `0` to `n` of `v`; poison if one is. -/
+@[mlir_operation]
+def orLanes {l w : Nat} (v : ⟦.vec l w⟧) : (n : Nat) → n < l → IntW w
+  | 0, _ => v[0]
+  | n + 1, h => do
+    let x ← orLanes v n (by omega)
+    let y ← v[n + 1]
+    return x ||| y
+
+/-- `llvm.intr.vector.reduce.or`: the OR of `v`'s lanes; poison if one is. -/
+@[mlir_operation]
+def reduceOr {l w : Nat} (v : ⟦.vec l w⟧) : IntW w :=
+  match l, v with
+  | 0, _ => .value 0
+  | n + 1, v => orLanes v n (by omega)
+
 /-- `vpmadd52luq`: lane `i` is `a[i]` plus the low 52 bits of the product of `b[i]`'s and `c[i]`'s
 low 52 bits. -/
 @[mlir_operation]

@@ -170,6 +170,16 @@ def cttz (isZeroPoison : Bool) {w : Nat} (x : IntW w) : IntW w := do
     .poison
   return a.ctz
 
+/-- `llvm.x86.subborrow`: `a - b - c'` for the borrow in `c' := c ≠ 0`, with the borrow out, `1` iff
+`a < b + c'` unsigned. Both poison if an operand is, where LLVM does not say. -/
+@[mlir_operation]
+def subborrow {w : Nat} (c : IntW 8) (a b : IntW w) : ⟦.struct [.bv 8, .bv w]⟧ :=
+  match c, a, b with
+  | .value c, .value a, .value b =>
+    let bin : Nat := if c = 0 then 0 else 1
+    (.value (if a.toNat < b.toNat + bin then 1 else 0), .value (a - b - .ofNat w bin))
+  | _, _, _ => (.poison, .poison)
+
 end Intrinsics
 
 section Cast

@@ -10,7 +10,11 @@ reaches a table too long for the code generator.
 
 With `--share-from ref --share-prefix <Lib>.Ref.Mlir --share-ns Ref`, a function whose op equals
 the other implementation's up to SSA numbering and the target attributes (`target_cpu`,
-`target_features`, `tune_cpu`, which have no IR semantics) is bound to that lift instead.
+`target_features`, `tune_cpu`, which have no IR semantics) is bound to that lift instead;
+`--share-src` compares against another extraction's ops (another checkout or profile).
+`--header` names the op directory in each lift's first comment line when it is not `build/…`
+of the main checkout. A callee without an op file (an external declaration, e.g. assembly) is
+bound to the `Func` of its name in `--extern-prefix`'s module of that name, written by hand.
 """
 import argparse, os, re
 
@@ -20,14 +24,21 @@ ap.add_argument('--out', required=True)
 ap.add_argument('--prefix', required=True, help='module prefix of the lifts')
 ap.add_argument('--ns', required=True, help='namespace of the lifts')
 ap.add_argument('--src', required=True, help='the `mlir_canonicalized` directory')
+ap.add_argument('--header', help='the op directory as lift headers name it (default: from build/ on)')
+ap.add_argument('--share-src', help='the `mlir_canonicalized` directory to share from (default: --src)')
 ap.add_argument('--share-from', choices=['ref', 'avx512'])
 ap.add_argument('--share-prefix')
 ap.add_argument('--share-ns')
+ap.add_argument('--extern-prefix', help='module prefix of the `Func`s for external callees')
 ap.add_argument('funcs', nargs='+')
 args = ap.parse_args()
+
+def external(f):
+    """A callee with no body here: an external declaration (assembly, say)."""
+    return not os.path.exists(f'{SRC}/{f}.mlir')
 SRC = os.path.join(os.path.expanduser(args.src), args.impl, 'op')
 # the header names the op file from the build directory on, as the lifts quote it
-HDR = SRC[SRC.index('build/'):] if 'build/' in SRC else SRC
+HDR = args.header or (SRC[SRC.index('build/'):] if 'build/' in SRC else SRC)
 
 def region(f, src=None):
     return open(f'{src or SRC}/{f}.mlir').read().rstrip('\n')
@@ -40,7 +51,7 @@ def shared(f):
     """`f`'s op is the other implementation's, up to numbering and target attributes."""
     if not args.share_from:
         return False
-    other = os.path.join(os.path.expanduser(args.src), args.share_from, 'op')
+    other = os.path.join(os.path.expanduser(args.share_src or args.src), args.share_from, 'op')
     if not os.path.exists(f'{other}/{f}.mlir'):
         return False
     norm = lambda t: TARGET.sub('', re.sub(r'%(?:arg)?\d+\b', '%', t))
@@ -87,11 +98,17 @@ def write(f, seen):
     seen.add(f)
     calls, globs = deps(f)
     for d in calls + globs:
-        if not shared(d):
+        if not shared(d) and not external(d):
             write(d, seen)
     glob = is_global(f)
     base = 'GlobalInitializer' if glob else 'Func'
-    imps = [f'{args.share_prefix if shared(d) else args.prefix}.{lean(d)}' for d in calls + globs]
+    def prefix(d):
+        if external(d):
+            if not args.extern_prefix:
+                raise SystemExit(f'{f} calls external {d}: pass --extern-prefix')
+            return args.extern_prefix
+        return args.share_prefix if shared(d) else args.prefix
+    imps = [f'{prefix(d)}.{lean(d)}' for d in calls + globs]
     binds = [f'@{d} := {args.share_ns + "." if shared(d) else ""}{lean(d)}' for d in calls + globs]
     cmd = ('noncomputable ' if nc(f) else '') + ('mlir_const_def' if glob else 'mlir_def')
     lines = ['module', '',

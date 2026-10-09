@@ -24,7 +24,9 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | sext => Operation.sext
   | bswap => Operation.bswap
   | cttz isZeroPoison => Operation.cttz isZeroPoison
+  | reduceOr => Operation.reduceOr
   | bitcast h => Operation.bitcast h
+  | extractvalue indices tCont tVal h => Operation.extractvalue indices tCont tVal h
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
@@ -53,6 +55,8 @@ def TernOp.compute : TernOp t₁ t₂ t₃ t → ⟦t₁⟧ → ⟦t₂⟧ → �
   | vpermi2var => Operation.vpermi2var
   | vpmadd52l => Operation.vpmadd52l
   | vpmadd52h => Operation.vpmadd52h
+  | pblendvb => Operation.pblendvb
+  | subborrow => Operation.subborrow
   | fshl => Operation.fshl
   | fshr => Operation.fshr
   | vector op => fun a b c => Vector.ofFn (fun i => op.compute a[i] b[i] c[i])

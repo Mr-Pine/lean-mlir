@@ -2,9 +2,11 @@ module
 
 import MLIR.Semantics.Operations.Scalar
 import MLIR.Semantics.Operations.Vector
+import MLIR.Semantics.Operations.Container
 import MLIR.Memory.Range
 meta import MLIR.Semantics.Operations.Scalar
 meta import MLIR.Semantics.Operations.Vector
+meta import MLIR.Semantics.Operations.Container
 meta import MLIR.Memory.Range
 
 /-! # Scalar operations and range disjointness -/
@@ -204,6 +206,102 @@ open Operation
 #guard
   vpmadd52h (#v[.value 1] : ⟦Ty.vec 1 64⟧) #v[.value (2 ^ 52 + 2 ^ 51)] #v[.value (2 ^ 51)] ==
     #v[.value (1 + 2 ^ 50)]
+
+/-! ## `vpmadd52l` — the low half of the product, of the low 52 bits -/
+
+#guard
+  vpmadd52l (#v[.value 1, .value 0, .poison, .value 0] : ⟦Ty.vec 4 64⟧)
+      #v[.value (2 ^ 52 + 3), .value (2 ^ 51), .value 1, .value 1]
+      #v[.value 5, .value 4, .value 1, .poison] ==
+    #v[.value 16, .value 0, .poison, .poison]
+
+/-! ## `pblendvb` — the mask's top bit picks `b`; a poison mask lane is poison -/
+
+#guard
+  pblendvb (#v[.value 1, .value 2, .value 3, .value 4] : ⟦Ty.vec 4 8⟧)
+      #v[.value 11, .value 12, .value 13, .value 14]
+      #v[.value 0x80, .value 0x7F, .value 0xFF, .value 0] ==
+    #v[.value 11, .value 2, .value 13, .value 4]
+
+#guard
+  pblendvb (#v[.value 1, .poison] : ⟦Ty.vec 2 8⟧) #v[.poison, .value 12] #v[.poison, .value 0x80] ==
+    #v[.poison, .value 12]
+
+-- the unselected operand may be poison without poisoning the lane
+#guard
+  pblendvb (#v[.value 1, .poison] : ⟦Ty.vec 2 8⟧) #v[.poison, .value 12]
+      #v[.value 0, .value 0xC0] ==
+    #v[.value 1, .value 12]
+
+/-! ## `reduceOr` — every lane, poison if one is -/
+
+#guard
+  reduceOr (#v[.value 0x1, .value 0x10, .value 0x100, .value 0x1000] : ⟦Ty.vec 4 64⟧) ==
+    PoisonOr.value 0x1111#64
+
+#guard reduceOr (#v[.value 0, .value 0] : ⟦Ty.vec 2 64⟧) == PoisonOr.value 0#64
+
+#guard reduceOr (#v[.value 5] : ⟦Ty.vec 1 8⟧) == PoisonOr.value 5#8
+
+#guard (reduceOr (#v[.value 0xFF, .value 1, .poison, .value 0] : ⟦Ty.vec 4 8⟧)).isPoison
+
+/-! ## `subborrow` — `(borrow out, a - b - borrow in)`; any nonzero `c` borrows -/
+
+private abbrev Sbb :=
+  PoisonOr (BitVec 8) × PoisonOr (BitVec 64)
+
+#guard (subborrow (.value 0) (.value 5#64) (.value 3#64) : Sbb) == (.value 0, .value 2)
+
+#guard (subborrow (.value 1) (.value 5#64) (.value 3#64) : Sbb) == (.value 0, .value 1)
+
+#guard (subborrow (.value 0x80) (.value 5#64) (.value 3#64) : Sbb) == (.value 0, .value 1)
+
+#guard (subborrow (.value 0) (.value 3#64) (.value 5#64) : Sbb) == (.value 1, .value (-2))
+
+-- `a = b`: a borrow in borrows out
+#guard (subborrow (.value 0) (.value 5#64) (.value 5#64) : Sbb) == (.value 0, .value 0)
+
+#guard (subborrow (.value 1) (.value 5#64) (.value 5#64) : Sbb) == (.value 1, .value (-1))
+
+-- `b + 1` overflows 64 bits
+#guard (subborrow (.value 1) (.value 0#64) (.value (-1 : BitVec 64)) : Sbb) == (.value 1, .value 0)
+
+#guard
+  (subborrow (.value 1) (.value (-1 : BitVec 64)) (.value (-1 : BitVec 64)) : Sbb) ==
+    (.value 1, .value (-1))
+
+#guard (subborrow .poison (.value 5#64) (.value 3#64) : Sbb) == (.poison, .poison)
+
+#guard (subborrow (.value 0) (.value 5#64) .poison : Sbb) == (.poison, .poison)
+
+/-! ## `extractvalue` — the member at a position, through arrays and structs -/
+
+#guard
+  (extractvalue [0] (.struct [.bv 8, .bv 64]) (.bv 8) rfl (.value 1, .value 2) : IntW 8) ==
+    PoisonOr.value 1
+
+#guard
+  (extractvalue [1] (.struct [.bv 8, .bv 64]) (.bv 64) rfl (.value 1, .poison) : IntW 64).isPoison
+
+#guard
+  (extractvalue [1, 2] (.struct [.bv 8, .array 3 (.bv 16)]) (.bv 16) rfl
+        (.value 1, #v[.value 4, .value 5, .value 6]) :
+      IntW 16) ==
+    PoisonOr.value 6
+
+#guard
+  (extractvalue [2, 1] (.array 3 (.struct [.bv 8, .bv 16, .bv 32])) (.bv 16) rfl
+        #v[(.value 0, .value 0, .value 0), (.value 0, .value 0, .value 0),
+          (.value 7, .value 8, .value 9)] :
+      IntW 16) ==
+    PoisonOr.value 8
+
+-- a whole member
+#guard
+  (extractvalue [1] (.struct [.bv 8, .struct [.bv 8, .bv 8]]) (.struct [.bv 8, .bv 8]) rfl
+        (.value 1, .value 2, .value 3) :
+      PoisonOr (BitVec 8) × PoisonOr (BitVec 8)) ==
+    (.value 2, .value 3)
 
 /-! ## `select` — LLVM's orientation: the condition being *true* picks the first value -/
 

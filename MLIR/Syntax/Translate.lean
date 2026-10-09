@@ -400,7 +400,7 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.intr.cttz" => [("is_zero_poison", .modeled)]
   | "llvm.select" => [("fastmathFlags", .inert)]
   | "llvm.mlir.constant" => [("value", .modeled)]
-  | "llvm.insertvalue" => [("position", .modeled)]
+  | "llvm.insertvalue" | "llvm.extractvalue" => [("position", .modeled)]
   | "llvm.shufflevector" => [("mask", .modeled)]
   | "llvm.mlir.addressof" => [("global_name", .modeled)]
   | "llvm.alloca" => [("elem_type", .modeled), ("alignment", .ignored)]
@@ -442,7 +442,7 @@ no frees, no recursion and no synchronization. -/
 def passthroughUses : List (String × AttrUse) :=
   [("mustprogress", .ignored), ("willreturn", .ignored), ("nofree", .ignored),
     ("norecurse", .ignored), ("nosync", .ignored), ("nocallback", .ignored),
-    ("min-legal-vector-width", .inert), ("no-trapping-math", .inert),
+    ("min-legal-vector-width", .inert), ("no-trapping-math", .inert), ("sspstrong", .inert),
     ("stack-protector-buffer-size", .inert), ("target-cpu", .inert), ("target-features", .inert),
     ("tune-cpu", .inert)]
 
@@ -539,6 +539,10 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
         "x86vector.avx512.intr.vpmadd52l.uq.512"
       | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpmadd52h.uq.512") =>
         "x86vector.avx512.intr.vpmadd52h.uq.512"
+      | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpmadd52l.uq.256") =>
+        "x86vector.avx512.intr.vpmadd52l.uq.512"
+      | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpmadd52h.uq.256") =>
+        "x86vector.avx512.intr.vpmadd52h.uq.512"
       | "llvm.call_intrinsic", some (.str i) => s!"intrinsic {i}"
       | name, _ => name
   match name with
@@ -586,13 +590,19 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.intr.fshl" | "llvm.intr.fshr" =>
     do
       let (dst, t) ← res
-      let [(a, .bv w), (b, t₂), (c, t₃)] := args | throw "expected three integer operands"
-      unless t₂ == .bv w && t₃ == .bv w && t == .bv w do
-        throw "the operand and result types must agree"
-      if name == "llvm.intr.fshl" then
-        return .ternop (.fshl (w := w)) dst a b c
-      else
-        return .ternop (.fshr (w := w)) dst a b c
+      let op {w} : TernOp (.bv w) (.bv w) (.bv w) (.bv w) :=
+        if name == "llvm.intr.fshl" then .fshl else .fshr
+      match args with
+      | [(a, .bv w), (b, t₂), (c, t₃)] =>
+        unless t₂ == .bv w && t₃ == .bv w && t == .bv w do
+          throw "the operand and result types must agree"
+        return .ternop (op (w := w)) dst a b c
+      | [(a, .vec l w), (b, t₂), (c, t₃)] =>
+        unless t₂ == .vec l w && t₃ == .vec l w && t == .vec l w do
+          throw "the operand and result types must agree"
+        return .ternop (.vector (l := l) (op (w := w))) dst a b c
+      | _ =>
+        throw "expected three integer or vector operands"
   | "llvm.intr.bswap" =>
     do
       let (dst, t) ← res
@@ -609,6 +619,21 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.bool z) := op.getAttr? "is_zero_poison"
         | throw "expected a boolean `is_zero_poison`"
       return .unop (.cttz z (w := w)) dst a
+  | "llvm.intr.vector.reduce.or" =>
+    do
+      let (dst, t) ← res
+      let [(v, .vec l w)] := args | throw "expected one vector operand"
+      unless t == .bv w do
+        throw "the result must be the vector's lane type"
+      return .unop (.reduceOr (l := l) (w := w)) dst v
+  | "intrinsic llvm.x86.subborrow.32" | "intrinsic llvm.x86.subborrow.64" =>
+    do
+      let (dst, t) ← res
+      let [(c, .bv 8), (a, .bv w), (b, t₃)] := args
+        | throw "expected an `i8` borrow and two integer operands"
+      unless t₃ == .bv w && t == .struct [.bv 8, .bv w] && name.endsWith s!".{w}" do
+        throw "the operand and result types must agree with the intrinsic's width"
+      return .ternop (.subborrow (w := w)) dst c a b
   | "llvm.bitcast" =>
     do
       let (dst, t) ← res
@@ -823,6 +848,31 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       else
         do
           throw "the value type must match the containers element"
+  | "llvm.extractvalue" =>
+    do
+      let (dst, t) ← res
+      let [(c, tCont)] := args | throw "expected one container"
+      let indices ←
+        ((← arrayInts op "position").mapM
+            (fun i : Int => do
+              let some i := i.toNat? | throw "negative position"
+              return i))
+      -- `extractvalue` reads arrays and structs, not a vector's lanes
+      if
+          (List.range indices.length).any fun k =>
+            tCont.memberType (indices.take k) matches some (.vec ..) then
+        throw "the position must not index into a vector"
+      if h : tCont.memberType indices == some t then
+        return .unop (.extractvalue indices tCont t h) dst c
+      else
+        throw "the result type must match the container's member"
+  | "intrinsic llvm.x86.avx2.pblendvb" =>
+    do
+      let (dst, t) ← res
+      let (l, w, a, b, c) ← vec3 t args
+      unless w == 8 do
+        throw "expected 8-bit lanes"
+      return .ternop (.pblendvb (l := l)) dst a b c
   | "x86vector.avx512.intr.vpermi2var.q.512" =>
     do
       let (dst, t) ← res

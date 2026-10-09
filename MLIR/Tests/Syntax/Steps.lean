@@ -361,6 +361,55 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
   erase_frame
   rfl
 
+mlir_def sbb :=
+{
+  ^bb0(%arg0: i8, %arg1: i64, %arg2: i64):
+    %0 = "llvm.call_intrinsic"(%arg0, %arg1, %arg2) <{fastmathFlags = #llvm.fastmath<none>, intrin = "llvm.x86.subborrow.64", op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 3, 0>}> : (i8, i64, i64) -> !llvm.struct<(i8, i64)>
+    %1 = "llvm.extractvalue"(%0) <{position = array<i64: 0>}> : (!llvm.struct<(i8, i64)>) -> i8
+    %2 = "llvm.extractvalue"(%0) <{position = array<i64: 1>}> : (!llvm.struct<(i8, i64)>) -> i64
+    "llvm.return"(%1, %2) : (i8, i64) -> ()
+}
+
+-- a `subborrow`'s fields, each by `step_pure`
+example (a b : BitVec 64) (s : GlobalState) (hwf : s.WF) :
+    sbb.call (sbb.args (.value 1) (.value a) (.value b)) s =
+      .value
+        (.cons (.value (if a.toNat < b.toNat + 1 then 1 else 0)) (.cons (.value (a - b - 1)) .nil),
+          s) := by
+  func_init
+  block_init
+  step_pure
+  step_pure with bo
+  guard_hyp hbo : bo = if a.toNat < b.toNat + 1 then 1#8 else 0#8
+  step_pure with d
+  guard_hyp hd : d = a - b - 1#64
+  finish_block
+  subst_vars
+  rfl
+
+mlir_def blendOr :=
+{
+  ^bb0(%arg0: vector<2xi8>, %arg1: vector<2xi8>, %arg2: vector<2xi8>):
+    %0 = "llvm.call_intrinsic"(%arg0, %arg1, %arg2) <{fastmathFlags = #llvm.fastmath<none>, intrin = "llvm.x86.avx2.pblendvb", op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 3, 0>}> : (vector<2xi8>, vector<2xi8>, vector<2xi8>) -> vector<2xi8>
+    %1 = "llvm.intr.vector.reduce.or"(%0) : (vector<2xi8>) -> i8
+    "llvm.return"(%1) : (i8) -> ()
+}
+
+-- `pblendvb` and `vector.reduce.or` to their lanes
+example (x y : Vector (BitVec 8) 2) (s : GlobalState) (hwf : s.WF) :
+    blendOr.call
+        (blendOr.args (Ty.wrap (t := .vec 2 8) x) (Ty.wrap (t := .vec 2 8) y)
+          (Ty.wrap (t := .vec 2 8) #v[0x80, 0])) s =
+      .value (.cons (.value (y[0] ||| x[1])) .nil, s) := by
+  func_init
+  block_init
+  step_pure
+  step_pure with r
+  guard_hyp hr : r = (if (0x80#8).msb = true then y[0] else x[0]) ||| x[1]
+  finish_block
+  subst_vars
+  rfl
+
 end
 
 end MLIR.Tests.Syntax.Steps

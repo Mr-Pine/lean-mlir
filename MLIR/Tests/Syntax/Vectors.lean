@@ -69,6 +69,31 @@ example (x : Vector (BitVec 64) 2) (s : GlobalState) (hwf : s.WF)
 example (x : Vector (BitVec 64) 8) (i : Nat) (hi : i < 8) : x[3] = x[3] ∧ x[i] = x[i] :=
   ⟨rfl, rfl⟩
 
+mlir_def vfshl :=
+{
+  ^bb0(%arg0: vector<2xi64>, %arg1: vector<2xi64>):
+    %0 = "llvm.mlir.constant"() <{value = dense<[8, 72]> : vector<2xi64>}> : () -> vector<2xi64>
+    %1 = "llvm.intr.fshl"(%arg0, %arg1, %0) : (vector<2xi64>, vector<2xi64>, vector<2xi64>) -> vector<2xi64>
+    "llvm.return"(%1) : (vector<2xi64>) -> ()
+}
+
+-- a vector `fshl` lane-wise, each lane's amount mod 64
+example (x y : Vector (BitVec 64) 2) (s : GlobalState) (hwf : s.WF) :
+    vfshl.call (vfshl.args (Ty.wrap (t := .vec 2 64) x) (Ty.wrap (t := .vec 2 64) y)) s =
+      .value
+        (.cons
+            (Ty.wrap (t := .vec 2 64)
+              #v[((x[0] ++ y[0]) <<< 8).extractLsb' 64 64, ((x[1] ++ y[1]) <<< 8).extractLsb' 64 64])
+            .nil,
+          s) := by
+  func_init
+  block_init
+  step_pure
+  step_pure
+  finish_block
+  subst_vars
+  rfl
+
 end
 
 end MLIR.Tests.Syntax.Vectors

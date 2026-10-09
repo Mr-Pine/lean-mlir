@@ -168,8 +168,11 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
   | .bswap => `(.bswap)
   | .cttz z => do
     `((.cttz $(← boolStx z)))
+  | .reduceOr => `(.reduceOr)
   | .bitcast (t := t) (t' := t') _ => do
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
+  | .extractvalue indices tCont tVal _ => do
+    `((.extractvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) rir_rfl%))
 
 def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .and => `(.and)
@@ -212,6 +215,8 @@ def ternOpStx : TernOp t₁ t₂ t₃ t → CommandElabM (TSyntax `term)
   | .vpermi2var => `(.vpermi2var)
   | .vpmadd52l => `(.vpmadd52l)
   | .vpmadd52h => `(.vpmadd52h)
+  | .pblendvb => `(.pblendvb)
+  | .subborrow => `(.subborrow)
   | .fshl => `(.fshl)
   | .fshr => `(.fshr)
   | .vector op => do
@@ -260,6 +265,11 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String
     `(.const (τ := $(← tys.tyStx c.ty (.val d))) $(← constStx c) $(← dstStx tys d))
   | .poison _ d => do
     `(.poison $(← dstStx tys d))
+  | .unop (.extractvalue indices tCont tVal _) d a => do
+    `(.unop
+          (.extractvalue [$(indices.toArray.map num),*] $(← tys.tyStx tCont a)
+            $(← tys.tyStx tVal (.val d)) rir_rfl%)
+          $(← dstStx tys d) $(← regStx tys a))
   | .unop op d a => do
     `(.unop $(← unOpStx op) $(← dstStx tys d) $(← regStx tys a))
   | .binop (.insertvalue indices tCont tVal _) d a b => do
