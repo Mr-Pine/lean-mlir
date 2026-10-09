@@ -177,6 +177,17 @@ dsimproc ↓[simp, mlir_operation]reduceShufflevector (Operation.shufflevector _
   return .visit (mkApp4 (mkConst ``Vector.mk [← getDecLevel β]) β nE arr (← mkEqRefl nE))
 
 open Lean Meta in
+/-- `shufflevector` with a closed mask, unfolded after its operands; by a mask with locals (a
+pattern's parameter) it stays folded for lemmas: its lanes cannot be decided. -/
+dsimproc [mlir_operation]unfoldShufflevector (Operation.shufflevector _ _ _) := fun e => do
+  let_expr Operation.shufflevector _ _ _ mask _ _ := e | return .continue
+  let mask ← instantiateMVars mask
+  if mask.hasFVar || mask.hasMVar then
+    return .continue
+  let some e' ← unfoldDefinition? e | return .continue
+  return .visit e'
+
+open Lean Meta in
 /-- `xs.set k x` for a literal vector `xs` (or `Vector.replicate n a`, `n` a literal) and a literal
 `k`, to the literal: an `insertelement` chain to the vector it builds. -/
 dsimproc [mlir_operation]reduceVectorSet (Vector.set _ _ _ _) := fun e => do

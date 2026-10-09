@@ -150,6 +150,48 @@ example (x : BitVec 64) (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
+/-- `r` a shuffle of `x` and `y` by `m`. -/
+def shufRun (m : Vector (Option (Fin (2 * 8))) 8) (x y r : Dst Γ (.vec 8 64)) : List (Instr Γ) :=
+  [.binop (.shufflevector m) r (.val x.i x.h) (.val y.i y.h)]
+
+-- a shuffle by a mask parameter stays folded: its lanes cannot be decided
+theorem runBodyFrom_shufRun {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos : Nat}
+    {m : Vector (Option (Fin (2 * 8))) 8} {x y r : Dst Γ (.vec 8 64)} {rest : List (Instr Γ)}
+    {X Y : Vector (BitVec 64) 8} {S : GlobalState} {g : ⟪Γ⟫ × GlobalState → PoisonOr β}
+    {K : PoisonOr β} (hbody : blk.body.drop pos = shufRun m x y r ++ rest)
+    (hR : E ⊨ [x := X, y := Y])
+    (hK :
+      (blk.runBodyFrom E[r := Operation.shufflevector m (Ty.wrap (t := .vec 8 64) X) (Ty.wrap Y)]
+            (pos + 1) S >>=
+          g) =
+        K) :
+    (blk.runBodyFrom E pos S >>= g) = K := by
+  step_pure
+  rw [hE]
+  exact hK
+
+/-- A shuffle by `m`, folded. -/
+@[irreducible]
+def shuf (m : Vector (Option (Fin (2 * 8))) 8) (X Y : Vector (BitVec 64) 8) : ⟦.vec 8 64⟧ :=
+  Operation.shufflevector m (Ty.wrap (t := .vec 8 64) X) (Ty.wrap Y)
+
+theorem shufflevector_eq_shuf (m : Vector (Option (Fin (2 * 8))) 8) (X Y : Vector (BitVec 64) 8) :
+    Operation.shufflevector m (Ty.wrap (t := .vec 8 64) X) (Ty.wrap Y) = shuf m X Y := by
+  unfold shuf
+  rfl
+
+-- ... for a lemma about it, which needs its operands resolved
+example {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos : Nat}
+    {m : Vector (Option (Fin (2 * 8))) 8} {x y r : Dst Γ (.vec 8 64)} {rest : List (Instr Γ)}
+    {X Y : Vector (BitVec 64) 8} {S : GlobalState} {g : ⟪Γ⟫ × GlobalState → PoisonOr β}
+    {K : PoisonOr β} (hbody : blk.body.drop pos = shufRun m x y r ++ rest)
+    (hR : E ⊨ [x := X, y := Y])
+    (hK : (blk.runBodyFrom E[r := shuf m X Y] (pos + 1) S >>= g) = K) :
+    (blk.runBodyFrom E pos S >>= g) = K := by
+  step_pure [shufflevector_eq_shuf]
+  rw [hE]
+  exact hK
+
 mlir_def put3 :=
 {
   ^bb0(%arg0: !llvm.ptr):
