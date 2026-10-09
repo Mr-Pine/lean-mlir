@@ -21,7 +21,8 @@ def insertelement {l w wi : Nat} (v : ⟦.vec l w⟧) (x : IntW w) (idx : IntW w
   | .value i => if h : i.toNat < l then v.set i.toNat x h else (Ty.vec l w).poisoned
   | .poison => (Ty.vec l w).poisoned
 
-@[mlir_operation]
+/-- `llvm.shufflevector`: lane `i` is `a[k]` or `b[k - l₁]` for mask entry `some k`, else poison.
+Not `mlir_operation`: `unfoldShufflevector` unfolds it only for a closed mask. -/
 def shufflevector {l₁ l₂ w : Nat} (indices : Vector (Option (Fin (2 * l₁))) l₂)
     (a b : ⟦.vec l₁ w⟧) : ⟦.vec l₂ w⟧ :=
   Vector.ofFn (n := l₂)
