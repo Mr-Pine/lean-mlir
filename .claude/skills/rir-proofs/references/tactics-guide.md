@@ -301,7 +301,8 @@ theorem runBodyFrom_foldRun {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos :
 
 Mistakes:
 - Constants the pattern reads (`m := foldMask`) must be in the env as the same literal: keep their
-  `step_pure`s inline, or label the constant `@[mlir_const]`.
+  `step_pure`s inline, or label the constant `@[mlir_const]`. A pattern that builds such a
+  constant (`vecRun`) steps `inline` for the same reason: named `vN`, reads of it give `vN`.
 - A `Nodup` premise over registers the site does not keep apart fails by `decide`: the pattern
   does not fit that site.
 
