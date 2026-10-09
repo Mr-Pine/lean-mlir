@@ -27,7 +27,7 @@ registers: `h` concludes `(blk.runBodyFrom E pos S >>= g) = K` and takes
 - decidable side conditions (the registers' `≠`), closed by `decide`;
 - a continuation `∀ …, (blk.runBodyFrom E' pos' S >>= g) = K`, entered: its last write is named
   like `step_pure`'s, and its other binders (the pattern's dead intermediates) are sealed away. -/
-syntax (name := stepPattern) "step_pattern" " using " term (stepNames)? : tactic
+syntax (name := stepPattern) "step_pattern" " using " stepLemma (stepNames)? : tactic
 
 /-- `pf : lhs = v` into `lhs = v'`, each local of `v` with a definition `x = t` in context replaced by
 `t`. -/
@@ -127,11 +127,12 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
       let g ← getMainGoal
       let inState := (← getRunBodyFrom (← getGoalType).2).state
       -- a constant with all its arguments open, so its implicit registers are ours to split
+      let thm := stepLemmaTerm stx[2]
       let lem ←
-        if stx[2].isIdent then
-          mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverloadWithInfo stx[2])
+        if thm.raw.isIdent then
+          mkConstWithFreshMVarLevels (← realizeGlobalConstNoOverloadWithInfo thm)
         else
-          instantiateMVars (← Term.elabTerm stx[2] none)
+          instantiateMVars (← Term.elabTerm thm none)
       let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
       -- registers as `⟨?i, ?h⟩`, so the body's `.val k _` fixes them
       -- (assigned, not unified: structure eta would solve `?x =?= ⟨?i, ?h⟩` by `?i := ?x.i`);

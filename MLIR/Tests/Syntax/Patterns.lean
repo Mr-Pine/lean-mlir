@@ -60,6 +60,20 @@ example (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
+-- `inline` and `named` after a lemma and its arguments: modifiers, not arguments
+example (s : GlobalState) (hwf : s.WF) :
+    dbl3.call (dbl3.args (.value 0)) s = .value (.cons (.value 8#64) .nil, s) := by
+  func_init
+  block_init
+  step_pure
+  step_pattern using runBodyFrom_dbl2Run inline
+  fail_if_success have := hv2
+  step_pattern using runBodyFrom_dblRun (X := _) named
+  have := hv3
+  finish_block
+  subst_vars
+  rfl
+
 mlir_def sum2 :=
 {
   ^bb0(%arg0: i64):
