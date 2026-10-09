@@ -14,8 +14,9 @@ public meta import Lean.Meta.Reduce
 /-!
 # `mlir_def`
 
-`mlir_def X binders := { region } with @f := t, …` translates a generic-form MLIR region and
-defines it in the shape of a hand lift:
+`mlir_def X binders := { region } with @f := t, …` translates a generic-form MLIR region, or a
+whole `"llvm.func"` with the aliases it refers to (its attributes checked by
+`Translate.checkFuncAttrs`), and defines it in the shape of a hand lift:
 * `X.Γ`, `X.tree`, `X.blockTys`, `X.blockParams` (`abbrev`s), and `X.hty`, which proves a value
   register's type from `X.tree`;
 * one `def` per block: `X.entry` for a single block, else `X.bb0`, `X.bb1`, … by MLIR name;
@@ -456,9 +457,8 @@ open MlirDef in
 /-- Define `x` from the region, as described in the module docstring. -/
 def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
     (binders : Array (TSyntax ``Lean.Parser.Term.bracketedBinder))
-    (r : TSyntax `mlir_region) (callees : Array (TSyntax ``calleeBinding)) :
+    (r : Syntax) (rgn : Region) (callees : Array (TSyntax ``calleeBinding)) :
     CommandElabM Unit := do
-  let rgn ← liftCoreM (region r)
   let p ← match Prog.ofRegion rgn with
     | .ok p => pure p
     | .error e => throwErrorAt r e
@@ -576,8 +576,7 @@ defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. A reg
 constant (`Prog.constant?`) folds to `x.lit : ⟦x.t⟧ᵣ`, and its block to the one `const x.lit`.
 -/
 def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
-    (r : TSyntax `mlir_region) : CommandElabM Unit := do
-  let rgn ← liftCoreM (region r)
+    (r : Syntax) (rgn : Region) : CommandElabM Unit := do
   let p ← match Prog.ofRegion rgn with
     | .ok p => pure p
     | .error e => throwErrorAt r e
@@ -623,6 +622,34 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
           { Γ := $Γ, hΓ := rfl, t := $tStx, block := $(name `entry) })]
   elabLift nc cmds
 
+/-- The function `s`'s region, its attributes checked. -/
+def funcRegion (s : TSyntax `mlir_symbol) : CommandElabM Region := do
+  let op ← liftCoreM (symbolOp s)
+  unless op.name == "llvm.func" do
+    throwErrorAt s "expected an \"llvm.func\", not \"{op.name}\""
+  if let .error e := Translate.checkFuncAttrs op.attrs then
+    throwErrorAt s e
+  return op.region
+
+/-- The global `s`'s initializer region, its attributes checked. A global given by its `value`
+has an empty region; its initializer is then that constant, returned. -/
+def globalRegion (s : TSyntax `mlir_symbol) : CommandElabM Region := do
+  let op ← liftCoreM (symbolOp s)
+  unless op.name == "llvm.mlir.global" do
+    throwErrorAt s "expected an \"llvm.mlir.global\", not \"{op.name}\""
+  if let .error e := Translate.checkGlobalAttrs op.attrs then
+    throwErrorAt s e
+  match op.region.blocks, op.attrs.getAttr? "value", op.attrs.getAttr? "global_type" with
+  | [{ ops := [], .. }], some v, some (.type t) =>
+    let const : Op :=
+      { name := "llvm.mlir.constant", res := [("0", t)], args := [], successors := [],
+        attrs := .mk [.mk "value" v] }
+    let ret : Op :=
+      { name := "llvm.return", res := [], args := [("0", t)], successors := [], attrs := .mk [] }
+    return ⟨[{ name := "bb0", args := [], ops := [const, ret] }]⟩
+  | _, some _, _ => throwErrorAt s "a global has either a `value` or an initializer"
+  | _, _, _ => return op.region
+
 end
 
 elab_rules : term <= expectedType
@@ -645,30 +672,49 @@ elab_rules : term
     return mkApp4 (mkConst ``Dst.mk) Γ t i h
 
 /-- `mlir_def X binders := { region } with @f := t, …`: define `X : Func` and its pieces from a
-generic-form MLIR region. `noncomputable mlir_def` lets what the code generator cannot compile be
+generic-form MLIR region, or an `"llvm.func"`. `noncomputable mlir_def` lets what the code generator cannot compile be
 noncomputable, e.g. a function binding a noncomputable global. -/
 syntax (name := mlirDef) (docComment)? ("noncomputable ")? "mlir_def " ident
   (ppSpace bracketedBinder)* " := " mlir_region (" with " calleeBinding,+)? : command
+
+@[inherit_doc mlirDef] syntax (name := mlirDefFunc) (docComment)? ("noncomputable ")? "mlir_def "
+  ident (ppSpace bracketedBinder)* " := " mlir_symbol (" with " calleeBinding,+)? : command
 
 elab_rules : command
   |
   `(
 $[$doc?:docComment]? $[noncomputable%$nc]? mlir_def $x:ident $bs* := $r:mlir_region
       $[with $cs,*]?) =>
-    elabMlirDef doc? nc.isSome x bs r ((cs.map (·.getElems)).getD #[])
+    do
+    elabMlirDef doc? nc.isSome x bs r (← liftCoreM (region r)) ((cs.map (·.getElems)).getD #[])
+  |
+  `(
+$[$doc?:docComment]? $[noncomputable%$nc]? mlir_def $x:ident $bs* := $f:mlir_symbol
+      $[with $cs,*]?) =>
+    do
+    elabMlirDef doc? nc.isSome x bs f (← funcRegion f) ((cs.map (·.getElems)).getD #[])
 
 /-- `mlir_const_def X := { region }`: define `X : GlobalInitializer` and its pieces from a constant
-global's initializer region, in generic-form MLIR; a region that builds a constant folds to it,
+global's initializer region, or its `"llvm.mlir.global"`, in generic-form MLIR; a region that builds a constant folds to it,
 `X.lit`. `noncomputable mlir_const_def` lets a table too long for the code generator be
 noncomputable; or raise `maxRecDepth` to compile it. -/
 syntax (name := mlirConstDef) (docComment)? ("noncomputable ")? "mlir_const_def " ident " := "
   mlir_region : command
 
+@[inherit_doc mlirConstDef] syntax (name := mlirConstDefGlobal) (docComment)? ("noncomputable ")?
+  "mlir_const_def " ident " := " mlir_symbol : command
+
 elab_rules : command
   |
   `(
 $[$doc?:docComment]? $[noncomputable%$nc]? mlir_const_def $x:ident := $r:mlir_region) =>
-    elabMlirConstDef doc? nc.isSome x r
+    do
+    elabMlirConstDef doc? nc.isSome x r (← liftCoreM (region r))
+  |
+  `(
+$[$doc?:docComment]? $[noncomputable%$nc]? mlir_const_def $x:ident := $g:mlir_symbol) =>
+    do
+    elabMlirConstDef doc? nc.isSome x g (← globalRegion g)
 
 /-- `mlir_region% { region }` is the region's AST, a `MLIR.Region`: `translate`'s input. -/
 elab "mlir_region% " r:mlir_region : term => do

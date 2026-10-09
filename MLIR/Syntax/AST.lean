@@ -88,6 +88,14 @@ structure Region where
   blocks : List Block
   deriving Lean.ToExpr
 
+/-- A module-level operation with a region, `"llvm.func"` or `"llvm.mlir.global"`, after the
+attribute aliases (`#tbaa_tag = …`) it refers to. -/
+structure SymbolOp where
+  aliases : List (String × AttrValue)
+  name : String
+  attrs : AttrDict
+  region : Region
+
 /-- The type as MLIR prints it. -/
 partial def MLIRType.toString : MLIRType → String
   | .int w => s!"i{w}"

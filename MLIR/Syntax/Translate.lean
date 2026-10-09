@@ -372,7 +372,149 @@ def vec3 (resTy : Ty) : List (RegRef × Ty) → Except String (Nat × Nat × Reg
     return (l, w, a, b, c)
   | _ => throw "expected three vector operands"
 
+/-! ## Attributes
+
+Each attribute the translation meets is `modeled`, `inert` or `ignored`; any other is rejected,
+so none is dropped unseen. -/
+
+/-- How the translation treats an attribute. -/
+inductive AttrUse where
+  /-- read into the operation, or checked -/
+  | modeled
+  /-- without semantics in the IR: calling conventions, linkage, profile and target hints -/
+  | inert
+  /-- UB or poison LLVM adds that the model leaves out, so the model is more defined -/
+  | ignored
+
+/-- The attributes of the operation `name`, beyond `modeled` ones its translation reads.
+`ignored`: GEP `inbounds`/`nusw` (an offset that wraps unsigned is poison either way), access
+alignment and TBAA, call and intrinsic parameter attributes, memory effects and `tail`, loop
+`mustProgress`; `alloca` alignment, as the model has no addresses. -/
+def opAttrUses : String → List (String × AttrUse)
+  | "llvm.add" | "llvm.sub" | "llvm.mul" | "llvm.shl" | "llvm.trunc" =>
+    [("overflowFlags", .modeled)]
+  | "llvm.or" => [("isDisjoint", .modeled)]
+  | "llvm.lshr" | "llvm.ashr" => [("isExact", .modeled)]
+  | "llvm.zext" => [("nonNeg", .modeled)]
+  | "llvm.icmp" => [("predicate", .modeled)]
+  | "llvm.select" => [("fastmathFlags", .inert)]
+  | "llvm.mlir.constant" => [("value", .modeled)]
+  | "llvm.insertvalue" => [("position", .modeled)]
+  | "llvm.shufflevector" => [("mask", .modeled)]
+  | "llvm.mlir.addressof" => [("global_name", .modeled)]
+  | "llvm.alloca" => [("elem_type", .modeled), ("alignment", .ignored)]
+  | "llvm.getelementptr" =>
+    [("elem_type", .modeled), ("rawConstantIndices", .modeled), ("noWrapFlags", .ignored),
+      ("inbounds", .ignored)]
+  | "llvm.load" | "llvm.store" =>
+    [("ordering", .modeled), ("alignment", .ignored), ("tbaa", .ignored)]
+  | "llvm.intr.memset" | "llvm.intr.memcpy" => [("isVolatile", .modeled), ("arg_attrs", .ignored)]
+  | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" => [("size", .modeled)]
+  | "llvm.call" =>
+    [("callee", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
+      ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
+      ("TailCallKind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored),
+      ("memory_effects", .ignored)]
+  | "llvm.call_intrinsic" =>
+    [("intrin", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
+      ("fastmathFlags", .inert), ("arg_attrs", .ignored), ("res_attrs", .ignored)]
+  | "llvm.br" => [("loop_annotation", .ignored)]
+  | "llvm.cond_br" =>
+    [("operandSegmentSizes", .modeled), ("branch_weights", .inert), ("loop_annotation", .ignored)]
+  | "llvm.switch" =>
+    [("case_values", .modeled), ("case_operand_segments", .modeled),
+      ("operandSegmentSizes", .modeled), ("branch_weights", .inert)]
+  | _ => []
+
+/-- A function's attributes. `ignored`: memory effects, `willreturn` and `nounwind`, parameter and
+result attributes. -/
+def funcAttrUses : List (String × AttrUse) :=
+  [("sym_name", .modeled), ("function_type", .modeled), ("passthrough", .modeled),
+    ("CConv", .inert), ("linkage", .inert), ("visibility_", .inert), ("dso_local", .inert),
+    ("unnamed_addr", .inert), ("no_inline", .inert), ("uwtable_kind", .inert),
+    ("frame_pointer", .inert), ("target_cpu", .inert), ("target_features", .inert),
+    ("tune_cpu", .inert), ("memory_effects", .ignored), ("will_return", .ignored),
+    ("no_unwind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored)]
+
+/-- A function's `passthrough` attributes. `ignored`: those promising progress, termination,
+no frees, no recursion and no synchronization. -/
+def passthroughUses : List (String × AttrUse) :=
+  [("mustprogress", .ignored), ("willreturn", .ignored), ("nofree", .ignored),
+    ("norecurse", .ignored), ("nosync", .ignored), ("nocallback", .ignored),
+    ("min-legal-vector-width", .inert), ("no-trapping-math", .inert),
+    ("stack-protector-buffer-size", .inert), ("target-cpu", .inert), ("target-features", .inert),
+    ("tune-cpu", .inert)]
+
+/-- Parameter and result attributes. `ignored`: those making an argument or result UB or poison
+(`noundef`, `nonnull`, `range`, `align`, `dereferenceable`, `noalias`) or promising how the callee
+uses it (`nocapture`, `nofree`, `readonly`, `writeonly`, `readnone`, `returned`, `writable`,
+`dead_on_unwind`). -/
+def paramAttrUses : List (String × AttrUse) :=
+  [("llvm.zeroext", .inert), ("llvm.signext", .inert), ("llvm.immarg", .inert),
+    ("llvm.noundef", .ignored), ("llvm.nonnull", .ignored), ("llvm.range", .ignored),
+    ("llvm.align", .ignored), ("llvm.dereferenceable", .ignored),
+    ("llvm.dereferenceable_or_null", .ignored), ("llvm.noalias", .ignored),
+    ("llvm.nocapture", .ignored), ("llvm.nofree", .ignored), ("llvm.readonly", .ignored),
+    ("llvm.writeonly", .ignored), ("llvm.readnone", .ignored), ("llvm.returned", .ignored),
+    ("llvm.writable", .ignored), ("llvm.dead_on_unwind", .ignored)]
+
+/-- A global's attributes; `alignment` is `ignored`, as the model has no addresses. -/
+def globalAttrUses : List (String × AttrUse) :=
+  [("sym_name", .modeled), ("global_type", .modeled), ("constant", .modeled),
+    ("addr_space", .modeled), ("value", .modeled), ("linkage", .inert), ("visibility_", .inert),
+    ("dso_local", .inert), ("unnamed_addr", .inert), ("alignment", .ignored)]
+
+/-- Reject an attribute of `d` that `uses` does not list, and a parameter attribute
+`paramAttrUses` does not. -/
+def checkAttrs (uses : List (String × AttrUse)) (d : AttrDict) : Except String Unit := do
+  let .mk es := d
+  for .mk k v in es do
+    unless (uses.lookup k).isSome do
+      throw s!"unsupported attribute `{k}`"
+    if k == "arg_attrs" || k == "res_attrs" then
+      let .list ds := v | throw s!"malformed `{k}`"
+      for p in ds do
+        let .dict (.mk ps) := p | throw s!"malformed `{k}`"
+        for .mk k' _ in ps do
+          unless (paramAttrUses.lookup k').isSome do
+            throw s!"unsupported parameter attribute `{k'}`"
+
+/-- An operation's attributes, checked as `checkAttrs`; operand bundles are rejected. -/
+def checkOpAttrs (op : Op) : Except String Unit := do
+  checkAttrs (opAttrUses op.name) op.attrs
+  if let some b := op.getAttr? "op_bundle_sizes" then
+    unless b matches .array _ [] do
+      throw "operand bundles are not supported"
+  if let some (.bool true) := op.getAttr? "isVolatile" then
+    throw "volatile accesses are not supported"
+
+/-- A function's attributes, checked as `checkAttrs`, with its `passthrough` list. -/
+def checkFuncAttrs (d : AttrDict) : Except String Unit := do
+  checkAttrs funcAttrUses d
+  if let some (.list ps) := d.getAttr? "passthrough" then
+    for p in ps do
+      let k ←
+        match p with
+        | .str k =>
+          pure k
+        | .list [.str k, _] =>
+          pure k
+        | _ =>
+          throw "malformed `passthrough`"
+      unless (passthroughUses.lookup k).isSome do
+        throw s!"unsupported function attribute `{k}`"
+
+/-- A global's attributes: those `globalAttrUses` lists, `constant`, address space `0`. -/
+def checkGlobalAttrs (d : AttrDict) : Except String Unit := do
+  checkAttrs globalAttrUses d
+  unless (d.getAttr? "constant").isSome do
+    throw "a global must be constant"
+  if let some (.int s _) := d.getAttr? "addr_space" then
+    unless s == 0 do
+      throw "a global must be in address space 0"
+
 def instr (E : Env) (op : Op) : Except String PInstr := do
+  checkOpAttrs op
   let args ← op.args.mapM (operand E)
   let res := result E op
   let checkNotAtomic : Except String Unit := do
@@ -388,7 +530,16 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       "x86vector.avx512.intr.vpmadd52l.uq.512"
     | "llvm.call", some (.symbol "x86_avx512_vpmadd52h_uq_512") =>
       "x86vector.avx512.intr.vpmadd52h.uq.512"
-    | name, _ => name
+    | name, _ =>
+      match name, op.getAttr? "intrin" with
+      | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpermi2var.q.512") =>
+        "x86vector.avx512.intr.vpermi2var.q.512"
+      | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpmadd52l.uq.512") =>
+        "x86vector.avx512.intr.vpmadd52l.uq.512"
+      | "llvm.call_intrinsic", some (.str "llvm.x86.avx512.vpmadd52h.uq.512") =>
+        "x86vector.avx512.intr.vpmadd52h.uq.512"
+      | "llvm.call_intrinsic", some (.str i) => s!"intrinsic {i}"
+      | name, _ => name
   match name with
   | "llvm.mlir.zero" =>
     do
@@ -697,6 +848,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     throw s!"unsupported operation '{name}'"
 
 def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit := do
+  checkOpAttrs op
   match op.name, op.successors with
   | "llvm.return", [] =>
     return .ret ((← op.args.mapM (operand E)).map (·.1))

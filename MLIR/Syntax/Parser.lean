@@ -86,6 +86,8 @@ declare_syntax_cat mlir_bb
 
 declare_syntax_cat mlir_region
 
+declare_syntax_cat mlir_symbol
+
 /-- `%arg0` or `%7`. `%arg` is a token of its own once `Run.Tactic` is imported. -/
 syntax ssaValue := ("%arg" noWs num) <|> ("%" noWs (num <|> ident))
 
@@ -118,6 +120,11 @@ syntax "array<" mlir_type (":" mlir_attr_val,*)? ">" : mlir_attr_val
 
 syntax "[" mlir_attr_val,* "]" : mlir_attr_val
 
+/-- `<#tbaa_type_desc, 0>`, an element of a TBAA type's `members = {…}`. -/
+syntax attrTuple := "<" mlir_attr_val,* ">"
+
+syntax "{" attrTuple,+ "}" : mlir_attr_val
+
 syntax mlir_type : mlir_attr_val
 
 syntax attrEntry := (ident <|> str) (" = " mlir_attr_val)?
@@ -141,6 +148,13 @@ syntax bbLabel ("(" bbArg,* ")")? ":" (comment)? mlir_op* : mlir_bb
 syntax "{" mlir_bb+ "}" : mlir_region
 
 syntax "{" mlir_op* "}" : mlir_region
+
+/-- `#tbaa_tag = #llvm.tbaa_tag<…>`, a module's attribute alias. -/
+syntax aliasDef := "#" ident " = " mlir_attr_val
+
+/-- An operation with one region and no operands, results or successors, after the aliases it
+refers to: `"llvm.func"() <{…}> ({ … }) : () -> ()`. -/
+syntax aliasDef* str "(" ")" attrDict "(" mlir_region ")" ":" "(" ")" "->" "(" ")" : mlir_symbol
 
 end
 
@@ -242,14 +256,14 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
       | `(dialectArg| $k:ident = $v) => return (some k.getId.toString, v)
       | `(dialectArg| $v:mlir_attr_val) => return (none, v)
       | a => throwErrorAt a "malformed contents of '#{dialect}<…>'"
-    -- a keyword or string: `nsw`, `none`
+    -- a keyword or string, `nsw`, `none`, as itself; anything else as an attribute
     let word (v : TSyntax `mlir_attr_val) : CoreM AttrValue := do
       match leaves v.raw with
       | #[x] =>
         if x.isIdent then return AttrValue.opaque_ dialect x.getId.toString
         if let some s := x.isStrLit? then return AttrValue.opaque_ dialect s
-        throwErrorAt v "unsupported contents of '#{dialect}<…>'"
-      | _ => throwErrorAt v "unsupported contents of '#{dialect}<…>'"
+        attrVal v
+      | _ => attrVal v
     -- `k = v, …`: a dictionary
     if vs.any (·.1.isSome) then
       let es ← vs.mapM fun
@@ -265,6 +279,11 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
     let vs : Array (TSyntax `mlir_attr_val) := (vs.map (·.getElems)).getD #[]
     return .array (← mlirType t) (← vs.toList.mapM attrVal)
   | `(mlir_attr_val| [ $vs,* ]) => return .list (← vs.getElems.toList.mapM attrVal)
+  | `(mlir_attr_val| { $ts:attrTuple,* }) =>
+    .list <$> ts.getElems.toList.mapM fun (t : TSyntax ``attrTuple) => do
+      match t with
+      | `(attrTuple| < $vs,* >) => return .list (← vs.getElems.toList.mapM attrVal)
+      | t => throwErrorAt t "malformed `<…>` tuple"
   | `(mlir_attr_val| $t:mlir_type) => do
     match leaves t.raw with
     | #[x] =>
@@ -339,6 +358,15 @@ def region : TSyntax `mlir_region → CoreM Region
   | `(mlir_region| { $ops:mlir_op* }) =>
     return ⟨[{ name := "bb0", args := [], ops := ← ops.toList.mapM op }]⟩
   | stx => throwErrorAt stx "malformed MLIR region"
+
+def symbolOp : TSyntax `mlir_symbol → CoreM SymbolOp
+  | `(mlir_symbol| $as:aliasDef* $name:str ( ) $attrs:attrDict ( $r:mlir_region ) : ( ) -> ( )) => do
+    let aliases ← as.toList.mapM fun (a : TSyntax ``aliasDef) => do
+      match a with
+      | `(aliasDef| # $a:ident = $v) => return (a.getId.toString, ← attrVal v)
+      | a => throwErrorAt a "malformed attribute alias"
+    return { aliases, name := name.getString, attrs := ← attrDictVal attrs, region := ← region r }
+  | stx => throwErrorAt stx "malformed MLIR operation"
 
 end
 
