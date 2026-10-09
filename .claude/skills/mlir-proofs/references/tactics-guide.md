@@ -305,6 +305,30 @@ Mistakes:
   constant (`vecRun`) steps `inline` for the same reason: named `vN`, reads of it give `vN`.
 - A `Nodup` premise over registers the site does not keep apart fails by `decide`: the pattern
   does not fit that site.
+- `with x` names a value the pattern computes; a value the continuation binds (`∀ A' E', …`) keeps
+  the lemma's binder name. Rename it after the step (`rename' A' => a5`, `Mathlib.Tactic.Rename`;
+  a bound fact by `rename_i`).
+
+**Unrolled loops.** A loop the compiler unrolls (a Zig `inline for`, an unrolled C loop) is one
+long block; stepping it costs more per instruction the deeper it goes, because each step's kernel
+check walks the body to its position. Prove one iteration as a pattern and step each with it
+(`Zig/Sha512_round.lean`: 75 of 80 rounds one 26-instruction pattern; 4 rounds at position 1887,
+47 s → 6 s). Finding the template:
+- Cut the block at an instruction each iteration has once (the load of its word), write each run
+  with registers relative to its start, and group equal runs. LLVM interleaves iterations: pick
+  the cut whose runs read only registers written before them.
+- What varies is a parameter: a constant's register (`k : Dst Γ (.bv 64)`), a `gepConst` offset
+  (`off : Nat`). The first and last iterations often differ (scheduling, the stores after the
+  loop): keep their steps, or give them their own patterns.
+- A memory read in the run: the read and its fit are premises (`hfit : Fits S.mem (Wp.add
+  (BitVec.ofNat 64 off)) 64`, `hload : S.mem.readAt (Wp.add (BitVec.ofNat 64 off)) 64 = Wt`),
+  closed at the site from the context (`have hw := hW t (by decide)` before the step).
+- The conclusion relates the run to the spec's step (`Sha512.round #v[A, …] Kt Wt = #v[A', A, …]`),
+  so the site chains iterations by rewriting.
+
+Any position works: the pattern reads the instructions at the position off the block, as a step
+reads one, and takes the registers' type proofs from them. State registers past the first few
+hundred as `rir_reg% X.hty k`, not `%k`, which decides `Γ.ty k` by unfolding `Γ` to it.
 
 ## 11. After the last block
 

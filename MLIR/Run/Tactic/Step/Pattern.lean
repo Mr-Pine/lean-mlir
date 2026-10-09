@@ -119,6 +119,44 @@ partial def closePremise (g : MVarId) : TacticM Unit := do
   else
     closeSide g
 
+/-- The registers' type proofs in `instrs`, as the lift proved them: index ↦ `Γ.ty i = t`. -/
+def regTypeProofs (instrs : Array Expr) : MetaM (Std.HashMap Nat Expr) := do
+  let out ← IO.mkRef ({} : Std.HashMap Nat Expr)
+  for x in instrs do
+    x.forEachWhere (fun e => e.isAppOfArity ``Dst.mk 4 || e.isAppOfArity ``Reg.val 4) fun e => do
+        if let some k← Tactic.finNLit? (e.getArg! 2) then
+          out.modify (·.insert k (e.getArg! 3))
+  out.get
+
+/-- A body fact `block.body.drop idx = pat ++ rest` for a block whose instructions are known: the
+pattern's instructions read off the block, as a step reads one, and `rest` the body past them. The
+kernel checks it, so a deep `idx` is not unfolded here. The fact and the instructions, or `none`
+when the instructions are not the pattern's. -/
+def concreteBodyFact? (lhs rhs : Expr) : MetaM (Option (Expr × Array Expr)) := do
+  let some (idx, block) := Tactic.bodyDrop? lhs | return none
+  let idx ← instantiateMVars idx
+  let some i := idx.nat? <|> idx.rawNatLit? | return none
+  let_expr HAppend.hAppend _ _ _ _ pat _ := rhs | return none
+  -- the pattern's length, its list unfolded
+  let mut k := 0
+  let mut p ← whnfD pat
+  while p.isAppOfArity ``List.cons 3 do
+    k := k + 1
+    p ← whnfD p.appArg!
+  unless p.isAppOfArity ``List.nil 1 do
+    return none
+  let mut instrs := #[]
+  for j in [i:i + k] do
+    let some x ← blockInstr? block (mkNatLit j) | return none
+    instrs := instrs.push x
+  let_expr List.drop α _ body := lhs | return none
+  let rest := mkApp3 (.const ``List.drop lhs.getAppFn.constLevels!) α (mkNatLit (i + k)) body
+  let fact :=
+    mkAppN rhs.getAppFn (rhs.getAppArgs.extract 0 4 ++ #[← mkListLit α instrs.toList, rest])
+  unless ← isDefEq fact rhs do
+    return none
+  return some (mkExpectedPropHint (← mkEqRefl lhs) (← mkEq lhs (← instantiateMVars rhs)), instrs)
+
 def stepPatternAt (stx : Syntax) : TacticM Unit := do
   -- the state as `S` with `hS`, to seal what the pattern stores
   Tactic.ensureStateEq
@@ -153,10 +191,14 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
         throwError "step_pattern: the conclusion of{indentExpr lem}\ndoes not match the goal"
       -- the body first: it fixes the registers and arguments the other premises mention
       let mut bodyFact? := none
+      let mut instrs := #[]
       for m in ms do
         let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
         if lhs.isAppOf ``List.drop then
-          if ← withDefault (isDefEq lhs rhs) then
+          if let some (h, xs)← concreteBodyFact? lhs rhs then
+            m.mvarId!.assign h
+            instrs := xs
+          else if ← withDefault (isDefEq lhs rhs) then
             m.mvarId!.assign (← mkEqRefl lhs)
           else if let some h← bodyFactAs? lhs rhs then
             -- an abstract block (a pattern lemma's proof): through its body fact
@@ -176,10 +218,18 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
           cont? := some mv
           continue
         closePremise mv
-      -- a register's type proof: unification skips proofs, so none got assigned
+      -- a register's type proof: unification skips proofs, so none got assigned; the body's own
+      -- when known (deciding `Γ.ty i` unfolds `Γ` to register `i`, too deep for a long function)
+      let proofs ← regTypeProofs instrs
       for h in typeProofs do
         unless ← h.isAssigned do
-          let some (_, l, r) := (← instantiateMVars (← h.getType)).eq? | continue
+          let hTy ← instantiateMVars (← h.getType)
+          let some (_, l, r) := hTy.eq? | continue
+          if let some k← Tactic.finNLit? l.appArg! then
+            if let some pf := proofs[k]? then
+              if ← withReducible (isDefEq (← inferType pf) hTy) then
+                h.assign pf
+                continue
           unless ← withDefault (isDefEq l r) do
             throwError "step_pattern: register type mismatch{indentExpr (← h.getType)}"
           h.assign (← mkEqRefl l)

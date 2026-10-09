@@ -148,3 +148,6 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
     could not carry became a goal before the main one. Split abbreviated conjunctions first
     (`obtain ⟨hfits, hoff⟩ := hsha`), add a transport lemma for the new state's shape, or clear
     the fact if no later step needs it.
+
+16. **"maximum recursion depth" at a register in a long function** (past a few hundred
+    registers): `%k` in a statement decides `Γ.ty k` by unfolding `Γ`. Write `rir_reg% X.hty k`.

@@ -66,6 +66,14 @@ theorem read_write_dst (env : ⟪Γ⟫) (dst : Dst Γ t) (v : ⟦t⟧) :
   subst h
   simp [write, read, set]
 
+/-- A register read right after its write, whatever the proofs of its type: no cast to reduce,
+which for a late register would unfold `Γ`'s types to it. -/
+@[mlir_env 1100]
+theorem read_write_same (env : ⟪Γ⟫) (i : Fin Γ.n) (h h' : Γ.ty i = t) (v : ⟦t⟧) :
+    (env.write ⟨i, h⟩ v).read (.val i h') = v := by
+  subst h
+  exact read_write_dst env ⟨i, rfl⟩ v
+
 /-- Writing the value a register already holds changes nothing. -/
 theorem write_of_read (env : ⟪Γ⟫) (dst : Dst Γ t) (h : env.read (.val dst.i dst.h) = v) :
     env.write dst v = env := by

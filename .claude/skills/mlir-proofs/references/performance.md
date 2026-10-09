@@ -15,7 +15,8 @@ end of a proof answers in well under a second.
    needs flags on the command line: `lake env lean -Dtrace.profiler=true
    -Dtrace.profiler.threshold=100 -Dtrace.profiler.output=out.json F.lean` (Firefox-profiler
    format; aggregate self time per stack path). Self time in `runFrontend` and
-   `Meta.realizeConst` is waiting on other proofs, not work.
+   `Meta.realizeConst` is waiting on other proofs, not work. So is a `bvDecide > Meta.Tactic.sat > addDecl
+   > Kernel` stack spanning the whole file: time the `bv_decide` lemma alone before blaming it.
 3. **Cut with `sorry`** after each phase and compare totals: finds the phase, including kernel
    time, which the profilers above do not show. A proof whose tactics are fast but whose
    declaration stays busy is in the kernel.
@@ -41,6 +42,7 @@ In the proof:
 | unifying pointers (`(f p k).id =?= p.id`) | `whnf` evaluates offset arithmetic; timeout at the declaration | `rfl` lemma `(f p k).id = p.id`, rewrite explicitly |
 | `generalize`/`subst` of a computed value | kernel evaluates it back ("deep recursion") | `obtain ⟨b, hb⟩ : ∃ b, e = b := ⟨_, rfl⟩` |
 | `obtain`/`rcases` on big goals | reverts the goal per layer | continuation-form lemmas, `refine` |
+| a long straight-line block (an unrolled loop) | per-step cost grows with the position: quadratic in the block | a `step_pattern` per iteration (`tactics-guide.md` §10) |
 | editing a module many files import | every importer rebuilds | stage new lemmas in the working file, move them when done |
 | a callee premise derived from a composite fact (`LimbsFit (a.add 80)` from `PointFit a`) | `mem_fact`'s transport search through `hS`, ~290 ms per premise | `mlir_transport` projection lemmas (tried two deep on the current facts first), or the coordinate facts as locals |
 

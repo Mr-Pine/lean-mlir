@@ -172,7 +172,7 @@ def bb2 : BB where
 
 end fd_r43x6_repsqr_mul2
 
-open fd_r43x6_repsqr_mul2 in
+open _root_.MLIR.Tests.Syntax.Avx512.Hand.fd_r43x6_repsqr_mul2 in
 /-- `fd_r43x6_repsqr_mul2`, calling `sqr` for `fd_r43x6_sqr_fast` and `mul` for
 `fd_r43x6_mul_fast`. -/
 @[reducible] def fd_r43x6_repsqr_mul2 (sqr : SqrFast) (mul : MulFast) : Func where
