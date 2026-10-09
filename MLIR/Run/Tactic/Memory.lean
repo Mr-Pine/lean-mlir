@@ -197,7 +197,7 @@ partial def counterBase? (s : Expr) : Option (Expr × Nat) :=
   if s.isFVar then some (s, 0)
   else
     if s.isAppOfArity ``GlobalState.alloca 3 then
-      (counterBase? s.appFn!.appArg!).map fun (b, k) => (b, k + 1)
+      (counterBase? s.appFn!.appFn!.appArg!).map fun (b, k) => (b, k + 1)
     else if s.isAppOfArity ``GlobalState.mk 2 then allocBase? s.appFn!.appArg! else none
 where
   /-- An `AllocState`: `⟨n⟩`, or a state's `alloc`. -/
