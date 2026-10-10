@@ -38,7 +38,7 @@ open Lean Elab Command Term MLIR
 
 /-- `@f := t`: calls to `@f` call the `Func` `t`; addresses of `@f` are of the
 `GlobalInitializer` `t`'s value. -/
-public syntax calleeBinding := "@" ident " := " term
+public syntax calleeBinding := "@" MLIR.mlirSymbolName " := " term
 
 /-- `rir_reg% X.hty k : Reg X.Γ t`: value register `k` of the `mlir_def` `X`, of the type `t` at
 entry `k` of `X.tree`; only the kernel checks the type. -/
@@ -166,13 +166,18 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
   | .sext => do
     `((.sext))
   | .bswap => `(.bswap)
+  | .copy (t := t) => do
+    `((.copy (t := $(← tyStx t))))
   | .cttz z => do
     `((.cttz $(← boolStx z)))
   | .reduceOr => `(.reduceOr)
+  | .reduceAnd => `(.reduceAnd)
   | .bitcast (t := t) (t' := t') _ => do
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
   | .extractvalue indices tCont tVal _ => do
     `((.extractvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) rir_rfl%))
+  | .vector op => do
+    `((.vector $(← unOpStx op)))
 
 def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .and => `(.and)
@@ -192,6 +197,11 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .ashr e => do
     `((.ashr $(← boolStx e)))
   | .smin => `(.smin)
+  | .smax => `(.smax)
+  | .umin => `(.umin)
+  | .umax => `(.umax)
+  | .scmp (w' := w') => `((.scmp (w' := $(num w'))))
+  | .ucmp (w' := w') => `((.ucmp (w' := $(num w'))))
   | .icmp p => do
     `((.icmp $(← predStx p)))
   | .ptrcmp ne => do
@@ -235,6 +245,10 @@ partial def constStx : ConstLit → CommandElabM (TSyntax `term)
     `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num n)))
   | .arraySplat n w v => do
     `((.replicate $(num n) $(← intLit v) : Vector (BitVec $(num w)) $(num n)))
+  | .bytes n v => do
+    let hex := Syntax.mkNumLit ("0x" ++ String.ofList (Nat.toDigits 16 v))
+    `((Vector.ofFn fun i : Fin $(num n) => BitVec.ofNat 8 ($hex >>> (8 * i.1)) :
+        Vector (BitVec 8) $(num n)))
   | .null => `(Pointer.null)
   | .agg t ms => do
     `(($(← membersStx t ms) : Ty.denoteRaw $(← tyStx t)))
@@ -290,6 +304,10 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String
     `(.memset $(← regStx tys dst) $(← regStx tys v) $(← regStx tys l))
   | .memcpy _ dst src l => do
     `(.memcpy $(← regStx tys dst) $(← regStx tys src) $(← regStx tys l))
+  | .memmove _ dst src l => do
+    `(.memmove $(← regStx tys dst) $(← regStx tys src) $(← regStx tys l))
+  | .ptrtoaddr _ d p => do
+    `(.ptrtoaddr $(← dstStx tys d) $(← regStx tys p))
   | .alloca d n false => do
     `(.alloca $(← dstStx tys d) $(num n))
   | .alloca d n true => do
@@ -300,9 +318,9 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) (global : String
     `(.lifetimeEnd $(← regStx tys p) $(num n))
   | .assume c => do
     `(.assume $(← regStx tys c))
-  | .call f _ _ args rets => do
-    `(.call $(callee f) $(← consStx (← args.mapM (regStx tys)))
-          $(← consStx (← rets.mapM (dstStx tys))))
+  | .call f _ _ args rets noret => do
+    let f ← if noret then `(Operation.noreturn) else pure (callee f)
+    `(.call $f $(← consStx (← args.mapM (regStx tys))) $(← consStx (← rets.mapM (dstStx tys))))
   | .addressof g d => do
     `(.addressof $(global g) $(← dstStx tys d))
 
@@ -312,6 +330,7 @@ def jumpStx (tys : ValTys) (j : PJump) : CommandElabM (TSyntax `term) := do
 def exitStx (tys : ValTys) : PExit → CommandElabM (TSyntax `term)
   | .ret vs => do
     `(.ret $(← consStx (← vs.mapM (regStx tys))))
+  | .unreachable => `(.unreachable)
   | .br j => do
     `(.br $(← jumpStx tys j))
   | .condBr c t f => do
@@ -328,6 +347,15 @@ def exitStx (tys : ValTys) : PExit → CommandElabM (TSyntax `term)
     `(.switch $(← regStx tys v) $(← jumpStx tys d) [$cs,*])
 
 /-! ## Callees and binders -/
+
+/-- `Translate.libCall? name`'s function. -/
+def libCallName? : String → Option Name
+  | "memcmp" => some ``Operation.memcmp
+  | "bcmp" => some ``Operation.bcmp
+  | "explicit_bzero" => some ``Operation.explicitBzero
+  | "__explicit_bzero_chk" => some ``Operation.explicitBzeroChk
+  | "memset_explicit" => some ``Operation.memsetExplicit
+  | _ => none
 
 /-- The identifiers in `stx`. -/
 partial def idents (stx : Syntax) : Array Name :=
@@ -478,16 +506,23 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
   let p ← match Prog.ofRegion rgn with
     | .ok p => pure p
     | .error e => throwErrorAt r e
-  let table ← callees.toList.mapM fun (c : TSyntax ``calleeBinding) => match c with
-    | `(calleeBinding| @$f:ident := $t) => pure (f.getId.toString, t)
-    | c => throwErrorAt c "malformed callee binding"
-  -- every callee's term, checked against its call sites
+  let table := callees.toList.map fun (c : TSyntax ``calleeBinding) =>
+    (MLIR.bracketsText c.raw[1], (⟨c.raw[3]⟩ : TSyntax `term))
+  -- every callee's term, checked against its call sites; a `noreturn` call needs none, an
+  -- unbound library function's is its `Translate.libCall?` semantics
   let calls := p.blocks.flatMap fun b => b.body.filterMap fun
-    | .call f ts us _ _ => some (f, ts, us)
+    | .call f ts us _ _ false => some (f, ts, us)
     | _ => none
   let mut terms : List (String × TSyntax `term) := []
   for (f, ts, us) in calls do
     if (terms.lookup f).isNone then
+      if (table.lookup f).isNone then
+        if let some lib := libCallName? f then
+          let some ⟨ts', us', _⟩ := libCall? f | unreachable!
+          unless ts' == ts && us' == us do
+            throwErrorAt r "@{f} does not have the type the call site needs"
+          terms := terms ++ [(f, (⟨(mkCIdent lib).raw⟩ : TSyntax `term))]
+          continue
       let t ← calleeTerm r table f
       terms := terms ++ [(f, ← checkCallee binders f t ts us)]
 
@@ -601,13 +636,15 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   unless p.Γ.args.isEmpty do
     throwErrorAt r "an initializer takes no arguments"
   let [t] := p.tRets | throwErrorAt r "an initializer returns exactly one value"
-  if b.body.any (fun | .call .. | .addressof .. => true | _ => false) then
-    throwErrorAt r "an initializer neither calls nor takes addresses"
+  if b.body.any (fun | .call .. => true | _ => false) then
+    throwErrorAt r "an initializer makes no calls"
   let name (s : Name) : Ident := mkIdent (x.getId ++ s)
   let Γ := name `Γ
   let tree := name `tree
   let lit := name `lit
   let c? := p.constant?
+  if c?.isNone && b.body.any (· matches .addressof ..) then
+    throwErrorAt r "an initializer takes addresses only as a folded constant's members"
   -- folded: the literal, then per undefined member its poison and the `insertvalue` of it
   let undefs := (c?.map (·.2)).getD []
   let vals := if c?.isSome then t :: undefs.flatMap fun (_, τ) => [τ, t] else p.Γ.vals

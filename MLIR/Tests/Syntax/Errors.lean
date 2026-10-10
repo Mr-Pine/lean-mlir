@@ -117,11 +117,11 @@ mlir_def allocaCount := {
     "llvm.return"() : () -> ()
 }
 
-/-- error: ^bb0: %0 = "llvm.load"(%arg0) : (!llvm.ptr) -> i64: atomic accesses are not supported -/
+/-- error: ^bb0: %0 = "llvm.load"(%arg0) : (!llvm.ptr) -> i64: unknown atomic ordering 3 -/
 #guard_msgs in
 mlir_def atomic := {
   ^bb0(%arg0: !llvm.ptr):
-    %0 = "llvm.load"(%arg0) <{ordering = 2 : i64}> : (!llvm.ptr) -> i64
+    %0 = "llvm.load"(%arg0) <{ordering = 3 : i64}> : (!llvm.ptr) -> i64
     "llvm.return"(%0) : (i64) -> ()
 }
 
@@ -209,7 +209,7 @@ mlir_def calleeBinder (k : Nat) := {
 example (k : Nat) : (calleeBinder k).blocks 0 = calleeBinder.entry k := rfl
 
 /--
-error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.br, llvm.cond_br or llvm.switch
+error: ^bb0: %0 = "llvm.add"(%arg0, %arg0) : (i64, i64) -> i64: 'llvm.add' is not a terminator; a block must end in llvm.return, llvm.unreachable, llvm.br, llvm.cond_br or llvm.switch
 -/
 #guard_msgs in
 mlir_def notTerminated := {
@@ -340,6 +340,123 @@ error: ^bb0: "llvm.intr.assume"(%arg0, %arg1) : (i1, !llvm.ptr) -> (): operand b
 mlir_def assumeBundle := {
   ^bb0(%arg0: i1, %arg1: !llvm.ptr):
     "llvm.intr.assume"(%arg0, %arg1) <{op_bundle_sizes = array<i32: 1>, op_bundle_tags = ["nonnull"]}> : (i1, !llvm.ptr) -> ()
+    "llvm.return"() : () -> ()
+}
+
+/-! ## Fail-closed imports of newer ops -/
+
+/--
+error: ^bb0: %0 = "llvm.inline_asm"(%arg0) : (i8) -> i8: only an empty asm returning its operand is supported
+-/
+#guard_msgs in
+mlir_def asmText := {
+  ^bb0(%arg0: i8):
+    %0 = "llvm.inline_asm"(%arg0) <{asm_dialect = 0 : i64, asm_string = "nop", constraints = "=r,0", tail_call_kind = #llvm.tailcallkind<tail>}> : (i8) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+/-- error: ^bb0: %0 = "llvm.inline_asm"(%arg0) : (i8) -> i8: unsupported constraints "=r,r" -/
+#guard_msgs in
+mlir_def asmUntied := {
+  ^bb0(%arg0: i8):
+    %0 = "llvm.inline_asm"(%arg0) <{asm_dialect = 0 : i64, asm_string = "", constraints = "=r,r"}> : (i8) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.inline_asm"(%arg0) : (i8) -> i8: unsupported constraints "=r,0,~{rbx}"
+-/
+#guard_msgs in
+mlir_def asmClobber := {
+  ^bb0(%arg0: i8):
+    %0 = "llvm.inline_asm"(%arg0) <{asm_dialect = 0 : i64, asm_string = "", constraints = "=r,0,~{rbx}"}> : (i8) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.cmpxchg"(%arg0, %arg1, %arg1) : (!llvm.ptr, i64, i64) -> !llvm.struct<(i64, i1)>: unsupported attribute `failure_ordering`
+-/
+#guard_msgs in
+mlir_def cmpxchg := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    %0 = "llvm.cmpxchg"(%arg0, %arg1, %arg1) <{failure_ordering = 2 : i64, success_ordering = 2 : i64}> : (!llvm.ptr, i64, i64) -> !llvm.struct<(i64, i1)>
+    "llvm.return"() : () -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.atomicrmw"(%arg0, %arg1) : (!llvm.ptr, i64) -> i64: unsupported attribute `bin_op`
+-/
+#guard_msgs in
+mlir_def atomicrmw := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    %0 = "llvm.atomicrmw"(%arg0, %arg1) <{bin_op = 1 : i64, ordering = 2 : i64}> : (!llvm.ptr, i64) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+}
+
+/-- error: ^bb0: %0 = "llvm.inttoptr"(%arg0) : (i64) -> !llvm.ptr: unsupported operation 'llvm.inttoptr' -/
+#guard_msgs in
+mlir_def inttoptr := {
+  ^bb0(%arg0: i64):
+    %0 = "llvm.inttoptr"(%arg0) : (i64) -> !llvm.ptr
+    "llvm.return"(%0) : (!llvm.ptr) -> ()
+}
+
+/-- error: ^bb0: %0 = "llvm.ptrtoaddr"(%arg0) : (!llvm.ptr) -> i32: expected an `i64` result -/
+#guard_msgs in
+mlir_def ptrtoaddrWidth := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.ptrtoaddr"(%arg0) : (!llvm.ptr) -> i32
+    "llvm.return"(%0) : (i32) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.intr.scmp"(%arg0, %arg0) : (i8, i8) -> i1: expected two operands of one type, and a result of at least 2 bits
+-/
+#guard_msgs in
+mlir_def scmpBit := {
+  ^bb0(%arg0: i8):
+    %0 = "llvm.intr.scmp"(%arg0, %arg0) : (i8, i8) -> i1
+    "llvm.return"(%0) : (i1) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.intr.bswap"(%arg0) : (i8) -> i8: expected a result of the operand's type, an even number of bytes
+-/
+#guard_msgs in
+mlir_def bswapByte := {
+  ^bb0(%arg0: i8):
+    %0 = "llvm.intr.bswap"(%arg0) : (i8) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+/-- error: %arg0: cannot decode the type !llvm.struct<packed (i8, i64)> -/
+#guard_msgs in
+mlir_def packedPadded := {
+  ^bb0(%arg0: !llvm.struct<packed (i8, i64)>):
+    "llvm.return"() : () -> ()
+}
+
+/-- error: @bcmp does not have the type the call site needs -/
+#guard_msgs in
+mlir_def bcmpType := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i32):
+    %0 = "llvm.call"(%arg0, %arg0, %arg1) <{callee = @bcmp, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 3, 0>}> : (!llvm.ptr, !llvm.ptr, i32) -> i32
+    "llvm.return"(%0) : (i32) -> ()
+}
+
+/-- error: llvm.call to @strlen: no callee bound; add `with @strlen := …` -/
+#guard_msgs in
+mlir_def unknownExternal := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.call"(%arg0) <{callee = @strlen, op_bundle_sizes = array<i32>, operandSegmentSizes = array<i32: 1, 0>}> : (!llvm.ptr) -> i64
+    "llvm.return"(%0) : (i64) -> ()
+}
+
+/-- error: ^bb0: "llvm.store"(%arg1, %arg0) : (i64, !llvm.ptr) -> (): unsupported attribute `nontemporal` -/
+#guard_msgs in
+mlir_def nontemporal := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    "llvm.store"(%arg1, %arg0) <{alignment = 8 : i64, nontemporal, ordering = 0 : i64}> : (i64, !llvm.ptr) -> ()
     "llvm.return"() : () -> ()
 }
 

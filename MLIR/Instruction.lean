@@ -25,12 +25,16 @@ inductive UnOp : Ty → (out : Ty) → Type
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
   | bswap {w : Nat} : UnOp (.bv w) (.bv w)
+  /-- An empty inline `asm` whose output is tied to its input: the input. -/
+  | copy {t : Ty} : UnOp t t
   | cttz (isZeroPoison : Bool) {w : Nat} : UnOp (.bv w) (.bv w)
   | reduceOr {l w : Nat} : UnOp (.vec l w) (.bv w)
+  | reduceAnd {l w : Nat} : UnOp (.vec l w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
   |
   extractvalue (indices : List Nat) (tCont tVal : Ty) (h : tCont.memberType indices == some tVal) :
     UnOp tCont tVal
+  | vector {l w w' : Nat} (op : UnOp (.bv w) (.bv w')) : UnOp (.vec l w) (.vec l w')
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
@@ -43,6 +47,13 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | lshr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | ashr (isExact : Bool) {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | smin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | smax {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | umin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | umax {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  /-- `llvm.scmp`: `-1`, `0` or `1` as `a` is less than, equal to or greater than `b`, signed. -/
+  | scmp {w w' : Nat} : BinOp (.bv w) (.bv w) (.bv w')
+  /-- `llvm.ucmp`: `scmp`, unsigned. -/
+  | ucmp {w w' : Nat} : BinOp (.bv w) (.bv w) (.bv w')
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
   /-- `getelementptr` with one `i64` index: `byteOff + index * stride` bytes on. -/
   | gepDyn (byteOff stride : Nat) : BinOp .ptr (.bv 64) .ptr
@@ -88,6 +99,10 @@ inductive Instr (Γ : Ctx)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
   | memset (dst : Reg Γ .ptr) (val : Reg Γ (.bv 8)) (len : Reg Γ (.bv w))
   | memcpy (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
+  /-- `memcpy` whose ranges may overlap: `src` read, then `dst` written. -/
+  | memmove (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
+  /-- `ptrtoaddr`/`ptrtoint`: `p`'s address, of the state's unspecified block addresses. -/
+  | ptrtoaddr (dst : Dst Γ (.bv w)) (p : Reg Γ .ptr)
   /-- A fresh block of `bytes` undefined bytes; `dst` points to its start. `dead` until a
   `lifetimeStart`: an `alloca` with lifetime markers. -/
   | alloca (dst : Dst Γ .ptr) (bytes : Nat) (dead : Bool := false)
@@ -109,6 +124,8 @@ structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where
 
 inductive Exit (Γ : Ctx) (tRets : List Ty) (blockTys : Fin n → List Ty)
   | ret (vs : Regs Γ tRets)
+  /-- `llvm.unreachable`: UB. -/
+  | unreachable
   | br (target : Jump Γ blockTys)
   | condBr (cond : Reg Γ (.bv 1)) (ttrue : Jump Γ blockTys) (tfalse : Jump Γ blockTys)
   |

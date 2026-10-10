@@ -99,6 +99,27 @@ def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env
   _ ← set updated
   return env
 
+/-- `llvm.memmove`: `memcpy` whose ranges may overlap, `src` read before `dst` is written. -/
+def memmove (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env : ⟪Γ⟫) :
+    EffectM ⟪Γ⟫ := do
+  let .value (dst, src, len) := do
+    return (← dst, ← src, (← len).toNat) | throwUB
+  let state ← get
+  throwUBIf (¬Room state.mem dst (8 * len))
+  throwUBIf (¬Room state.mem src (8 * len))
+  let replacement := state.mem.readAt src (8 * len)
+  let defined := state.mem.definedAt src (8 * len)
+  let updated := { state with mem := state.mem.storeDef dst replacement defined }
+  _ ← set updated
+  return env
+
+/-- `ptrtoaddr`: `p`'s block's address `addr p.id` plus its offset, truncated or zero-extended to
+`w` bits as `ptrtoint` is. -/
+@[mlir_operation]
+def ptrtoaddr (addr : BlockId → BitVec 64) {w : Nat} (p : PoisonOr Pointer) : IntW w := do
+  let p ← p
+  return (addr p.id + p.offset).setWidth w
+
 /-- `llvm.lifetime.start` of `p`'s object; poison: no effect. -/
 def lifetimeStart (p : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let .value p := p | return env

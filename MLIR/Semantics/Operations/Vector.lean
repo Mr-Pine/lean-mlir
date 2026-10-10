@@ -75,6 +75,22 @@ def reduceOr {l w : Nat} (v : ⟦.vec l w⟧) : IntW w :=
   | 0, _ => .value 0
   | n + 1, v => orLanes v n (by omega)
 
+/-- The AND of lanes `0` to `n` of `v`; poison if one is. -/
+@[mlir_operation]
+def andLanes {l w : Nat} (v : ⟦.vec l w⟧) : (n : Nat) → n < l → IntW w
+  | 0, _ => v[0]
+  | n + 1, h => do
+    let x ← andLanes v n (by omega)
+    let y ← v[n + 1]
+    return x &&& y
+
+/-- `llvm.intr.vector.reduce.and`: the AND of `v`'s lanes; poison if one is. -/
+@[mlir_operation]
+def reduceAnd {l w : Nat} (v : ⟦.vec l w⟧) : IntW w :=
+  match l, v with
+  | 0, _ => .value (BitVec.allOnes w)
+  | n + 1, v => andLanes v n (by omega)
+
 /-- `vpmadd52luq`: lane `i` is `a[i]` plus the low 52 bits of the product of `b[i]`'s and `c[i]`'s
 low 52 bits. -/
 @[mlir_operation]

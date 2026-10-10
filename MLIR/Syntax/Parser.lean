@@ -49,6 +49,53 @@ def balancedBrackets.formatter : Formatter :=
 def balancedBrackets.parenthesizer : Parenthesizer :=
   pure ()
 
+/-- Consume up to the `"` closing the string, skipping each escaped character. -/
+partial def mlirStrFnAux (startPos : String.Pos.Raw) (i : String.Pos.Raw) : ParserFn := fun c s =>
+  if c.atEnd i then s.mkError "unterminated string"
+  else
+    match c.get i with
+    | '"' => mkNodeToken `mlir_str startPos true c (s.setPos (c.next i))
+    | '\\' => if c.atEnd (c.next i) then s.mkError "unterminated string"
+      else mlirStrFnAux startPos (c.next (c.next i)) c s
+    | _ => mlirStrFnAux startPos (c.next i) c s
+
+def mlirStrFn : ParserFn := fun c s =>
+  if c.get s.pos == '"' then mlirStrFnAux s.pos (c.next s.pos) c s else s.mkError "string"
+
+/-- A string with MLIR's escapes (`\\`, `\"`, `\n`, `\t` and `\XX` in hex), as raw text: Lean's
+string literal rejects `"\ED"`. -/
+def mlirStr : Parser :=
+  withAntiquot (mkAntiquot "mlirStr" `mlir_str)
+    { fn := mlirStrFn, info := mkAtomicInfo "mlirStr" }
+
+@[combinator_formatter mlirStr]
+def mlirStr.formatter : Formatter :=
+  pure ()
+
+@[combinator_parenthesizer mlirStr]
+def mlirStr.parenthesizer : Parenthesizer :=
+  pure ()
+
+/-- Consume a symbol name's characters: letters, digits, `_`, `$`, `.` and `-`. -/
+def mlirSymbolNameFn : ParserFn := fun c s =>
+  let ok (ch : Char) := ch.isAlphanum || ch == '_' || ch == '$' || ch == '.' || ch == '-'
+  let i := s.pos
+  if c.atEnd i || !ok (c.get i) then s.mkError "symbol name"
+  else mkNodeToken `mlir_symbol_name i true c (takeWhileFn ok c s)
+
+/-- A symbol's name after the `@`, as raw text: `anon.042b.50`, which is no Lean identifier. -/
+def mlirSymbolName : Parser :=
+  withAntiquot (mkAntiquot "mlirSymbolName" `mlir_symbol_name)
+    { fn := mlirSymbolNameFn, info := mkAtomicInfo "mlirSymbolName" }
+
+@[combinator_formatter mlirSymbolName]
+def mlirSymbolName.formatter : Formatter :=
+  pure ()
+
+@[combinator_parenthesizer mlirSymbolName]
+def mlirSymbolName.parenthesizer : Parenthesizer :=
+  pure ()
+
 /-- A `//` comment up to the end of the line, as `^bb1:  // 2 preds: ^bb0, ^bb1` has. -/
 def commentFn : ParserFn := fun c s =>
   let i := s.pos
@@ -101,33 +148,38 @@ syntax "!" ident (balancedBrackets)? : mlir_type
 
 syntax signedNum := "-"? num
 
+/-- An attribute: a string first, which `mlir_attr_val`'s token lookahead would reject. -/
+syntax attrValue := mlirStr <|> mlir_attr_val
+
 syntax signedNum (":" mlir_type)? : mlir_attr_val
 
-syntax str : mlir_attr_val
-
-syntax "@" (ident <|> str) : mlir_attr_val
+syntax "@" (mlirSymbolName <|> mlirStr) : mlir_attr_val
 
 syntax "#" ident : mlir_attr_val
 
-/-- `nsw`, or `argMem = read` as in `#llvm.memory_effects<…>`. -/
-syntax dialectArg := (atomic(ident " = "))? mlir_attr_val
+/-- `distinct[0]<>`, an alias scope's identity. -/
+syntax distinctAttr := &"distinct" "[" num "]" balancedBrackets
+
+/-- `nsw`, `argMem = read` as in `#llvm.memory_effects<…>`, a keyword (`private`), or
+`distinct[0]<>`. -/
+syntax dialectArg := (atomic(ident " = "))? (atomic(distinctAttr) <|> attrValue <|> rawIdent)
 
 syntax "#" ident "<" dialectArg,* ">" : mlir_attr_val
 
-syntax "dense<" mlir_attr_val ">" ":" mlir_type : mlir_attr_val
+syntax "dense<" attrValue ">" ":" mlir_type : mlir_attr_val
 
-syntax "array<" mlir_type (":" mlir_attr_val,*)? ">" : mlir_attr_val
+syntax "array<" mlir_type (":" attrValue,*)? ">" : mlir_attr_val
 
-syntax "[" mlir_attr_val,* "]" : mlir_attr_val
+syntax "[" attrValue,* "]" : mlir_attr_val
 
 /-- `<#tbaa_type_desc, 0>`, an element of a TBAA type's `members = {…}`. -/
-syntax attrTuple := "<" mlir_attr_val,* ">"
+syntax attrTuple := "<" attrValue,* ">"
 
 syntax "{" attrTuple,+ "}" : mlir_attr_val
 
 syntax mlir_type : mlir_attr_val
 
-syntax attrEntry := (ident <|> str) (" = " mlir_attr_val)?
+syntax attrEntry := (ident <|> str) (" = " attrValue)?
 
 syntax attrDict := "<"? "{" attrEntry,* "}" ">"?
 
@@ -145,12 +197,11 @@ syntax bbArg := ssaValue ":" mlir_type
 
 syntax bbLabel ("(" bbArg,* ")")? ":" (comment)? mlir_op* : mlir_bb
 
-syntax "{" mlir_bb+ "}" : mlir_region
-
-syntax "{" mlir_op* "}" : mlir_region
+/-- Blocks; the entry block's label may be left out. -/
+syntax "{" mlir_op* mlir_bb* "}" : mlir_region
 
 /-- `#tbaa_tag = #llvm.tbaa_tag<…>`, a module's attribute alias. -/
-syntax aliasDef := "#" ident " = " mlir_attr_val
+syntax aliasDef := "#" ident " = " attrValue
 
 /-- An operation with one region and no operands, results or successors, after the aliases it
 refers to: `"llvm.func"() <{…}> ({ … }) : () -> ()`. -/
@@ -240,30 +291,53 @@ def intValue (n : TSyntax ``signedNum) : Int :=
   | #[n] => n.isNatLit?.getD 0
   | _ => 0
 
+/-- The characters of the `mlirStr` node `x`, its escapes decoded: `\\XX` is the character of
+code `XX`, a byte. -/
+def mlirStrValue (x : Syntax) : String :=
+  let hex (c : Char) : Option Nat :=
+    if c.isDigit then some (c.toNat - '0'.toNat)
+    else if 'a' ≤ c && c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
+    else if 'A' ≤ c && c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
+    else none
+  let rec go : List Char → List Char
+    | '\\' :: a :: b :: cs =>
+      match hex a, hex b with
+      | some h, some l => Char.ofNat (16 * h + l) :: go cs
+      | _, _ => (if a == 'n' then '\n' else if a == 't' then '\t' else a) :: go (b :: cs)
+    | '\\' :: a :: cs => (if a == 'n' then '\n' else if a == 't' then '\t' else a) :: go cs
+    | c :: cs => c :: go cs
+    | [] => []
+  String.ofList (go ((bracketsText x).toList.drop 1).dropLast)
+
 mutual
+
+partial def anyAttrVal (v : TSyntax ``attrValue) : CoreM AttrValue :=
+  let x := v.raw[0]
+  if x.getKind == `mlir_str then return .str (mlirStrValue x) else attrVal ⟨x⟩
 
 partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
   | `(mlir_attr_val| $n:signedNum $[: $t]?) => do
     return .int (intValue n) (← match t with | some t => mlirType t | none => pure (.int 64))
-  | `(mlir_attr_val| $s:str) => return .str s.getString
-  | `(mlir_attr_val| @ $x:ident) => return .symbol x.getId.toString
-  | `(mlir_attr_val| @ $s:str) => return .symbol s.getString
+  | stx@`(mlir_attr_val| @ $_) =>
+    let x := stx.raw[1]
+    return .symbol (if x.getKind == `mlir_str then mlirStrValue x else bracketsText x)
   | `(mlir_attr_val| # $x:ident) => return .alias x.getId.toString
   | `(mlir_attr_val| # $d:ident < $vs,* >) => do
     let dialect := d.getId.toString
-    let vs ← vs.getElems.toList.mapM fun (a : TSyntax ``dialectArg) => do
-      match a with
-      | `(dialectArg| $k:ident = $v) => return (some k.getId.toString, v)
-      | `(dialectArg| $v:mlir_attr_val) => return (none, v)
-      | a => throwErrorAt a "malformed contents of '#{dialect}<…>'"
-    -- a keyword or string, `nsw`, `none`, as itself; anything else as an attribute
-    let word (v : TSyntax `mlir_attr_val) : CoreM AttrValue := do
-      match leaves v.raw with
-      | #[x] =>
-        if x.isIdent then return AttrValue.opaque_ dialect x.getId.toString
-        if let some s := x.isStrLit? then return AttrValue.opaque_ dialect s
-        attrVal v
-      | _ => attrVal v
+    -- `k = v`'s key, and the value: an attribute, or a keyword
+    let vs := vs.getElems.toList.map fun (a : TSyntax ``dialectArg) =>
+      (if a.raw[0][0].isIdent then some a.raw[0][0].getId.toString else none, a.raw[1])
+    -- a word or string, `nsw`, `none`, `private`, as itself; anything else as an attribute
+    let word (v : Syntax) : CoreM AttrValue := do
+      if v.isIdent then return AttrValue.opaque_ dialect v.getId.toString
+      if v.getKind == ``distinctAttr then
+        return AttrValue.opaque_ "distinct" (toString (v[2].isNatLit?.getD 0))
+      let x := v[0]
+      if x.getKind == `mlir_str then return AttrValue.opaque_ dialect (mlirStrValue x)
+      match leaves x with
+      | #[y] => if y.isIdent then return AttrValue.opaque_ dialect y.getId.toString
+      | _ => pure ()
+      anyAttrVal ⟨v⟩
     -- `k = v, …`: a dictionary
     if vs.any (·.1.isSome) then
       let es ← vs.mapM fun
@@ -274,15 +348,15 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
     match vs with
     | [v] => return v
     | vs => return .list vs
-  | `(mlir_attr_val| dense< $v > : $t) => return .dense (← attrVal v) (← mlirType t)
+  | `(mlir_attr_val| dense< $v > : $t) => return .dense (← anyAttrVal v) (← mlirType t)
   | `(mlir_attr_val| array< $t $[: $vs,*]? >) => do
-    let vs : Array (TSyntax `mlir_attr_val) := (vs.map (·.getElems)).getD #[]
-    return .array (← mlirType t) (← vs.toList.mapM attrVal)
-  | `(mlir_attr_val| [ $vs,* ]) => return .list (← vs.getElems.toList.mapM attrVal)
+    let vs : Array (TSyntax ``attrValue) := (vs.map (·.getElems)).getD #[]
+    return .array (← mlirType t) (← vs.toList.mapM anyAttrVal)
+  | `(mlir_attr_val| [ $vs,* ]) => return .list (← vs.getElems.toList.mapM anyAttrVal)
   | `(mlir_attr_val| { $ts:attrTuple,* }) =>
     .list <$> ts.getElems.toList.mapM fun (t : TSyntax ``attrTuple) => do
       match t with
-      | `(attrTuple| < $vs,* >) => return .list (← vs.getElems.toList.mapM attrVal)
+      | `(attrTuple| < $vs,* >) => return .list (← vs.getElems.toList.mapM anyAttrVal)
       | t => throwErrorAt t "malformed `<…>` tuple"
   | `(mlir_attr_val| $t:mlir_type) => do
     match leaves t.raw with
@@ -308,8 +382,8 @@ partial def attrDictVal : TSyntax ``attrDict → CoreM AttrDict
   | stx => throwErrorAt stx "malformed MLIR attribute dictionary"
 
 /-- A dictionary entry's value; a bare key is `unit`. -/
-partial def attrValOrUnit : Option (TSyntax `mlir_attr_val) → CoreM AttrValue
-  | some v => attrVal v
+partial def attrValOrUnit : Option (TSyntax ``attrValue) → CoreM AttrValue
+  | some v => anyAttrVal v
   | none => return .unit
 
 end
@@ -352,18 +426,20 @@ def block : TSyntax `mlir_bb → CoreM Block
              ops := ← ops.toList.mapM op }
   | stx => throwErrorAt stx "malformed MLIR block"
 
-/-- The region `stx`; a region without block headers is one block `^bb0` without arguments. -/
+/-- The region `stx`; operations before the first block header are the entry block `^bb0`, without
+arguments. -/
 def region : TSyntax `mlir_region → CoreM Region
-  | `(mlir_region| { $bs:mlir_bb* }) => return ⟨← bs.toList.mapM block⟩
-  | `(mlir_region| { $ops:mlir_op* }) =>
-    return ⟨[{ name := "bb0", args := [], ops := ← ops.toList.mapM op }]⟩
+  | `(mlir_region| { $ops:mlir_op* $bs:mlir_bb* }) => do
+    let bs ← bs.toList.mapM block
+    if ops.isEmpty && !bs.isEmpty then return ⟨bs⟩
+    return ⟨{ name := "bb0", args := [], ops := ← ops.toList.mapM op } :: bs⟩
   | stx => throwErrorAt stx "malformed MLIR region"
 
 def symbolOp : TSyntax `mlir_symbol → CoreM SymbolOp
   | `(mlir_symbol| $as:aliasDef* $name:str ( ) $attrs:attrDict ( $r:mlir_region ) : ( ) -> ( )) => do
     let aliases ← as.toList.mapM fun (a : TSyntax ``aliasDef) => do
       match a with
-      | `(aliasDef| # $a:ident = $v) => return (a.getId.toString, ← attrVal v)
+      | `(aliasDef| # $a:ident = $v) => return (a.getId.toString, ← anyAttrVal v)
       | a => throwErrorAt a "malformed attribute alias"
     return { aliases, name := name.getString, attrs := ← attrDictVal attrs, region := ← region r }
   | stx => throwErrorAt stx "malformed MLIR operation"

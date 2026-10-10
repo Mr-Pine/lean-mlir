@@ -42,13 +42,16 @@ it by path.
 func_init / block_init done? ── no ──> func_init (once), block_init (each block)
 │
 next instruction (infoview "Instructions" panel)
-├─ constant, arithmetic, icmp, select, gep, cast, vector op → step_pure
+├─ constant, arithmetic, icmp, select, gep, cast, vector op, ptrtoaddr → step_pure
 ├─ lifetime.start / lifetime.end → step_lifetime (step_pure dispatches to it)
 ├─ assume c → step_assume [facts deciding c] (step_pure dispatches to it)
 │    └─ flagged op (nsw/nuw) or gep → no-overflow lemma as simp arg if the step leaves an `if`
 ├─ load → step_load            ├─ store → step_store
-├─ memcpy / memset → step_memcpy / step_memset
-├─ call @f → step_call using f.call_eq (or the callee hypothesis)
+├─ memcpy / memmove / memset → step_memcpy / step_memmove / step_memset
+├─ call @f → step_call using f.call_eq (or the callee hypothesis); an unbound @bcmp (@memcmp,
+│    @explicit_bzero, @__explicit_bzero_chk) → step_call using Operation.bcmp_eq (memcmp_eq,
+│    explicitBzero_eq, explicitBzeroChk_eq); a noreturn call or unreachable is UB: never stepped,
+│    the branch to it is shown not taken
 ├─ alloca → step_alloca        ├─ addressof @g → step_addressof g.value_eq
 ├─ a run of instructions that recurs → step_pattern using <pattern lemma>
 └─ end of body → finish_block

@@ -23,10 +23,13 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | zext nneg => Operation.zext nneg
   | sext => Operation.sext
   | bswap => Operation.bswap
+  | copy => id
   | cttz isZeroPoison => Operation.cttz isZeroPoison
   | reduceOr => Operation.reduceOr
+  | reduceAnd => Operation.reduceAnd
   | bitcast h => Operation.bitcast h
   | extractvalue indices tCont tVal h => Operation.extractvalue indices tCont tVal h
+  | vector op => fun a => Vector.ofFn (fun i => op.compute a[i])
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
@@ -40,6 +43,11 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | lshr exact => Operation.lshr exact
   | ashr exact => Operation.ashr exact
   | smin => Operation.smin
+  | smax => Operation.smax
+  | umin => Operation.umin
+  | umax => Operation.umax
+  | scmp => Operation.scmp
+  | ucmp => Operation.ucmp
   | icmp p => Operation.icmp p
   | ptrcmp ne => Operation.ptrcmp ne
   | gepDyn byteOff stride => Operation.gepDyn byteOff stride
@@ -77,6 +85,10 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | store p reg => Operation.store (env.read p) (env.read reg) env
   | memset dst v len => Operation.memset (env.read dst) (env.read v) (env.read len) env
   | memcpy dst src len => Operation.memcpy (env.read dst) (env.read src) (env.read len) env
+  | memmove dst src len => Operation.memmove (env.read dst) (env.read src) (env.read len) env
+  | ptrtoaddr dst p => do
+    let s ← get
+    pure (env.write dst (Operation.ptrtoaddr s.mem.addr (env.read p)))
   | alloca dst bytes dead =>
     modifyGetThe GlobalState fun s => (env.write dst (.value s.allocaPtr), s.alloca bytes dead)
   | lifetimeStart p _ => Operation.lifetimeStart (env.read p) env
@@ -110,6 +122,7 @@ def switchTarget {bt : Fin n → List Ty} (x : ⟦t⟧ᵣ) (default : Jump Γ bt
 def Exit.run {blockTys : Fin n → List Ty} (params : (k : Fin n) → Dsts Γ (blockTys k)) (env : ⟪Γ⟫) :
     Exit Γ tRets blockTys → EffectM (⟪Γ⟫ × (Vals tRets ⊕ Fin n))
   | ret regs => pure (env, .inl (regs.read env))
+  | unreachable => throwUB
   | br target => pure (target.run params env)
   | condBr cond ttrue tfalse => do
     let .value cond := env.read cond | throwUB

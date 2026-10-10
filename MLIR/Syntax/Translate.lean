@@ -2,6 +2,7 @@ module
 
 public import MLIR.Syntax.AST
 public import MLIR.Func
+public import MLIR.Semantics.Operations.LibCall
 
 /-!
 # MLIR AST to `Func`
@@ -37,6 +38,8 @@ inductive ConstLit
   | splat (l w : Nat) (v : Int)
   | array (n w : Nat) (vs : List Int)
   | arraySplat (n w : Nat) (v : Int)
+  /-- A byte array, byte `i` `v`'s `i`-th lowest: a string, one literal however long. -/
+  | bytes (n v : Nat)
   | null
   /-- An array's elements or a struct's fields, of type `t`. -/
   | agg (t : Ty) (ms : List ConstLit)
@@ -46,6 +49,7 @@ def ConstLit.ty : ConstLit → Ty
   | .bv w _ => .bv w
   | .vec l w _ | .splat l w _ => .vec l w
   | .array n w _ | .arraySplat n w _ => .array n (.bv w)
+  | .bytes n _ => .array n (.bv 8)
   | .null => .ptr
   | .agg t _ => t
 
@@ -74,13 +78,17 @@ inductive PInstr
   | store (t : Ty) (p v : RegRef)
   | memset (w : Nat) (p v l : RegRef)
   | memcpy (w : Nat) (dst src l : RegRef)
+  | memmove (w : Nat) (dst src l : RegRef)
+  | ptrtoaddr (w : Nat) (dst : Nat) (p : RegRef)
   /-- `dead` until a `lifetimeStart`: an `alloca` with lifetime markers. -/
   | alloca (dst : Nat) (bytes : Nat) (dead : Bool)
   | lifetimeStart (p : RegRef) (bytes : Nat)
   | lifetimeEnd (p : RegRef) (bytes : Nat)
   | assume (c : RegRef)
-  /-- A call of the symbol `callee`, from argument types `ts` to result types `us`. -/
+  /-- A call of the symbol `callee`, from argument types `ts` to result types `us`; `noreturn` at
+  the call site: UB. -/
   | call (callee : String) (ts us : List Ty) (args : List RegRef) (rets : List Nat)
+    (noreturn : Bool)
   | addressof (global : String) (dst : Nat)
 
 /-- A jump to block `target` with arguments `args`. -/
@@ -90,6 +98,7 @@ structure PJump where
 
 inductive PExit
   | ret (vs : List RegRef)
+  | unreachable
   | br (j : PJump)
   | condBr (c : RegRef) (t f : PJump)
   | switch (w : Nat) (v : RegRef) (dflt : PJump) (cases : List (Int × PJump))
@@ -143,20 +152,21 @@ def dropWs (cs : List Char) : List Char :=
   cs.dropWhile (· == ' ')
 
 mutual
-/-- Decode one type from the head of `cs`. -/
-partial def parseTy : List Char → Option (Ty × List Char)
+/-- Decode one type from the head of `cs`. A packed struct is the plain one when that has no
+padding and, unless `top` (the type is no struct's field), its alignment is a byte's. -/
+partial def parseTy (top : Bool) : List Char → Option (Ty × List Char)
   | 'i' :: cs => (takeNat cs).map fun (w, rest) => (.bv w, rest)
   | 'p' :: 't' :: 'r' :: cs => some (.ptr, cs)
   | 'a' :: 'r' :: 'r' :: 'a' :: 'y' :: '<' :: cs => do
     let (n, cs) ← takeNat (dropWs cs)
     let 'x' :: cs := dropWs cs | none
-    let (t, cs) ← parseTy (dropWs cs)
+    let (t, cs) ← parseTy top (dropWs cs)
     let '>' :: cs := dropWs cs | none
     return (.array n t, cs)
   | 'v' :: 'e' :: 'c' :: 't' :: 'o' :: 'r' :: '<' :: cs => do
     let (n, cs) ← takeNat (dropWs cs)
     let 'x' :: cs := dropWs cs | none
-    let (t, cs) ← parseTy (dropWs cs)
+    let (t, cs) ← parseTy false (dropWs cs)
     let .bv w := t | none
     let '>' :: cs := dropWs cs | none
     return (.vec n w, cs)
@@ -170,14 +180,20 @@ partial def parseTy : List Char → Option (Ty × List Char)
         pure (dropWs cs)
       | cs =>
         pure cs
+    let (packed, cs) :=
+      match cs with
+      | 'p' :: 'a' :: 'c' :: 'k' :: 'e' :: 'd' :: cs => (true, dropWs cs)
+      | cs => (false, cs)
     let '(' :: cs := cs | none
     let (fields, cs) ← parseTyFields (dropWs cs) []
     let '>' :: cs := dropWs cs | none
-    return (.struct fields, cs)
+    let t := Ty.struct fields
+    if packed && (t.hasPadding || !top && t.align != 8) then none
+    return (t, cs)
   | _ => none
-/-- `t (, t)* )` -/
+/-- `t (, t)* )`, struct fields. -/
 partial def parseTyFields (cs : List Char) (acc : List Ty) : Option (List Ty × List Char) := do
-  let (t, cs) ← parseTy cs
+  let (t, cs) ← parseTy false cs
   match dropWs cs with
   | ',' :: cs =>
     parseTyFields (dropWs cs) (t :: acc)
@@ -192,7 +208,7 @@ def ty : MLIRType → Except String Ty
   | .vector [n] [] (.int w) => return .vec n w
   | .undefined "llvm.ptr" => return .ptr
   | t@(.undefined s) =>
-    match parseTy ((s.drop "llvm.".length).toString.toList) with
+    match parseTy true ((s.drop "llvm.".length).toString.toList) with
     | some (a, []) => return a
     | _ => throw s!"cannot decode the type {t}"
   | t => throw s!"unsupported type {t}"
@@ -387,14 +403,17 @@ inductive AttrUse where
   | modeled
   /-- without semantics in the IR: calling conventions, linkage, profile and target hints -/
   | inert
-  /-- UB or poison LLVM adds that the model leaves out, so the model is more defined -/
+  /-- UB, poison or unknown values LLVM adds that the model leaves out, so the model is more
+  defined -/
   | ignored
 
 /-- The attributes of the operation `name`, beyond `modeled` ones its translation reads.
 `ignored`: GEP `inbounds`/`nusw` (an offset that wraps unsigned is poison either way), access
-alignment and TBAA, call and intrinsic parameter attributes, memory effects, `tail` and `nounwind`
-(the model has no unwinding), loop
-`mustProgress`; `alloca` alignment, as the model has no addresses. -/
+alignment, TBAA and alias scopes, call and intrinsic parameter attributes, memory effects,
+`willreturn`, `tail` and `nounwind` (the model has no unwinding), loop `mustProgress`; `alloca`
+alignment, as the model has no addresses; `volatile`, whose access the model makes plainly, its UB
+conditions kept (one thread, no memory-mapped I/O). `inert`: atomic and fence orderings' `syncscope`
+and a fence's ordering, as the model runs one thread. -/
 def opAttrUses : String → List (String × AttrUse)
   | "llvm.add" | "llvm.sub" | "llvm.mul" | "llvm.shl" | "llvm.trunc" =>
     [("overflowFlags", .modeled)]
@@ -413,16 +432,24 @@ def opAttrUses : String → List (String × AttrUse)
     [("elem_type", .modeled), ("rawConstantIndices", .modeled), ("noWrapFlags", .ignored),
       ("inbounds", .ignored)]
   | "llvm.load" | "llvm.store" =>
-    [("ordering", .modeled), ("alignment", .ignored), ("tbaa", .ignored)]
-  | "llvm.intr.memset" | "llvm.intr.memcpy" => [("isVolatile", .modeled), ("arg_attrs", .ignored)]
+    [("ordering", .modeled), ("syncscope", .inert), ("alignment", .ignored), ("tbaa", .ignored),
+      ("alias_scopes", .ignored), ("noalias_scopes", .ignored), ("volatile_", .ignored)]
+  | "llvm.intr.memset" | "llvm.intr.memcpy" | "llvm.intr.memmove" =>
+    [("isVolatile", .ignored), ("arg_attrs", .ignored), ("alias_scopes", .ignored),
+      ("noalias_scopes", .ignored)]
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" => [("size", .modeled)]
   | "llvm.intr.assume" => [("op_bundle_sizes", .modeled), ("op_bundle_tags", .modeled)]
   | "llvm.intr.experimental.noalias.scope.decl" => [("scope", .inert)]
+  | "llvm.fence" => [("ordering", .inert), ("syncscope", .inert)]
+  | "llvm.inline_asm" =>
+    [("asm_string", .modeled), ("constraints", .modeled), ("asm_dialect", .inert),
+      ("has_side_effects", .inert), ("is_align_stack", .inert), ("tail_call_kind", .ignored)]
   | "llvm.call" =>
     [("callee", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
-      ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
-      ("TailCallKind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored),
-      ("memory_effects", .ignored), ("no_unwind", .ignored)]
+      ("noreturn", .modeled), ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
+      ("inline_hint", .inert), ("TailCallKind", .ignored), ("arg_attrs", .ignored),
+      ("res_attrs", .ignored), ("memory_effects", .ignored), ("no_unwind", .ignored),
+      ("will_return", .ignored), ("alias_scopes", .ignored), ("noalias_scopes", .ignored)]
   | "llvm.call_intrinsic" =>
     [("intrin", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
       ("fastmathFlags", .inert), ("arg_attrs", .ignored), ("res_attrs", .ignored)]
@@ -435,28 +462,32 @@ def opAttrUses : String → List (String × AttrUse)
   | _ => []
 
 /-- A function's attributes. `ignored`: memory effects, `willreturn` and `nounwind`, parameter and
-result attributes. -/
+result attributes. `inert`: size and inlining hints, and the unwinding `personality`, as the model
+has no unwinding. -/
 def funcAttrUses : List (String × AttrUse) :=
   [("sym_name", .modeled), ("function_type", .modeled), ("passthrough", .modeled),
     ("CConv", .inert), ("linkage", .inert), ("visibility_", .inert), ("dso_local", .inert),
-    ("unnamed_addr", .inert), ("no_inline", .inert), ("uwtable_kind", .inert),
-    ("frame_pointer", .inert), ("target_cpu", .inert), ("target_features", .inert),
+    ("unnamed_addr", .inert), ("no_inline", .inert), ("inline_hint", .inert), ("minsize", .inert),
+    ("optsize", .inert), ("uwtable_kind", .inert), ("frame_pointer", .inert),
+    ("personality", .inert), ("target_cpu", .inert), ("target_features", .inert),
     ("tune_cpu", .inert), ("memory_effects", .ignored), ("will_return", .ignored),
     ("no_unwind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored)]
 
 /-- A function's `passthrough` attributes. `ignored`: those promising progress, termination,
-no frees, no recursion and no synchronization. -/
+no frees, no recursion and no synchronization. `inert`: code generation's (stack protection and
+probing, lazy binding, diagnostics). -/
 def passthroughUses : List (String × AttrUse) :=
   [("mustprogress", .ignored), ("willreturn", .ignored), ("nofree", .ignored),
     ("norecurse", .ignored), ("nosync", .ignored), ("nocallback", .ignored),
-    ("min-legal-vector-width", .inert), ("no-trapping-math", .inert), ("sspstrong", .inert),
-    ("stack-protector-buffer-size", .inert), ("target-cpu", .inert), ("target-features", .inert),
-    ("tune-cpu", .inert)]
+    ("min-legal-vector-width", .inert), ("no-trapping-math", .inert), ("ssp", .inert),
+    ("sspstrong", .inert), ("stack-protector-buffer-size", .inert), ("probe-stack", .inert),
+    ("nonlazybind", .inert), ("warn-stack-size", .inert), ("target-cpu", .inert),
+    ("target-features", .inert), ("tune-cpu", .inert)]
 
 /-- Parameter and result attributes. `ignored`: those making an argument or result UB or poison
-(`noundef`, `nonnull`, `range`, `align`, `dereferenceable`, `noalias`) or promising how the callee
-uses it (`nocapture`, `nofree`, `readonly`, `writeonly`, `readnone`, `returned`, `writable`,
-`dead_on_unwind`). -/
+(`noundef`, `nonnull`, `range`, `align`, `dereferenceable`, `noalias`, `sret`) or promising how the
+callee uses it (`nocapture`, `nofree`, `readonly`, `writeonly`, `readnone`, `returned`, `writable`,
+`dead_on_unwind`, `dead_on_return`). -/
 def paramAttrUses : List (String × AttrUse) :=
   [("llvm.zeroext", .inert), ("llvm.signext", .inert), ("llvm.immarg", .inert),
     ("llvm.noundef", .ignored), ("llvm.nonnull", .ignored), ("llvm.range", .ignored),
@@ -464,7 +495,8 @@ def paramAttrUses : List (String × AttrUse) :=
     ("llvm.dereferenceable_or_null", .ignored), ("llvm.noalias", .ignored),
     ("llvm.nocapture", .ignored), ("llvm.nofree", .ignored), ("llvm.readonly", .ignored),
     ("llvm.writeonly", .ignored), ("llvm.readnone", .ignored), ("llvm.returned", .ignored),
-    ("llvm.writable", .ignored), ("llvm.dead_on_unwind", .ignored)]
+    ("llvm.writable", .ignored), ("llvm.dead_on_unwind", .ignored),
+    ("llvm.dead_on_return", .ignored), ("llvm.sret", .ignored)]
 
 /-- A global's attributes; `alignment` is `ignored`, as the model has no addresses. -/
 def globalAttrUses : List (String × AttrUse) :=
@@ -496,8 +528,6 @@ def checkOpAttrs (op : Op) : Except String Unit := do
   if let some b := op.getAttr? "op_bundle_tags" then
     unless b matches .list [] do
       throw "operand bundles are not supported"
-  if let some (.bool true) := op.getAttr? "isVolatile" then
-    throw "volatile accesses are not supported"
 
 /-- A function's attributes, checked as `checkAttrs`, with its `passthrough` list. -/
 def checkFuncAttrs (d : AttrDict) : Except String Unit := do
@@ -528,10 +558,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   checkOpAttrs op
   let args ← op.args.mapM (operand E)
   let res := result E op
-  let checkNotAtomic : Except String Unit := do
+  -- an atomic access (`unordered` to `seq_cst`) is a plain one: the model runs one thread
+  let checkOrdering : Except String Unit := do
     if let some o := intAttr? op "ordering" then
-      unless o == 0 do
-        throw "atomic accesses are not supported"
+      unless [0, 1, 2, 4, 5, 6, 7].contains o do
+        throw s!"unknown atomic ordering {o}"
   -- the intrinsics' direct calls, as the x86vector dialect spells them
   let name :=
     match op.name, op.getAttr? "callee" with
@@ -564,6 +595,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     do
       let (dst, t) ← res
       match t, op.getAttr? "value" with
+      -- a string's characters are its bytes, as `mlirStrValue` decodes them
+      | .array n (.bv 8), some (.str bytes) =>
+        unless bytes.length == n do
+          throw s!"{bytes.length} bytes for {n} array elements"
+        return .const (.bytes n (bytes.toList.foldr (fun c v => 256 * v + c.toNat) 0)) dst
       | .bv w, some (.int v _) =>
         return .const (.bv w v) dst
       | .bv 1, some (.bool b) =>
@@ -616,10 +652,17 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.intr.bswap" =>
     do
       let (dst, t) ← res
-      let [(a, .bv w)] := args | throw "expected one integer operand"
-      unless t == .bv w && w % 8 == 0 do
-        throw "expected a result of the operand's type, a whole number of bytes"
-      return .unop (.bswap (w := w)) dst a
+      match args with
+      | [(a, .bv w)] =>
+        unless t == .bv w && w % 16 == 0 do
+          throw "expected a result of the operand's type, an even number of bytes"
+        return .unop (.bswap (w := w)) dst a
+      | [(a, .vec l w)] =>
+        unless t == .vec l w && w % 16 == 0 do
+          throw "expected a result of the operand's type, lanes of an even number of bytes"
+        return .unop (.vector (l := l) (.bswap (w := w))) dst a
+      | _ =>
+        throw "expected one integer or vector operand"
   | "llvm.intr.cttz" =>
     do
       let (dst, t) ← res
@@ -629,13 +672,16 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.bool z) := op.getAttr? "is_zero_poison"
         | throw "expected a boolean `is_zero_poison`"
       return .unop (.cttz z (w := w)) dst a
-  | "llvm.intr.vector.reduce.or" =>
+  | "llvm.intr.vector.reduce.or" | "llvm.intr.vector.reduce.and" =>
     do
       let (dst, t) ← res
       let [(v, .vec l w)] := args | throw "expected one vector operand"
       unless t == .bv w do
         throw "the result must be the vector's lane type"
-      return .unop (.reduceOr (l := l) (w := w)) dst v
+      if name == "llvm.intr.vector.reduce.or" then
+        return .unop (.reduceOr (l := l) (w := w)) dst v
+      else
+        return .unop (.reduceAnd (l := l) (w := w)) dst v
   | "intrinsic llvm.x86.subborrow.32" | "intrinsic llvm.x86.subborrow.64" =>
     do
       let (dst, t) ← res
@@ -668,6 +714,55 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     arith (.ashr (op.hasAttr "isExact")) (← res) args
   | "llvm.intr.smin" =>
     arith .smin (← res) args
+  | "llvm.intr.smax" =>
+    arith .smax (← res) args
+  | "llvm.intr.umin" =>
+    arith .umin (← res) args
+  | "llvm.intr.umax" =>
+    arith .umax (← res) args
+  | "llvm.intr.scmp" | "llvm.intr.ucmp" =>
+    do
+      let (dst, t) ← res
+      let op {w w'} : BinOp (.bv w) (.bv w) (.bv w') :=
+        if name == "llvm.intr.scmp" then .scmp else .ucmp
+      match args, t with
+      | [(a, .bv w), (b, t₂)], .bv w' =>
+        unless t₂ == .bv w && 2 ≤ w' do
+          throw "expected two operands of one type, and a result of at least 2 bits"
+        return .binop (op (w := w) (w' := w')) dst a b
+      | [(a, .vec l w), (b, t₂)], .vec l' w' =>
+        unless t₂ == .vec l w && l == l' && 2 ≤ w' do
+          throw "expected two operands of one type, and as many result lanes of at least 2 bits"
+        return .binop (.vector (l := l) (op (w := w) (w' := w'))) dst a b
+      | _, _ =>
+        throw "expected two integer or vector operands"
+  | "llvm.ptrtoaddr" | "llvm.ptrtoint" =>
+    do
+      let (dst, t) ← res
+      let [(p, .ptr)] := args | throw "expected one pointer operand"
+      let .bv w := t | throw "expected an integer result"
+      -- `ptrtoaddr` gives the address's own width
+      if name == "llvm.ptrtoaddr" && w != 64 then
+        throw "expected an `i64` result"
+      return .ptrtoaddr w dst p
+  | "llvm.inline_asm" =>
+    do
+      let (dst, t) ← res
+      let [(a, t₁)] := args | throw "expected one operand"
+      let some (.str asm) := op.getAttr? "asm_string" | throw "expected an `asm_string`"
+      let some (.str cs) := op.getAttr? "constraints" | throw "expected `constraints`"
+      -- an empty asm, its one output tied to its one input: the input
+      let clobber (c : String) :=
+        c ∈ ["~{dirflag}", "~{fpsr}", "~{flags}", "~{memory}", "~{cc}"]
+      unless asm.isEmpty && t₁ == t do
+        throw "only an empty asm returning its operand is supported"
+      match (cs.splitOn ",").map String.trimAscii with
+      | o :: i :: rest =>
+        unless o.toString == "=r" && i.toString == "0" && rest.all (clobber ·.toString) do
+          throw s!"unsupported constraints \"{cs}\""
+      | _ =>
+        throw s!"unsupported constraints \"{cs}\""
+      return .unop (.copy (t := t)) dst a
   | "llvm.icmp" =>
     do
       let (dst, t) ← res
@@ -715,42 +810,55 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.trunc" | "llvm.zext" | "llvm.sext" =>
     do
       let (dst, t) ← res
-      let [(a, .bv w)] := args | throw "expected one integer operand"
-      let .bv w' := t | throw "expected an integer result"
-      if op.name == "llvm.trunc" then
-        unless w' < w do
-          throw "the result must be narrower"
-        return .unop (.trunc (w := w) (w' := w') (← overflowFlags op)) dst a
-      else
-        unless w < w' do
-          throw "the result must be wider"
-        if op.name == "llvm.zext" then
-          return .unop (.zext (w := w) (w' := w') (op.hasAttr "nonNeg")) dst a
+      -- the scalar cast, and the lane count for a vector's
+      let (a, w, w', lanes) ←
+        match args, t with
+        | [(a, .bv w)], .bv w' =>
+          pure (a, w, w', none)
+        | [(a, .vec l w)], .vec l' w' =>
+          unless l == l' do
+            throw "the result has another lane count"
+          pure (a, w, w', some l)
+        | _, _ =>
+          throw "expected one integer or vector operand, and a result of its kind"
+      let cast : UnOp (.bv w) (.bv w') ←
+        if op.name == "llvm.trunc" then
+          unless w' < w do
+            throw "the result must be narrower"
+          pure (.trunc (← overflowFlags op))
         else
-          return .unop (.sext (w := w) (w' := w')) dst a
+          unless w < w' do
+            throw "the result must be wider"
+          pure (if op.name == "llvm.zext" then .zext (op.hasAttr "nonNeg") else .sext)
+      match lanes with
+      | none =>
+        return .unop cast dst a
+      | some l =>
+        return .unop (.vector (l := l) cast) dst a
   | "llvm.load" =>
     do
-      checkNotAtomic
+      checkOrdering
       let (dst, t) ← res
       let [(p, .ptr)] := args | throw "expected one pointer operand"
       return .load t dst p
   | "llvm.store" =>
     do
-      checkNotAtomic
+      checkOrdering
       let [(v, t), (p, .ptr)] := args | throw "expected a value and a pointer operand"
       return .store t p v
   | "llvm.intr.memset" =>
     do
-      checkNotAtomic
       let [(dst, .ptr), (val, .bv 8), (len, .bv w)] :=
         args | throw "expected destination pointer, byte and length"
       return .memset w dst val len
-  | "llvm.intr.memcpy" =>
+  | "llvm.intr.memcpy" | "llvm.intr.memmove" =>
     do
-      checkNotAtomic
       let [(dst, .ptr), (src, .ptr), (len, .bv w)] :=
         args | throw "expected destination and source pointer, and length"
-      return .memcpy w dst src len
+      if name == "llvm.intr.memcpy" then
+        return .memcpy w dst src len
+      else
+        return .memmove w dst src len
   | "llvm.alloca" =>
     do
       let (dst, t) ← res
@@ -912,7 +1020,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.symbol callee) := op.getAttr? "callee" | throw "expected a `callee` symbol"
       let rets ← op.res.mapM (valIdx E ·.1)
       let us ← op.res.mapM (ty ·.2)
-      return .call callee (args.map (·.2)) us (args.map (·.1)) rets
+      return .call callee (args.map (·.2)) us (args.map (·.1)) rets (op.hasAttr "noreturn")
   | "llvm.mlir.addressof" =>
     do
       let some (.symbol global) :=
@@ -927,6 +1035,8 @@ def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit :
   match op.name, op.successors with
   | "llvm.return", [] =>
     return .ret ((← op.args.mapM (operand E)).map (·.1))
+  | "llvm.unreachable", [] =>
+    return .unreachable
   | "llvm.br", [s] =>
     return .br (← jump E blockTys s op.args)
   | "llvm.cond_br", [sT, sF] =>
@@ -973,24 +1083,26 @@ def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit :
             let j ← jump E blockTys s (pending.take n.toNat)
             return (cs ++ [(c, j)], pending.drop n.toNat)
       return .switch w v dflt cs
-  | "llvm.return", _ | "llvm.br", _ | "llvm.cond_br", _ | "llvm.switch", _ =>
+  | "llvm.return", _ | "llvm.unreachable", _ | "llvm.br", _ | "llvm.cond_br", _
+  | "llvm.switch", _ =>
     throw s!"wrong number of successors"
   | name, _ =>
     throw
-        s!"'{name}' is not a terminator; a block must end in llvm.return, llvm.br, \
-    llvm.cond_br or llvm.switch"
+        s!"'{name}' is not a terminator; a block must end in llvm.return, llvm.unreachable, \
+    llvm.br, llvm.cond_br or llvm.switch"
 
 /-- `f`, with errors prefixed by the operation. -/
 def atOp {α : Type} (blk : String) (op : Op) (f : Except String α) : Except String α :=
   f.mapError fun e => s!"^{blk}: {op.render}: {e}"
 
 def isTerminator (name : String) : Bool :=
-  name ∈ ["llvm.return", "llvm.br", "llvm.cond_br", "llvm.switch"]
+  name ∈ ["llvm.return", "llvm.unreachable", "llvm.br", "llvm.cond_br", "llvm.switch"]
 
 /-- Operations translated to nothing: `noalias.scope.decl` only declares alias scopes, for alias
-analysis; the model has no alias analysis to inform. -/
+analysis, which the model has none of; a `fence` orders memory between threads, and the model
+runs one. -/
 def isDropped (name : String) : Bool :=
-  name == "llvm.intr.experimental.noalias.scope.decl"
+  name == "llvm.intr.experimental.noalias.scope.decl" || name == "llvm.fence"
 
 end Translate
 
@@ -1038,7 +1150,7 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
     rgn.blocks.flatMap fun b =>
       b.ops.filterMap fun op =>
         if op.name == "llvm.intr.lifetime.start" then op.args.getLast?.map (·.1) else none
-  let E : Env := { Γ, blocks := names, defs, started }
+  let E : Translate.Env := { Γ, blocks := names, defs, started }
   -- block parameters
   let params ←
     (rgn.blocks.drop 1).mapM fun b =>
@@ -1099,6 +1211,7 @@ def Folded.members (t : Ty) : Folded → Option (List Folded)
     | _ => none
   | .lit (.array _ w vs) => some (vs.map (.lit <| .bv w ·))
   | .lit (.arraySplat n w v) => some (.replicate n (.lit (.bv w v)))
+  | .lit (.bytes n v) => some ((List.range n).map fun i => .lit (.bv 8 (v / 256 ^ i % 256)))
   | .lit (.agg _ ms) => some (ms.map .lit)
   | .lit _ => none
   | .agg _ ms => some ms
@@ -1131,9 +1244,9 @@ end
 end Translate
 
 open Translate in
-/-- The constant `p` returns, if its one block builds it from constants, `undef`s and
-`insertvalue`s alone and it is not all undefined: its undefined members zero, with their paths and
-types. -/
+/-- The constant `p` returns, if its one block builds it from constants, `undef`s, addresses
+(undefined) and `insertvalue`s alone and it is not all undefined: its undefined members zero, with
+their paths and types. -/
 def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
   let [b] := p.blocks | none
   let .ret [.val r] := b.exit | none
@@ -1147,6 +1260,9 @@ def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
           return vals.set! d .undef
         | .binop (.insertvalue is t _ _) d (.val a) (.val v) =>
           return vals.set! d (← (← vals[v]?).insert t (← vals[a]?) is)
+        -- a pointer, which a global holds undefined: taking such a global's address is UB
+        | .addressof _ d =>
+          return vals.set! d .undef
         | _ =>
           none
   let (c, us) ← (← vals[r]?).toLit (← p.Γ.vals[r]?)
@@ -1162,6 +1278,15 @@ abbrev Global :=
 /-- A callee's semantics, typically `g.call` for a `g : Func`. -/
 abbrev Callee :=
   Σ (ts us : List Ty), Vals ts → EffectM (Vals us)
+
+/-- The library function `name` as a callee: an unbound call of one, of its signature. -/
+def libCall? : String → Option Callee
+  | "memcmp" => some ⟨_, _, Operation.memcmp⟩
+  | "bcmp" => some ⟨_, _, Operation.bcmp⟩
+  | "explicit_bzero" => some ⟨_, _, Operation.explicitBzero⟩
+  | "__explicit_bzero_chk" => some ⟨_, _, Operation.explicitBzeroChk⟩
+  | "memset_explicit" => some ⟨_, _, Operation.memsetExplicit⟩
+  | _ => none
 
 mutual
 /-- `t`'s all-zero raw value, with null pointers. -/
@@ -1188,6 +1313,7 @@ def ConstLit.value : (c : ConstLit) → ⟦c.ty⟧ᵣ
   | .splat l w v => Vector.replicate l (BitVec.ofInt w v)
   | .array n w vs => Vector.ofFn fun i : Fin n => BitVec.ofInt w (vs[i]?.getD 0)
   | .arraySplat n w v => Vector.replicate n (BitVec.ofInt w v)
+  | .bytes n v => Vector.ofFn fun i : Fin n => BitVec.ofNat 8 (v >>> (8 * i.1))
   | .null => Pointer.null
   | .agg (.array _ t) ms => Vector.ofFn fun i => (ConstLit.valuesAt t ms).getD i t.zeroRaw
   | .agg (.struct fs) ms => ConstLit.fieldsAt fs ms
@@ -1248,12 +1374,18 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Gl
     return .memset (← mkReg Γ .ptr dst) (← mkReg Γ (.bv 8) v) (← mkReg Γ (.bv w) l)
   | .memcpy w dst src l =>
     return .memcpy (← mkReg Γ .ptr dst) (← mkReg Γ .ptr src) (← mkReg Γ (.bv w) l)
+  | .memmove w dst src l =>
+    return .memmove (← mkReg Γ .ptr dst) (← mkReg Γ .ptr src) (← mkReg Γ (.bv w) l)
+  | .ptrtoaddr w d p => return .ptrtoaddr (← mkDst Γ (.bv w) d) (← mkReg Γ .ptr p)
   | .alloca d n dead => return .alloca (← mkDst Γ .ptr d) n dead
   | .lifetimeStart p n => return .lifetimeStart (← mkReg Γ .ptr p) n
   | .lifetimeEnd p n => return .lifetimeEnd (← mkReg Γ .ptr p) n
   | .assume c => return .assume (← mkReg Γ (.bv 1) c)
-  | .call name ts us args rets => do
-    let some ⟨ts', us', f⟩ := callees name | throw s!"no callee bound for @{name}"
+  | .call name ts us args rets noret => do
+    let some ⟨ts', us', f⟩ :=
+        if noret then some ⟨ts, us, Operation.noreturn⟩
+        else (callees name).orElse fun _ => libCall? name
+      | throw s!"no callee bound for @{name}"
     if h : ts' = ts ∧ us' = us then
       return .call (h.1 ▸ h.2 ▸ f) (← mkRegs Γ ts args) (← mkDsts Γ us rets)
     else
@@ -1272,6 +1404,7 @@ def mkJump (j : PJump) : Except String (Jump Γ blockTys) := do
 
 def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
   | .ret vs => return .ret (← mkRegs Γ tRets vs)
+  | .unreachable => return .unreachable
   | .br j => return .br (← mkJump Γ blockTys j)
   | .condBr c t f =>
     return .condBr (← mkReg Γ (.bv 1) c) (← mkJump Γ blockTys t) (← mkJump Γ blockTys f)

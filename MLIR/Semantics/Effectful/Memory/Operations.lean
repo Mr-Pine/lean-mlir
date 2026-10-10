@@ -16,7 +16,7 @@ open Memory
 /-- `m` with block `i` changed by `f`, if there is one. -/
 def MemoryState.modifyBlock (m : MemoryState) (i : BlockId) (f : MemoryBlock → MemoryBlock) :
     MemoryState :=
-  ⟨m.mem.modify i f⟩
+  { m with mem := m.mem.modify i f }
 
 /-- Store bits `b` at a pointer, defined where `d` is set. If the pointer does not reference a
 block, this is a no-op. -/
@@ -65,19 +65,84 @@ def GlobalState.allocaPtr (s : GlobalState) : Pointer :=
 a `lifetimeStart`. -/
 def GlobalState.alloca (s : GlobalState) (bytes : Nat) (dead : Bool := false) : GlobalState :=
   { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
-    mem := ⟨s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead⟩⟩ }
+    mem := { s.mem with mem := s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead⟩ } }
 
 /-- Add a live block of `bytes` bytes under `b`, holding `x` from its start, the rest undefined: an
 `alloca` stored into at once. -/
 def MemoryState.addBlock (m : MemoryState) (b : BlockId) (bytes : Nat) {w : Nat} (x : BitVec w) :
     MemoryState :=
-  ⟨m.mem.insert b ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true⟩⟩
+  { m with
+    mem := m.mem.insert b ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true⟩ }
 
 /-- Remove every block with id `n` or above: a returning callee's frame. -/
 def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
-  { mem := m.mem.filter fun id _ => id.id < n }
+  { m with mem := m.mem.filter fun id _ => id.id < n }
 
 section Theorems
+
+/-! ### The unspecified choices: kept by every write -/
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_storeDef {m : MemoryState} {b d : BitVec w} :
+    (m.storeDef p b d).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_storeAt {m : MemoryState} {b : BitVec w} :
+    (m.storeAt p b).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_lifetimeStart {m : MemoryState} :
+    (m.lifetimeStart p).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_lifetimeEnd {m : MemoryState} : (m.lifetimeEnd p).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_addBlock {m : MemoryState} {x : BitVec w} :
+    (m.addBlock b n x).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.unspec_eraseFrom {m : MemoryState} : (m.eraseFrom n).unspec = m.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem GlobalState.unspec_alloca {s : GlobalState} : (s.alloca n d).mem.unspec = s.mem.unspec :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_storeDef {m : MemoryState} {b d : BitVec w} :
+    (m.storeDef p b d).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_storeAt {m : MemoryState} {b : BitVec w} : (m.storeAt p b).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_lifetimeStart {m : MemoryState} : (m.lifetimeStart p).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_lifetimeEnd {m : MemoryState} : (m.lifetimeEnd p).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_addBlock {m : MemoryState} {x : BitVec w} :
+    (m.addBlock b n x).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem MemoryState.addr_eraseFrom {m : MemoryState} : (m.eraseFrom n).addr = m.addr :=
+  rfl
+
+@[simp, mlir_mem, mlir_state]
+theorem GlobalState.addr_alloca {s : GlobalState} : (s.alloca n d).mem.addr = s.mem.addr :=
+  rfl
 
 /-! ### Changing one block -/
 
@@ -109,7 +174,7 @@ theorem GlobalState.WF_modifyBlock {s : GlobalState} :
 
 theorem MemoryState.eraseFrom_modifyBlock {m : MemoryState} :
     (m.modifyBlock i f).eraseFrom n = (m.eraseFrom n).modifyBlock i f := by
-  simp only [eraseFrom, modifyBlock, MemoryState.mk.injEq]
+  simp only [eraseFrom, modifyBlock, MemoryState.mk.injEq, and_true]
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_modify, beq_iff_eq]
@@ -123,7 +188,7 @@ theorem MemoryState.eraseFrom_modifyBlock {m : MemoryState} :
 
 theorem MemoryState.modifyBlock_eraseFrom_of_le {m : MemoryState} (h : n ≤ i.id) :
     (m.eraseFrom n).modifyBlock i f = m.eraseFrom n := by
-  simp only [eraseFrom, modifyBlock, MemoryState.mk.injEq]
+  simp only [eraseFrom, modifyBlock, MemoryState.mk.injEq, and_true]
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_modify, beq_iff_eq]
@@ -869,7 +934,7 @@ theorem MemoryState.eraseFrom_storeAt {m : MemoryState} {p : Pointer} {x : BitVe
 @[mlir_frame, mlir_erase]
 theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
     (s.alloca b d).mem.eraseFrom s.alloc.nextFreeBlock = s.mem.eraseFrom s.alloc.nextFreeBlock := by
-  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq, and_true]
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
@@ -881,7 +946,7 @@ theorem GlobalState.eraseFrom_alloca {s : GlobalState} :
 @[mlir_frame, mlir_erase]
 theorem GlobalState.eraseFrom_alloca_of_le {s : GlobalState} (h : n ≤ s.alloc.nextFreeBlock) :
     (s.alloca b d).mem.eraseFrom n = s.mem.eraseFrom n := by
-  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  simp only [GlobalState.alloca, MemoryState.eraseFrom, MemoryState.mk.injEq, and_true]
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]
@@ -1049,7 +1114,7 @@ theorem MemoryState.readAt_addBlock_of_id_ne {m : MemoryState} {b : BlockId} {x 
 @[mlir_frame, mlir_erase]
 theorem MemoryState.eraseFrom_addBlock_of_le {m : MemoryState} {b : BlockId} {x : BitVec v}
     (h : n ≤ b.id) : (m.addBlock b bytes x).eraseFrom n = m.eraseFrom n := by
-  simp only [MemoryState.addBlock, MemoryState.eraseFrom, MemoryState.mk.injEq]
+  simp only [MemoryState.addBlock, MemoryState.eraseFrom, MemoryState.mk.injEq, and_true]
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_filter', Std.ExtHashMap.getElem?_insert]

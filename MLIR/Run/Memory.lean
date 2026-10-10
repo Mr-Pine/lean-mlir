@@ -45,6 +45,33 @@ theorem run_memcpyDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.t
   subst hn
   simp [Operation.memcpy, hd, hfd, hfs, throwUBIf, mlir_effect]
 
+/-- `memmove` of `n` known bytes: a store at `dst` of the bits read at `src`, which may overlap. -/
+theorem run_memmove {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
+    (hfd : Room s.mem dst (8 * n)) (hfs : Fits s.mem src (8 * n)) :
+    (Operation.memmove (.value dst) (.value src) (.value len)) env s =
+      .value (env, { s with mem := s.mem.storeAt dst (s.mem.readAt src (8 * n)) }) := by
+  subst hn
+  simp [Operation.memmove, hfd, hfs.room, throwUBIf, mlir_effect,
+    MemoryState.definedAt_of_fits hfs, MemoryState.storeAt]
+
+/-- `memmove` of `n` bytes: their bits and which are defined. -/
+theorem run_memmoveDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
+    (hfd : Room s.mem dst (8 * n)) (hfs : Room s.mem src (8 * n)) :
+    (Operation.memmove (.value dst) (.value src) (.value len)) env s =
+      .value
+        (env,
+          { s with
+            mem :=
+              s.mem.storeDef dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n)) }) := by
+  subst hn
+  simp [Operation.memmove, hfd, hfs, throwUBIf, mlir_effect]
+
+/-- `ptrtoaddr`: the value of the state's addresses, the state unchanged. -/
+theorem run_ptrtoaddr {dst : Dst Γ (.bv w)} {p : Reg Γ .ptr} :
+    Instr.run env (.ptrtoaddr dst p) s =
+      .value (env.write dst (Operation.ptrtoaddr s.mem.addr (env.read p)), s) :=
+  rfl
+
 /-- `memset` of `n` bytes: a store at `src` of the repeated byte. -/
 theorem run_memset {dst : Pointer} {val : BitVec 8} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
     (hfd : Room s.mem dst (8 * n)) :

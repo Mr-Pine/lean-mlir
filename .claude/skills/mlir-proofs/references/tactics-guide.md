@@ -127,7 +127,7 @@ Mistakes:
       step_call using fd_r43x6_repsqr_mul2.call_eq))
 ```
 
-## 5. `step_memcpy`, `step_memset`
+## 5. `step_memcpy`, `step_memmove`, `step_memset`
 
 ```lean
 -- fd_sha512_init.lean
@@ -140,7 +140,7 @@ Mistakes:
 
 `step_memcpy` needs the two ranges disjoint: give the theorem `p.id ≠ q.id` (or a `Nodup` list of
 ids) when they are not distinct slots; `Room` of the destination, `Fits` of the source (`memset`:
-`Room`).
+`Room`). `step_memmove` takes the same facts but disjointness.
 
 ## 6. `step_call`
 
@@ -157,6 +157,15 @@ The callee's `call_eq` theorem, and its premises from the context:
 
 A callee bound as a parameter (`mlir_def … (frombytes : FromBytes) … with @f := frombytes`) is
 called through its spec hypothesis: `step_call using hspec.1`.
+
+An unbound library call steps with the framework's lemma, its result named and resolved by the
+result's lemmas:
+
+```lean
+-- Tests/Syntax/LibCalls.lean: bcmp(p, q, 32) == 0
+  step_call using Operation.bcmp_eq with r
+  step_pure [hr, Operation.bcmpResult_self]
+```
 
 Mistakes:
 - A premise the context cannot show by `mem_fact` or `simp [mlir_mem, *]`: state it with `have`

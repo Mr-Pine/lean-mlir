@@ -24,14 +24,33 @@ python3 lift.py --src <build>/mlir_canonicalized --impl ref --out <Lib>/Ref/Mlir
   --prefix <Lib>.Ref.Mlir --ns MLIR.<Lib>.Ref fd_ed25519_verify
 ```
 
+Another extraction's op directory (Rust, C++, zig): `--ops <dir>` instead of `--src`/`--impl`,
+`--all` for every function and global in it, `--extern-prefix` for the module prefix of
+hand-written `Func`s of external callees. Mangled symbols get demangled names
+(`FieldElement51_Mul_mul`, `fe_isnonzero_fe_loose` for an overload), the symbol in the first
+comment line, the demangled one in the second.
+
 A lift is: `module`, the region's path (relative to the build directory) as the first comment,
 imports (`public` and `meta` of the callees' lifts), the namespace, and
 `mlir_def g := { region verbatim } with @callee := callee, @global := global`. No docstrings, no
 other prose. The elaborator requires:
 
 - a `with @f := t` binding for every called or addressed symbol; `t` is a lifted `Func`, a
-  `GlobalInitializer`, or a parameter of the definition (`mlir_def g (cb : CB) := … with @f := cb`);
-- `noncomputable` on a table too long for the code generator and on every lift that reaches it.
+  `GlobalInitializer`, or a parameter of the definition (`mlir_def g (cb : CB) := … with @f := cb`).
+  Unbound: a call marked `noreturn` (a panic: UB), and the library functions `memcmp`, `bcmp`,
+  `explicit_bzero`, `__explicit_bzero_chk`, `memset_explicit` of their C signatures (their
+  meaning, `Operation.memcmp` …);
+- `noncomputable` on a table or a function (over 2000 values) too long for the code generator,
+  and on every lift that reaches it.
+
+What the translation leaves out, each listed in `Translate.opAttrUses` and its neighbours (the
+rest is rejected): the UB and poison of `noundef`, `nonnull`, `range`, `align`, `dereferenceable`,
+`noalias`, `sret`, `readonly`/`writeonly`, `dead_on_return`, memory effects, TBAA and alias scopes,
+GEP `inbounds`, `mustprogress`/`willreturn`; `volatile` (the access is a plain one, its UB
+conditions kept: one thread, no memory-mapped I/O). The importer itself drops `icmp samesign`,
+`initializes`, `captures` and intrinsic call attributes. A `fence` is nothing and an atomic access
+a plain one (one thread); `ptrtoaddr`/`ptrtoint` read `S.mem.addr`, unconstrained block
+addresses; `asm("" : "+r"(x))` is `x`; `undef` is poison.
 
 Build the lifts before opening proofs that import them. Never copy lifts from another project:
 lift from the canonicalized regions, which each lift's first line names.

@@ -117,6 +117,39 @@ def smin {w : Nat} (x y : IntW w) : IntW w := do
   return result
 
 @[mlir_operation]
+def smax {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return if b.slt a then a else b
+
+@[mlir_operation]
+def umin {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return if a.ult b then a else b
+
+@[mlir_operation]
+def umax {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return if b.ult a then a else b
+
+/-- `llvm.scmp`: `-1`, `0` or `1` at width `w'` as `x` is less than, equal to or greater than `y`,
+signed. -/
+@[mlir_operation]
+def scmp {w w' : Nat} (x y : IntW w) : IntW w' := do
+  let a ← x
+  let b ← y
+  return if a.slt b then -1 else if a = b then 0 else 1
+
+/-- `llvm.ucmp`: `scmp`, unsigned. -/
+@[mlir_operation]
+def ucmp {w w' : Nat} (x y : IntW w) : IntW w' := do
+  let a ← x
+  let b ← y
+  return if a.ult b then -1 else if a = b then 0 else 1
+
+@[mlir_operation]
 def icmp {w : Nat} (pred : IntPred) (x y : IntW w) : IntW 1 := do
   let a ← x
   let b ← y
@@ -154,7 +187,7 @@ def fshr {w : Nat} (x y z : IntW w) : IntW w := do
   let c ← z
   return ((a ++ b) >>> (c.toNat % w)).setWidth w
 
-/-- `llvm.intr.bswap`: `x`'s bytes in reverse order (`w` a multiple of 8). -/
+/-- `llvm.intr.bswap`: `x`'s bytes in reverse order (`w` a multiple of 16). -/
 @[mlir_operation]
 def bswap {w : Nat} (x : IntW w) : IntW w := do
   let a ← x

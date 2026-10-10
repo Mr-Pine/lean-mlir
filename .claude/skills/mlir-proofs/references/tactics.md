@@ -139,7 +139,9 @@ and at the start of a loop or pattern lemma about a block.
 ### `step_pure [opaque] [only] [args] [names]`
 
 One pure instruction (constant, arithmetic, compare, `select`, `gep`, casts, vector ops). On a
-`lifetime.start`/`lifetime.end` it steps as `step_lifetime`, on an `assume` as `step_assume`. Fails
+`lifetime.start`/`lifetime.end` it steps as `step_lifetime`, on an `assume` as `step_assume`; a
+`ptrtoaddr`/`ptrtoint` reads the state's unconstrained block addresses, its value
+`S.mem.addr q.id + q.offset` (truncated or extended), the state unchanged (`run_ptrtoaddr`). Fails
 at the instruction goal (`rfl` after `dsimp [mlir_instr]`) when the instruction is effectful. A `gep` whose no-wrap cannot be shown stays `Operation.gep …`; a flagged
 operation (`add nsw`, `shl nuw`, …) whose overflow test does not simplify stays an
 `if … then .poison else …` (pass the no-overflow lemma as a simp arg).
@@ -168,13 +170,14 @@ that the store misses are carried; one it overwrites, or may overwrite (no `mlir
 conditions hold: possible aliasing), is dropped; `set_option trace.rir true` names each dropped
 fact.
 
-### `step_memcpy [only] [args] [consuming …]` / `step_memset …`
+### `step_memcpy [only] [args] [consuming …]` / `step_memmove …` / `step_memset …`
 
 `memcpy(dst, src, len)`: `len.toNat = n` by `rfl`, `Range.Disjoint` of the two ranges, `Room` of
 `dst` and `Fits` of `src`, each by `mem_fact` else `simp_all`; the new memory stores
 `S.mem.readAt src (8 * n)` at `dst` (`run_memcpy`; undefined source bits stay undefined,
-`run_memcpyDef`). `memset(dst, val, len)`: `Room` of `dst`; the new memory stores
-`val.replicate n`.
+`run_memcpyDef`). `memmove`: the same without `Range.Disjoint` (`run_memmove`, `run_memmoveDef`).
+`memset(dst, val, len)`: `Room` of `dst`; the new memory stores `val.replicate n`. A volatile one
+steps as the plain one.
 
 ### `step_lifetime [only] [args]`
 
@@ -198,6 +201,11 @@ closed by `mem_fact`, else `simp [mlir_mem, *]`. Results are written with `write
 into single writes; a `void` call writes nothing. The new state `s'` is sealed like a store's, so
 facts must transport through the shape `s'` has (register `mlir_transport` lemmas for it, or
 have an implication `hpost : ∀ s, s.WF → (post s).WF` in context).
+
+An unbound call of a library function steps with its lemma: `Operation.bcmp_eq` and
+`Operation.memcmp_eq` (`Fits` of both ranges; the result is `bcmpResult`/`memcmpResult` of
+`S.mem.unspec`, `0` iff the bytes are equal: `bcmpResult_eq_zero_iff`, `bcmpResult_self`),
+`Operation.explicitBzero_eq`, `Operation.explicitBzeroChk_eq` (`Room`; zeros stored).
 
 ### `step_alloca [names] [consuming …]`
 

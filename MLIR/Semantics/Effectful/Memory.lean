@@ -25,12 +25,29 @@ structure AllocState where
   nextFreeBlock : Nat
   deriving Inhabited
 
+/-- What LLVM leaves unspecified and the model fixes per run, constrained by nothing: a proof about
+a run holds for every choice. -/
+class Unspecified where
+  /-- Each block's address, as `ptrtoaddr` reads it; blocks may overlap, so a proof holds for
+  every disjoint placement too. -/
+  addr : BlockId → BitVec 64
+  /-- `memcmp`'s result for `n` unequal bytes, before it is given the order's sign. -/
+  memcmp : (n : Nat) → BitVec (8 * n) → BitVec (8 * n) → BitVec 32
+  /-- `bcmp`'s result for `n` unequal bytes, before it is made nonzero. -/
+  bcmp : (n : Nat) → BitVec (8 * n) → BitVec (8 * n) → BitVec 32
+
+/-- The choice `⟨m⟩` makes when it builds a state from scratch: all zero. -/
+instance : Unspecified :=
+  ⟨fun _ => 0, fun _ _ _ => 0, fun _ _ _ => 0⟩
+
 /--
-`MemoryState` tracks the *content* of memory blocks
+`MemoryState` tracks the *content* of memory blocks, and the choices LLVM leaves unspecified
+(instance-implicit: `⟨m⟩` takes the default; every operation keeps them)
 -/
 @[ext]
 structure MemoryState where
   mem : Std.ExtHashMap BlockId MemoryBlock
+  [unspec : Unspecified]
   deriving Inhabited
 
 @[ext]
@@ -39,6 +56,10 @@ structure GlobalState where
   mem : MemoryState
 
 /-! ## Basic Definitions -/
+
+/-- Each block's address: the state's unspecified choice. -/
+def MemoryState.addr (m : MemoryState) : BlockId → BitVec 64 :=
+  m.unspec.addr
 
 instance : GetElem? MemoryState BlockId MemoryBlock (fun m i => i ∈ m.mem) where
   getElem mem id h := mem.mem[id]

@@ -26,6 +26,9 @@ syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)?
 /-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`. -/
 syntax (name := stepMemcpy) "step_memcpy" stepSimpArgs (stepConsuming)? : tactic
 
+/-- `step_impure` for a `memmove`, closing the instruction with `run_memmove`. -/
+syntax (name := stepMemmove) "step_memmove" stepSimpArgs (stepConsuming)? : tactic
+
 /-- `step_impure` for a `memset`, closing the instruction with `run_memset`. -/
 syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 
@@ -258,6 +261,16 @@ def evalStepMemcpy : Tactic := fun stx => do
         expect_values
         exact
             run_memcpy (by rfl) (by first | mem_fact | simp_all) (by first | mem_fact | simp_all)
+              (by first | mem_fact | simp_all)))
+
+@[tactic stepMemmove]
+def evalStepMemmove : Tactic := fun stx => do
+  runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
+      (←
+        `(tacticSeq|
+        expect_values
+        exact
+            run_memmove (by rfl) (by first | mem_fact | simp_all)
               (by first | mem_fact | simp_all)))
 
 @[tactic stepMemset]
