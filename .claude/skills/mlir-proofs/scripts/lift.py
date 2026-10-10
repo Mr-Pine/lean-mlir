@@ -1,4 +1,4 @@
-"""Lift Firedancer functions to RIR `mlir_def`s.
+"""Lift LLVM functions to RIR `mlir_def`s.
 
     python3 lift.py --src <build>/mlir_canonicalized --impl ref --out <Lib>/Ref/Mlir \
         --prefix <Lib>.Ref.Mlir --ns MLIR.<Lib>.Ref fd_ed25519_verify
@@ -9,9 +9,14 @@ verbatim, binds every callee and global (`with @f := f`), and is `noncomputable`
 reaches a table or a function too long for the code generator.
 
 With `--share-from ref --share-prefix <Lib>.Ref.Mlir --share-ns Ref`, a function whose op equals
-the other implementation's up to SSA numbering and the target attributes (`target_cpu`,
-`target_features`, `tune_cpu`, which have no IR semantics) is bound to that lift instead;
-`--share-src` compares against another extraction's ops (another checkout or profile).
+one of the other implementation's is bound to that lift instead (and `--all` skips it); the other
+is the function of the same symbol or Lean name, else any whose op equals. Ops are compared up to
+SSA numbering, symbol names (callees as bound), TBAA (alias definitions and access tags), and the
+function attributes and `passthrough` entries `Translate.funcAttrUses`/`passthroughUses` mark
+inert or ignored (target, calling convention, linkage, memory effects, `warn-stack-size`, …): the
+translation reads none of them. `--share-src` compares against another extraction's ops (another
+checkout or profile), `--share-ops <dir>` against an op directory itself (another project's,
+`--share-ns` then its full namespace).
 `--header` names the op directory in each lift's first comment line when it is not `build/…`
 of the main checkout. A callee without an op file (an external declaration, e.g. assembly) is
 bound to the `Func` of its name in `--extern-prefix`'s module of that name, written by hand (its
@@ -36,6 +41,7 @@ ap.add_argument('--all', action='store_true', help='lift every function and glob
 ap.add_argument('--header', help='the op directory as lift headers name it (default: from build/ on)')
 ap.add_argument('--share-src', help='the `mlir_canonicalized` directory to share from (default: --src)')
 ap.add_argument('--share-from', choices=['ref', 'avx512'])
+ap.add_argument('--share-ops', help='the op directory to share from, instead of --share-from')
 ap.add_argument('--share-prefix')
 ap.add_argument('--share-ns')
 ap.add_argument('--extern-prefix', help='module prefix of the `Func`s for external callees')
@@ -54,35 +60,94 @@ HDR = args.header or (SRC[SRC.index('build/'):] if 'build/' in SRC else SRC)
 def region(f, src=None):
     return open(f'{src or SRC}/{f}.mlir').read().rstrip('\n')
 
-TARGET = re.compile(r', (target_cpu = "[^"]*"|tune_cpu = "[^"]*"|'
-                    r'target_features = #llvm.target_features<\[[^\]]*\]>)|'
-                    r', \["(target-cpu|tune-cpu|target-features)", "[^"]*"\]')
+# `Translate.funcAttrUses`' inert and ignored function attributes, `passthroughUses`' entries
+INERT = {'CConv', 'linkage', 'visibility_', 'dso_local', 'unnamed_addr', 'no_inline', 'inline_hint',
+         'minsize', 'optsize', 'uwtable_kind', 'frame_pointer', 'personality', 'target_cpu',
+         'target_features', 'tune_cpu', 'memory_effects', 'will_return', 'no_unwind', 'sym_name'}
+PASS = {'mustprogress', 'willreturn', 'nofree', 'norecurse', 'nosync', 'nocallback',
+        'min-legal-vector-width', 'no-trapping-math', 'ssp', 'sspstrong',
+        'stack-protector-buffer-size', 'probe-stack', 'nonlazybind', 'warn-stack-size',
+        'target-cpu', 'target-features', 'tune-cpu'}
+
+def split_attrs(s):
+    """`s` split at each `, ` outside brackets and strings."""
+    out, depth, cur, q, i = [], 0, '', False, 0
+    while i < len(s):
+        c = s[i]
+        if c == '"' and (i == 0 or s[i - 1] != '\\'):
+            q = not q
+        elif not q and c in '<([{':
+            depth += 1
+        elif not q and c in '>)]}' and s[i - 1] != '-':
+            depth -= 1
+        elif not q and depth == 0 and s.startswith(', ', i):
+            out, cur, i = out + [cur], '', i + 2
+            continue
+        cur += c
+        i += 1
+    return out + [cur]
+
+def norm_head(h):
+    """A function's header without the attributes the translation does not read."""
+    m = re.match(r'(.*?"llvm.func"\(\) <\{)(.*)(\}> \(\{)$', h, re.S)
+    if not m:
+        return h
+    keep = []
+    for a in split_attrs(m.group(2)):
+        k = a.split(' = ', 1)[0]
+        if k == 'passthrough':
+            ps = [p for p in split_attrs(a.split(' = ', 1)[1][1:-1])
+                  if (p[2:].split('"')[0] if p.startswith('[') else p.strip('"')) not in PASS]
+            a = f'passthrough = [{", ".join(ps)}]'
+        if k not in INERT:
+            keep.append(a)
+    return m.group(1) + ', '.join(keep) + m.group(3)
+
+def norm(t, sym=lambda d: d):
+    """`t` up to SSA numbering, TBAA, symbol names (each `@d` as `sym(d)`) and, for a function,
+    the attributes the translation does not read."""
+    t = '\n'.join(l for l in t.splitlines() if not re.match(r'#tbaa\w* = #llvm\.tbaa_', l))
+    t = re.sub(r', tbaa = \[[^\]]*\]|tbaa = \[[^\]]*\], ', '', t)
+    t = re.sub(r'%(?:arg)?\d+\b', '%', t)
+    t = re.sub(r'((?:callee|global_name) = )@([A-Za-z_0-9.]+)', lambda m: m[1] + '@' + sym(m[2]), t)
+    t = re.sub(r'sym_name = "[^"]*"', 'sym_name', t)
+    head, sep, body = t.partition('({\n')
+    return norm_head(head + '({') + '\n' + body if sep else t
+
+def other_dir():
+    if args.share_ops:
+        return os.path.expanduser(args.share_ops)
+    return os.path.join(os.path.expanduser(args.share_src or args.src), args.share_from, 'op')
+
+SHARED = {}
 
 def shared(f):
-    """`f`'s op is the other implementation's, up to numbering and target attributes."""
-    if not args.share_from:
-        return False
-    other = os.path.join(os.path.expanduser(args.share_src or args.src), args.share_from, 'op')
-    if not os.path.exists(f'{other}/{f}.mlir'):
-        return False
-    norm = lambda t: TARGET.sub('', re.sub(r'%(?:arg)?\d+\b', '%', t))
-    return norm(region(f)) == norm(region(f, other))
+    """The other directory's function (or global) whose op is `f`'s up to `norm`, if any."""
+    if not (args.share_from or args.share_ops) or external(f):
+        return None
+    if f not in SHARED:
+        SHARED[f] = None
+        mine = norm(region(f), lambda d: shared(d) or '!' + d)
+        cands = [g for g in [f] + [g for g, n in OTHER_NAMES.items() if n == lean(f)]
+                 if g in OTHER_OPS] + sorted(OTHER_OPS)
+        SHARED[f] = next((g for g in cands if OTHER_OPS[g] == mine), None)
+    return SHARED[f]
 
 # library functions the translation models when unbound (`libCall?` in Translate.lean)
 LIBFUNCS = {'bcmp', 'memcmp', 'explicit_bzero', '__explicit_bzero_chk', 'memset_explicit'}
 
-def deps(f):
+def deps(f, src=None):
     """The symbols `f` calls and addresses, less the calls the translation models. A global's
     initializer binds nothing: its addresses are of pointers the translation leaves undefined."""
-    if is_global(f):
+    if is_global(f, src):
         return [], []
-    s = region(f)
+    s = region(f, src)
     calls = set()
     for line in s.splitlines():
         m = re.search(r'callee = @([A-Za-z_0-9.]+)', line)
-        if m and not (m.group(1) in LIBFUNCS and external(m.group(1))) \
-                and not re.search(r'[{,] noreturn[,}]', line):
-            calls.add(m.group(1))
+        lib = m and m[1] in LIBFUNCS and not os.path.exists(f'{src or SRC}/{m[1]}.mlir')
+        if m and not lib and not re.search(r'[{,] noreturn[,}]', line):
+            calls.add(m[1])
     globs = sorted(set(re.findall(r'global_name = @([A-Za-z_0-9.]+)', s)))
     return sorted(calls), globs
 
@@ -186,20 +251,21 @@ def names(syms):
         result[s] = m
     return result, demangled
 
-def all_syms():
-    here = [f[:-5] for f in os.listdir(SRC) if f.endswith('.mlir')]
+def all_syms(src=None):
+    src = src or SRC
+    here = [f[:-5] for f in os.listdir(src) if f.endswith('.mlir')]
     ext = set()
     for f in here:
-        c, _ = deps(f)
-        ext |= {d for d in c if external(d)}
+        c, _ = deps(f, src)
+        ext |= {d for d in c if not os.path.exists(f'{src}/{d}.mlir')}
     return here + sorted(ext)
 
 def lean(f):
     """`f`'s Lean name: demangled, and without dots, which would make it a namespace."""
     return NAMES.get(f) or f.replace('.', '_')
 
-def is_global(f):
-    return '"llvm.mlir.global"()' in region(f).split('({', 1)[0]
+def is_global(f, src=None):
+    return '"llvm.mlir.global"()' in region(f, src).split('({', 1)[0]
 
 def big(f):
     """A table, or a function of more values (a register context), too long for the code
@@ -242,8 +308,9 @@ def write(f, seen):
                 raise SystemExit(f'{f} calls external {d}: pass --extern-prefix')
             return args.extern_prefix
         return args.share_prefix if shared(d) else args.prefix
-    imps = [f'{prefix(d)}.{lean(d)}' for d in calls + globs]
-    binds = [f'@{d} := {args.share_ns + "." if shared(d) else ""}{lean(d)}' for d in calls + globs]
+    name = lambda d: OTHER_NAMES[shared(d)] if shared(d) else lean(d)
+    imps = [f'{prefix(d)}.{name(d)}' for d in calls + globs]
+    binds = [f'@{d} := {args.share_ns + "." if shared(d) else ""}{name(d)}' for d in calls + globs]
     cmd = ('noncomputable ' if nc(f) else '') + ('mlir_const_def' if glob else 'mlir_def')
     dm = [f'-- {DEMANGLED[f]}'] if DEMANGLED.get(f, f) != f else []
     lines = ['module', '',
@@ -261,7 +328,12 @@ def write(f, seen):
     print(f)
 
 NAMES, DEMANGLED = names(all_syms())
+if args.share_from or args.share_ops:
+    OTHER_NAMES = names(all_syms(other_dir()))[0]
+    OTHER_OPS = {g: norm(region(g, other_dir())) for g in OTHER_NAMES
+                 if os.path.exists(f'{other_dir()}/{g}.mlir')}
 seen = set()
-funcs = sorted(f[:-5] for f in os.listdir(SRC) if f.endswith('.mlir')) if args.all else args.funcs
+funcs = sorted(f[:-5] for f in os.listdir(SRC) if f.endswith('.mlir') and not shared(f[:-5])) \
+    if args.all else args.funcs
 for f in funcs:
     write(f, seen)
