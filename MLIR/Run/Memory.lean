@@ -155,6 +155,23 @@ theorem run_addressof_wrap {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty
   subst hw hn
   exact run_addressof hv (Ty.flatten_wrap hp) hpad
 
+/-- `run_addressof` of a global with undefined members (`x`'s bits `b`, defined where `d` is set,
+at their literal width `w`): a fresh block of `n` bytes holding them, masked. -/
+theorem run_addressof_def {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧}
+    {x : ⟦t⟧} {dst : Dst Γ .ptr} {w n : Nat} {b d : BitVec w} (hv : v s = .value (x, s))
+    (hp : t.hasPtr = false) (hw : t.width = w)
+    (hx : t.flattenDef x = (b.cast hw.symm, d.cast hw.symm))
+    (hn : (w + 7) / 8 = n) :
+    Instr.run env (.addressof v dst) s =
+      .value
+        (env.write dst (.value s.allocaPtr),
+          let s' := s.alloca n
+          { s' with mem := s'.mem.storeDef s.allocaPtr b d }) := by
+  subst hn hw
+  simp only [Instr.run, EffectM.bind_eq, hv, PoisonOr.value_bind, hp, throwUBIf, Bool.false_eq_true,
+    ↓reduceIte, hx, BitVec.cast_eq]
+  rfl
+
 @[mlir_operation]
 theorem gep_value {ptr} (h : ¬ptr.offset.uaddOverflow off) :
     Operation.gep (.value off) (.value ptr) = .value (ptr.add off) := by simp [Operation.gep, h]

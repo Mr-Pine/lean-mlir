@@ -262,7 +262,7 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
         withMainContext do
             return (← getRunBodyFrom (← getGoalType).2).state
       if outState != inState then
-        let goals ← sealStep inState
+        let (goals, _) ← sealStep inState
         replaceMainGoal ((← getMainGoal) :: goals.toList)
 
 @[tactic stepPattern]

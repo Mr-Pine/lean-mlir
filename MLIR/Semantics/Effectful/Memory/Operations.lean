@@ -265,6 +265,34 @@ theorem MemoryState.definedAt_storeDef_self (hfits : InBounds m p w) (x d : BitV
   unfold MemoryBlock.lengthInBits at hsz
   simp [definedAt, getElem?_storeDef_self hblk, extractLsb'_spliceBits_self, hsz]
 
+/-- Storing what a range holds, defined as it is, changes nothing. -/
+theorem MemoryState.storeDef_readAt_definedAt {m : MemoryState} (h : InBounds m p w) :
+    m.storeDef p (m.readAt p w) (m.definedAt p w) = m := by
+  obtain ⟨blk, hblk, hsz⟩ := h
+  have hb : m.mem[p.id]? = some blk := hblk
+  unfold MemoryBlock.lengthInBits at hsz
+  have hsp (x : BitVec (8 * blk.length)) :
+      spliceBits x p.offsetInBits (x.extractLsb' p.offsetInBits w) = x := by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    rw [getLsbD_spliceBits]
+    split
+    · rw [BitVec.getLsbD_extractLsb']
+      simp only [show i - p.offsetInBits < w by omega, decide_true, Bool.true_and]
+      congr 1
+      omega
+    · rfl
+  simp only [storeDef, readAt, definedAt, hblk, modifyBlock]
+  refine MemoryState.ext ?_ rfl
+  apply Std.ExtHashMap.ext_getElem?
+  intro k
+  simp only [Std.ExtHashMap.getElem?_modify, beq_iff_eq]
+  split
+  · subst_vars
+    rw [hb]
+    simp only [Option.map_some, hsp]
+  · rfl
+
 @[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeDef_disjoint {v w : Nat} {m : MemoryState}
     (h : (Range.of p v).Disjoint (Range.of q w)) (x d : BitVec v) :
@@ -320,6 +348,13 @@ theorem Pointer.offsetInBits_add {p : Pointer} {off : BitVec 64}
     (hov : ¬p.offset.uaddOverflow off) :
     (p.add off).offsetInBits = p.offsetInBits + off.toNat * 8 := by
   simp only [Pointer.offsetInBits, Pointer.add, BitVec.toNat_add_of_not_uaddOverflow hov]
+  omega
+
+/-- An offset known to be `c` does not wrap by `off` while their sum is below `2 ^ 64`. -/
+theorem Pointer.not_uaddOverflow_of_offset_eq {p : Pointer} {c off : BitVec 64} (h : p.offset = c)
+    (hlt : c.toNat + off.toNat < 2 ^ 64) : ¬p.offset.uaddOverflow off := by
+  rw [h]
+  simp only [BitVec.uaddOverflow, decide_eq_true_eq]
   omega
 
 theorem InBounds.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
@@ -538,6 +573,100 @@ theorem Fits.storeAt_self {m : MemoryState} {x : BitVec w} (h : Room m p w) :
   obtain ⟨blk, hblk, hl, hsz⟩ := h
   unfold MemoryBlock.lengthInBits at hsz
   exact ⟨_, MemoryState.getElem?_storeAt_self hblk, hl, hsz, extractLsb'_spliceBits_self _ _ _ hsz⟩
+
+/-- A store into a live block's room: a range from its start is known. -/
+theorem Fits.storeAt_self_of_le {m : MemoryState} {x : BitVec v} (h : Room m p v) (hw : w ≤ v) :
+    Fits (m.storeAt p x) p w :=
+  (Fits.storeAt_self h).mono hw
+
+/-- A store into a live block's room: a range inside it is known. -/
+theorem Fits.storeAt_add_self {m : MemoryState} {x : BitVec v} {off : BitVec 64} (h : Room m p v)
+    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) :
+    Fits (m.storeAt p x) (p.add off) w :=
+  Fits.add_of_le hov hw (Fits.storeAt_self h)
+
+/-- A masked store into a live block's room: a range inside it its mask defines is known. -/
+theorem Fits.storeDef_of_mask {m : MemoryState} {x d : BitVec v} {off : BitVec 64}
+    (h : Room m p v) (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v)
+    (hd : d.extractLsb' (off.toNat * 8) w = BitVec.allOnes w) :
+    Fits (m.storeDef p x d) (p.add off) w := by
+  obtain ⟨blk, hblk, hl, hsz⟩ := h
+  unfold MemoryBlock.lengthInBits at hsz
+  refine ⟨_, MemoryState.getElem?_storeDef_self hblk, hl, ?_, ?_⟩
+  · simp only [MemoryBlock.lengthInBits, Pointer.offsetInBits_add hov]; omega
+  · rw [Pointer.offsetInBits_add hov,
+      extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
+      Nat.add_sub_cancel_left, hd]
+
+/-- `storeDef_of_mask` from the masked store's start. -/
+theorem Fits.storeDef_of_mask_self {m : MemoryState} {x d : BitVec v} (h : Room m p v)
+    (hw : w ≤ v) (hd : d.extractLsb' 0 w = BitVec.allOnes w) : Fits (m.storeDef p x d) p w := by
+  obtain ⟨blk, hblk, hl, hsz⟩ := h
+  unfold MemoryBlock.lengthInBits at hsz
+  refine ⟨_, MemoryState.getElem?_storeDef_self hblk, hl, ?_, ?_⟩
+  · simp only [MemoryBlock.lengthInBits]; omega
+  · rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
+      Nat.sub_self, hd]
+
+/-- A copy's range known where its source's is: `memcpy`'s store of `src`'s definedness. -/
+theorem Fits.storeDef_definedAt {m : MemoryState} {x : BitVec v} {off : BitVec 64}
+    (h : Room m p v) (hs : Fits m (q.add off) w) (hov : ¬p.offset.uaddOverflow off)
+    (hovq : ¬q.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) :
+    Fits (m.storeDef p x (m.definedAt q v)) (p.add off) w := by
+  refine Fits.storeDef_of_mask h hov hw ?_
+  obtain ⟨blk, hblk, _, _, hd⟩ := hs
+  have hb : m[q.id]? = some blk := hblk
+  simp only [MemoryState.definedAt, hb, BitVec.extractLsb'_extractLsb'_add hw]
+  rw [Pointer.offsetInBits_add hovq] at hd
+  exact hd
+
+/-- `storeDef_definedAt` from the copy's start. -/
+theorem Fits.storeDef_definedAt_self {m : MemoryState} {x : BitVec v} (h : Room m p v)
+    (hs : Fits m q w) (hw : w ≤ v) : Fits (m.storeDef p x (m.definedAt q v)) p w := by
+  refine Fits.storeDef_of_mask_self h hw ?_
+  obtain ⟨blk, hblk, _, _, hd⟩ := hs
+  have hw' : 0 + w ≤ v := by omega
+  simp only [MemoryState.definedAt, hblk, BitVec.extractLsb'_extractLsb'_add hw', Nat.add_zero]
+  exact hd
+
+/-- A read inside a masked store: the stored bits. -/
+theorem MemoryState.readAt_storeDef_add {off : BitVec 64} (hfits : InBounds m p v)
+    (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x d : BitVec v) :
+    (m.storeDef p x d).readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w := by
+  obtain ⟨blk, hblk, hsz⟩ := hfits
+  unfold MemoryBlock.lengthInBits at hsz
+  have hb : (m.storeDef p x d)[(p.add off).id]? = _ := getElem?_storeDef_self hblk
+  simp only [readAt, hb, Pointer.offsetInBits_add hov]
+  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
+    Nat.add_sub_cancel_left]
+
+/-- A read at a masked store's start: the stored bits' low ones. -/
+theorem MemoryState.readAt_storeDef_le (hfits : InBounds m p v) (hw : w ≤ v) (x d : BitVec v) :
+    (m.storeDef p x d).readAt p w = x.extractLsb' 0 w := by
+  obtain ⟨blk, hblk, hsz⟩ := hfits
+  unfold MemoryBlock.lengthInBits at hsz
+  simp only [readAt, getElem?_storeDef_self hblk]
+  rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega), Nat.sub_self]
+
+/-- A read inside a copy: the source's bits. -/
+@[mlir_read]
+theorem MemoryState.readAt_storeDef_readAt_add {off : BitVec 64} (hp : InBounds m p v)
+    (hq : InBounds m q v) (hov : ¬p.offset.uaddOverflow off) (hovq : ¬q.offset.uaddOverflow off)
+    (hw : off.toNat * 8 + w ≤ v) (d : BitVec v) :
+    (m.storeDef p (m.readAt q v) d).readAt (p.add off) w = m.readAt (q.add off) w := by
+  rw [readAt_storeDef_add hp hov hw, readAt_add_of_readAt hq hovq hw rfl]
+
+/-- A read at a copy's start: the source's bits. -/
+@[mlir_read]
+theorem MemoryState.readAt_storeDef_readAt_le (hp : InBounds m p v) (hw : w ≤ v) (d : BitVec v) :
+    (m.storeDef p (m.readAt q v) d).readAt p w = m.readAt q w := by
+  rw [readAt_storeDef_le hp hw, readAt_of_readAt_le hw rfl]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp [hi, show i < v by omega]
+
+-- after the copy's: a copy's read resolves to its source's
+attribute [mlir_read] MemoryState.readAt_storeDef_add MemoryState.readAt_storeDef_le
 
 /-- A store elsewhere keeps known bits known. -/
 @[mlir_transport]
@@ -781,6 +910,16 @@ theorem InBounds.mem (h : InBounds m p w) : p.id ∈ m.mem := by
     Std.ExtHashMap.mem_iff_isSome_getElem?.2
       (by
         rw [hb]; rfl)
+
+/-- A pointer into memory of a `WF` state is below its counter. -/
+theorem GlobalState.WF.id_lt_of_inBounds {s : GlobalState} (hwf : s.WF)
+    (h : InBounds s.mem q w) :
+    q.id.id < s.alloc.nextFreeBlock :=
+  hwf.lt h.mem
+
+/-- Blocks with distinct numbers are distinct. -/
+theorem BlockId.ne_of_id_ne {a b : BlockId} (h : a.id ≠ b.id) : a ≠ b :=
+  fun e => h (congrArg BlockId.id e)
 
 theorem Room.mem (h : Room m p w) : p.id ∈ m.mem :=
   h.inBounds.mem

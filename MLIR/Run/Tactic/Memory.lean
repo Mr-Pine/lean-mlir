@@ -76,6 +76,16 @@ def decideWithOffsets? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Opt
         l.isAppOfArity ``Pointer.offset 1 && !r.hasFVar && (goal.find? (· == l)).isSome &&
           !eqs.any (·.2.1 == l) then
       eqs := eqs.push (pf, l, r)
+  -- a new block's pointers: offset `0` by `rfl`
+  let zero := mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit 64) (mkNatLit 0)
+  let slots ← IO.mkRef (#[] : Array Expr)
+  goal.forEachWhere
+      (fun e =>
+        e.isAppOfArity ``Pointer.offset 1 &&
+          (e.appArg!.isAppOf ``GlobalState.allocaPtr || e.appArg!.isAppOf ``GlobalState.slot))
+      fun e => slots.modify fun a => if a.contains e then a else a.push e
+  for l in (← slots.get).filter fun l => !eqs.any (·.2.1 == l) do
+    eqs := eqs.push (mkExpectedPropHint (← mkEqRefl zero) (← mkEq l zero), l, zero)
   -- `subst k e`: `e` with the offsets from the `k`-th on replaced by their values
   let subst (k : Nat) (e : Expr) : Expr :=
     (eqs.extract k).foldl (fun e (_, l, r) => e.replace fun t => if t == l then some r else none) e
@@ -91,17 +101,106 @@ def decideWithOffsets? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Opt
     pf ← mkEqNDRec motive pf (← mkEqSymm h)
   return some (mkExpectedPropHint pf goal)
 
+/-- Whether `ty` relates two naturals: `≤`, `<`, `=` or `≠`. -/
+def isNatRel (ty : Expr) : Bool :=
+  let ty := ty.cleanupAnnotations
+  let nat (α : Expr) := α.isConstOf ``Nat
+  if ty.isAppOfArity ``LE.le 4 || ty.isAppOfArity ``LT.lt 4 then nat (ty.getArg! 0)
+  else
+    match ty.ne? with
+    | some (α, _, _) => nat α
+    | none => ((ty.not?.getD ty).eq?).any (nat ·.1)
+
+/-- A relation of naturals (`isNatRel`): by `decide` when closed, else by `omega` from `extra` and
+the facts of that kind about its locals (`j < 256` for `2 * j ≤ 512`), literals' `toNat`
+evaluated. -/
+def natArith? (facts : Array (Expr × Expr)) (goal : Expr) (extra : Array Expr := #[]) :
+    MetaM (Option Expr) := do
+  let goal ← instantiateMVars goal
+  unless isNatRel goal && !goal.hasMVar do
+    return none
+  if !goal.hasFVar then
+    return ← decideProof? goal
+  let fvs := (collectFVars {} goal).fvarIds
+  let hyps := facts.filterMap fun (pf, ty) =>
+    if isNatRel ty && ty.hasAnyFVar fvs.contains then some pf else none
+  -- nothing bounds its locals: no proof
+  if hyps.isEmpty && extra.isEmpty then
+    return none
+  let ctx ←
+    Simp.mkContext
+      (simpTheorems := #[← ({} : SimpTheorems).addConst ``BitVec.toNat_ofNat])
+  let simprocs := #[← Simp.getSimprocs]
+  let g ← mkFreshExprMVar goal
+  try
+    -- no progress is an error of `simpGoal`: the goal as it is
+    let r ←
+      try
+        pure (← simpGoal g.mvarId! ctx (simprocs := simprocs)).1
+      catch _ =>
+        pure (some (#[], g.mvarId!))
+    if let some (_, g') := r then
+      let hs ←
+        (extra ++ hyps).mapM fun h => do
+            let (r, _) ← simp (← inferType h) ctx (simprocs := simprocs)
+            return ← r.proof?.elim (pure h) (mkEqMP · h)
+      let omegaOn (g : MVarId) : MetaM Unit := do
+        let some g' ← g.falseOrByContra | throwError "no goal"
+        g'.withContext do
+            let neg := (← getLCtx).lastDecl.map (·.toExpr)
+            Lean.Elab.Tactic.Omega.omega (hs.toList ++ neg.toList) g'
+      -- `t % 2 ^ 64` as `t` where `omega` shows `t < 2 ^ 64`: with the `%` left in, `omega`
+      -- (no dark shadows) misses `2 * i % 2 ^ 64 * 8 ≤ 4080` for `i < 256`
+      let modCtx ←
+        Simp.mkContext (simpTheorems := #[← ({} : SimpTheorems).addConst ``Nat.mod_eq_of_lt])
+      let disch : Simp.Discharge := fun p => do
+        let m ← mkFreshExprMVar p
+        try
+          omegaOn m.mvarId!
+          let pf ← instantiateMVars m
+          return if pf.hasMVar then none else some pf
+        catch _ =>
+          return none
+      let g' ←
+        try
+          match (← simpGoal g' modCtx (discharge? := disch)).1 with
+          | some (_, g'') => pure (some g'')
+          | none => pure none
+        catch _ =>
+          pure (some g')
+      if let some g' := g' then
+        omegaOn g'
+    let pf ← instantiateMVars g
+    return if pf.hasMVar then none else some pf
+  catch _ =>
+    return none
+
 /-- `¬q.offset.uaddOverflow off` from a fact `¬q.offset.uaddOverflow c` for a literal `c` at least
-`off`. -/
+`off` (`off ≤ c` by `decide`, else `natArith?`). -/
 def noOverflowOfFact? (facts : Array (Expr × Expr)) (q off : Expr) : MetaM (Option Expr) := do
   let qo ← mkAppM ``Pointer.offset #[q]
   for (pf, ty) in facts do
-    let some (_, l, r) := ty.cleanupAnnotations.not? >>= (·.eq?) | continue
+    -- `¬x.uaddOverflow c = true`, or as `simp` leaves it, `x.uaddOverflow c = false`
+    let ty := ty.cleanupAnnotations
+    let some (pf, l, r) :=
+        (do
+            let (_, l, r) ← ty.not? >>= (·.eq?)
+            guard (r.isConstOf ``Bool.true)
+            return (pf, l, r)) <|>
+          (do
+            let (_, l, r) ← ty.eq?
+            guard (r.isConstOf ``Bool.false)
+            return (mkApp2 (mkConst ``Bool.ne_true_of_eq_false) l pf, l, r)) | continue
+    let _ := r
     let_expr BitVec.uaddOverflow _ x c := l | continue
-    unless r.isConstOf ``Bool.true && x == qo do
+    unless x == qo do
       continue
     let hle ← mkAppM ``LE.le #[← mkAppM ``BitVec.toNat #[off], ← mkAppM ``BitVec.toNat #[c]]
-    let some hle ← decideWithOffsets? facts hle | continue
+    let some hle ←
+      (do
+          if let some h← decideWithOffsets? facts hle then
+            return some h
+          natArith? facts hle) | continue
     return some (← mkAppM ``BitVec.not_uaddOverflow_of_le #[pf, hle])
   return none
 
@@ -112,19 +211,44 @@ def noOverflowGoal (q off : Expr) : MetaM Expr := do
         mkEq (← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[q], off])
             (mkConst ``Bool.true))
 
+/-- `¬q.offset.uaddOverflow off` for a variable `off` from `q`'s offset `c` (a fact `q.offset = c`,
+or `0` for a new block's pointer): `c.toNat + off.toNat < 2 ^ 64` by `natArith?`. -/
+def noOverflowOfOffset? (facts : Array (Expr × Expr)) (q off : Expr) : MetaM (Option Expr) := do
+  let qo ← mkAppM ``Pointer.offset #[q]
+  let zero := mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit 64) (mkNatLit 0)
+  let known? : Option (Option Expr × Expr) :=
+    if q.isAppOf ``GlobalState.allocaPtr || q.isAppOfArity ``GlobalState.slot 2 then
+      some (none, zero)
+    else
+      facts.findSome? fun (pf, ty) =>
+        (ty.eq?).bind fun (_, l, r) => if l == qo && !r.hasFVar then some (some pf, r) else none
+  let some (pf?, c) := known? | return none
+  let pf ← pf?.getDM (return mkExpectedPropHint (← mkEqRefl zero) (← mkEq qo zero))
+  let lt ← mkAppM ``LT.lt #[← mkAppM ``HAdd.hAdd #[← mkAppM ``BitVec.toNat #[c],
+    ← mkAppM ``BitVec.toNat #[off]], mkNatLit (2 ^ 64)]
+  let some hlt ← natArith? facts lt | return none
+  return some (← mkAppM ``Pointer.not_uaddOverflow_of_offset_eq #[pf, hlt])
+
 /-- `w` bits at `q.add off` inside `v` bits at `q`: the offset does not wrap (by the offsets'
-values, or a no-overflow fact for a larger offset), and `off.toNat * 8 + w ≤ v`. -/
+values, or a no-overflow fact for a larger offset), and `off.toNat * 8 + w ≤ v` (by `decide`, else
+`natArith?`: a variable offset `2 * j` with `j < 256`). -/
 def addWithin? (facts : Array (Expr × Expr)) (q off w v : Expr) : MetaM (Option (Expr × Expr)) := do
   let hov? ←
     match ← decideWithOffsets? facts (← noOverflowGoal q off) with
     | some h =>
       pure (some h)
     | none =>
-      noOverflowOfFact? facts q off
+      match ← noOverflowOfFact? facts q off with
+      | some h => pure (some h)
+      | none => noOverflowOfOffset? facts q off
   let some hov := hov? | return none
   let off8 ← mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8]
+  let hwTy ← mkAppM ``LE.le #[← mkAppM ``HAdd.hAdd #[off8, w], v]
   let some hw ←
-    decideWithOffsets? facts (← mkAppM ``LE.le #[← mkAppM ``HAdd.hAdd #[off8, w], v]) | return none
+    (do
+        if let some h← decideWithOffsets? facts hwTy then
+          return some h
+        natArith? facts hwTy) | return none
   return some (hov, hw)
 
 /-- `goal` by the lemma `lem`, its explicit premises `prems` (the rest by unifying with `goal`). -/
@@ -220,6 +344,140 @@ def slotPtr? (p : Expr) : Option Expr := do
   let (b, k) ← counterBase? p.appArg!
   return mkApp2 (mkConst ``GlobalState.slot) b (mkNatLit k)
 
+/-- The memory predicates, weakest first: `InBounds`, `Room`, `Fits`; a stronger fact gives the
+weaker ones. -/
+def memPreds : Array Name :=
+  #[``InBounds, ``Room, ``Fits]
+
+/-- `(kind, m, p, w)` of a memory predicate `P m p w`, `kind` its index in `memPreds`. -/
+def memPred? (ty : Expr) : Option (Nat × Expr × Expr × Expr) := do
+  let k ← memPreds.findIdx? (ty.isAppOfArity · 3)
+  return (k, ty.getArg! 0, ty.getArg! 1, ty.getArg! 2)
+
+/-- `pf`, a memory predicate of kind `k`, weakened to kind `j ≤ k`. -/
+def weakenMemPred (pf : Expr) (k j : Nat) : MetaM Expr := do
+  let mut pf := pf
+  let mut k := k
+  while j < k do
+    pf ← mkAppM (if k == 2 then ``Fits.room else ``Room.inBounds) #[pf]
+    k := k - 1
+  return pf
+
+/-- `p` without its `.add` offsets: the same block. -/
+partial def stripAdds (p : Expr) : Expr :=
+  match p.app2? ``Pointer.add with
+  | some (q, _) => stripAdds q
+  | none => p
+
+/-- `p.id.id < s.alloc.nextFreeBlock`: `p` into a `WF` state `s`'s memory, by a memory fact. -/
+def idBelowWF? (facts : Array (Expr × Expr)) (p s : Expr) : MetaM (Option Expr) := do
+  let some hwf ← wfProof? facts s | return none
+  let mem ← mkAppM ``GlobalState.mem #[s]
+  for (pf, ty) in facts do
+    let some (k, m, p', _) := memPred? ty | continue
+    unless m == mem && stripAdds p' == p do
+      continue
+    let lt ← mkAppM ``GlobalState.WF.id_lt_of_inBounds #[hwf, ← weakenMemPred pf k 0]
+    -- `(p'.id).id` is `p.id.id`: an offset stays in its block
+    let cnt ← mkAppM ``AllocState.nextFreeBlock #[← mkAppM ``GlobalState.alloc #[s]]
+    let ty ← mkAppM ``LT.lt #[mkApp (mkConst ``BlockId.id) (mkApp (mkConst ``Pointer.id) p), cnt]
+    return some (mkExpectedPropHint lt ty)
+  return none
+
+/-- The bounds `p.id.id < s.alloc.nextFreeBlock` (`idBelowWF?`) for the block numbers and counters
+`goal` mentions. -/
+def wfBounds (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Array Expr) := do
+  let ptrs ← IO.mkRef (#[] : Array Expr)
+  let states ← IO.mkRef (#[] : Array Expr)
+  goal.forEachWhere (fun e => e.isAppOfArity ``BlockId.id 1 || e.isAppOfArity ``GlobalState.alloc 1)
+    fun e => do
+      if e.isAppOfArity ``GlobalState.alloc 1 then
+        states.modify fun a => if a.contains e.appArg! then a else a.push e.appArg!
+      else if let some p := e.appArg!.app1? ``Pointer.id then
+        ptrs.modify fun a => if a.contains (stripAdds p) then a else a.push (stripAdds p)
+  let mut out := #[]
+  for s in ← states.get do
+    for p in ← ptrs.get do
+      if let some h← idBelowWF? facts p s then
+        out := out.push h
+  return out
+
+/-- `p.id ≠ q.id` by the blocks' numbers, `omega` over the facts bounding them (`r.id.id < b`,
+`b ≤ z.id.id`) and a slot's number (`s.slot k`, `s.allocaPtr`, a named `x = s.slot k`). Only tried
+when facts bound both, or one and the other is a slot (two slots: `neSlots?`, a smaller proof; a
+pointer and a slot: `step_alloca`'s facts). -/
+def idOrderNe? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
+  let some p := a.app1? ``Pointer.id | return none
+  let some q := b.app1? ``Pointer.id | return none
+  let num (e : Expr) := mkApp (mkConst ``BlockId.id) e
+  let (na, nb) := (num a, num b)
+  -- one pass over the facts: the order facts about either number, the named slots `x = s.slot k`
+  let mut bp := #[]
+  let mut bq := #[]
+  let mut named : Array (Expr × Expr × Expr) := #[]
+  for (pf, ty) in facts do
+    if isNatRel ty then
+      if !ty.isEq then
+        if (ty.find? (· == na)).isSome then
+          bp := bp.push pf
+        if (ty.find? (· == nb)).isSome then
+          bq := bq.push pf
+    else if let some (_, l, r) := ty.consumeMData.eq? then
+      if (l == p || l == q) &&
+          (r.isAppOfArity ``GlobalState.slot 2 || r.isAppOf ``GlobalState.allocaPtr) then
+        named := named.push (l, pf, r)
+  -- a slot's number over its base state's counter: `(s.slot k).id.id = b.alloc.nextFreeBlock + j`
+  let slotNum? (p : Expr) : MetaM (Option (Expr × Expr)) := do
+    let named? := named.findSome? fun (l, pf, r) => if l == p then some (pf, r) else none
+    let (hx?, s) := named?.elim (none, p) fun (pf, r) => (some pf, r)
+    let slot? :=
+      if s.isAppOfArity ``GlobalState.slot 2 then
+        (s.appArg!.nat?).bind fun k => (counterBase? s.appFn!.appArg!).map fun (b, j) => (b, j + k)
+      else if s.isAppOfArity ``GlobalState.allocaPtr 1 then counterBase? s.appArg!
+      else none
+    let some (base, k) := slot? | return none
+    let lhs := num (mkApp (mkConst ``Pointer.id) p)
+    let cnt ← mkAppM ``AllocState.nextFreeBlock #[← mkAppM ``GlobalState.alloc #[base]]
+    let rhs ← mkAppM ``HAdd.hAdd #[cnt, mkNatLit k]
+    let ty ← mkEq lhs rhs
+    -- by `rfl` from the slot; through `hx` for a named one
+    let pf ←
+      match hx? with
+      | none => pure (mkExpectedPropHint (← mkEqRefl lhs) ty)
+      | some hx =>
+        do
+          let f ←
+            withLocalDeclD `x (mkConst ``Pointer) fun x => do
+                mkLambdaFVars #[x] (num (mkApp (mkConst ``Pointer.id) x))
+          let h ← mkCongrArg f hx
+          let some (_, _, r) := (← inferType h).eq? | return none
+          let hr := mkExpectedPropHint (← mkEqRefl r) (← mkEq r rhs)
+          pure (mkExpectedPropHint (← mkEqTrans h hr) ty)
+    return some (base, pf)
+  let sp ← slotNum? p
+  let sq ← slotNum? q
+  -- tied: a slot and a bounded number, or both bounded (two slots: `neSlots?`, a smaller proof)
+  let mut extra := bp ++ bq
+  let mut tied := !bp.isEmpty && !bq.isEmpty
+  for (s?, bo) in [(sp, bq), (sq, bp)] do
+    let some (_, pf) := s? | continue
+    if !bo.isEmpty then
+      extra := extra.push pf
+      tied := true
+  unless tied do
+    return none
+  -- `omega` on the bounds alone: no other fact, nothing to normalize
+  let goal ← mkAppM ``Ne #[na, nb]
+  let g ← mkFreshExprMVar goal
+  try
+    let some g' ← g.mvarId!.falseOrByContra | return none
+    g'.withContext do
+        let neg := (← getLCtx).lastDecl.map (·.toExpr)
+        Lean.Elab.Tactic.Omega.omega (extra.toList ++ neg.toList) g'
+    return some (← mkAppM ``BlockId.ne_of_id_ne #[← instantiateMVars g])
+  catch _ =>
+    return none
+
 /-- `a ≠ b` from the facts: either way round, by a `[…].Nodup`, or by `decide` for closed terms
 (on locals it would only unfold them). -/
 partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option Expr) := do
@@ -244,28 +502,11 @@ partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option
   for (h, ty) in facts do
     if let some h← nodupNe? h ty a b then
       return some h
+  if let some h← idOrderNe? facts a b then
+    return some h
   if ne.hasFVar then
     return none
   decideProof? ne
-
-/-- The memory predicates, weakest first: `InBounds`, `Room`, `Fits`; a stronger fact gives the
-weaker ones. -/
-def memPreds : Array Name :=
-  #[``InBounds, ``Room, ``Fits]
-
-/-- `(kind, m, p, w)` of a memory predicate `P m p w`, `kind` its index in `memPreds`. -/
-def memPred? (ty : Expr) : Option (Nat × Expr × Expr × Expr) := do
-  let k ← memPreds.findIdx? (ty.isAppOfArity · 3)
-  return (k, ty.getArg! 0, ty.getArg! 1, ty.getArg! 2)
-
-/-- `pf`, a memory predicate of kind `k`, weakened to kind `j ≤ k`. -/
-def weakenMemPred (pf : Expr) (k j : Nat) : MetaM Expr := do
-  let mut pf := pf
-  let mut k := k
-  while j < k do
-    pf ← mkAppM (if k == 2 then ``Fits.room else ``Room.inBounds) #[pf]
-    k := k - 1
-  return pf
 
 /-- The lemma `memPreds[j].suffix`: `Fits.mono`, `Room.alloca`, … -/
 def memPredLemma (j : Nat) (suffix : Name) : Name :=
@@ -275,7 +516,9 @@ def memPredLemma (j : Nat) (suffix : Name) : Name :=
 one, with the same `m` and `p`, and the same width as a literal (`(Ty.vec 8 64).width` is `512`), a
 wider literal, or any width for an open `w`; not `isDefEq` on the predicate itself, which unfolds the memory. An offset
 `q.add off` is inside a fact for `q` (`add_of_le`) if `q.offset + off` does not wrap: by
-`q.offset`'s value, or a no-overflow fact for a larger offset. Then through the writes of `m`. -/
+`q.offset`'s value, or a no-overflow fact for a larger offset; a variable `off` by `natArith?`.
+Then through the writes of `m`: a store's or a masked store's known range, a new block's, an
+object's write by its transport lemma. -/
 partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr) :
     MetaM (Option Expr) := do
   let goal ← mkAppM memPreds[j]! #[m, p, w]
@@ -319,6 +562,18 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     if t.isAppOfArity ``GlobalState.mk 2 then
       let some h ← memPredProof? facts j t.appArg! p w | return none
       return some (mkExpectedPropHint h goal)
+  -- an abbreviation's state (`withT … S`): its memory
+  if let some t := m.app1? ``GlobalState.mem then
+    if let some c := t.getAppFn.constName? then
+      if (← isReducible c) && !(← isProjectionFn c) then
+        let m' ← whnfR m
+        if m' != m then
+          let some h ← memPredProof? facts j m' p w | return none
+          return some (mkExpectedPropHint h goal)
+  -- the new block of an `alloca`, at its start or inside it: its bounds, room if live
+  if let some t := m.app1? ``GlobalState.mem then
+    if let some h← allocaPtrPred? facts j t p w₁ goal then
+      return some h
   -- below an `alloca` or a new block: `alloca`, `addBlock`, the state's `WF` by `wfProof?` (not the
   -- transport search: a read below six `alloca`s needs twelve lemmas)
   if let some t := m.app1? ``GlobalState.mem then
@@ -336,17 +591,32 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     return ← proveBy? (memPredLemma j `addBlock) goal #[hwf, h]
   -- through a write
   match_expr m with
-  | MemoryState.storeAt m' q _ x =>
-    -- the stored bits, known: from room for them
-    if j == 2 && q == p then
-      if let some h← memPredProof? facts 1 m' p w then
-        if let some pf← proveBy? ``Fits.storeAt_self goal #[h] then
-          return some pf
+  | MemoryState.storeAt m' q v x =>
+    -- the stored bits, known: from room for them, at the store or inside it
+    if j == 2 then
+      let v ← normWidths v
+      if q == p then
+        if v == w₁ then
+          if let some h← memPredProof? facts 1 m' p w then
+            if let some pf← proveBy? ``Fits.storeAt_self goal #[h] then
+              return some pf
+        -- a range from its start, the widths checked before the search below
+        else if let some hw← natArith? facts (← mkAppM ``LE.le #[w₁, v]) then
+          if let some h← memPredProof? facts 1 m' p v then
+            if let some pf← proveBy? ``Fits.storeAt_self_of_le goal #[h, hw] then
+              return some pf
+      if let some (q', off) := p.app2? ``Pointer.add then
+        if q' == q then
+          if let some (hov, hw)← addWithin? facts q off w₁ v then
+            if let some h← memPredProof? facts 1 m' q v then
+              if let some pf← proveBy? ``Fits.storeAt_add_self goal #[h, hov, hw] then
+                return some pf
     let some h ← memPredProof? facts j m' p w | return none
     return some (← mkAppOptM (memPredLemma j `storeAt) #[m', p, w, q, none, x, h])
-  | MemoryState.storeDef m' _ _ _ _ =>
+  | MemoryState.storeDef m' q v _ d =>
+    -- known where the mask defines it: a copy's (`memcpy`, the source's definedness) or a literal
     if j == 2 then
-      return none
+      return ← storeDefFits? facts goal m' q (← normWidths v) d p w₁
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `storeDef) goal #[h]
   | MemoryState.lifetimeStart m' q =>
@@ -369,7 +639,164 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
       neProof? facts (← mkAppM ``Pointer.id #[p]) (← mkAppM ``Pointer.id #[q]) | return none
     proveBy? (memPredLemma j `lifetimeEnd) goal #[h, hne]
   | _ =>
+    objectWrite? facts j m p w goal
+
+where
+  /-- Through an object's write `m = f m' …` (`storeVec`, `hashMem`): by its transport lemma
+  `P.f` (`InBounds.storeVec`) from the predicate below, one layer at a time, not a search; its other
+  premises a `≠` or disjointness of blocks. -/
+  objectWrite? (facts : Array (Expr × Expr)) (j : Nat) (m p w goal : Expr) :
+      MetaM (Option Expr) := do
+    let some f := m.getAppFn.constName? | return none
+    let some last := f.componentsRev.head? | return none
+    let some m' ← m.getAppArgs.findM? fun a => return (← inferType a).isConstOf ``MemoryState
+      | return none
+    let suffix := memPreds[j]!.componentsRev.head!
+    let lems := (← labelled `mlir_transport).filter fun n =>
+      match n.componentsRev with
+      | l :: pre :: _ => l == last && pre == suffix
+      | _ => false
+    if lems.isEmpty then
+      return none
+    let some h ← memPredProof? facts j m' p w | return none
+    for lem in lems do
+      let saved ← saveState
+      let c ← mkConstWithFreshMVarLevels lem
+      let (ms, _, ty) ← forallMetaTelescopeReducing (← inferType c)
+      if ← withReducible (isDefEq ty goal) then
+        let mut ok := true
+        for mv in ms do
+          let mv := mv.mvarId!
+          if ← mv.isAssigned then
+            continue
+          let pty ← instantiateMVars (← mv.getType)
+          unless ← isProp pty do
+            continue
+          -- the predicate below, then block distinctness
+          let pf? ←
+            if ← isDefEq pty (← inferType h) then pure (some h)
+            else
+              match pty.cleanupAnnotations with
+              | .app (.app (.app (.const ``Ne _) _) a) b => neProof? facts a b
+              | _ =>
+                match neSides? pty with
+                | some (a, b) => neProof? facts a b
+                | none =>
+                  match_expr pty with
+                  | Range.Disjoint ra rb =>
+                    let_expr Range.of p₁ v₁ := ra | pure none
+                    let_expr Range.of p₂ v₂ := rb | pure none
+                    let some hne ←
+                      neProof? facts (← mkAppM ``Pointer.id #[p₁]) (← mkAppM ``Pointer.id #[p₂])
+                      | pure none
+                    pure (some (mkAppN (mkConst ``Range.disjoint_of_id_ne) #[p₁, p₂, v₁, v₂, hne]))
+                  | _ => pure none
+          match pf? with
+          | some pf =>
+            mv.assign pf
+          | none =>
+            ok := false
+            break
+        if ok then
+          let pf ← instantiateMVars (mkAppN c ms)
+          if !pf.hasMVar then
+            return some pf
+      saved.restore
     return none
+  /-- `InBounds` or `Room` (`j`) of `(s.alloca n dead).mem` at `p`, `s.allocaPtr` or inside it. -/
+  allocaPtrPred? (facts : Array (Expr × Expr)) (j : Nat) (t p w goal : Expr) :
+      MetaM (Option Expr) := do
+    let_expr GlobalState.alloca s n dead := t | return none
+    if j == 2 || (j == 1 && !dead.isConstOf ``Bool.false) then
+      return none
+    let q := mkApp (mkConst ``GlobalState.allocaPtr) s
+    -- the new block's pointer as `s.allocaPtr` or as a slot `b.slot k` of the same block
+    let isNew (e : Expr) : Bool :=
+      e == q || (slotPtr? q == some e) ||
+        (e.isAppOfArity ``GlobalState.slot 2 && (do
+          let (b, k) ← counterBase? s
+          let k' ← e.appArg!.nat?
+          guard (e.appFn!.appArg! == b && k == k')) == some ())
+    let (base, off?) :=
+      if isNew p then (some p, none)
+      else
+        match p.app2? ``Pointer.add with
+        | some (q', off) => if isNew q' then (some q', some off) else (none, none)
+        | none => (none, none)
+    let some _ := base |
+      -- a named slot `x = b.slot k`: as the slot, then back along `hx`
+      let x := stripAdds p
+      unless x.isFVar do
+        return none
+      let some (hx, r) := facts.findSome? fun (pf, ty) =>
+          (ty.consumeMData.eq?).bind fun (_, l, r) =>
+            if l == x && isNew r then some (pf, r) else none
+        | return none
+      let rep (e : Expr) := e.replace fun t => if t == x then some r else none
+      let some h ← allocaPtrPred? facts j t (rep p) w (rep goal) | return none
+      let motive ← motiveOver goal x (mkConst ``Pointer)
+      return some (← mkEqNDRec motive h (← mkEqSymm hx))
+    let goal' := goal.replace fun e => if base == some e then some q else none
+    let v ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
+    let lem := if j == 0 then ``InBounds.allocaPtr else ``Room.allocaPtr
+    -- about `s.allocaPtr`, the goal's slot by `rfl`
+    let pf? ←
+      match off? with
+      | none =>
+        let some hw ← natArith? facts (← mkAppM ``LE.le #[w, v]) | return none
+        proveBy? lem goal' #[hw]
+      | some off =>
+        let some (hov, hw) ← addWithin? facts q off w v | return none
+        let whole ← mkAppM memPreds[j]! #[← mkAppM ``GlobalState.mem #[t], q, v]
+        let some h ← proveBy? lem whole #[← mkAppM ``Nat.le_refl #[v]] | return none
+        pure (some (← mkAppOptM (memPredLemma j `add_of_le)
+          #[none, none, none, none, off, hov, hw, h]))
+    return pf?.map (mkExpectedPropHint · goal)
+  /-- `Fits (m.storeDef q x d) p w` (the `goal`) for `p` at `q` or inside it, `v` bits stored with
+  room for them: from the source's `Fits` for a copy's mask `m.definedAt src v`, by `decide` for a
+  literal mask. -/
+  storeDefFits? (facts : Array (Expr × Expr)) (goal m q v d p w : Expr) : MetaM (Option Expr) := do
+    let off? := if p == q then none else (p.app2? ``Pointer.add).bind fun (q', off) =>
+      if q' == q then some off else none
+    if p != q && off?.isNone then
+      return none
+    let src? : Option Expr := do
+      let_expr MemoryState.definedAt m'' src _ := d | none
+      guard (m'' == m)
+      return src
+    -- the cheap checks first, then the searches below the store
+    match src?, off? with
+    | some src, none =>
+      let some hw ← natArith? facts (← mkAppM ``LE.le #[w, v]) | return none
+      let some hs ← memPredProof? facts 2 m src w | return none
+      let some hr ← memPredProof? facts 1 m q v | return none
+      proveBy? ``Fits.storeDef_definedAt_self goal #[hr, hs, hw]
+    | some src, some off =>
+      let some (hov, hw) ← addWithin? facts q off w v | return none
+      let some (hovq, _) ← addWithin? facts src off w v | return none
+      let some hs ← memPredProof? facts 2 m (← mkAppM ``Pointer.add #[src, off]) w | return none
+      let some hr ← memPredProof? facts 1 m q v | return none
+      proveBy? ``Fits.storeDef_definedAt goal #[hr, hs, hov, hovq, hw]
+    | none, _ =>
+      -- a literal mask: its bits there all set
+      if (← getBitVecValue? d).isNone then
+        return none
+      let start ←
+        match off? with
+        | none => pure (mkNatLit 0)
+        | some off => mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8]
+      let hdTy ←
+        mkEq (← mkAppM ``BitVec.extractLsb' #[start, w, d]) (← mkAppM ``BitVec.allOnes #[w])
+      let some hd ← decideProof? hdTy | return none
+      match off? with
+      | none =>
+        let some hw ← natArith? facts (← mkAppM ``LE.le #[w, v]) | return none
+        let some hr ← memPredProof? facts 1 m q v | return none
+        proveBy? ``Fits.storeDef_of_mask_self goal #[hr, hw, hd]
+      | some off =>
+        let some (hov, hw) ← addWithin? facts q off w v | return none
+        let some hr ← memPredProof? facts 1 m q v | return none
+        proveBy? ``Fits.storeDef_of_mask goal #[hr, hov, hw, hd]
 
 /-- Prove `Fits m p w` by `memPredProof?`. -/
 def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Option Expr) :=
@@ -635,12 +1062,6 @@ def MemCtx.build : MetaM MemCtx := do
   return { lemmas, heads, transport := ← labelled `mlir_transport, facts := ← splitConjunctedFacts,
            factMap := ← contextFactMap, slots := ← namedSlots eqs, reads, mems := ← IO.mkRef {} }
 
-/-- `p` without its `.add` offsets: the same block. -/
-partial def stripAdds (p : Expr) : Expr :=
-  match p.app2? ``Pointer.add with
-  | some (q, _) => stripAdds q
-  | none => p
-
 /-- The slot `s.slot k` whose block id `e` (`p.id`) is: `p` spelled as one, as an `allocaPtr`
 (`slotPtr?`), or a named slot, with its `hx : x = s.slot k`. -/
 def slotOfId? (c : FactCtx) (e : Expr) : Option (Expr × Option Expr) := do
@@ -709,8 +1130,8 @@ def neSlots? (c : FactCtx) (a b : Expr) : MetaM (Option Expr) := do
   return some (← mkExpectedTypeHint pf (mkNot (← mkEq a b)))
 
 /-- A transport lemma's premise by the searches needing no lemma: a memory predicate
-(`memPredProof?`), `≠` of block ids (facts, either way round, `List.Nodup`, distinct slots) and the
-disjointness of distinct blocks. -/
+(`memPredProof?`), a relation of naturals (`natArith?`), `≠` of block ids (facts, either way round,
+`List.Nodup`, distinct slots, their order) and the disjointness of distinct blocks. -/
 def premiseSearch? (c : FactCtx) (goal : Expr) : MetaM (Option Expr) := do
   let ne? (a b : Expr) : MetaM (Option Expr) := do
     if let some h← neProof? c.facts a b then
@@ -718,6 +1139,9 @@ def premiseSearch? (c : FactCtx) (goal : Expr) : MetaM (Option Expr) := do
     neSlots? c a b
   if let some (j, m, p, w) := memPred? goal then
     return ← memPredProof? c.facts j m p w
+  -- a width or offset bound (`37 ≤ 41`), a block number below a counter
+  if isNatRel goal then
+    return ← natArith? c.facts goal (← wfBounds c.facts goal)
   match_expr goal with
   | Range.Disjoint a b =>
     let_expr Range.of p v := a | return none
@@ -780,6 +1204,14 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
     return ← local?
   transportWith c.factMap c.transport fuel goal (side := premiseSearch? c)
 
+/-- The writes of the memory `m`, outermost first: each with the memory it writes over (its first
+`MemoryState` argument). -/
+partial def writesOf (m : Expr) (acc : Array Expr := #[]) : MetaM (Array Expr) := do
+  for a in m.getAppArgs do
+    if (← inferType a).isConstOf ``MemoryState then
+      return ← writesOf a (acc.push m)
+  return acc
+
 /-- One `mlir_read` lemma on the read `e`: a stored value (`true`), or the read past a write, with
 the proof of `e = _`. Only lemmas for `e`'s read and write are tried. -/
 def readStep (c : MemCtx) (e : Expr) : MetaM (Option (Bool × Expr × Expr)) := do
@@ -823,15 +1255,21 @@ partial def readThrough (c : MemCtx) (e : Expr) : MetaM (Expr × Expr) := do
     let (v, pf') ← readThrough c e'
     return (v, ← mkEqTrans pf pf')
   | none =>
+    -- an abbreviation of writes no lemma reads through (`storeOut m …`): its writes
+    for i in [0:e.getAppNumArgs] do
+      let a := e.getArg! i
+      let some n := a.getAppFn.constName? | continue
+      unless (← inferType a).isConstOf ``MemoryState do
+        continue
+      unless (← isReducible n) && !(← isProjectionFn n) do
+        continue
+      let some a' ← withReducible (unfoldDefinition? a) | continue
+      let e' := mkAppN e.getAppFn (e.getAppArgs.set! i a'.headBeta)
+      let (v, pf) ← readThrough c e'
+      if v == e' then
+        break
+      return (v, mkExpectedPropHint pf (← mkEq e v))
     return (e, ← mkEqRefl e)
-
-/-- The writes of the memory `m`, outermost first: each with the memory it writes over (its first
-`MemoryState` argument). -/
-partial def writesOf (m : Expr) (acc : Array Expr := #[]) : MetaM (Array Expr) := do
-  for a in m.getAppArgs do
-    if (← inferType a).isConstOf ``MemoryState then
-      return ← writesOf a (acc.push m)
-  return acc
 
 /-- `fun s => e` with the memory `m` as `s.mem`: a fact about a state's memory, as a motive over
 the state. -/

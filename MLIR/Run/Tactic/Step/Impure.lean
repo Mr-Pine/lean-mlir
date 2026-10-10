@@ -23,10 +23,12 @@ syntax (name := stepImpure)
 /-- `step_impure` for a `load`, closing the instruction with `run_load`. -/
 syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)? : tactic
 
-/-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`. -/
+/-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`, or with `run_memcpyDef`
+for a source only partly known. -/
 syntax (name := stepMemcpy) "step_memcpy" stepSimpArgs (stepConsuming)? : tactic
 
-/-- `step_impure` for a `memmove`, closing the instruction with `run_memmove`. -/
+/-- `step_impure` for a `memmove`, closing the instruction with `run_memmove`, or `run_memmoveDef`
+for a source only partly known. -/
 syntax (name := stepMemmove) "step_memmove" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `memset`, closing the instruction with `run_memset`. -/
@@ -44,17 +46,18 @@ syntax (name := stepLifetime) "step_lifetime" stepSimpArgs : tactic
 syntax (name := stepAssume) "step_assume" stepSimpArgs : tactic
 
 /-- Seal the goal's new state as `S` with `hS`, carrying the facts about `inState` over (the
-unproved ones are returned as goals; `consumed` ones, two lemmas deep or not at all; those
-mentioning `about?`, a lifetime marker's pointer, dropped). -/
+unproved ones are returned as goals; `consumed` ones, and at a lifetime marker those mentioning its
+pointer `about?`, two lemmas deep or not at all; at a marker, the rest not carried dropped). Also
+returned: the names fresh facts took over from the facts they supersede. -/
 def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option Expr := none) :
-    TacticM (Array MVarId) := do
+    TacticM (Array MVarId × Array Name) := do
   -- the new state's memory facts, about it as a term over `inState`, then generalized with it
-  let (mem, olds) ←
+  let (mem, olds, renamed) ←
     withMainContext do
         let (g, goal) ← getGoalType
-        let (hyps, olds, g) ← Tactic.memFactsOf g inState (← getRunBodyFrom goal).state
+        let (hyps, olds, g, renamed) ← Tactic.memFactsOf g inState (← getRunBodyFrom goal).state
         replaceMainGoal [g]
-        return (hyps, olds)
+        return (hyps, olds, renamed)
   let ⟨S', hS', hS⟩ ← sealState inState mem
   -- the old read facts: carried over by `memFactsOf`, used by `sealState`'s simplification
   withMainContext do
@@ -79,31 +82,48 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option 
         let fc ← Tactic.FactCtx.build
         let locals ← Tactic.localImplications
         let new? := (← instantiateMVars (← hS'.getType)).eq?.map (·.2.2)
+        -- the marker's pointer and the named slot `x = q` it is, either way round
+        let markerPtrs ←
+          match about? with
+          | none => pure #[]
+          | some q =>
+            do
+              let eqs ← Tactic.localEqs
+              let slots := eqs.filter fun e => e.lhs == q && e.rhs.isAppOf ``GlobalState.slot
+              pure (#[q] ++ (eqs.filter (·.rhs == q)).map (·.lhs) ++ slots.map (·.rhs))
         for hyp in preserveHyps do
           let decl ← hyp.getDecl
           -- `P S` as `fun s => P s`, then `P S'`
           let key ← instantiateMVars decl.type
           let motive := .lam `s (← inferType inState) (← kabstract key inState) .default
           let newTy := motive.beta #[.fvar S']
+          -- about the object a lifetime marker restarts or ends (by its pointer, or a slot named
+          -- for it): rarely carried, so not searched deep
+          let aboutMarker := markerPtrs.any fun q => (key.find? (· == q)).isSome
           -- `P (new state)` carried from `P S`, then `hS'` back; else left open
           let pf? ←
             observing? do
                 let some new := new? | failure
                 let some pf ←
                   Tactic.carryFact fc locals (.fvar hyp) key (motive.beta #[new]) (deep :=
-                      !consumed.contains hyp) | failure
+                      !consumed.contains hyp && !aboutMarker) | failure
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
           -- a consumed fact not carried stays about the old state, to be cleared after the step;
           -- an equation (`S.mem.eraseFrom b = m`) stays about it, true there, rather than a goal
           if pf?.isNone && consumed.contains hyp then
             continue
           -- about the object a lifetime marker restarts or ends: gone with its old lifetime
-          if pf?.isNone && about?.any (fun q => (key.find? (· == q)).isSome) then
+          if pf?.isNone && aboutMarker then
             trace[rir] m!"fact {decl.userName} dropped at the lifetime marker"
             g ← g.tryClear hyp
             continue
           if pf?.isNone && key.isEq then
             trace[rir] m!"fact {decl.userName} kept about the state before the step"
+            continue
+          -- past a lifetime marker, a fact not carried is dropped rather than a goal
+          if pf?.isNone && about?.isSome then
+            trace[rir] m!"fact {decl.userName} not carried past the lifetime marker: dropped"
+            g ← g.tryClear hyp
             continue
           let pg ← mkFreshExprSyntheticOpaqueMVar newTy (tag := decl.userName) -- New goal
           let (_, g') ← (← g.assert decl.userName newTy pg).intro1P
@@ -125,7 +145,7 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option 
         g ← Tactic.mergeStateEq g hNew
         setGoals [g]
         return goals
-  return goals
+  return (goals, renamed)
 
 /-- Step an effectful instruction, proving it with `runTactics`; with `resolveFirst`, the written
 value's reads resolved before the state is sealed (a call's result, which reads the old state). -/
@@ -149,9 +169,15 @@ def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : 
           simpValue args.only args.simpArgs operation (← getRunBodyFrom goal).env args.expand
         let runGoal ← replaceBySimp runGoal operation resultValue
         -- a lifetime marker's pointer, whose object's facts it ends
+        let op := resultValue.expr
+        let marker := op.isAppOf ``Operation.lifetimeStart || op.isAppOf ``Operation.lifetimeEnd
+        if marker then
+          let arg := op.appArg!
+          unless arg.isAppOf ``PoisonOr.value || arg.isAppOf ``PoisonOr.poison do
+            throwError "lifetime marker: its pointer operand is not known to be a value or \
+              poison{indentExpr arg}\na register the env does not hold?"
         let about? := do
-          let op := resultValue.expr
-          guard (op.isAppOf ``Operation.lifetimeStart || op.isAppOf ``Operation.lifetimeEnd)
+          guard marker
           let_expr PoisonOr.value _ q := op.appArg! | none
           return q
         -- Apply runTactics to runGoal
@@ -167,7 +193,7 @@ def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : 
           withMainContext do
               let lctx ← getLCtx
               return args.consumed.filterMap fun h => (lctx.findFromUserName? h.getId).map (h, ·)
-        let goals ← sealStep inState (before.map (·.2.fvarId)) about?
+        let (goals, renamed) ← sealStep inState (before.map (·.2.fvarId)) about?
         finishStep args
         -- the consumed facts last: the value may read through them. By name: the seal renews ids,
         -- and a fact may be the step's own (a read-back). One there before may be gone with its
@@ -175,7 +201,8 @@ def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : 
         withMainContext do
             let lctx ← getLCtx
             let mut hs := #[]
-            for h in args.consumed do
+            -- not a fresh fact that took over a consumed one's name
+            for h in args.consumed.filter (!renamed.contains ·.getId) do
               match lctx.findFromUserName? h.getId with
               | some d =>
                 hs := hs.push d.fvarId
@@ -259,9 +286,12 @@ def evalStepMemcpy : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact
-            run_memcpy (by rfl) (by first | mem_fact | simp_all) (by first | mem_fact | simp_all)
-              (by first | mem_fact | simp_all)))
+        first
+        | exact run_memcpy (by rfl) (by first | mem_fact | simp_all)
+            (by first | mem_fact | simp_all) (by mem_fact)
+        -- a source not known throughout: its definedness copied
+        | exact run_memcpyDef (by rfl) (by first | mem_fact | simp_all)
+            (by first | mem_fact | simp_all) (by first | mem_fact | simp_all)))
 
 @[tactic stepMemmove]
 def evalStepMemmove : Tactic := fun stx => do
@@ -269,9 +299,11 @@ def evalStepMemmove : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact
-            run_memmove (by rfl) (by first | mem_fact | simp_all)
-              (by first | mem_fact | simp_all)))
+        first
+        | exact run_memmove (by rfl) (by first | mem_fact | simp_all) (by mem_fact)
+        -- a source not known throughout: its definedness copied
+        | exact run_memmoveDef (by rfl) (by first | mem_fact | simp_all)
+            (by first | mem_fact | simp_all)))
 
 @[tactic stepMemset]
 def evalStepMemset : Tactic := fun stx => do

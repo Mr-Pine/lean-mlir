@@ -139,8 +139,9 @@ Mistakes:
 ```
 
 `step_memcpy` needs the two ranges disjoint: give the theorem `p.id ≠ q.id` (or a `Nodup` list of
-ids) when they are not distinct slots; `Room` of the destination, `Fits` of the source (`memset`:
-`Room`). `step_memmove` takes the same facts but disjointness.
+ids) when they are not distinct slots; `Room` of the destination, `Fits` of the source, or only
+`Room` of it (its definedness copied; the known sub-ranges stay known) (`memset`: `Room`).
+`step_memmove` takes the same facts but disjointness.
 
 ## 6. `step_call`
 
@@ -233,6 +234,8 @@ Mistakes:
   `alloca`.
 - A fact about a slot that a lifetime marker cannot carry (an object predicate over it) is
   dropped at the marker; restate it after the stores (`Fits` from `hfits_<x>` facts, `Fits.append`).
+- A slot's lifetime ending is no reason to `clear_facts` it: the marker drops what it cannot
+  carry. Clearing a dead temporary's facts still saves the later steps carrying them.
 - `step_load` failing on a slot right after `step_alloca` or `lifetime.start`: the load reads
   undefined bits (poison in LLVM), so the code reads before it writes, or the store was not
   stepped yet.

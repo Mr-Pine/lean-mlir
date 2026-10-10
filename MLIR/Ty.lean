@@ -347,7 +347,9 @@ public section FlattenUnflatten
 
 section BitVecs
 
-/-- Pack a Vector of BitVectors into one. -/
+/-- Pack a Vector of BitVectors into one. Exposed for `addressof`'s evaluation of a global, which
+unfolds it at all transparency; irreducible past this file, so elaboration does not. -/
+@[expose]
 def _root_.BitVec.packLanes {we : Nat} : {n : Nat} → Vector (BitVec we) n → BitVec (we * n)
   | 0, _ => 0#(we * 0)
   | _ + 1, v => BitVec.packLanes v.tail ++ v[0]
@@ -396,12 +398,14 @@ def allValues [Inhabited α] (v : Vector (PoisonOr α) n) : PoisonOr (Vector α 
 
 mutual
 /-- A value's bits, with zero padding. -/
+@[expose]
 def flattenRaw : (t : Ty) → ⟦t⟧ᵣ → BitVec t.width
   | bv _, x => x
   | ptr, _ => 0#_
   | vec _ _, v => BitVec.packLanes v
   | array _ t, v => BitVec.packLanes (v.map fun x => 0#(padding t.width t.align) ++ flattenRaw t x)
   | struct fields, v => flattenRawFields 0 (fieldsAlign fields) fields v
+@[expose]
 def flattenRawFields (off a : Nat) :
     (ts : List Ty) → denoteFieldsRaw ts → BitVec (fieldsWidth off a ts)
   | [], _ => 0#0
@@ -622,12 +626,14 @@ theorem unflatten_flatten {t : Ty} {v : ⟦t⟧} {b : BitVec t.width} (h : flatt
 
 mutual
 /-- `v`'s raw value, its poison leaves zero. -/
+@[expose]
 def valueOrZero : (t : Ty) → ⟦t⟧ → ⟦t⟧ᵣ
   | bv _, x => x.getValue
   | ptr, x => x.getValue
   | vec _ _, v => v.map PoisonOr.getValue
   | array _ t, v => v.map (valueOrZero t)
   | struct fs, v => valueOrZeroFields fs v
+@[expose]
 def valueOrZeroFields : (fs : List Ty) → denoteFields fs → denoteFieldsRaw fs
   | [], _ => ()
   | [t], v => valueOrZero t v
@@ -636,12 +642,14 @@ end
 
 mutual
 /-- Each of `v`'s integer leaves all ones if a value, zero if poison; pointers null. -/
+@[expose]
 def definedness : (t : Ty) → ⟦t⟧ → ⟦t⟧ᵣ
   | bv w, x => if x.isPoison then 0 else BitVec.allOnes w
   | ptr, _ => Pointer.null
   | vec _ w, v => v.map fun x => if x.isPoison then 0 else BitVec.allOnes w
   | array _ t, v => v.map (definedness t)
   | struct fs, v => definednessFields fs v
+@[expose]
 def definednessFields : (fs : List Ty) → denoteFields fs → denoteFieldsRaw fs
   | [], _ => ()
   | [t], v => definedness t v
@@ -681,7 +689,8 @@ def fieldsHavePadding (off a : Nat) : List Ty → Bool
 end
 
 /-- A value's bits, its poison leaves zero, and which of them are defined: neither in a poison leaf
-nor padding. -/
+nor padding. Exposed, so `addressof` evaluates a global's. -/
+@[expose]
 def flattenDef (t : Ty) (v : ⟦t⟧) : BitVec t.width × BitVec t.width :=
   (flattenRaw t (valueOrZero t v), flattenRaw t (definedness t v))
 
@@ -897,5 +906,8 @@ theorem unflattenDefFields_allOnes :
 end
 
 end FlattenUnflatten
+
+-- importers reason about packed lanes by the lemmas, not by unfolding
+attribute [irreducible] BitVec.packLanes
 
 end MLIR.Ty

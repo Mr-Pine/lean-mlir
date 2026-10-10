@@ -51,7 +51,7 @@ def addAllocaFreshness (tac : String) : TacticM Unit := do
       replaceMainGoal [g']
 
 /-- After the `alloca`: the slot `hx : x = p` (`p` an `allocaPtr`) as `x = b.slot k` (`slotPtr?`),
-and the facts about `p` stated about `x`, named after it. -/
+and the facts about `p` stated about `x`, named after it (`hx_fits_8` for `x.add 8`). -/
 def nameAllocaSlot : TacticM Unit :=
   withMainContext do
     let mut g ← getMainGoal
@@ -67,12 +67,22 @@ def nameAllocaSlot : TacticM Unit :=
     for h in ← Tactic.hypsMentioning p (except := #[hx]) do
       let d ← h.getDecl
       let ty ← instantiateMVars d.type
+      -- the state's equation keeps the slot as its state spells it
+      if ty.isEq && ty.getArg! 0 == mkConst ``GlobalState then
+        continue
       let motive ← Tactic.motiveOver ty p (mkConst ``Pointer)
       let ty' := motive.beta #[.fvar x]
-      let name :=
+      -- a range inside the block (a global's member) after its offset
+      let name ←
         match Tactic.memPred? ty with
-        | some (k, _) => (`h).appendAfter s!"{xName}_{#["bounds", "room", "fits"][k]!}"
-        | none => d.userName.appendAfter s!"_{xName}"
+        | some (k, _, q, _) =>
+          do
+            let at_ ←
+              match q.app2? ``Pointer.add with
+              | some (_, off) => pure ((← getBitVecValue? off).map fun ⟨_, o⟩ => s!"_{o.toNat}")
+              | none => pure none
+            pure ((`h).appendAfter s!"{xName}_{#["bounds", "room", "fits"][k]!}{at_.getD ""}")
+        | none => pure (d.userName.appendAfter s!"_{xName}")
       let (_, g') ← (← g.assert name ty' (← mkEqNDRec motive d.toExpr pf)).intro1P
       g ← g'.clear d.fvarId
     -- its offset, `0`: offsets into the slot (`x.add 24`) stay in range

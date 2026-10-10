@@ -124,7 +124,8 @@ def enterContinuation (g : MVarId) (E : Expr) : TacticM Unit := do
 unless the result is `v` itself, leave `result = v` open. -/
 def closeRead (g : MVarId) : TacticM (List MVarId) :=
   g.withContext do
-    let some (_, lhs, rhs) := (← instantiateMVars (← g.getType)).eq? | return [g]
+    -- through an abbreviation of the read
+    let some (_, lhs, rhs) := (← whnfR (← instantiateMVars (← g.getType))).eq? | return [g]
     unless lhs.isAppOfArity ``Env.read 4 do
       return [g]
     if let some (v, pf)← Tactic.walkRead (lhs.getArg! 2) (lhs.getArg! 3) then
@@ -160,11 +161,13 @@ partial def closeReads (g : MVarId) : TacticM (List MVarId) := do
       open_ := open_ ++ [g']
   return open_
 
-/-- Whether `g` is a read, or a conjunction of reads, of an env. -/
-partial def isReadGoal (ty : Expr) : Bool :=
+/-- Whether `ty` is a read, or a conjunction of reads, of an env; abbreviations unfolded
+(`abbrev Regs E := E ⊨ […]`). -/
+partial def isReadGoal (ty : Expr) : MetaM Bool := do
+  let ty ← whnfR ty
   match ty.and? with
-  | some (a, b) => isReadGoal a && isReadGoal b
-  | none => Tactic.isEnvReadEq ty
+  | some (a, b) => isReadGoal a <&&> isReadGoal b
+  | none => return Tactic.isEnvReadEq ty
 
 /-- `env_reads` closes `E.read r = v`, or `E ⊨ [r := v, …]`, through `E`'s writes as `step_loop`
 closes its reads; what remains, by `rfl`. -/
@@ -237,7 +240,7 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
     -- reads through the env's writes first: `simp [*]` would assign their values from any fact;
     -- what they leave has its values fixed, so `simp [*]` may close it
     let gs ←
-      if isReadGoal (← instantiateMVars (← g.getType)) then
+      if ← g.withContext (isReadGoal (← instantiateMVars (← g.getType))) then
         g.withContext (closeReads g)
       else
         pure [g]

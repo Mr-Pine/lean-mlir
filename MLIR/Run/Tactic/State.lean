@@ -149,69 +149,225 @@ def factMatching? (facts : Array (Expr × Expr)) (ty : Expr) : MetaM (Option Exp
       return some pf
   return none
 
+/-- The memories below `m` down to a local state's, outermost first, for fresh facts: `m`'s writes,
+the memory they start from (a new block's), an abbreviation's own writes after it (`storeOut m …`
+unfolded at reducible transparency). -/
+partial def freshLayers (m : Expr) : MetaM (Array Expr) := do
+  -- a local state's memory: the old one
+  if m.isAppOfArity ``GlobalState.mem 1 && m.appArg!.isFVar then
+    return #[]
+  if let some c := m.getAppFn.constName? then
+    if (← isReducible c) && !(← isProjectionFn c) then
+      if let some m' ← withReducible (unfoldDefinition? m) then
+        let m' := m'.headBeta
+        if m' != m then
+          return #[m] ++ (← freshLayers m')
+  for a in m.getAppArgs do
+    if (← inferType a).isConstOf ``MemoryState then
+      return #[m] ++ (← freshLayers a)
+  return #[m]
+
+/-- The pointer a fact `P m p …` is about: its first `Pointer` argument. -/
+def factPtr? (ty : Expr) : MetaM (Option Expr) :=
+  ty.getAppArgs.findM? fun a => return (← inferType a).isConstOf ``Pointer
+
+/-- The name of a fresh fact `concl` about the pointer `p`: a memory predicate's (`hfits_x`); an
+object's, the fact about the old memory `oldMem` of the lemma's premise `prem` about the same
+object, which it supersedes (`hx_limbs`, `LimbsRoom` to `LimbsFit`), else `hlimbsFit_x`. -/
+def freshName (c : MemCtx) (concl : Expr) (oldMem : Expr) (prems : Array Expr) :
+    MetaM (Name × Option FVarId) := do
+  if let some (k, _, p, _) := memPred? concl then
+    return (← namedAfterPtr #[`hbounds, `hroom, `hfits][k]! p, none)
+  let some p ← factPtr? concl | return (`hfresh, none)
+  -- `LimbsRoom` and `LimbsFit`: one object's predicates
+  let object (n : Name) : Name := n.modifyBase fun
+    | .str pre s =>
+      .str pre ((["Fit", "Room", "Bounds"].find? (s.endsWith ·)).elim s fun x =>
+        String.ofList (s.toList.take (s.length - x.length)))
+    | n => n
+  let some cn := concl.getAppFn.constName? | return (`hfresh, none)
+  for prem in prems do
+    unless prem.getAppFn.constName?.map object == some (object cn) do
+      continue
+    let some m ← prem.getAppArgs.findM? fun a => return (← inferType a).isConstOf ``MemoryState
+      | continue
+    unless (← factPtr? prem) == some p do
+      continue
+    let atOld := prem.replace fun t => if t == m then some oldMem else none
+    let some (.fvar h) := c.factMap[atOld]? | continue
+    return (← h.getUserName, some h)
+  let pred := (concl.getAppFn.constName?.map (·.getString!)).getD "fresh"
+  let base := s!"h{pred.decapitalize}"
+  return (← namedAfterPtr (.mkSimple base) p, none)
+
 /-- The memory facts of the step's new state `new` (over the old state `S`), each `(h, motive)` with
-`h : motive new`: a new block's size (`mlir_fresh`), every write an `mlir_read` lemma reads back,
-and every read fact of `S` the writes miss (the others dropped, traced by `trace.rir`). Asserted in
-`g`; the old read facts returned, for clearing once the state is sealed. Read through the writes
-while `S`'s facts hold. -/
+`h : motive new`: a new block's size (`mlir_fresh`, at each write, carried up through the later
+ones), every write an `mlir_read` lemma reads back, and every read fact of `S` the writes miss (the
+others dropped, traced by `trace.rir`). Asserted in `g`; the old read facts, and the object facts a
+fresh one supersedes, returned for clearing once the state is sealed, with the names the fresh ones
+take over. Read through the writes while `S`'s facts hold. -/
 def memFactsOf (g : MVarId) (S new : Expr) :
-    MetaM (Array (FVarId × Expr) × Array FVarId × MVarId) :=
+    MetaM (Array (FVarId × Expr) × Array FVarId × MVarId × Array Name) :=
   g.withContext do
     let newMem ← normWidths (← dsimpState (← mkAppM ``GlobalState.mem #[new]))
     let oldMem ← mkAppM ``GlobalState.mem #[S]
     let c ← MemCtx.build
     -- `(name, fact about newMem, proof)`, asserted last
     let mut facts : Array (Name × Expr × Expr) := #[]
+    let mut superseded : Array FVarId := #[]
     -- a new block's size, a store's known bits, a started object's room: each `mlir_fresh`
-    -- lemma's fact about the new memory (its first `MemoryState` argument), unless a fact of the
-    -- old one says as much and is carried (all but through a lifetime marker)
+    -- lemma's fact about a write (its first `MemoryState` argument), carried up to the new
+    -- memory, unless a fact of the old one says as much and is carried (all but through a
+    -- lifetime marker)
     let lifetime :=
       newMem.isAppOf ``MemoryState.lifetimeStart || newMem.isAppOf ``MemoryState.lifetimeEnd
-    for n in ← labelled `mlir_fresh do
-      let some (fact, name) ←
-        observing? do
-            let lem ← mkConstWithFreshMVarLevels n
-            let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
-            let isMem (a : Expr) : MetaM Bool := return (← inferType a).isConstOf ``MemoryState
-            let some m ← concl.getAppArgs.findM? isMem | failure
-            unless ← withReducible (isDefEq m newMem) do
-              failure
-            if !lifetime then
-              let concl ← normWidths (← instantiateMVars concl)
-              let atOld := concl.replace fun t => if t == newMem then some oldMem else none
-              if c.factMap.contains atOld then
+    let layers ← freshLayers newMem
+    let isMem (a : Expr) : MetaM Bool := return (← inferType a).isConstOf ``MemoryState
+    -- each lemma with the head of its memory (`none`: any), so a write tries only its own
+    let lemmas ←
+      (← labelled `mlir_fresh).mapM fun n => do
+          let (_, _, concl) ←
+            forallMetaTelescopeReducing (← inferType (← mkConstWithFreshMVarLevels n))
+          let m? ← concl.getAppArgs.findM? isMem
+          return (n, m?.bind (·.getAppFn.constName?))
+    let mut targets : Array Expr := #[]
+    let mut layerFacts : Array (Expr × Expr) := #[]
+    -- the objects a lifetime marker above a write starts or ends: no fact of the write survives
+    let marked (i : Nat) (p : Expr) : Bool :=
+      (layers.extract 0 i).any fun w =>
+        let marker :=
+          w.isAppOfArity ``MemoryState.lifetimeStart 2 || w.isAppOfArity ``MemoryState.lifetimeEnd 2
+        marker && stripAdds w.appArg! == stripAdds p
+    for i in [0:layers.size] do
+      let wm := layers[i]!
+      let head := wm.getAppFn.constName?
+      -- an abbreviation's own head is no lemma's: all of them, unification unfolds it
+      let abbrev_ ← head.elim (pure false) fun c => isReducible c
+      for (n, h?) in lemmas do
+        if !abbrev_ && h?.isSome && h? != head then
+          continue
+        let some (target, pf, name, old?, layerPf, concl) ←
+          observing? do
+              let lem ← mkConstWithFreshMVarLevels n
+              let (ms, _, concl) ← forallMetaTelescopeReducing (← inferType lem)
+              let some m ← concl.getAppArgs.findM? isMem | failure
+              unless ← withReducible (isDefEq m wm) do
                 failure
-              if let some (k, _, p, w) := memPred? concl then
-                for (_, ty) in c.facts do
-                  let some (k', m', p', w') := memPred? ty | continue
-                  if k ≤ k' && m' == oldMem && p' == p && (← normWidths w') == w then
-                    failure
-            for mv in ms do
-              let mv := mv.mvarId!
-              if !(← mv.isAssigned) && (← isProp (← mv.getType)) then
-                let ty ← instantiateMVars (← mv.getType)
-                -- a premise with an open value (a width): bound by the fact it matches
-                let some pf ←
-                  if ty.hasExprMVar then
-                    factMatching? c.facts ty
-                  else
-                    factDischarge c.toFactCtx 4 ty | failure
-                mv.assign pf
-            unless ← ms.allM (·.mvarId!.isAssigned) do
-              failure
-            let concl ← normWidths (← instantiateMVars concl)
-            -- named after its pointer, as read facts are
-            let name ←
-              match memPred? concl with
-              | some (k, _, p, _) =>
-                namedAfterPtr #[`hbounds, `hroom, `hfits][k]! p
-              | none =>
-                pure `hfresh
-            return ((concl, ← instantiateMVars (mkAppN lem ms)), name) | continue
-      facts := facts.push (name, fact)
+              -- about `wm` as spelled, not the abbreviation's unfolding unification saw
+              let mI ← instantiateMVars m
+              let concl ← instantiateMVars concl
+              let concl := if mI == wm then concl else concl.replace fun t =>
+                if t == mI then some wm else none
+              let concl ← normWidths concl
+              let target :=
+                if i == 0 then concl
+                else mkAppN concl.getAppFn
+                    (concl.getAppArgs.map fun a => if a == wm then newMem else a)
+              if targets.contains target then
+                failure
+              if let some p ← factPtr? target then
+                if marked i p then
+                  failure
+              if !lifetime then
+                let atOld := target.replace fun t => if t == newMem then some oldMem else none
+                if c.factMap.contains atOld then
+                  failure
+                if let some (k, _, p, w) := memPred? target then
+                  for (_, ty) in c.facts do
+                    let some (k', m', p', w') := memPred? ty | continue
+                    if k ≤ k' && m' == oldMem && p' == p && (← normWidths w') == w then
+                      failure
+              -- premises about the memory below `wm`: as deep as its writes
+              let fuel := max 4 (layers.size - i + 1)
+              let mut prems := #[]
+              for mv in ms do
+                let mv := mv.mvarId!
+                if !(← mv.isAssigned) && (← isProp (← mv.getType)) then
+                  let ty ← instantiateMVars (← mv.getType)
+                  prems := prems.push ty
+                  -- a premise with an open value (a width): bound by the fact it matches
+                  let some pf ←
+                    if ty.hasExprMVar then
+                      factMatching? c.facts ty
+                    else
+                      factDischarge c.toFactCtx fuel ty | failure
+                  mv.assign pf
+              unless ← ms.allM (·.mvarId!.isAssigned) do
+                failure
+              let pf := mkExpectedPropHint (← instantiateMVars (mkAppN lem ms)) concl
+              let layerPf := pf
+              -- up through the later writes, the fact at `wm` among the facts
+              let pf ←
+                if i == 0 then pure pf
+                else
+                  let fc := c.toFactCtx
+                  let fc :=
+                    { fc with facts := fc.facts.push (pf, concl),
+                              factMap := fc.factMap.insert concl pf }
+                  let some pf ← factDischarge fc (i + 2) target | failure
+                  pure pf
+              let (name, old?) ← freshName c target oldMem (← prems.mapM instantiateMVars)
+              return (target, pf, name, old?, layerPf, concl) | continue
+        targets := targets.push target
+        facts := facts.push (name, target, pf)
+        layerFacts := layerFacts.push (layerPf, concl)
+        if let some h := old? then
+          superseded := superseded.push h
+    -- a masked store's known ranges, from the facts and those at the layers: where a literal
+    -- mask is set (a global with undefined members), where a copy's source is known (`memcpy`)
+    let lfacts := c.facts ++ layerFacts
+    for i in [0:layers.size] do
+      let wm := layers[i]!
+      let_expr MemoryState.storeDef m' q v _ d := wm | continue
+      let v ← normWidths v
+      let mut cands : Array (Expr × Expr) := #[]
+      if let some ⟨_, dv⟩ ← getBitVecValue? d then
+        if let some n := v.nat? then
+          -- the runs of set bits from a byte boundary
+          let mut a := 0
+          while a < n do
+            if dv.getLsbD a && a % 8 == 0 then
+              let mut b := a
+              while b < n && dv.getLsbD b do
+                b := b + 1
+              let ptr ← if a == 0 then pure q else
+                mkAppM ``Pointer.add #[q, mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit 64)
+                  (mkNatLit (a / 8))]
+              cands := cands.push (ptr, mkNatLit (b - a))
+              a := b
+            else
+              a := a + 1
+      else if let some src := (do
+            let_expr MemoryState.definedAt m'' src _ := d | none
+            guard (m'' == m'); some src) then
+        for (_, ty) in c.facts do
+          let some (2, mem, p', w') := memPred? ty | continue
+          unless mem == m' do
+            continue
+          if p' == src then
+            cands := cands.push (q, w')
+          else if let some (src', off) := p'.app2? ``Pointer.add then
+            if src' == src then
+              cands := cands.push (← mkAppM ``Pointer.add #[q, off], w')
+      for (ptr, w) in cands do
+        let target ← mkAppM ``Fits #[newMem, ptr, w]
+        if targets.contains target || marked i ptr then
+          continue
+        let some pf ← fitsProof? lfacts wm ptr w | continue
+        let concl ← mkAppM ``Fits #[wm, ptr, w]
+        let pf ←
+          if i == 0 then pure pf
+          else
+            let fc := c.toFactCtx
+            let fc :=
+              { fc with facts := fc.facts.push (pf, concl), factMap := fc.factMap.insert concl pf }
+            let some pf ← factDischarge fc (i + 2) target | continue
+            pure pf
+        targets := targets.push target
+        facts := facts.push (← namedAfterPtr `hfits ptr, target, pf)
     let mut seen : Array Expr := #[]
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
-    for w in ← writesOf newMem do
+    for w in layers do
       for l in c.lemmas do
         unless w.isAppOf l.write do
           continue
@@ -277,6 +433,8 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         let why := if stuck then "a write not known to miss it" else "overwritten"
         trace[rir] m!"read fact {d.userName} dropped ({why}):{indentExpr r}"
       olds := olds.push d.fvarId
+    olds := olds ++ superseded.filter (!olds.contains ·)
+    let renamed ← superseded.mapM (·.getUserName)
     -- each fact as `h : motive new`, `motive s` the fact with `s.mem` for the new memory
     let mut g := g
     let mut hyps := #[]
@@ -285,7 +443,7 @@ def memFactsOf (g : MVarId) (S new : Expr) :
       let (h, g') ← (← g.assert name (motive.beta #[new]) pf).intro1P
       g := g'
       hyps := hyps.push (h, motive)
-    return (hyps, olds, g)
+    return (hyps, olds, g, renamed)
 
 def sealState (S : Expr) (hyps : Array (FVarId × Expr) := #[]) : TacticM SealedState :=
   withMainContext do
@@ -382,7 +540,7 @@ def ensureStateEq : TacticM Unit :=
     -- the writes read back, as a step's
     let base? := bases.find? fun b => b.isFVar && b != s
     if let some b := base? then
-      let (hyps, oldReads, g') ← memFactsOf g b s
+      let (hyps, oldReads, g', _) ← memFactsOf g b s
       g := g'
       carried := carried ++ hyps.map (·.1)
       olds := olds ++ oldReads
