@@ -17,8 +17,9 @@ namespace MLIR
 
 @[mlir_instr]
 def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
-  | gepConst byteOff =>
-    if 0 ≤ byteOff then Operation.gep (.value byteOff.toNat) else Operation.gepBack byteOff.natAbs
+  | gepConst flags byteOff =>
+    if 0 ≤ byteOff then Operation.gep flags (.value byteOff.toNat)
+    else Operation.gepBack flags byteOff.natAbs
   | trunc flags => Operation.trunc flags
   | zext nneg => Operation.zext nneg
   | sext => Operation.sext
@@ -50,7 +51,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | ucmp => Operation.ucmp
   | icmp p => Operation.icmp p
   | ptrcmp ne => Operation.ptrcmp ne
-  | gepDyn byteOff stride => Operation.gepDyn byteOff stride
+  | gepDyn flags byteOff stride => Operation.gepDyn flags byteOff stride
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm

@@ -16,6 +16,20 @@ mlir_def loadAt := {
     "llvm.return"(%1) : (i64) -> ()
 }
 
+mlir_def loadAtNuw := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = i64, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %1 = "llvm.load"(%0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%1) : (i64) -> ()
+}
+
+mlir_def loadAtInbounds := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: i64):
+    %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = i64, noWrapFlags = 3 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %1 = "llvm.load"(%0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%1) : (i64) -> ()
+}
+
 mlir_def loadField := {
   ^bb0(%arg0: !llvm.ptr, %arg1: i64):
     %0 = "llvm.getelementptr"(%arg0, %arg1) <{elem_type = !llvm.struct<(i64, array<4 x i16>)>, rawConstantIndices = array<i32: 0, 1, -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
@@ -51,8 +65,26 @@ private def at_ (i : BitVec 64) : Option (BitVec 64) :=
 #guard (List.range 5).map (fun i => at_ (BitVec.ofNat 64 i)) == [10, 20, 30, 40, 50].map some
 -- past the block: no load
 #guard at_ 5 == none
--- `2 ^ 61 * 8` overflows 64 bits: a poison pointer
-#guard at_ (BitVec.ofNat 64 (2 ^ 61)) == none
+-- no flags: `2 ^ 61 * 8` wraps to the start
+#guard at_ (BitVec.ofNat 64 (2 ^ 61)) == some 10
+
+/-- `at_` with `inbounds nuw` (`nuw`), or `inbounds` alone (not `nuw`), from byte `off`. -/
+private def atFlags (nuw : Bool) (off i : BitVec 64) : Option (BitVec 64) :=
+  let s := if nuw then loadAtNuw.eval 1 (loadAtNuw.args (.value ⟨⟨1⟩, off⟩) (.value i)) limbs
+    else loadAtInbounds.eval 1 (loadAtInbounds.args (.value ⟨⟨1⟩, off⟩) (.value i)) limbs
+  match s with
+  | .value (some (.cons (.value v) .nil), _) => some v
+  | _ => none
+
+#guard atFlags true 0 2 == some 30
+-- the offset wraps: a poison pointer
+#guard atFlags true 0 (BitVec.ofNat 64 (2 ^ 61)) == none
+#guard atFlags false 0 (BitVec.ofNat 64 (2 ^ 61)) == none
+-- index `-1`, signed for `inbounds`, unsigned (wrapping) for `nuw`
+#guard atFlags false 16 (-1) == some 20
+#guard atFlags true 16 (-1) == none
+-- before the block's start
+#guard atFlags false 0 (-1) == none
 
 /-- Block `1`: the `struct<(i64, array<4 x i16>)>` `(7, [1, 2, 3, 4])`. -/
 private def record : GlobalState :=

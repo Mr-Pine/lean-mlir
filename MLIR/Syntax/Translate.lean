@@ -228,11 +228,11 @@ def Ty.index (k : Nat) : Ty → Except String (Nat × Ty)
     return (k * ((w + 7) / 8), .bv w)
   | t => throw s!"cannot index into {repr t}"
 
-/-- The byte offset of `getelementptr`'s constant indices over `t`, and for its one dynamic index
-(`-2147483648`) the stride it steps by: the size of what it indexes. Only the first index, over
-whole `t`s, may be negative. -/
-def gepOffset (t : Ty) : List Int → Except String (Int × Option Nat)
-  | [] => return (0, none)
+/-- The byte offset of `getelementptr`'s constant indices over `t`, for its one dynamic index
+(`-2147483648`) the stride it steps by (the size of what it indexes), and the first index's part of
+the offset: only the first index, over whole `t`s, may be negative. -/
+def gepOffset (t : Ty) : List Int → Except String (Int × Option Nat × Int)
+  | [] => return (0, none, 0)
   | k₀ :: ks => do
     let dynamic := -2147483648
     let natIdx (k : Int) : Except String Nat := do
@@ -242,6 +242,7 @@ def gepOffset (t : Ty) : List Int → Except String (Int × Option Nat)
     -- the first index steps over whole `t`s, the others into `t`
     let (off, stride) : Int × Option Nat :=
       if k₀ == dynamic then (0, some t.size) else (k₀ * t.size, none)
+    let first := off
     let (off, stride, _) ←
       ks.foldlM (init := (off, stride, t)) fun (off, stride, t) k => do
           if k == dynamic then
@@ -251,7 +252,7 @@ def gepOffset (t : Ty) : List Int → Except String (Int × Option Nat)
             return (off, some et.size, et)
           let (step, t) ← Ty.index (← natIdx k) t
           return (off + step, stride, t)
-    return (off, stride)
+    return (off, stride, first)
 
 /-! ## Attributes -/
 
@@ -259,6 +260,15 @@ def intAttr? (op : Op) (k : String) : Option Int :=
   match op.getAttr? k with
   | some (.int v _) => some v
   | _ => none
+
+/-- A `getelementptr`'s no-wrap flags: `noWrapFlags` (bits `inbounds`, `nusw`, `nuw`), or the
+older `inbounds` attribute. -/
+def gepFlags (op : Op) : Except String GepFlags := do
+  let bits := (intAttr? op "noWrapFlags").getD 0
+  unless 0 ≤ bits && bits < 8 do
+    throw s!"unknown `noWrapFlags` {bits}"
+  let inbounds := bits % 2 == 1 || (op.getAttr? "inbounds").isSome
+  return { nusw := inbounds || bits / 2 % 2 == 1, nuw := bits / 4 % 2 == 1 }
 
 def arrayInts (op : Op) (k : String) : Except String (List Int) := do
   let some (.array _ vs) := op.getAttr? k | throw s!"expected an `array<…>` attribute `{k}`"
@@ -408,7 +418,7 @@ inductive AttrUse where
   | ignored
 
 /-- The attributes of the operation `name`, beyond `modeled` ones its translation reads.
-`ignored`: GEP `inbounds`/`nusw` (an offset that wraps unsigned is poison either way), access
+`ignored`: GEP `inbounds`'s object bounds (its `nusw` is modeled), access
 alignment, TBAA and alias scopes, call and intrinsic parameter attributes, memory effects,
 `willreturn`, `tail` and `nounwind` (the model has no unwinding), loop `mustProgress`; `alloca`
 alignment, as the model has no addresses; `volatile`, whose access the model makes plainly, its UB
@@ -429,8 +439,8 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.mlir.addressof" => [("global_name", .modeled)]
   | "llvm.alloca" => [("elem_type", .modeled), ("alignment", .ignored)]
   | "llvm.getelementptr" =>
-    [("elem_type", .modeled), ("rawConstantIndices", .modeled), ("noWrapFlags", .ignored),
-      ("inbounds", .ignored)]
+    [("elem_type", .modeled), ("rawConstantIndices", .modeled), ("noWrapFlags", .modeled),
+      ("inbounds", .modeled)]
   | "llvm.load" | "llvm.store" =>
     [("ordering", .modeled), ("syncscope", .inert), ("alignment", .ignored), ("tbaa", .ignored),
       ("alias_scopes", .ignored), ("noalias_scopes", .ignored), ("volatile_", .ignored)]
@@ -908,13 +918,23 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       unless t == .ptr do
         throw "expected a pointer result"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
-      match args, ← gepOffset (← ty et) (← arrayInts op "rawConstantIndices") with
-      | [(p, .ptr)], (off, none) =>
-        return .unop (.gepConst off) dst p
-      | [(p, .ptr), (i, .bv 64)], (off, some stride) =>
+      let flags ← gepFlags op
+      let (off, stride, first) ← gepOffset (← ty et) (← arrayInts op "rawConstantIndices")
+      -- with flags, the model checks the whole offset, signed below `2 ^ 63`, and the address it
+      -- reaches: a negative offset only alone (its address the one LLVM passes through), never
+      -- with `nuw` (LLVM's unsigned index times the size)
+      if flags != {} then
+        unless off.natAbs < 2 ^ 63 && stride.all (· < 2 ^ 63) do
+          throw s!"offset {off} or stride out of the signed 64-bit range"
+        if first < 0 && (flags.nuw || off != first || stride.isSome) then
+          throw s!"negative index part {first} with other parts or `nuw`"
+      match args, stride with
+      | [(p, .ptr)], none =>
+        return .unop (.gepConst flags off) dst p
+      | [(p, .ptr), (i, .bv 64)], some stride =>
         unless 0 ≤ off do
           throw s!"negative offset {off} with a dynamic index"
-        return .binop (.gepDyn off.toNat stride) dst p i
+        return .binop (.gepDyn flags off.toNat stride) dst p i
       | _, _ =>
         throw "expected a pointer, and an `i64` operand for the dynamic index"
   | "llvm.shufflevector" =>

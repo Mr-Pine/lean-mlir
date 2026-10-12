@@ -46,15 +46,18 @@ other prose. The elaborator requires:
 What the translation leaves out, each listed in `Translate.opAttrUses` and its neighbours (the
 rest is rejected): the UB and poison of `noundef`, `nonnull`, `range`, `align`, `dereferenceable`,
 `noalias`, `sret`, `readonly`/`writeonly`, `dead_on_return`, memory effects, TBAA and alias scopes,
-GEP `inbounds`, `mustprogress`/`willreturn`; `volatile` (the access is a plain one, its UB
-conditions kept: one thread, no memory-mapped I/O). The importer itself drops `icmp samesign`,
-`initializes`, `captures` and intrinsic call attributes. A `fence` is nothing and an atomic access
+GEP `inbounds`'s object bounds, `mustprogress`/`willreturn`; `volatile` (the access is a plain
+one, its UB conditions kept: one thread, no memory-mapped I/O). The importer itself drops `icmp
+samesign`, `initializes`, `captures` and intrinsic call attributes. A `fence` is nothing and an atomic access
 a plain one (one thread); `ptrtoaddr`/`ptrtoint` read `S.mem.addr`, unconstrained block
 addresses; `asm("" : "+r"(x))` is `x`; `undef` is poison. A pointer stored in memory is recorded
 by its block and offset, its bits undefined (an integer load of them is poison); `memcpy` copies
-the bits, not the pointer (a load of the copy is poison: less defined than LLVM). A dynamic `gep`
-reads its index unsigned where that offset stays in `[0, 2 ^ 64)`, else signed (`gepInt`), poison
-where neither does.
+the bits, not the pointer (a load of the copy is poison: less defined than LLVM). A `gep`'s no-wrap
+flags are kept: without them the address wraps; `nuw` is poison where the unsigned offset or
+address wraps; `nusw` (and `inbounds`) reads the index signed and is poison where the offset or an
+address it passes through leaves the signed or address range (`gepSigned`; below `2 ^ 63` the
+readings agree). A lift with flags rejects a constant offset or stride of `2 ^ 63` or more and a
+negative index part next to others or with `nuw`.
 
 Build the lifts before opening proofs that import them. Never copy lifts from another project:
 lift from the canonicalized regions, which each lift's first line names.

@@ -112,7 +112,7 @@ def isNatRel (ty : Expr) : Bool :=
     | none => ((ty.not?.getD ty).eq?).any (nat ·.1)
 
 /-- A relation of naturals (`isNatRel`): by `decide` when closed, else by `omega` from `extra` and
-the facts of that kind about its locals (`j < 256` for `2 * j ≤ 512`), literals' `toNat`
+the facts of that kind about its locals and theirs (`j < 256` for `2 * j ≤ 512`), literals' `toNat`
 evaluated. -/
 def natArith? (facts : Array (Expr × Expr)) (goal : Expr) (extra : Array Expr := #[]) :
     MetaM (Option Expr) := do
@@ -121,9 +121,19 @@ def natArith? (facts : Array (Expr × Expr)) (goal : Expr) (extra : Array Expr :
     return none
   if !goal.hasFVar then
     return ← decideProof? goal
-  let fvs := (collectFVars {} goal).fvarIds
-  let hyps := facts.filterMap fun (pf, ty) =>
-    if isNatRel ty && ty.hasAnyFVar fvs.contains then some pf else none
+  -- the facts about its locals, then about theirs (`8 * k ≤ len.toNat` brings `len`'s bound)
+  let mut fvs := (collectFVars {} goal).fvarIds
+  let mut hyps : Array Expr := #[]
+  let mut used : Array Nat := #[]
+  for _ in [0:2] do
+    let mut more := #[]
+    for h : j in [0:facts.size] do
+      let (pf, ty) := facts[j]
+      if !used.contains j && isNatRel ty && ty.hasAnyFVar fvs.contains then
+        used := used.push j
+        hyps := hyps.push pf
+        more := more.push ty
+    fvs := more.foldl (fun fvs ty => fvs ++ (collectFVars {} ty).fvarIds) fvs
   -- nothing bounds its locals: no proof
   if hyps.isEmpty && extra.isEmpty then
     return none
@@ -908,99 +918,174 @@ def offsetProof? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Option Ex
 def noOverflowProof? (facts : Array (Expr × Expr)) (p off : Expr) : MetaM (Option Expr) := do
   offsetProof? facts (← noOverflowGoal p off)
 
-/-- `gep` of a pointer and an offset that does not wrap is `.value (p.add off)`. -/
-simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
-  let_expr Operation.gep bo pp := e | return .continue
+/-- A `GepFlags` literal's `nusw` and `nuw`. -/
+def gepFlagBits? (f : Expr) : MetaM (Option (Bool × Bool)) := do
+  let_expr GepFlags.mk a b := ← whnfR (← instantiateMVars f) | return none
+  let bool? (e : Expr) : Option Bool :=
+    if e.isConstOf ``Bool.true then some true
+    else if e.isConstOf ``Bool.false then some false
+    else none
+  return (bool? a).bind fun a => (bool? b).map (a, ·)
+
+/-- `f.<field> = b` for a flags literal, by `rfl`. -/
+def gepFlagEq (f : Expr) (field : Name) (b : Bool) : MetaM Expr := do
+  let bE := toExpr b
+  return mkExpectedPropHint (← mkEqRefl bE) (← mkEq (mkApp (mkConst (``GepFlags ++ field)) f) bE)
+
+/-- `lem` instantiated to rewrite `e`, its explicit hypotheses proved by `prove`: the result and the
+proof. -/
+def rewriteBy? (lem : Name) (e : Expr) (prove : Expr → MetaM (Option Expr)) :
+    MetaM (Option (Expr × Expr)) := do
+  let c ← mkConstWithFreshMVarLevels lem
+  let (xs, bis, ty) ← forallMetaTelescopeReducing (← inferType c)
+  let some (_, lhs, rhs) := ty.eq? | return none
+  unless ← isDefEq lhs e do
+    return none
+  for x in xs, bi in bis do
+    if bi.isExplicit then
+      let some h ← prove (← instantiateMVars (← inferType x)) | return none
+      unless ← isDefEq x h do
+        return none
+  let pf ← instantiateMVars (mkAppN c xs)
+  if pf.hasMVar then
+    return none
+  return some (← instantiateMVars rhs, pf)
+
+/-- A side condition of a `gep` lemma about offsets: by `decide` (a flag, a literal), the offsets'
+facts, or `omega` from them. -/
+def gepSideProof? (facts : Array (Expr × Expr)) (goal : Expr) : MetaM (Option Expr) := do
+  if !goal.hasFVar && !goal.hasMVar then
+    if let some h ← decideProof? goal then
+      return some h
+  if let some h ← decideWithOffsets? facts goal then
+    return some h
+  if let some h ← natArith? facts goal then
+    return some h
+  offsetProof? facts goal
+
+/-- `gep` of a pointer: `.value (p.add off)` without flags; for `nuw`, where the address provably
+does not wrap (and for `nusw` the offset is below `2 ^ 63`), else poison where it provably does. -/
+simproc_decl gepValue (Operation.gep _ (.value _) (.value _)) := fun e => do
+  let_expr Operation.gep f bo pp := e | return .continue
   let_expr PoisonOr.value _ off := bo | return .continue
   let_expr PoisonOr.value _ p := pp | return .continue
+  let some (nusw, nuw) ← gepFlagBits? f | return .continue
+  let value ← mkAppM ``PoisonOr.value #[← mkAppM ``Pointer.add #[p, off]]
+  if !nusw && !nuw then
+    return .visit { expr := value, proof? := ← mkAppOptM ``gep_none #[off, p] }
   let facts ← splitConjunctedFacts
+  -- `off.toNat < 2 ^ 63`, the `nusw` reading's
+  let small ← mkAppM ``LT.lt #[← mkAppM ``BitVec.toNat #[off], mkNatLit (2 ^ 63)]
+  let nuswEq ← mkEq (mkApp (mkConst ``GepFlags.nusw) f) (toExpr false)
+  let hs? : Option Expr ←
+    if !nusw then
+      pure (some (← mkAppOptM ``Or.inl #[nuswEq, small, ← gepFlagEq f `nusw false]))
+    else
+      (← gepSideProof? facts small).mapM fun h => mkAppOptM ``Or.inr #[nuswEq, small, h]
   -- a stack slot's offset by its fact, a bound for a larger offset, else bounds by `omega`
-  let some h ←
+  let h? ←
     (do
         if let some h← decideWithOffsets? facts (← noOverflowGoal p off) then
           return some h
         if let some h← noOverflowOfFact? facts p off then
           return some h
-        noOverflowProof? facts p off) |
-    -- an offset known to wrap: poison (a negative index's unsigned reading)
-    let ov ← mkEq (← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off])
-      (mkConst ``Bool.true)
-    let some h ← decideWithOffsets? facts ov | return .continue
-    return .visit { expr := ← mkAppOptM ``PoisonOr.poison #[mkConst ``Pointer],
-                    proof? := ← mkAppM ``gep_overflow #[h] }
-  return .visit
-      { expr := ← mkAppM ``PoisonOr.value #[← mkAppM ``Pointer.add #[p, off]],
-        proof? := ← mkAppM ``gep_value #[h] }
-
-/-- `gepDyn` by a value index: its unsigned reading (`gepDynUnsigned`, the steps' old `gep` by an
-unsigned index) simplified as the step's `simp` does, its arguments resolving the bound: a value is
-the result (the reading itself, simplified again as before), poison the signed reading (`gepInt`);
-else it is left, for a later pass. -/
-simproc_decl gepDynValue (Operation.gepDyn _ _ _ (.value _)) := fun e => do
-  let_expr Operation.gepDyn byteOff stride ptr idx := e | return .continue
-  let_expr PoisonOr.value _ i := idx | return .continue
-  -- terms and lemmas built unchecked: `ptr`'s type may be a register type not yet reduced
-  let u := mkApp4 (mkConst ``Operation.gepDynUnsigned) byteOff stride ptr idx
-  -- by `i` itself (`ofNat i.toNat` would expand `i`), as the old `gepDyn` simplified over a bound
-  -- index before the operand was read
-  let (u', h₀) ←
-    if (← (evalNat byteOff).run) == some 0 && (← (evalNat stride).run) == some 1 then
-      pure (mkApp2 (mkConst ``Operation.gep) (mkApp2 (mkConst ``PoisonOr.value) (← inferType i) i)
-          ptr, some (mkApp2 (mkConst ``gepDynUnsigned_zero_one) ptr i))
+        noOverflowProof? facts p off)
+  if let (some h, some hs) := (h?, hs?) then
+    return .visit { expr := value, proof? := ← mkAppOptM ``gep_value #[off, f, p, h, hs] }
+  -- an offset known to wrap: poison (a negative index's unsigned reading)
+  let ov ← mkEq (← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off])
+    (mkConst ``Bool.true)
+  let some h ← decideWithOffsets? facts ov | return .continue
+  let nuwEq ← mkEq (mkApp (mkConst ``GepFlags.nuw) f) (toExpr true)
+  let nuswT ← mkEq (mkApp (mkConst ``GepFlags.nusw) f) (toExpr true)
+  let hf ←
+    if nuw then
+      mkAppOptM ``Or.inl #[nuwEq, mkAnd nuswT small, ← gepFlagEq f `nuw true]
     else
-      pure (u, none)
-  let r ← Simp.simp u'
-  -- typed as `u = _`: `simp` unfolds `u` by its definition, no step in the proof
-  let pf ← match h₀ with
-    | some h₀ => mkEqTrans h₀ (← r.getProof)
-    | none => r.getProof
-  let h := mkExpectedPropHint pf (← mkEq u r.expr)
-  let r := r.expr
-  if let some (_, q) := r.app2? ``PoisonOr.value then
-    let pf := mkAppN (mkConst ``gepDyn_eq_unsigned) #[byteOff, stride, ptr, idx, q, h]
-    if let some h₀ := h₀ then
-      return .visit { expr := u', proof? := ← mkEqTrans pf h₀ }
-    return .visit { expr := u, proof? := pf }
-  if r.isAppOf ``PoisonOr.poison then
-    let pf := mkAppN (mkConst ``gepDyn_of_unsigned_poison) #[byteOff, stride, ptr, i, h]
-    let some (_, _, rhs) := (← inferType pf).eq? | return .continue
-    return .visit { expr := rhs, proof? := pf }
-  return .continue
+      let some hsm ← gepSideProof? facts small | return .continue
+      mkAppOptM ``Or.inr
+        #[nuwEq, mkAnd nuswT small, ← mkAppM ``And.intro #[← gepFlagEq f `nusw true, hsm]]
+  return .visit { expr := ← mkAppOptM ``PoisonOr.poison #[mkConst ``Pointer],
+                  proof? := ← mkAppOptM ``gep_overflow #[off, f, p, h, hf] }
 
-/-- `gepInt off` of a pointer whose offset plus `off` stays in `[0, 2 ^ 64)`, by the offsets' facts:
-`.value (p.add (BitVec.ofInt 64 off))`. -/
-simproc_decl gepIntValue (Operation.gepInt _ (.value _)) := fun e => do
-  let_expr Operation.gepInt off pp := e | return .continue
-  let_expr PoisonOr.value _ p := pp | return .continue
+/-- `gepDyn` by a value index. Without `nusw`: the offset read unsigned (the `gep` by the index
+itself for bytes), as the steps' old `gepDyn` unfolded. With `nusw`: the unsigned `gep` where the
+offset is provably below `2 ^ 63`, else the signed reading (`gepSigned`) where the unsigned `gep`
+simplifies to poison; else it is left, for a later pass. Terms built unchecked: `ptr`'s type may be
+a register type not yet reduced. -/
+simproc_decl gepDynValue (Operation.gepDyn _ _ _ _ (.value _)) := fun e => do
+  let_expr Operation.gepDyn f byteOff stride ptr idx := e | return .continue
+  let_expr PoisonOr.value _ i := idx | return .continue
+  let some (nusw, _) ← gepFlagBits? f | return .continue
+  let bytes := (← (evalNat byteOff).run) == some 0 && (← (evalNat stride).run) == some 1
+  let rhsOf (pf : Expr) : MetaM Expr := do
+    let some (_, _, r) := (← inferType pf).eq? | throwError "not an equation"
+    return r
+  if !nusw then
+    let hf ← gepFlagEq f `nusw false
+    let pf :=
+      if bytes then mkAppN (mkConst ``gepDyn_zero_one_of_not_nusw) #[f, ptr, i, hf]
+      else mkAppN (mkConst ``gepDyn_of_not_nusw) #[f, byteOff, stride, ptr, i, hf]
+    return .visit { expr := ← rhsOf pf, proof? := pf }
+  let hf ← gepFlagEq f `nusw true
   let facts ← splitConjunctedFacts
-  let o ← mkAppOptM ``Nat.cast
-    #[mkConst ``Int, none, ← mkAppM ``BitVec.toNat #[← mkAppM ``Pointer.offset #[p]]]
-  let sum ← mkAppM ``HAdd.hAdd #[o, off]
-  let prove (goal : Expr) : MetaM (Option Expr) := do
-    if let some h ← decideWithOffsets? facts goal then
-      return some h
-    offsetProof? facts goal
-  let some h₀ ← prove (← mkAppM ``LE.le #[mkApp (mkConst ``Int.ofNat) (mkNatLit 0), sum])
-    | return .continue
-  let some h₁ ← prove (← mkAppM ``LT.lt #[sum, ← mkAppM ``HPow.hPow #[mkApp (mkConst ``Int.ofNat)
-    (mkNatLit 2), mkNatLit 64]]) | return .continue
-  let pf ← mkAppM ``gepInt_value #[h₀, h₁]
-  let some (_, _, r) := (← inferType pf).eq? | return .continue
+  let iNat ← mkAppM ``BitVec.toNat #[i]
+  let off ←
+    if bytes then pure iNat
+    else mkAppM ``HAdd.hAdd #[byteOff, ← mkAppM ``HMul.hMul #[iNat, stride]]
+  let lt ← mkAppM ``LT.lt #[off, mkNatLit (2 ^ 63)]
+  let hlt? ←
+    (do
+        -- a byte index masked below `2 ^ 63`
+        if bytes then
+          if i.isAppOfArity ``HAnd.hAnd 6 then
+            let c := i.appArg!
+            let hc ← mkAppM ``LT.lt #[← mkAppM ``BitVec.toNat #[c], mkNatLit (2 ^ 63)]
+            if let some h ← decideProof? hc then
+              return some (mkApp3 (mkConst ``toNat_and_lt) i.appFn!.appArg! c h)
+        if let some h ← gepSideProof? facts lt then
+          return some h
+        -- by the step's `simp` arguments
+        let r ← Simp.simp lt
+        if r.expr.isConstOf ``True then
+          return some (← mkOfEqTrue (← r.getProof))
+        return none)
+  if let some hlt := hlt? then
+    let pf :=
+      if bytes then mkAppN (mkConst ``gepDyn_zero_one_of_lt) #[f, ptr, i, hf, hlt]
+      else mkAppN (mkConst ``gepDyn_of_lt) #[byteOff, stride, f, ptr, i, hf, hlt]
+    return .visit { expr := ← rhsOf pf, proof? := pf }
+  -- the unsigned `gep`, poison: the signed reading
+  let offBv ←
+    if bytes then pure i else pure (mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit 64) off)
+  let nuwOnly := mkApp2 (mkConst ``GepFlags.mk) (toExpr false) (toExpr true)
+  let u := mkApp3 (mkConst ``Operation.gep) nuwOnly
+    (mkApp2 (mkConst ``PoisonOr.value) (← inferType i) offBv) ptr
+  let r ← Simp.simp u
+  unless r.expr.isAppOf ``PoisonOr.poison do
+    return .continue
+  let h := mkExpectedPropHint (← r.getProof) (← mkEq u r.expr)
+  let pf :=
+    if bytes then mkAppN (mkConst ``gepDyn_zero_one_of_unsigned_poison) #[ptr, f, i, hf, h]
+    else mkAppN (mkConst ``gepDyn_of_unsigned_poison) #[byteOff, stride, ptr, f, i, hf, h]
+  return .visit { expr := ← rhsOf pf, proof? := pf }
+
+/-- `gepSigned` of a pointer whose offset and addresses provably stay in range, by the offsets'
+facts: `.value (p.add (BitVec.ofInt 64 off))`. -/
+simproc_decl gepSignedValue (Operation.gepSigned _ _ _ _ (.value _)) := fun e => do
+  let facts ← splitConjunctedFacts
+  let some (r, pf) ← rewriteBy? ``gepSigned_value e (gepSideProof? facts) | return .continue
   return .visit { expr := r, proof? := pf }
 
-/-- `gepBack n` of a pointer at least `n` bytes into its block is `.value (p.add (-n))`. -/
-simproc_decl gepBackValue (Operation.gepBack _ (.value _)) := fun e => do
-  let_expr Operation.gepBack n pp := e | return .continue
-  let_expr PoisonOr.value _ p := pp | return .continue
+/-- `gepBack n` of a pointer: `.value (p.add (-n))` without flags, or for `nusw` (no `nuw`) at
+least `n` bytes into its block. -/
+simproc_decl gepBackValue (Operation.gepBack _ _ (.value _)) := fun e => do
+  let_expr Operation.gepBack f _ _ := e | return .continue
+  let some (nusw, nuw) ← gepFlagBits? f | return .continue
   let facts ← splitConjunctedFacts
-  let goal ← mkAppM ``LE.le #[n, ← mkAppM ``BitVec.toNat #[← mkAppM ``Pointer.offset #[p]]]
-  let some h ←
-    (do
-        if let some h← decideWithOffsets? facts goal then
-          return some h
-        offsetProof? facts goal) | return .continue
-  let pf ← mkAppM ``gepBack_value #[h]
-  let some (_, _, r) := (← inferType pf).eq? | return .continue
+  let some (r, pf) ←
+      if !nusw && !nuw then rewriteBy? ``gepBack_none e fun _ => pure none
+      else rewriteBy? ``gepBack_value e (gepSideProof? facts) | return .continue
   return .visit { expr := r, proof? := pf }
 
 /-- The new state with its projections reduced -/

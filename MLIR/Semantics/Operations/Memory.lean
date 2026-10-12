@@ -52,49 +52,57 @@ def ptrcmp (ne : Bool) (x y : PoisonOr Pointer) : IntW 1 := do
   let b ← y
   return BitVec.ofBool ((a == b) != ne)
 
-def gep (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
+/-- `gep` by `byteOff` bytes (the offset's bits, the address wrapping): poison when `nuw` and the
+address wraps unsigned, or `nusw` and the offset, signed, takes it out of `[0, 2 ^ 64)`: below the
+block's start for a negative one, past `2 ^ 64` for another (`gep_nusw_iff`). -/
+def gep (f : GepFlags) (byteOff : PoisonOr (BitVec 64)) (ptr : PoisonOr Pointer) :
+    PoisonOr Pointer := do
   let ptr ← ptr
   let off ← byteOff
-  if ptr.offset.uaddOverflow off then
+  if f.nuw ∧ ptr.offset.uaddOverflow off then
+    .poison
+  if f.nusw ∧
+      (if off.msb then ptr.offset.toNat < (-off).toNat else ptr.offset.uaddOverflow off) then
     .poison
   return ptr.add off
 
-/-- `gep` back by `n` bytes, adding `-n`: poison when that leaves the block below its start. -/
-def gepBack (n : Nat) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
+/-- `gep` back by `n` bytes, adding `-n`: poison when `nusw` and that leaves the block below its
+start, or `nuw` and the address wraps unsigned. -/
+def gepBack (f : GepFlags) (n : Nat) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
   let ptr ← ptr
-  if ptr.offset.toNat < n then
+  if f.nusw ∧ ptr.offset.toNat < n then
+    .poison
+  if f.nuw ∧ ptr.offset.uaddOverflow (-BitVec.ofNat 64 n) then
     .poison
   return ptr.add (-BitVec.ofNat 64 n)
 
-/-- `gep` by `off` bytes, signed: poison unless the offset it reaches is in `[0, 2 ^ 64)` (LLVM
-poisons `inbounds` out of the object, unchecked: less defined). -/
-def gepInt (off : Int) (ptr : PoisonOr Pointer) : PoisonOr Pointer := do
+/-- `gep` by `byteOff + i * stride` bytes, `i` signed (`nusw`): poison unless the offset and the
+addresses it passes through stay in range, its constant and dynamic parts in either order (LangRef's
+`nusw` rules, checked for both orders: less defined), and for `nuw` the unsigned address too. -/
+def gepSigned (f : GepFlags) (byteOff stride : Nat) (i : BitVec 64) (ptr : PoisonOr Pointer) :
+    PoisonOr Pointer := do
   let p ← ptr
-  if 0 ≤ (p.offset.toNat : Int) + off ∧ (p.offset.toNat : Int) + off < 2 ^ 64 then
-    .value (p.add (BitVec.ofInt 64 off))
+  let a : Int := p.offset.toNat
+  let d : Int := i.toInt * stride
+  if -2 ^ 63 ≤ d ∧ byteOff + d < 2 ^ 63 ∧ byteOff < (2 ^ 63 : Int) ∧ a + byteOff < 2 ^ 64 ∧
+      0 ≤ a + d ∧ 0 ≤ a + byteOff + d ∧ a + byteOff + d < 2 ^ 64 ∧
+      (f.nuw → p.offset.toNat + (byteOff + i.toNat * stride) < 2 ^ 64) then
+    .value (p.add (BitVec.ofInt 64 (byteOff + d)))
   else
     .poison
 
-/-- `gep` by `byteOff + index * stride` bytes: the index read unsigned where the offset that gives
-stays in `[0, 2 ^ 64)`, else signed (`gepInt`), as LLVM sign-extends it; both readings give the same
-bits, poison where neither stays. -/
-def gepDyn (byteOff stride : Nat) (ptr : PoisonOr Pointer) (idx : IntW 64) : PoisonOr Pointer := do
-  let i ← idx
-  let off := byteOff + i.toNat * stride
-  if off < 2 ^ 64 then
-    (gep (.value (BitVec.ofNat 64 off)) ptr).orElse (gepInt (byteOff + i.toInt * stride) ptr)
-  else
-    gepInt (byteOff + i.toInt * stride) ptr
-
-/-- `gepDyn`'s unsigned reading alone, which the steps simplify first. -/
-@[mlir_operation]
-def gepDynUnsigned (byteOff stride : Nat) (ptr : PoisonOr Pointer) (idx : IntW 64) :
+/-- `gep` by `byteOff + index * stride` bytes: for `nusw` the index signed (`gepSigned`) unless the
+offset is below `2 ^ 63`, where signed and unsigned agree; for `nuw` poison when the offset wraps
+unsigned; the address then as `gep` adds it. -/
+def gepDyn (f : GepFlags) (byteOff stride : Nat) (ptr : PoisonOr Pointer) (idx : IntW 64) :
     PoisonOr Pointer := do
   let i ← idx
-  let off := byteOff + i.toNat * stride
-  if off < 2 ^ 64 then gep (.value (BitVec.ofNat 64 off)) ptr else .poison
-
-attribute [mlir_operation] PoisonOr.value_orElse PoisonOr.poison_orElse
+  if f.nusw ∧ 2 ^ 63 ≤ byteOff + i.toNat * stride then
+    gepSigned f byteOff stride i ptr
+  else if f.nuw ∧ ¬byteOff + i.toNat * stride < 2 ^ 64 then
+    .poison
+  else
+    gep f (.value (BitVec.ofNat 64 (byteOff + i.toNat * stride))) ptr
 
 def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let .value (dst, val, len) := do

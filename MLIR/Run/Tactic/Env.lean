@@ -191,7 +191,7 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
           Simp.getSimprocs,
       ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
       -- one set: each set is looked up at every subterm
-      ← [``gepDynValue, ``gepIntValue, ``gepValue, ``gepBackValue].foldlM
+      ← [``gepDynValue, ``gepSignedValue, ``gepValue, ``gepBackValue].foldlM
         (init := ({} : Simp.Simprocs)) fun procs n => procs.add n (post := true),
       ← laneSimprocs]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)

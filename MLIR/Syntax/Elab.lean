@@ -141,6 +141,13 @@ def flagsStx (f : OverflowFlags) : CommandElabM (TSyntax `term) :=
   | false, true => `({ nuw := true })
   | true, true => `({ nsw := true, nuw := true })
 
+def gepFlagsStx (f : GepFlags) : CommandElabM (TSyntax `term) :=
+  match f.nusw, f.nuw with
+  | false, false => `({})
+  | true, false => `({ nusw := true })
+  | false, true => `({ nuw := true })
+  | true, true => `({ nusw := true, nuw := true })
+
 def boolStx (b : Bool) : CommandElabM (TSyntax `term) :=
   if b then `(true) else `(false)
 
@@ -157,8 +164,8 @@ def predStx : IntPred → CommandElabM (TSyntax `term)
   | .uge => `(.uge)
 
 def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
-  | .gepConst n => do
-    `((.gepConst $(← intLit n)))
+  | .gepConst f n => do
+    `((.gepConst $(← gepFlagsStx f) $(← intLit n)))
   | .trunc f => do
     `((.trunc $(← flagsStx f)))
   | .zext nneg => do
@@ -206,7 +213,8 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.icmp $(← predStx p)))
   | .ptrcmp ne => do
     `((.ptrcmp $(← boolStx ne)))
-  | .gepDyn byteOff stride => `((.gepDyn $(num byteOff) $(num stride)))
+  | .gepDyn f byteOff stride => do
+    `((.gepDyn $(← gepFlagsStx f) $(num byteOff) $(num stride)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)

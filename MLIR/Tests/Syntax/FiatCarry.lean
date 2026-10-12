@@ -87,19 +87,19 @@ def fiat_25519_carry.entry : BasicBlock fiat_25519_carry.Γ [] fiat_25519_carry.
       -- the carry chain through the five limbs
       .load ⟨3, rfl⟩ (.arg 1 rfl),
       .binop (.lshr false) ⟨4, rfl⟩ (.val 3 rfl) (.val 0 rfl),
-      .unop (.gepConst 8) ⟨5, rfl⟩ (.arg 1 rfl),
+      .unop (.gepConst { nusw := true } 8) ⟨5, rfl⟩ (.arg 1 rfl),
       .load ⟨6, rfl⟩ (.val 5 rfl),
       .binop (.add {}) ⟨7, rfl⟩ (.val 4 rfl) (.val 6 rfl),
       .binop (.lshr false) ⟨8, rfl⟩ (.val 7 rfl) (.val 0 rfl),
-      .unop (.gepConst 16) ⟨9, rfl⟩ (.arg 1 rfl),
+      .unop (.gepConst { nusw := true } 16) ⟨9, rfl⟩ (.arg 1 rfl),
       .load ⟨10, rfl⟩ (.val 9 rfl),
       .binop (.add {}) ⟨11, rfl⟩ (.val 8 rfl) (.val 10 rfl),
       .binop (.lshr false) ⟨12, rfl⟩ (.val 11 rfl) (.val 0 rfl),
-      .unop (.gepConst 24) ⟨13, rfl⟩ (.arg 1 rfl),
+      .unop (.gepConst { nusw := true } 24) ⟨13, rfl⟩ (.arg 1 rfl),
       .load ⟨14, rfl⟩ (.val 13 rfl),
       .binop (.add {}) ⟨15, rfl⟩ (.val 12 rfl) (.val 14 rfl),
       .binop (.lshr false) ⟨16, rfl⟩ (.val 15 rfl) (.val 0 rfl),
-      .unop (.gepConst 32) ⟨17, rfl⟩ (.arg 1 rfl),
+      .unop (.gepConst { nusw := true } 32) ⟨17, rfl⟩ (.arg 1 rfl),
       .load ⟨18, rfl⟩ (.val 17 rfl),
       .binop (.add {}) ⟨19, rfl⟩ (.val 16 rfl) (.val 18 rfl),
       -- the reduction: the top carry, times 19, back into limb 0, and one more carry
@@ -119,13 +119,13 @@ def fiat_25519_carry.entry : BasicBlock fiat_25519_carry.Γ [] fiat_25519_carry.
       .binop .and ⟨33, rfl⟩ (.val 19 rfl) (.val 1 rfl),
       -- the stores
       .store (.arg 0 rfl) (.val 27 rfl),
-      .unop (.gepConst 8) ⟨34, rfl⟩ (.arg 0 rfl),
+      .unop (.gepConst { nusw := true } 8) ⟨34, rfl⟩ (.arg 0 rfl),
       .store (.val 34 rfl) (.val 28 rfl),
-      .unop (.gepConst 16) ⟨35, rfl⟩ (.arg 0 rfl),
+      .unop (.gepConst { nusw := true } 16) ⟨35, rfl⟩ (.arg 0 rfl),
       .store (.val 35 rfl) (.val 31 rfl),
-      .unop (.gepConst 24) ⟨36, rfl⟩ (.arg 0 rfl),
+      .unop (.gepConst { nusw := true } 24) ⟨36, rfl⟩ (.arg 0 rfl),
       .store (.val 36 rfl) (.val 32 rfl),
-      .unop (.gepConst 32) ⟨37, rfl⟩ (.arg 0 rfl),
+      .unop (.gepConst { nusw := true } 32) ⟨37, rfl⟩ (.arg 0 rfl),
       .store (.val 37 rfl) (.val 33 rfl) ]
   -- llvm.return
   exit := .ret .nil

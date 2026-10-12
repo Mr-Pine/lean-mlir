@@ -59,16 +59,19 @@ Every step simplifies the value it writes (or the operation it runs) in passes:
 4. vector lanes `#v[.value x, …]` to `Ty.wrap #v[x, …]`; literal vectors equal to an `mlir_const`
    constant become that constant.
 
-Simprocs in these passes: `gepDynValue` (a dynamic `gep` by a value index: its unsigned reading
-`gep (byteOff + i.toNat * stride)`, `gep i` for byte strides, simplified as the step does; when
-that is poison, `gepInt` of the signed offset, which `gepIntValue` resolves from the offsets'
-facts: a `gep` back by a negative index; unresolved, left for a later pass), `gepValue` (`gep (.value off) (.value p)` to `.value (p.add off)` when
-`p.offset + off` provably does not wrap: by the offsets' facts, a no-overflow fact
-`¬p.offset.uaddOverflow c` for a literal `c ≥ off`, or `omega` with the offsets' values
-(`x.offset = 0`) in, a `% 2 ^ 64` it shows is below the modulus dropped first: a symbolic index
-from a block's start or a bounded multiple `192 * k` with `k < 8` needs no lemma), and the memory
-simprocs (a read `S.mem.readAt p w` by a read fact, through `hS`'s stores by the `mlir_read`
-lemmas, or inside a wider known read). Side conditions are discharged by `decide`, then from the
+Simprocs in these passes: `gepDynValue` (a dynamic `gep` by a value index: without `nusw` its
+unsigned reading `gep f (byteOff + i.toNat * stride)`, `gep f i` for byte strides; with `nusw` the
+unsigned `gep { nuw := true } …` where the offset is provably below `2 ^ 63` (from the facts or the
+step's simp arguments: pass a bound such as `hlt : i.toNat * 8 < 2 ^ 63`), else, when that `gep`
+is poison, `gepSigned` of the signed index, which `gepSignedValue` resolves from the offsets'
+facts: a `gep` back by a negative index; unresolved, left for a later pass), `gepValue` (`gep f
+(.value off) (.value p)` to `.value (p.add off)`: at once without flags; for `nuw`/`nusw` when
+`p.offset + off` provably does not wrap (for `nusw` also `off.toNat < 2 ^ 63`, by `decide` for a
+literal): by the offsets' facts, a no-overflow fact `¬p.offset.uaddOverflow c` for a literal
+`c ≥ off`, or `omega` with the offsets' values (`x.offset = 0`) in, a `% 2 ^ 64` it shows is below
+the modulus dropped first: a symbolic index from a block's start or a bounded multiple `192 * k`
+with `k < 8` needs no lemma), and the memory simprocs (a read `S.mem.readAt p w` by a read fact,
+through `hS`'s stores by the `mlir_read` lemmas, or inside a wider known read). Side conditions are discharged by `decide`, then from the
 facts (`mem_fact`'s search; `Fits` and `WF` below `alloca`s and new blocks built layer by layer
 from the entry state's facts, so reads below a frame resolve without read facts of the inputs).
 

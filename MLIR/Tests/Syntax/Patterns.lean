@@ -208,7 +208,7 @@ mlir_def put3 :=
 /-- `y = x + x` stored at `p`, `p + 8` (through `q`) and `p + 16` (through `q'`). -/
 def put3Run (x y : Dst Γ (.bv 64)) (p : Reg Γ .ptr) (q q' : Dst Γ .ptr) : List (Instr Γ) :=
   [.binop (.add {}) y (.val x.i x.h) (.val x.i x.h), .store p (.val y.i y.h),
-    .unop (.gepConst 8) q p, .store (.val q.i q.h) (.val y.i y.h), .unop (.gepConst 16) q' p,
+    .unop (.gepConst {} 8) q p, .store (.val q.i q.h) (.val y.i y.h), .unop (.gepConst {} 16) q' p,
     .store (.val q'.i q'.h) (.val y.i y.h)]
 
 -- stores through a pointer register that may be an argument or a value
@@ -218,7 +218,6 @@ theorem runBodyFrom_put3Run {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos :
     {K : PoisonOr β} (hbody : blk.body.drop pos = put3Run x y p q q' ++ rest)
     (hR : E ⊨ [x := X, p := P]) (hpq : p ≠ .val q.i q.h) (hwf : S.WF)
     (hP : Fits S.mem P 64) (hP8 : Fits S.mem (P.add 8#64) 64) (hP16 : Fits S.mem (P.add 16#64) 64)
-    (hoff : P.offset.toNat + 24 ≤ 2 ^ 64)
     (hK :
       ∀ vq vq',
         (blk.runBodyFrom E[y := .value (X + X), q := vq, q' := vq'] (pos + 6)
@@ -239,8 +238,7 @@ theorem runBodyFrom_put3Run {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos :
   exact hK _ _
 
 example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
-    (hp8 : Fits s.mem (p.add 8#64) 64) (hp16 : Fits s.mem (p.add 16#64) 64)
-    (hoff : p.offset.toNat + 24 ≤ 2 ^ 64) :
+    (hp8 : Fits s.mem (p.add 8#64) 64) (hp16 : Fits s.mem (p.add 16#64) 64) :
     put3.call (put3.args (.value p)) s =
       .value
         (.nil,

@@ -293,12 +293,13 @@ example (E : ⟪addTwo.Γ⟫) (S : GlobalState) (x : BitVec 32) (v : Vector (Bit
 
 mlir_def at8 :=
   {^bb0(%arg0:!llvm.ptr,
-      %arg1:i64):%0 = "llvm.getelementptr"(%arg0, %arg1)<{elem_type = i64, rawConstantIndices =
-        array<i32:-2147483648>}>:(!llvm.ptr, i64)->!llvm.ptr"llvm.return"(%0):(!llvm.ptr)->()}
+      %arg1:i64):%0 = "llvm.getelementptr"(%arg0, %arg1)<{elem_type = i64, noWrapFlags = 7 : i32,
+        rawConstantIndices = array<i32:-2147483648>}>:(!llvm.ptr, i64)->!llvm.ptr
+        "llvm.return"(%0):(!llvm.ptr)->()}
 
--- a `gep` by a symbolic index from a block's start (`p.offset = 0`) does not wrap
+-- a `gep inbounds nuw` by a symbolic index from a block's start (`p.offset = 0`) does not wrap
 example (p : Pointer) (i : BitVec 64) (E : ⟪at8.Γ⟫) (S : GlobalState) (hp : p.offset = 0)
-    (hi : i.toNat * 8 < 2 ^ 64) (hArgs : E.args = (at8.args (.value p) (.value i)).get) :
+    (hi : i.toNat * 8 < 2 ^ 63) (hArgs : E.args = (at8.args (.value p) (.value i)).get) :
     at8.runFrom E 0 S =
       .value (.cons (.value (p.add (BitVec.ofNat 64 (i.toNat * 8)))) .nil, S) := by
   block_init
@@ -308,7 +309,7 @@ example (p : Pointer) (i : BitVec 64) (E : ⟪at8.Γ⟫) (S : GlobalState) (hp :
 
 -- an offset `192 * k` for `k < 8` that does not wrap: `omega` alone misses it through `% 2 ^ 64`
 example (p : Pointer) (k : Nat) (hp : p.offset.toNat + 192 * 8 < 2 ^ 64) (hk : k < 8) :
-    Operation.gep (.value (BitVec.ofNat 64 (192 * k))) (.value p) =
+    Operation.gep { nusw := true, nuw := true } (.value (BitVec.ofNat 64 (192 * k))) (.value p) =
       .value (p.add (BitVec.ofNat 64 (192 * k))) := by
   simp only [Tactic.gepValue]
 
@@ -371,11 +372,12 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : PairFit s.mem p) :
   rfl
 
 mlir_def back8 :=
-  {^bb0(%arg0:!llvm.ptr):%0 = "llvm.getelementptr"(%arg0)<{elem_type = i8, rawConstantIndices =
-        array<i32:16>}>:(!llvm.ptr)->!llvm.ptr%1 = "llvm.getelementptr"(%0)<{elem_type = i8,
-        rawConstantIndices = array<i32:-8>}>:(!llvm.ptr)->!llvm.ptr"llvm.return"(%1):(!llvm.ptr)->()}
+  {^bb0(%arg0:!llvm.ptr):%0 = "llvm.getelementptr"(%arg0)<{elem_type = i8, noWrapFlags = 3 : i32,
+        rawConstantIndices = array<i32:16>}>:(!llvm.ptr)->!llvm.ptr%1 = "llvm.getelementptr"(%0)<{
+        elem_type = i8, noWrapFlags = 3 : i32, rawConstantIndices = array<i32:-8>}>:(!llvm.ptr)
+        ->!llvm.ptr"llvm.return"(%1):(!llvm.ptr)->()}
 
--- constant `gep`s forward and back, from a block's start
+-- constant `gep inbounds`s forward and back, from a block's start
 example (p : Pointer) (E : ⟪back8.Γ⟫) (S : GlobalState) (hp : p.offset = 0)
     (hArgs : E.args = (back8.args (.value p)).get) :
     back8.runFrom E 0 S = .value (.cons (.value (p.add 8#64)) .nil, S) := by

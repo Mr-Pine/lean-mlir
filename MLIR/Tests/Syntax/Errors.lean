@@ -227,6 +227,26 @@ mlir_def gepDynamicField := {
     "llvm.return"(%0) : (!llvm.ptr) -> ()
 }
 
+/--
+error: ^bb0: %0 = "llvm.getelementptr"(%arg0) : (!llvm.ptr) -> !llvm.ptr: unknown `noWrapFlags` 8
+-/
+#guard_msgs in
+mlir_def gepUnknownFlags := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.getelementptr"(%arg0) <{elem_type = i8, noWrapFlags = 8 : i32, rawConstantIndices = array<i32: 1>}> : (!llvm.ptr) -> !llvm.ptr
+    "llvm.return"(%0) : (!llvm.ptr) -> ()
+}
+
+/--
+error: ^bb0: %0 = "llvm.getelementptr"(%arg0) : (!llvm.ptr) -> !llvm.ptr: negative index part -1 with other parts or `nuw`
+-/
+#guard_msgs in
+mlir_def gepNegativeNuw := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.getelementptr"(%arg0) <{elem_type = i8, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -1>}> : (!llvm.ptr) -> !llvm.ptr
+    "llvm.return"(%0) : (!llvm.ptr) -> ()
+}
+
 /-- error: ^bb2: "llvm.return"() : () -> (): returns (), but another llvm.return returns (i64) -/
 #guard_msgs in
 mlir_def returnTypes := {

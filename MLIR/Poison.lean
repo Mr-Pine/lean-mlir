@@ -54,25 +54,6 @@ theorem value_ne_poison (a : α) : @Ne (no_index _) (value a) poison := by -- `v
 theorem ite_value_value {c : Prop} [Decidable c] {a b : α} :
     (if c then value a else value b : no_index _) = value (if c then a else b) := by split <;> rfl
 
-/-- `a`, or `b` where `a` is poison. -/
-def orElse (a b : PoisonOr α) : PoisonOr α :=
-  match a with
-  | .value x => .value x
-  | .poison => b
-
-@[simp]
-theorem value_orElse {a : α} {b : PoisonOr α} : (value a).orElse b = value a :=
-  rfl
-
-@[simp]
-theorem poison_orElse {b : PoisonOr α} : (@poison α).orElse b = b :=
-  rfl
-
-/-- `simp` rewrites `a` alone: `b` once `a` is poison. -/
-@[congr]
-theorem orElse_congr {a a' b : PoisonOr α} (h : a = a') : a.orElse b = a'.orElse b := by
-  rw [h]
-
 /-! ### Formatting & Priting instances -/
 
 instance [ToString α] : ToString (PoisonOr α) where

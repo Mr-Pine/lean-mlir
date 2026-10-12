@@ -265,8 +265,8 @@ def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM U
                   |
                     try
                       simp [*, $(mkIdent `mlir_env):ident, $(mkIdent ``Tactic.gepDynValue):ident,
-                        $(mkIdent ``Tactic.gepIntValue):ident, $(mkIdent ``Tactic.gepValue):ident,
-                        $(mkIdent ``Tactic.gepBackValue):ident]))
+                        $(mkIdent ``Tactic.gepSignedValue):ident,
+                        $(mkIdent ``Tactic.gepValue):ident, $(mkIdent ``Tactic.gepBackValue):ident]))
       open_ := open_ ++ (← getGoals)
   for g in conts do
     setGoals [g]

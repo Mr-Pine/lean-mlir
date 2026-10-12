@@ -167,28 +167,28 @@ def bb0 : BB where
 
 def bb1 : BB where
   body :=
-    [ .unop (.gepConst 8) ⟨5, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 8) ⟨5, rfl⟩ (.arg 0 rfl),
       .load ⟨6, rfl⟩ (.val 5 rfl),
       .binop (.icmp .eq) ⟨7, rfl⟩ (.val 6 rfl) (.val 2 rfl) ]
   exit := .condBr (.val 7 rfl) ⟨2, .nil⟩ ⟨9, .nil⟩
 
 def bb2 : BB where
   body :=
-    [ .unop (.gepConst 16) ⟨8, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 16) ⟨8, rfl⟩ (.arg 0 rfl),
       .load ⟨9, rfl⟩ (.val 8 rfl),
       .binop (.icmp .eq) ⟨10, rfl⟩ (.val 9 rfl) (.val 2 rfl) ]
   exit := .condBr (.val 10 rfl) ⟨3, .nil⟩ ⟨9, .nil⟩
 
 def bb3 : BB where
   body :=
-    [ .unop (.gepConst 24) ⟨11, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 24) ⟨11, rfl⟩ (.arg 0 rfl),
       .load ⟨12, rfl⟩ (.val 11 rfl),
       .binop (.icmp .eq) ⟨13, rfl⟩ (.val 12 rfl) (.val 2 rfl) ]
   exit := .condBr (.val 13 rfl) ⟨4, .nil⟩ ⟨9, .nil⟩
 
 def bb4 : BB where
   body :=
-    [ .unop (.gepConst 32) ⟨14, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 32) ⟨14, rfl⟩ (.arg 0 rfl),
       .load ⟨15, rfl⟩ (.val 14 rfl),
       .binop (.icmp .eq) ⟨16, rfl⟩ (.val 15 rfl) (.val 2 rfl) ]
   -- all limbs zero: return `1`
@@ -196,28 +196,28 @@ def bb4 : BB where
 
 def bb5 : BB where
   body :=
-    [ .unop (.gepConst 8) ⟨17, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 8) ⟨17, rfl⟩ (.arg 0 rfl),
       .load ⟨18, rfl⟩ (.val 17 rfl),
       .binop (.icmp .eq) ⟨19, rfl⟩ (.val 18 rfl) (.val 0 rfl) ]
   exit := .condBr (.val 19 rfl) ⟨6, .nil⟩ ⟨9, .nil⟩
 
 def bb6 : BB where
   body :=
-    [ .unop (.gepConst 16) ⟨20, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 16) ⟨20, rfl⟩ (.arg 0 rfl),
       .load ⟨21, rfl⟩ (.val 20 rfl),
       .binop (.icmp .eq) ⟨22, rfl⟩ (.val 21 rfl) (.val 0 rfl) ]
   exit := .condBr (.val 22 rfl) ⟨7, .nil⟩ ⟨9, .nil⟩
 
 def bb7 : BB where
   body :=
-    [ .unop (.gepConst 24) ⟨23, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 24) ⟨23, rfl⟩ (.arg 0 rfl),
       .load ⟨24, rfl⟩ (.val 23 rfl),
       .binop (.icmp .eq) ⟨25, rfl⟩ (.val 24 rfl) (.val 0 rfl) ]
   exit := .condBr (.val 25 rfl) ⟨8, .nil⟩ ⟨9, .nil⟩
 
 def bb8 : BB where
   body :=
-    [ .unop (.gepConst 32) ⟨26, rfl⟩ (.arg 0 rfl),
+    [ .unop (.gepConst { nusw := true } 32) ⟨26, rfl⟩ (.arg 0 rfl),
       .load ⟨27, rfl⟩ (.val 26 rfl),
       .binop (.icmp .eq) ⟨28, rfl⟩ (.val 27 rfl) (.val 0 rfl) ]
   -- the limbs of `p`: return `1`

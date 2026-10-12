@@ -20,7 +20,7 @@ inductive Dsts (Γ : Ctx) : List Ty → Type
   | cons (d : Dst Γ t) (ds : Dsts Γ ts) : Dsts Γ (t :: ts)
 
 inductive UnOp : Ty → (out : Ty) → Type
-  | gepConst (byteOff : Int) : UnOp .ptr .ptr
+  | gepConst (flags : GepFlags) (byteOff : Int) : UnOp .ptr .ptr
   | trunc (flags : OverflowFlags) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | zext (nneg : Bool) {w w' : Nat} : UnOp (.bv w) (.bv w')
   | sext {w w' : Nat} : UnOp (.bv w) (.bv w')
@@ -56,7 +56,7 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | ucmp {w w' : Nat} : BinOp (.bv w) (.bv w) (.bv w')
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
   /-- `getelementptr` with one `i64` index: `byteOff + index * stride` bytes on. -/
-  | gepDyn (byteOff stride : Nat) : BinOp .ptr (.bv 64) .ptr
+  | gepDyn (flags : GepFlags) (byteOff stride : Nat) : BinOp .ptr (.bv 64) .ptr
   /-- `icmp eq` (`ne := false`) or `icmp ne` on pointers. -/
   | ptrcmp (ne : Bool) : BinOp .ptr .ptr (.bv 1)
   |
