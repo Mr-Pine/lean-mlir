@@ -134,6 +134,10 @@ def norm(t, sym=lambda d: d):
     the attributes the translation does not read."""
     t = '\n'.join(l for l in t.splitlines() if not re.match(r'#tbaa\w* = #llvm\.tbaa_', l))
     t = re.sub(r', tbaa = \[[^\]]*\]|tbaa = \[[^\]]*\], ', '', t)
+    # alias scopes, which the translation ignores (`noalias.scope.decl` translates to nothing)
+    t = '\n'.join(l for l in t.splitlines() if not re.match(r'#alias_scope\w* = #llvm\.alias_scope', l)
+                  and '"llvm.intr.experimental.noalias.scope.decl"' not in l)
+    t = re.sub(r', (?:no)?alias_scopes = \[[^\]]*\]|(?:no)?alias_scopes = \[[^\]]*\], ', '', t)
     t = re.sub(r'%(?:arg)?\d+\b', '%', t)
     t = re.sub(r'((?:callee|global_name) = )@([A-Za-z_0-9.]+)', lambda m: m[1] + '@' + sym(m[2]), t)
     t = re.sub(r'sym_name = "[^"]*"', 'sym_name', t)
@@ -153,7 +157,7 @@ def shared(f):
         return None
     if f not in SHARED:
         SHARED[f] = None
-        mine = norm(region(f), lambda d: shared(d) or '!' + d)
+        mine = norm(region(f), lambda d: shared(d) or (d if external(d) else '!' + d))
         cands = [g for g in [f] + [g for g, n in OTHER_NAMES.items() if n == lean(f)]
                  if g in OTHER_OPS] + sorted(OTHER_OPS)
         SHARED[f] = next((g for g in cands if OTHER_OPS[g] == mine), None)
