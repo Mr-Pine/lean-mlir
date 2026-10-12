@@ -81,9 +81,6 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
 -- poison pointer, poison value
 #guard (store? (τ := .bv 64) .poison (.value 0#64)).isNone
 
--- a pointer at a type with no bit pattern cannot be stored
-#guard (store? (τ := .ptr) (.value (p 0)) (.value (p 0))).isNone
-
 -- the block does not exist
 #guard (store? (τ := .bv 64) (.value pDead) (.value 0#64)).isNone
 
@@ -111,7 +108,7 @@ private def load? (τ : Ty) (ptr : ⟦Ty.ptr⟧) (s : GlobalState := s0) : Optio
 
 #guard load? (.bv 64) (.value (p 7)) == none
 
--- a load at `ptr` type is poison
+-- a load at `ptr` type of integer bits is poison
 #guard load? .ptr (.value (p 0)) == some .poison
 
 /-! ## `memset` -/
@@ -251,6 +248,81 @@ private def memcpyLoad? (src : Pointer) (s : GlobalState) : Option ⟦Ty.bv 64�
 
 -- reading a dead object is UB
 #guard memcpyLoad? (a 0) (s0.alloca 8 true) == none
+
+/-! ## Stored pointers -/
+
+/-- `s0` with block `1`, 16 bytes, fresh from an `alloca`. -/
+private def sP : GlobalState :=
+  s0.alloca 16
+
+/-- `sP` with `q 3` stored at byte `off` of block `1`. -/
+private def withPtr (off : Nat) : Option GlobalState :=
+  store? (τ := .ptr) (.value (a off)) (.value (q 3)) sP
+
+-- a stored pointer loads back, at any byte offset
+#guard ((withPtr 0).bind (load? .ptr (.value (a 0)) ·)) == some (.value (q 3))
+
+#guard ((withPtr 5).bind (load? .ptr (.value (a 5)) ·)) == some (.value (q 3))
+
+-- not from another offset
+#guard ((withPtr 0).bind (load? .ptr (.value (a 1)) ·)) == some .poison
+
+-- its bits are undefined: an integer load of them is poison
+#guard ((withPtr 0).bind (load? (.bv 64) (.value (a 0)) ·)) == some .poison
+
+#guard ((withPtr 0).bind (load? (.bv 8) (.value (a 7)) ·)) == some .poison
+
+-- a byte stored over it, defined or poison, leaves it poison
+#guard
+  (((withPtr 0).bind (store? (τ := .bv 8) (.value (a 3)) (.value 1#8) ·)).bind
+      (load? .ptr (.value (a 0)) ·)) ==
+    some .poison
+
+#guard
+  ((((withPtr 0).bind (store? (τ := .bv 8) (.value (a 3)) (.value 1#8) ·)).bind
+        (store? (τ := .bv 8) (.value (a 3)) .poison ·)).bind
+      (load? .ptr (.value (a 0)) ·)) ==
+    some .poison
+
+-- a store next to it leaves it
+#guard
+  (((withPtr 0).bind (store? (τ := .bv 64) (.value (a 8)) (.value 1#64) ·)).bind
+      (load? .ptr (.value (a 0)) ·)) ==
+    some (.value (q 3))
+
+-- a pointer stored over half of it replaces it
+#guard
+  (((withPtr 0).bind (store? (τ := .ptr) (.value (a 4)) (.value (p 1)) ·)).bind
+      (fun s => (load? .ptr (.value (a 0)) s).bind fun x =>
+        (load? .ptr (.value (a 4)) s).map (x, ·))) ==
+    some (.poison, .value (p 1))
+
+-- a poison pointer stores nothing
+#guard
+  ((store? (τ := .ptr) (.value (a 0)) .poison sP).bind (load? .ptr (.value (a 0)) ·)) ==
+    some .poison
+
+-- a struct's pointer leaf is recorded, its integer leaf stored
+#guard
+  ((store? (τ := .struct [.ptr, .bv 32]) (.value (a 0)) (.value (q 3), .value 7#32) sP).bind
+      (load? (.struct [.ptr, .bv 32]) (.value (a 0)) ·)) ==
+    some (.value (q 3), .value 7#32)
+
+-- `memcpy` copies the bits, not the pointer: the copy loads as poison
+#guard
+  ((withPtr 0).bind fun s =>
+      match Operation.memcpy (.value (a 8)) (.value (a 0)) (.value 8#64) env0 s with
+      | .value (_, s') => load? .ptr (.value (a 8)) s'
+      | .poison => none) ==
+    some .poison
+
+-- `lifetime.start` drops it
+#guard
+  ((withPtr 0).bind fun s =>
+      match Operation.lifetimeStart (.value (a 0)) env0 s with
+      | .value (_, s') => load? .ptr (.value (a 0)) s'
+      | .poison => none) ==
+    some .poison
 
 /-! ## Lifetimes -/
 

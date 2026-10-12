@@ -11,12 +11,14 @@ namespace MLIR
 @[expose] public section
 
 /-- A block of `length` bytes: its bits, which of them are `defined` (bit `i` set: bit `i` was
-written), and whether the object is `live` (inside its lifetime). -/
+written), whether the object is `live` (inside its lifetime), and the pointers stored in it by
+their first bit, each loaded back while its 64 bits stay undefined. -/
 structure MemoryBlock where
   (length : Nat)
   (bytes : BitVec (8 * length))
   (defined : BitVec (8 * length))
   (live : Bool)
+  (ptrs : Nat → Option Pointer)
 
 /--
 `AllocState` keeps a counter of available blockIds
@@ -67,7 +69,7 @@ instance : GetElem? MemoryState BlockId MemoryBlock (fun m i => i ∈ m.mem) whe
 
 /-- A live block holding `bytes`, all defined. -/
 def MemoryBlock.ofBytes (length : Nat) (bytes : BitVec (8 * length)) : MemoryBlock :=
-  ⟨length, bytes, BitVec.allOnes _, true⟩
+  ⟨length, bytes, BitVec.allOnes _, true, fun _ => none⟩
 
 @[implicit_reducible]
 def MemoryBlock.lengthInBits (b : MemoryBlock) : Nat :=

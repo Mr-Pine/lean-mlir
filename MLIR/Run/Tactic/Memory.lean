@@ -616,9 +616,14 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
   | MemoryState.storeDef m' q v _ d =>
     -- known where the mask defines it: a copy's (`memcpy`, the source's definedness) or a literal
     if j == 2 then
-      return ← storeDefFits? facts goal m' q (← normWidths v) d p w₁
+      return ← storeDefFits? `storeDef facts goal m' q (← normWidths v) d p w₁
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `storeDef) goal #[h]
+  | MemoryState.overlay m' q v _ d =>
+    if j == 2 then
+      return ← storeDefFits? `overlay facts goal m' q (← normWidths v) d p w₁
+    let some h ← memPredProof? facts j m' p w | return none
+    proveBy? (memPredLemma j `overlay) goal #[h]
   | MemoryState.lifetimeStart m' q =>
     -- the started object: room in its bounds
     if j == 1 && q == p then
@@ -752,10 +757,13 @@ where
         pure (some (← mkAppOptM (memPredLemma j `add_of_le)
           #[none, none, none, none, off, hov, hw, h]))
     return pf?.map (mkExpectedPropHint · goal)
-  /-- `Fits (m.storeDef q x d) p w` (the `goal`) for `p` at `q` or inside it, `v` bits stored with
-  room for them: from the source's `Fits` for a copy's mask `m.definedAt src v`, by `decide` for a
-  literal mask. -/
-  storeDefFits? (facts : Array (Expr × Expr)) (goal m q v d p w : Expr) : MetaM (Option Expr) := do
+  /-- `Fits (m.storeDef q x d) p w` (the `goal`; `m.overlay` for `kind := overlay`) for `p` at `q`
+  or inside it, `v` bits stored with room for them: from the source's `Fits` for a copy's mask
+  `m.definedAt src v`, by the kernel's `decide` for a literal mask (no
+  `exponentiation.threshold`). -/
+  storeDefFits? (kind : Name) (facts : Array (Expr × Expr)) (goal m q v d p w : Expr) :
+      MetaM (Option Expr) := do
+    let lemma (suffix : String) : Name := .str ``Fits s!"{kind}{suffix}"
     let off? := if p == q then none else (p.app2? ``Pointer.add).bind fun (q', off) =>
       if q' == q then some off else none
     if p != q && off?.isNone then
@@ -770,13 +778,13 @@ where
       let some hw ← natArith? facts (← mkAppM ``LE.le #[w, v]) | return none
       let some hs ← memPredProof? facts 2 m src w | return none
       let some hr ← memPredProof? facts 1 m q v | return none
-      proveBy? ``Fits.storeDef_definedAt_self goal #[hr, hs, hw]
+      proveBy? (lemma "_definedAt_self") goal #[hr, hs, hw]
     | some src, some off =>
       let some (hov, hw) ← addWithin? facts q off w v | return none
       let some (hovq, _) ← addWithin? facts src off w v | return none
       let some hs ← memPredProof? facts 2 m (← mkAppM ``Pointer.add #[src, off]) w | return none
       let some hr ← memPredProof? facts 1 m q v | return none
-      proveBy? ``Fits.storeDef_definedAt goal #[hr, hs, hov, hovq, hw]
+      proveBy? (lemma "_definedAt") goal #[hr, hs, hov, hovq, hw]
     | none, _ =>
       -- a literal mask: its bits there all set
       if (← getBitVecValue? d).isNone then
@@ -787,16 +795,16 @@ where
         | some off => mkAppM ``HMul.hMul #[← mkAppM ``BitVec.toNat #[off], mkNatLit 8]
       let hdTy ←
         mkEq (← mkAppM ``BitVec.extractLsb' #[start, w, d]) (← mkAppM ``BitVec.allOnes #[w])
-      let some hd ← decideProof? hdTy | return none
+      let some hd ← kernelDecide? hdTy | return none
       match off? with
       | none =>
         let some hw ← natArith? facts (← mkAppM ``LE.le #[w, v]) | return none
         let some hr ← memPredProof? facts 1 m q v | return none
-        proveBy? ``Fits.storeDef_of_mask_self goal #[hr, hw, hd]
+        proveBy? (lemma "_of_mask_self") goal #[hr, hw, hd]
       | some off =>
         let some (hov, hw) ← addWithin? facts q off w v | return none
         let some hr ← memPredProof? facts 1 m q v | return none
-        proveBy? ``Fits.storeDef_of_mask goal #[hr, hov, hw, hd]
+        proveBy? (lemma "_of_mask") goal #[hr, hov, hw, hd]
 
 /-- Prove `Fits m p w` by `memPredProof?`. -/
 def fitsProof? (facts : Array (Expr × Expr)) (m p w : Expr) : MetaM (Option Expr) :=
@@ -913,10 +921,72 @@ simproc_decl gepValue (Operation.gep (.value _) (.value _)) := fun e => do
           return some h
         if let some h← noOverflowOfFact? facts p off then
           return some h
-        noOverflowProof? facts p off) | return .continue
+        noOverflowProof? facts p off) |
+    -- an offset known to wrap: poison (a negative index's unsigned reading)
+    let ov ← mkEq (← mkAppM ``BitVec.uaddOverflow #[← mkAppM ``Pointer.offset #[p], off])
+      (mkConst ``Bool.true)
+    let some h ← decideWithOffsets? facts ov | return .continue
+    return .visit { expr := ← mkAppOptM ``PoisonOr.poison #[mkConst ``Pointer],
+                    proof? := ← mkAppM ``gep_overflow #[h] }
   return .visit
       { expr := ← mkAppM ``PoisonOr.value #[← mkAppM ``Pointer.add #[p, off]],
         proof? := ← mkAppM ``gep_value #[h] }
+
+/-- `gepDyn` by a value index: its unsigned reading (`gepDynUnsigned`, the steps' old `gep` by an
+unsigned index) simplified as the step's `simp` does, its arguments resolving the bound: a value is
+the result (the reading itself, simplified again as before), poison the signed reading (`gepInt`);
+else it is left, for a later pass. -/
+simproc_decl gepDynValue (Operation.gepDyn _ _ _ (.value _)) := fun e => do
+  let_expr Operation.gepDyn byteOff stride ptr idx := e | return .continue
+  let_expr PoisonOr.value _ i := idx | return .continue
+  -- terms and lemmas built unchecked: `ptr`'s type may be a register type not yet reduced
+  let u := mkApp4 (mkConst ``Operation.gepDynUnsigned) byteOff stride ptr idx
+  -- by `i` itself (`ofNat i.toNat` would expand `i`), as the old `gepDyn` simplified over a bound
+  -- index before the operand was read
+  let (u', h₀) ←
+    if (← (evalNat byteOff).run) == some 0 && (← (evalNat stride).run) == some 1 then
+      pure (mkApp2 (mkConst ``Operation.gep) (mkApp2 (mkConst ``PoisonOr.value) (← inferType i) i)
+          ptr, some (mkApp2 (mkConst ``gepDynUnsigned_zero_one) ptr i))
+    else
+      pure (u, none)
+  let r ← Simp.simp u'
+  -- typed as `u = _`: `simp` unfolds `u` by its definition, no step in the proof
+  let pf ← match h₀ with
+    | some h₀ => mkEqTrans h₀ (← r.getProof)
+    | none => r.getProof
+  let h := mkExpectedPropHint pf (← mkEq u r.expr)
+  let r := r.expr
+  if let some (_, q) := r.app2? ``PoisonOr.value then
+    let pf := mkAppN (mkConst ``gepDyn_eq_unsigned) #[byteOff, stride, ptr, idx, q, h]
+    if let some h₀ := h₀ then
+      return .visit { expr := u', proof? := ← mkEqTrans pf h₀ }
+    return .visit { expr := u, proof? := pf }
+  if r.isAppOf ``PoisonOr.poison then
+    let pf := mkAppN (mkConst ``gepDyn_of_unsigned_poison) #[byteOff, stride, ptr, i, h]
+    let some (_, _, rhs) := (← inferType pf).eq? | return .continue
+    return .visit { expr := rhs, proof? := pf }
+  return .continue
+
+/-- `gepInt off` of a pointer whose offset plus `off` stays in `[0, 2 ^ 64)`, by the offsets' facts:
+`.value (p.add (BitVec.ofInt 64 off))`. -/
+simproc_decl gepIntValue (Operation.gepInt _ (.value _)) := fun e => do
+  let_expr Operation.gepInt off pp := e | return .continue
+  let_expr PoisonOr.value _ p := pp | return .continue
+  let facts ← splitConjunctedFacts
+  let o ← mkAppOptM ``Nat.cast
+    #[mkConst ``Int, none, ← mkAppM ``BitVec.toNat #[← mkAppM ``Pointer.offset #[p]]]
+  let sum ← mkAppM ``HAdd.hAdd #[o, off]
+  let prove (goal : Expr) : MetaM (Option Expr) := do
+    if let some h ← decideWithOffsets? facts goal then
+      return some h
+    offsetProof? facts goal
+  let some h₀ ← prove (← mkAppM ``LE.le #[mkApp (mkConst ``Int.ofNat) (mkNatLit 0), sum])
+    | return .continue
+  let some h₁ ← prove (← mkAppM ``LT.lt #[sum, ← mkAppM ``HPow.hPow #[mkApp (mkConst ``Int.ofNat)
+    (mkNatLit 2), mkNatLit 64]]) | return .continue
+  let pf ← mkAppM ``gepInt_value #[h₀, h₁]
+  let some (_, _, r) := (← inferType pf).eq? | return .continue
+  return .visit { expr := r, proof? := pf }
 
 /-- `gepBack n` of a pointer at least `n` bytes into its block is `.value (p.add (-n))`. -/
 simproc_decl gepBackValue (Operation.gepBack _ (.value _)) := fun e => do

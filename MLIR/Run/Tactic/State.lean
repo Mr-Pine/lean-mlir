@@ -318,7 +318,11 @@ def memFactsOf (g : MVarId) (S new : Expr) :
     let lfacts := c.facts ++ layerFacts
     for i in [0:layers.size] do
       let wm := layers[i]!
-      let_expr MemoryState.storeDef m' q v _ d := wm | continue
+      let some (m', q, v, d) :=
+          (match_expr wm with
+            | MemoryState.storeDef m' q v _ d => some (m', q, v, d)
+            | MemoryState.overlay m' q v _ d => some (m', q, v, d)
+            | _ => none) | continue
       let v ← normWidths v
       let mut cands : Array (Expr × Expr) := #[]
       if let some ⟨_, dv⟩ ← getBitVecValue? d then

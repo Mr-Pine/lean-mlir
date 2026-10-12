@@ -5,7 +5,7 @@ public import MLIR.Semantics.Func
 
 namespace MLIR
 
-public section
+@[expose] public section
 
 def GlobalInitializer.blockParams {Γ : Ctx} : Fin 1 → Dsts Γ [] := fun _ => Dsts.nil
 

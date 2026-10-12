@@ -20,7 +20,8 @@ public meta section
 syntax (name := stepImpure)
   "step_impure" stepSimpArgs (stepNames)? (stepConsuming)? " => " tacticSeq : tactic
 
-/-- `step_impure` for a `load`, closing the instruction with `run_load`. -/
+/-- `step_impure` for a `load`, closing the instruction with `run_load`; of a pointer, with
+`run_loadPtr`, its value the pointer stored there (`S.mem.loadPtr p`, by a read fact). -/
 syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)? : tactic
 
 /-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`, or with `run_memcpyDef`
@@ -34,7 +35,8 @@ syntax (name := stepMemmove) "step_memmove" stepSimpArgs (stepConsuming)? : tact
 /-- `step_impure` for a `memset`, closing the instruction with `run_memset`. -/
 syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 
-/-- `step_impure` for a `store`, closing the instruction with `run_store`. -/
+/-- `step_impure` for a `store`, closing the instruction with `run_store`; of a pointer, with
+`run_storePtr`, which records it: `hread_p : S.mem.loadPtr p = .value q` after. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `lifetime.start` or `lifetime.end`: the state's memory as
@@ -236,6 +238,18 @@ elab "expect_values" : tactic =>
       if (← whnf (← inferType a)).isAppOf ``PoisonOr && !a.isAppOfArity ``PoisonOr.value 2 then
         throwError "operand{indentExpr a}\nis not known to be `.value _`; it may be poison"
 
+/-- Fail unless the instruction's operation (`load`, `store`) is at pointer type: the pointer run
+lemmas are tried only there, a mismatched one unfolding the operation. -/
+elab "expect_ptr" : tactic =>
+  withMainContext do
+    let_expr Eq _ lhs _ := ← instantiateMVars (← getMainTarget)
+      | throwError "expected an equation, got{indentExpr (← getMainTarget)}"
+    let op := lhs.appFn!.appFn!
+    let some τ ← op.getAppArgs.findM? fun a => return (← inferType a).isConstOf ``Ty
+      | throwError "no type argument in{indentExpr op}"
+    unless (← whnfR τ).isConstOf ``Ty.ptr do
+      throwError "not at pointer type:{indentExpr τ}"
+
 @[tactic stepLoad]
 def evalStepLoad : Tactic := fun stx => do
   -- the pointer keeps the values named with `with`, as the facts about it do; its `Fits` by
@@ -244,7 +258,9 @@ def evalStepLoad : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact run_load (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
+        first
+        | expect_ptr; exact run_loadPtr (by mem_fact)
+        | exact run_load (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
@@ -253,20 +269,29 @@ def evalStepStore : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact
+        first
+        | expect_ptr; exact run_storePtr (by mem_fact)
+        | exact
             run_store (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)
               (by first | decide | simp_all)))
 
+/-- Close a lifetime marker's run goal by its own lemma: a mismatched one unfolds both markers into
+the block map before failing. -/
+elab "lifetime_run" : tactic =>
+  withMainContext do
+    let_expr Eq _ lhs _ := ← instantiateMVars (← getMainTarget)
+      | throwError "expected an equation, got{indentExpr (← getMainTarget)}"
+    let op := lhs.appFn!.appFn!
+    let poison := op.appArg!.isAppOf ``PoisonOr.poison
+    let lem :=
+      if op.isAppOf ``Operation.lifetimeStart then
+        if poison then ``run_lifetimeStart_poison else ``run_lifetimeStart
+      else if poison then ``run_lifetimeEnd_poison else ``run_lifetimeEnd
+    evalTactic (← `(tactic| exact $(mkIdent lem)))
+
 /-- Step a `lifetime.start` or `lifetime.end`. -/
 def runLifetimeStep (args : StepArgs) : TacticM Unit := do
-  runStep args
-      (←
-        `(tacticSeq|
-        first
-        | exact run_lifetimeStart
-        | exact run_lifetimeEnd
-        | exact run_lifetimeStart_poison
-        | exact run_lifetimeEnd_poison))
+  runStep args (← `(tacticSeq| lifetime_run))
 
 /-- Step an `assume`. -/
 def runAssumeStep (args : StepArgs) : TacticM Unit := do

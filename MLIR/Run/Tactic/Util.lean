@@ -125,6 +125,32 @@ def decideProof? (p : Expr) : MetaM (Option Expr) := do
     return none
   return some (← mkDecideProof p)
 
+/-- `e`, a closed term, reduced by the kernel to weak head normal form: a literal for a number, no
+`exponentiation.threshold` and no recursion limit of the elaborator's. -/
+def kernelWhnf (e : Expr) : MetaM Expr := do
+  ofExceptKernelException (Kernel.whnf (← getEnv) (← getLCtx) e)
+
+/-- `e`, a closed term of type `Nat`, evaluated by the kernel. -/
+def kernelNat? (e : Expr) : MetaM (Option Nat) := do
+  let r ← kernelWhnf e
+  return r.rawNatLit? <|> r.nat?
+
+/-- `p` by `decide`, evaluated by the kernel (which checks the proof the same way): for literals
+past the elaborator's `exponentiation.threshold`. -/
+def kernelDecide? (p : Expr) : MetaM (Option Expr) := do
+  let .some inst ← trySynthInstance (mkApp (mkConst ``Decidable) p) | return none
+  let d := mkApp2 (mkConst ``Decidable.decide) p inst
+  let some v ← observing? (kernelWhnf d) | return none
+  unless v.isConstOf ``Bool.true do
+    return none
+  let tt := mkConst ``Bool.true
+  let h := mkExpectedPropHint (← mkEqRefl tt) (← mkEq d tt)
+  return some (mkApp3 (mkConst ``of_decide_eq_true) p inst h)
+
+/-- `l = r` by `rfl`, checked by the kernel alone: for `l` that evaluates to the literal `r`. -/
+def kernelRfl (l r : Expr) : MetaM Expr := do
+  return mkExpectedPropHint (← mkEqRefl r) (← mkEq l r)
+
 /-- `fun y : ty => e` with each `t` in `e` replaced by `f y`. -/
 def motiveOver (e t ty : Expr) (f : Expr → Expr := id) : MetaM Expr :=
   withLocalDeclD `y ty fun y =>

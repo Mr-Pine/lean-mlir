@@ -5,6 +5,7 @@ public import MLIR.Memory.Range
 public import MLIR.Semantics.Effectful.Memory.Bits
 public import MLIR.Semantics.Effectful.Memory.Fits
 public import MLIR.SimpSets
+public import MLIR.Poison
 import Std.Data.ExtHashMap.Lemmas
 
 namespace MLIR
@@ -18,18 +19,37 @@ def MemoryState.modifyBlock (m : MemoryState) (i : BlockId) (f : MemoryBlock →
     MemoryState :=
   { m with mem := m.mem.modify i f }
 
-/-- Store bits `b` at a pointer, defined where `d` is set. If the pointer does not reference a
-block, this is a no-op. -/
+/-- `ptrs` without the entries whose 64 bits meet bits `off … off + w`, unless `d` sets them all:
+an entry under defined bits loads as poison anyway. -/
+def MemoryBlock.clearPtrs (ptrs : Nat → Option Pointer) (off : Nat) {w : Nat} (d : BitVec w) :
+    Nat → Option Pointer :=
+  if d = BitVec.allOnes w then ptrs
+  else fun o => if o + 64 ≤ off ∨ off + w ≤ o then ptrs o else none
+
+/-- Store bits `b` at a pointer, defined where `d` is set; unless all are, the stored pointers it
+meets are dropped. If the pointer does not reference a block, this is a no-op. -/
 def MemoryState.storeDef (m : MemoryState) (p : Pointer) {w : Nat} (b d : BitVec w) : MemoryState :=
   m.modifyBlock p.id fun blk =>
     { blk with
       bytes := spliceBits blk.bytes p.offsetInBits b
-      defined := spliceBits blk.defined p.offsetInBits d }
+      defined := spliceBits blk.defined p.offsetInBits d
+      ptrs := MemoryBlock.clearPtrs blk.ptrs p.offsetInBits d }
 
-/-- Store bits at a pointer, all defined. If the pointer does not reference a block, this is a
-no-op. -/
+/-- Store bits at a pointer, all defined: `storeDef` with every bit set. If the pointer does not
+reference a block, this is a no-op. -/
 def MemoryState.storeAt (m : MemoryState) (p : Pointer) {w : Nat} (b : BitVec w) : MemoryState :=
-  m.storeDef p b (BitVec.allOnes w)
+  m.modifyBlock p.id fun blk =>
+    { blk with
+      bytes := spliceBits blk.bytes p.offsetInBits b
+      defined := spliceBits blk.defined p.offsetInBits (BitVec.allOnes w) }
+
+/-- `storeDef` keeping the stored pointers: the stores of defined bits into a range, as one, for
+proofs that track its definedness. -/
+def MemoryState.overlay (m : MemoryState) (p : Pointer) {w : Nat} (b d : BitVec w) : MemoryState :=
+  m.modifyBlock p.id fun blk =>
+    { blk with
+      bytes := spliceBits blk.bytes p.offsetInBits b
+      defined := spliceBits blk.defined p.offsetInBits d }
 
 /-- Read bits at a pointer. Returns `0#w` if there is no block for the pointer. -/
 def MemoryState.readAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :=
@@ -43,11 +63,43 @@ def MemoryState.definedAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :
   | some block => block.defined.extractLsb' p.offsetInBits _
   | _ => 0
 
-/-- `p`'s object live (`live`) or dead, its bits undefined either way. -/
+/-- The pointer stored at bit `o` of `b`: its entry while its 64 bits are undefined, else
+poison. -/
+def MemoryBlock.ptrAt (b : MemoryBlock) (o : Nat) : PoisonOr Pointer :=
+  match b.ptrs o with
+  | some q => if b.defined.extractLsb' o 64 = 0 then .value q else .poison
+  | none => .poison
+
+/-- The pointer stored at bit `o` of block `i`; poison if there is no block. -/
+def MemoryState.ptrAt (m : MemoryState) (i : BlockId) (o : Nat) : PoisonOr Pointer :=
+  match m[i]? with
+  | some b => b.ptrAt o
+  | none => .poison
+
+/-- The pointer stored at `p`: what a `load` of a pointer reads. -/
+def MemoryState.loadPtr (m : MemoryState) (p : Pointer) : PoisonOr Pointer :=
+  m.ptrAt p.id p.offsetInBits
+
+/-- `q` recorded as stored at bit `o` of block `i`. -/
+def MemoryState.recordPtr (m : MemoryState) (i : BlockId) (o : Nat) (q : Pointer) : MemoryState :=
+  m.modifyBlock i fun blk => { blk with ptrs := fun o' => if o' = o then some q else blk.ptrs o' }
+
+/-- Store the pointer `q` at `p`: its 64 bits undefined (an integer load of them is poison), `q`
+recorded, the stored pointers it meets dropped. -/
+def MemoryState.storePtr (m : MemoryState) (p : Pointer) (q : Pointer) : MemoryState :=
+  m.modifyBlock p.id fun blk =>
+    { blk with
+      bytes := spliceBits blk.bytes p.offsetInBits 0#64
+      defined := spliceBits blk.defined p.offsetInBits 0#64
+      ptrs := fun o =>
+        if o = p.offsetInBits then some q
+        else MemoryBlock.clearPtrs blk.ptrs p.offsetInBits 0#64 o }
+
+/-- `p`'s object live (`live`) or dead, its bits undefined and its pointers gone either way. -/
 def MemoryState.setLifetime (m : MemoryState) (p : Pointer) (live : Bool) : MemoryState :=
   m.modifyBlock p.id fun blk =>
     { blk with
-      defined := 0, live }
+      defined := 0, live, ptrs := fun _ => none }
 
 /-- `llvm.lifetime.start`: `p`'s object becomes live, its bits undefined. -/
 def MemoryState.lifetimeStart (m : MemoryState) (p : Pointer) : MemoryState :=
@@ -65,14 +117,18 @@ def GlobalState.allocaPtr (s : GlobalState) : Pointer :=
 a `lifetimeStart`. -/
 def GlobalState.alloca (s : GlobalState) (bytes : Nat) (dead : Bool := false) : GlobalState :=
   { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
-    mem := { s.mem with mem := s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead⟩ } }
+    mem :=
+      { s.mem with
+        mem := s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead, fun _ => none⟩ } }
 
 /-- Add a live block of `bytes` bytes under `b`, holding `x` from its start, the rest undefined: an
 `alloca` stored into at once. -/
 def MemoryState.addBlock (m : MemoryState) (b : BlockId) (bytes : Nat) {w : Nat} (x : BitVec w) :
     MemoryState :=
   { m with
-    mem := m.mem.insert b ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true⟩ }
+    mem :=
+      m.mem.insert b
+        ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true, fun _ => none⟩ }
 
 /-- Remove every block with id `n` or above: a returning callee's frame. -/
 def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
@@ -201,8 +257,18 @@ theorem MemoryState.modifyBlock_eraseFrom_of_le {m : MemoryState} (h : n ≤ i.i
 
 /-! ### `storeDef`, `storeAt` -/
 
+/-- A store defining every bit drops no stored pointer. -/
+@[simp]
+theorem MemoryBlock.clearPtrs_allOnes {ptrs : Nat → Option Pointer} :
+    MemoryBlock.clearPtrs ptrs off (BitVec.allOnes w) = ptrs := by
+  simp [MemoryBlock.clearPtrs]
+
 theorem MemoryState.storeAt_eq_storeDef {m : MemoryState} {x : BitVec w} :
-    m.storeAt p x = m.storeDef p x (BitVec.allOnes w) :=
+    m.storeAt p x = m.storeDef p x (BitVec.allOnes w) := by
+  simp [storeAt, storeDef]
+
+theorem MemoryState.storeAt_eq_overlay {m : MemoryState} {x : BitVec w} :
+    m.storeAt p x = m.overlay p x (BitVec.allOnes w) :=
   rfl
 
 theorem MemoryState.getElem?_storeDef_self {m : MemoryState} (h : m[p.id]? = some blk) :
@@ -210,7 +276,8 @@ theorem MemoryState.getElem?_storeDef_self {m : MemoryState} (h : m[p.id]? = som
       some
         { blk with
           bytes := spliceBits blk.bytes p.offsetInBits x
-          defined := spliceBits blk.defined p.offsetInBits d } := by
+          defined := spliceBits blk.defined p.offsetInBits d
+          ptrs := MemoryBlock.clearPtrs blk.ptrs p.offsetInBits d } := by
   simp [storeDef, getElem?_modifyBlock_self, h]
 
 /-- The an existing block is overwritten with `storeAt` -/
@@ -221,8 +288,8 @@ theorem MemoryState.getElem?_storeAt_self {m : MemoryState} {x : BitVec w}
       some
         { blk with
           bytes := spliceBits blk.bytes p.offsetInBits x
-          defined := spliceBits blk.defined p.offsetInBits (BitVec.allOnes w) } :=
-  getElem?_storeDef_self h
+          defined := spliceBits blk.defined p.offsetInBits (BitVec.allOnes w) } := by
+  simp [storeAt, getElem?_modifyBlock_self, h]
 
 theorem MemoryState.getElem?_storeDef_ne {m : MemoryState} {p q : Pointer} (hptr : q.id ≠ p.id) :
     (m.storeDef p x d)[q.id]? = m[q.id]? :=
@@ -232,7 +299,7 @@ theorem MemoryState.getElem?_storeDef_ne {m : MemoryState} {p q : Pointer} (hptr
 @[mlir_mem]
 theorem MemoryState.getElem?_storeAt_ne {m : MemoryState} {p q : Pointer} (hptr : q.id ≠ p.id) :
     (m.storeAt p x)[q.id]? = m[q.id]? :=
-  getElem?_storeDef_ne hptr
+  getElem?_modifyBlock_ne hptr
 
 theorem MemoryState.getElem?_storeDef_isSome {m : MemoryState} {i : BlockId} :
     ((m.storeDef p x d)[i]?).isSome = (m[i]?).isSome := by
@@ -244,8 +311,8 @@ theorem MemoryState.getElem?_storeDef_isSome {m : MemoryState} {i : BlockId} :
 /-- `storeAt` does not change whether an id is allocated or not. -/
 @[mlir_mem]
 theorem MemoryState.getElem?_storeAt_isSome {m : MemoryState} {i : BlockId} :
-    ((m.storeAt p x)[i]?).isSome = (m[i]?).isSome :=
-  getElem?_storeDef_isSome
+    ((m.storeAt p x)[i]?).isSome = (m[i]?).isSome := by
+  rw [storeAt_eq_storeDef]; exact getElem?_storeDef_isSome
 
 @[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeDef_self (hfits : InBounds m p w) (x d : BitVec w) :
@@ -256,8 +323,8 @@ theorem MemoryState.readAt_storeDef_self (hfits : InBounds m p w) (x d : BitVec 
 
 @[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeAt_self (hfits : InBounds m p w) (x : BitVec w) :
-    (m.storeAt p x).readAt p w = x :=
-  readAt_storeDef_self hfits x _
+    (m.storeAt p x).readAt p w = x := by
+  rw [storeAt_eq_storeDef]; exact readAt_storeDef_self hfits x _
 
 theorem MemoryState.definedAt_storeDef_self (hfits : InBounds m p w) (x d : BitVec w) :
     (m.storeDef p x d).definedAt p w = d := by
@@ -265,9 +332,9 @@ theorem MemoryState.definedAt_storeDef_self (hfits : InBounds m p w) (x d : BitV
   unfold MemoryBlock.lengthInBits at hsz
   simp [definedAt, getElem?_storeDef_self hblk, extractLsb'_spliceBits_self, hsz]
 
-/-- Storing what a range holds, defined as it is, changes nothing. -/
-theorem MemoryState.storeDef_readAt_definedAt {m : MemoryState} (h : InBounds m p w) :
-    m.storeDef p (m.readAt p w) (m.definedAt p w) = m := by
+/-- Overlaying what a range holds, defined as it is, changes nothing. -/
+theorem MemoryState.overlay_readAt_definedAt {m : MemoryState} (h : InBounds m p w) :
+    m.overlay p (m.readAt p w) (m.definedAt p w) = m := by
   obtain ⟨blk, hblk, hsz⟩ := h
   have hb : m.mem[p.id]? = some blk := hblk
   unfold MemoryBlock.lengthInBits at hsz
@@ -282,7 +349,7 @@ theorem MemoryState.storeDef_readAt_definedAt {m : MemoryState} (h : InBounds m 
       congr 1
       omega
     · rfl
-  simp only [storeDef, readAt, definedAt, hblk, modifyBlock]
+  simp only [overlay, readAt, definedAt, hblk, modifyBlock]
   refine MemoryState.ext ?_ rfl
   apply Std.ExtHashMap.ext_getElem?
   intro k
@@ -314,8 +381,8 @@ theorem MemoryState.readAt_storeDef_disjoint {v w : Nat} {m : MemoryState}
 @[mlir_mem, mlir_read]
 theorem MemoryState.readAt_storeAt_disjoint {v w : Nat} {m : MemoryState}
     (h : (Range.of p v).Disjoint (Range.of q w)) (x : BitVec v) :
-    (m.storeAt p x).readAt q w = m.readAt q w :=
-  readAt_storeDef_disjoint h x _
+    (m.storeAt p x).readAt q w = m.readAt q w := by
+  rw [storeAt_eq_storeDef]; exact readAt_storeDef_disjoint h x _
 
 theorem MemoryState.definedAt_storeDef_disjoint {v w : Nat} {m : MemoryState}
     (h : (Range.of p v).Disjoint (Range.of q w)) (x d : BitVec v) :
@@ -517,13 +584,14 @@ theorem Room.storeDef_iff {m : MemoryState} {x d : BitVec v} :
 /-- A store keeps every block and its length. -/
 @[simp]
 theorem InBounds.storeAt_iff {m : MemoryState} {x : BitVec v} :
-    InBounds (m.storeAt q x) p w ↔ InBounds m p w :=
-  InBounds.storeDef_iff
+    InBounds (m.storeAt q x) p w ↔ InBounds m p w := by
+  rw [MemoryState.storeAt_eq_storeDef]; exact InBounds.storeDef_iff
 
 /-- A store keeps every block, its length and lifetime. -/
 @[simp]
-theorem Room.storeAt_iff {m : MemoryState} {x : BitVec v} : Room (m.storeAt q x) p w ↔ Room m p w :=
-  Room.storeDef_iff
+theorem Room.storeAt_iff {m : MemoryState} {x : BitVec v} :
+    Room (m.storeAt q x) p w ↔ Room m p w := by
+  rw [MemoryState.storeAt_eq_storeDef]; exact Room.storeDef_iff
 
 @[mlir_mem, mlir_transport]
 theorem InBounds.storeAt (hq : InBounds m p w) : InBounds (m.storeAt q x) p w :=
@@ -678,7 +746,8 @@ theorem Fits.storeDef_of_disjoint (hq : Fits m p w) (hd : (Range.of q v).Disjoin
     refine
       ⟨{ blk with
           bytes := spliceBits blk.bytes q.offsetInBits x
-          defined := spliceBits blk.defined q.offsetInBits d },
+          defined := spliceBits blk.defined q.offsetInBits d
+          ptrs := MemoryBlock.clearPtrs blk.ptrs q.offsetInBits d },
         by
         rw [← h]; exact MemoryState.getElem?_storeDef_self hblk, hl, hsz, ?_⟩
     simp only [Range.Disjoint, Range.of, h, ne_eq, not_true_eq_false, false_or] at hd
@@ -818,7 +887,7 @@ theorem Room.lifetimeStart_self (h : InBounds m p w) : Room (m.lifetimeStart p) 
   obtain ⟨blk, hblk, hsz⟩ := h
   refine
     ⟨{ blk with
-        defined := 0, live := true },
+        defined := 0, live := true, ptrs := fun _ => none },
       ?_, rfl, hsz⟩
   simp [MemoryState.lifetimeStart, MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_self,
     hblk]
@@ -1023,13 +1092,13 @@ theorem Fits.alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
 
 theorem InBounds.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
     InBounds (s.alloca n d).mem s.allocaPtr w := by
-  refine ⟨⟨n, 0, 0, !d⟩, ?_, ?_⟩
+  refine ⟨⟨n, 0, 0, !d, fun _ => none⟩, ?_, ?_⟩
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
 theorem Room.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
     Room (s.alloca n).mem s.allocaPtr w := by
-  refine ⟨⟨n, 0, 0, true⟩, ?_, rfl, ?_⟩
+  refine ⟨⟨n, 0, 0, true, fun _ => none⟩, ?_, rfl, ?_⟩
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
@@ -1146,7 +1215,7 @@ theorem GlobalState.WF.storeAt_allocaPtr {s : GlobalState} (h : s.WF) (hp : p.id
     intro hm
     have := h.bound _ hm
     simp [hp, GlobalState.allocaPtr] at this
-  simp only [MemoryState.storeAt, MemoryState.storeDef, MemoryState.modifyBlock]
+  simp only [MemoryState.storeAt, MemoryState.modifyBlock]
   congr 1
   apply Std.ExtHashMap.ext_getElem?
   intro k
@@ -1160,7 +1229,7 @@ theorem GlobalState.WF.storeAt_allocaPtr {s : GlobalState} (h : s.WF) (hp : p.id
 /-- An `alloca` stored into from its start: the block added with the bits. -/
 theorem GlobalState.alloca_storeAt_allocaPtr {s : GlobalState} {x : BitVec w} :
     (s.alloca n).mem.storeAt s.allocaPtr x = s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x := by
-  simp only [MemoryState.storeAt, MemoryState.storeDef, MemoryState.modifyBlock, GlobalState.alloca,
+  simp only [MemoryState.storeAt, MemoryState.modifyBlock, GlobalState.alloca,
     GlobalState.allocaPtr, MemoryState.addBlock, Pointer.offsetInBits]
   congr 1
   apply Std.ExtHashMap.ext_getElem?

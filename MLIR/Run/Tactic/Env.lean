@@ -190,8 +190,10 @@ def simpPass (only : Bool) (simpArgs : Syntax) (e : Expr) (facts : Array FVarId)
         else
           Simp.getSimprocs,
       ← ({} : Simp.Simprocs).add ``readThroughWrites (post := false), ← memSimprocs c,
-      ← ({} : Simp.Simprocs).add ``gepValue (post := true),
-      ← ({} : Simp.Simprocs).add ``gepBackValue (post := true), ← laneSimprocs]
+      -- one set: each set is looked up at every subterm
+      ← [``gepDynValue, ``gepIntValue, ``gepValue, ``gepBackValue].foldlM
+        (init := ({} : Simp.Simprocs)) fun procs n => procs.add n (post := true),
+      ← laneSimprocs]
   let elaborated ← elabSimpArgs simpArgs ctx procs (eraseLocal := false) (kind := .simp)
   -- `decide` first, also with locals that do not block it (a vector's size); a closed goal it
   -- refutes (registers `r ≠ r`, at each write a read passes) only by a local, else the facts

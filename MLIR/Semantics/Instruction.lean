@@ -99,12 +99,12 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
     pure (env.writeMany rets vs)
   | addressof (t := t) v dst => do
     let x ← v
-    throwUBIf t.hasPtr
     let (b, d) := t.flattenDef x
     modifyGetThe GlobalState fun s =>
         (env.write dst (.value s.allocaPtr),
           let s' := s.alloca ((t.width + 7) / 8) -- Bits to bytes
-          { s' with mem := s'.mem.storeDef s.allocaPtr b d })
+          { s' with
+            mem := (s'.mem.storeDef s.allocaPtr b d).recordPtrs s.allocaPtr (t.ptrLeaves 0 x) })
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/

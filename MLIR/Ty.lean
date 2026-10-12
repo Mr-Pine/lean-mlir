@@ -462,12 +462,25 @@ theorem extractLsb'_flattenRaw_struct_singleton (v : ⟦struct [t]⟧ᵣ) (hw : 
 theorem extractLsb'_flattenRaw_bv (x : ⟦bv l⟧ᵣ) :
     (flattenRaw (bv l) x).extractLsb' s w = x.extractLsb' s w := by rfl
 
+mutual
+/-- Whether a value of `t` holds a pointer. Structural, so `decide` and the kernel evaluate it. -/
 @[expose, simp]
 def hasPtr : Ty → Bool
   | ptr => true
   | bv _ | vec _ _ => false
   | array _ t => t.hasPtr
-  | struct fs => fs.attach.any fun ⟨t, _⟩ => t.hasPtr -- or a mutual hasPtrFields
+  | struct fs => hasPtrFields fs
+/-- Whether one of the fields `fs` holds a pointer. -/
+@[expose, simp]
+def hasPtrFields : List Ty → Bool
+  | [] => false
+  | t :: ts => t.hasPtr || hasPtrFields ts
+end
+
+@[simp]
+theorem hasPtrFields_eq_false {fs : List Ty} :
+    hasPtrFields fs = false ↔ ∀ t ∈ fs, t.hasPtr = false := by
+  induction fs <;> simp_all
 
 theorem hasPtr_bv : (bv w).hasPtr = false := by simp [hasPtr]
 
@@ -904,6 +917,190 @@ theorem unflattenDefFields_allOnes :
           simp only [fieldsWidth]; omega),
       unflattenDef_allOnes, unflattenDefFields_allOnes]
 end
+
+/-! ### Stored pointers: the pointer leaves a store records and a load reads -/
+
+mutual
+/-- The pointer leaves holding a pointer, by their bit offsets from `off`: what a store records. -/
+@[expose]
+def ptrLeaves : (t : Ty) → Nat → ⟦t⟧ → List (Nat × Pointer)
+  | bv _, _, _ => []
+  | vec _ _, _, _ => []
+  | ptr, off, x =>
+    match x with
+    | .value q => [(off, q)]
+    | .poison => []
+  | array _ t, off, v => v.toList.zipIdx.flatMap fun (x, i) => ptrLeaves t (off + i * t.stride) x
+  | struct fs, off, v => ptrLeavesFields off 0 (fieldsAlign fs) fs v
+/-- `ptrLeaves` of fields `ts` laid out from bit `off` of a struct at bit `base`. -/
+@[expose]
+def ptrLeavesFields (base off a : Nat) : (ts : List Ty) → denoteFields ts → List (Nat × Pointer)
+  | [], _ => []
+  | [t], x => ptrLeaves t (base + off) x
+  | t :: t' :: ts, (x, xs) =>
+    ptrLeaves t (base + off) x ++
+      ptrLeavesFields base (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a
+        (t' :: ts) xs
+end
+
+mutual
+/-- `v` with each pointer leaf `P` of its bit offset from `off`: a load's stored pointers. -/
+@[expose]
+def setPtrs : (t : Ty) → Nat → (Nat → PoisonOr Pointer) → ⟦t⟧ → ⟦t⟧
+  | bv _, _, _, x => x
+  | vec _ _, _, _, x => x
+  | ptr, off, P, _ => P off
+  | array _ t, off, P, v => v.mapIdx fun i x => setPtrs t (off + i * t.stride) P x
+  | struct fs, off, P, v => setPtrsFields off 0 (fieldsAlign fs) fs P v
+/-- `setPtrs` of fields `ts` laid out from bit `off` of a struct at bit `base`. -/
+@[expose]
+def setPtrsFields (base off a : Nat) :
+    (ts : List Ty) → (Nat → PoisonOr Pointer) → denoteFields ts → denoteFields ts
+  | [], _, v => v
+  | [t], P, x => setPtrs t (base + off) P x
+  | t :: t' :: ts, P, (x, xs) =>
+    (setPtrs t (base + off) P x,
+      setPtrsFields base (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a
+        (t' :: ts) P xs)
+end
+
+mutual
+/-- A type without pointers has no pointer leaves. -/
+theorem ptrLeaves_of_hasPtr :
+    ∀ {t : Ty} {off : Nat} {v : ⟦t⟧}, t.hasPtr = false → t.ptrLeaves off v = []
+  | bv _, _, _, _ => rfl
+  | vec _ _, _, _, _ => rfl
+  | ptr, _, _, h => by simp [hasPtr] at h
+  | array _ t, _, _, h => by
+    simp only [ptrLeaves, List.flatMap_eq_nil_iff]
+    intro x _
+    exact ptrLeaves_of_hasPtr (by simpa [hasPtr] using h)
+  | struct _, _, _, h => ptrLeavesFields_of_hasPtr (by simpa [hasPtr] using h)
+theorem ptrLeavesFields_of_hasPtr :
+    ∀ {base off a : Nat} {ts : List Ty} {v : denoteFields ts},
+      (∀ t ∈ ts, t.hasPtr = false) → ptrLeavesFields base off a ts v = []
+  | _, _, _, [], _, _ => rfl
+  | _, _, _, [t], _, h => ptrLeaves_of_hasPtr (h t (by simp))
+  | _, _, _, t :: _ :: _, (_, _), h => by
+    simp only [ptrLeavesFields, ptrLeaves_of_hasPtr (h t (by simp)), List.nil_append]
+    exact ptrLeavesFields_of_hasPtr fun t' h' => h t' (List.mem_cons_of_mem _ h')
+end
+
+mutual
+/-- A type without pointers: `setPtrs` changes nothing. -/
+theorem setPtrs_of_hasPtr :
+    ∀ {t : Ty} {off : Nat} {P : Nat → PoisonOr Pointer} {v : ⟦t⟧},
+      t.hasPtr = false → t.setPtrs off P v = v
+  | bv _, _, _, _, _ => rfl
+  | vec _ _, _, _, _, _ => rfl
+  | ptr, _, _, _, h => by simp [hasPtr] at h
+  | array _ t, _, _, _, h => by
+    simp only [setPtrs]
+    ext i hi
+    rw [Vector.getElem_mapIdx, setPtrs_of_hasPtr (by simpa [hasPtr] using h)]
+  | struct _, _, _, _, h => setPtrsFields_of_hasPtr (by simpa [hasPtr] using h)
+theorem setPtrsFields_of_hasPtr :
+    ∀ {base off a : Nat} {ts : List Ty} {P : Nat → PoisonOr Pointer} {v : denoteFields ts},
+      (∀ t ∈ ts, t.hasPtr = false) → setPtrsFields base off a ts P v = v
+  | _, _, _, [], _, _, _ => rfl
+  | _, _, _, [t], _, _, h => setPtrs_of_hasPtr (h t (by simp))
+  | _, _, _, t :: _ :: _, _, (_, _), h => by
+    simp only [setPtrsFields, setPtrs_of_hasPtr (h t (by simp)),
+      setPtrsFields_of_hasPtr fun t' h' => h t' (List.mem_cons_of_mem _ h')]
+end
+
+/-! ### A value's bits as a number: what the kernel evaluates for a global's image -/
+
+/-- Lanes of `we` bits as one number, the first lowest. -/
+@[expose]
+def packNat (we : Nat) : List Nat → Nat
+  | [] => 0
+  | x :: xs => packNat we xs <<< we ||| x
+
+theorem _root_.Vector.toList_eq_cons_tail {α : Type _} {n : Nat} (v : Vector α (n + 1)) :
+    v.toList = v[0] :: v.tail.toList := by
+  apply List.ext_getElem
+  · simp
+  · intro i _ _
+    cases i with
+    | zero => simp
+    | succ i => simp [Nat.add_comm]
+
+/-- A packed vector's bits as a number: `packNat` of its lanes'. -/
+theorem _root_.BitVec.toNat_packLanes {we : Nat} :
+    ∀ {n : Nat} (v : Vector (BitVec we) n),
+      (BitVec.packLanes v).toNat = packNat we (v.toList.map BitVec.toNat)
+  | 0, v => by
+    have : v.toList = [] := by simp
+    simp [BitVec.packLanes, this, packNat]
+  | n + 1, v => by
+    rw [Vector.toList_eq_cons_tail, List.map_cons, packNat, ← BitVec.toNat_packLanes v.tail]
+    rw [BitVec.packLanes, BitVec.toNat_append]
+
+mutual
+/-- `flattenRaw`'s bits as a number, lanes through lists: `Vector.tail`'s copies, which make the
+kernel's evaluation of `packLanes` quadratic, avoided. -/
+@[expose]
+def flattenNat : (t : Ty) → ⟦t⟧ᵣ → Nat
+  | bv _, x => x.toNat
+  | ptr, _ => 0
+  | vec _ w, v => packNat w (v.toList.map BitVec.toNat)
+  | array _ t, v => packNat (padding t.width t.align + t.width) (v.toList.map (flattenNat t))
+  | struct fields, v => flattenNatFields 0 (fieldsAlign fields) fields v
+/-- `flattenNat` of fields `ts` from bit `off`. -/
+@[expose]
+def flattenNatFields (off a : Nat) : (ts : List Ty) → denoteFieldsRaw ts → Nat
+  | [], _ => 0
+  | [t], v => flattenNat t v
+  | t :: t' :: ts, (x, xs) =>
+    flattenNatFields (off + (padding (off + t.width) (max t.align t'.align) + t.width)) a (t' :: ts)
+          xs <<<
+        (padding (off + t.width) (max t.align t'.align) + t.width) |||
+      flattenNat t x
+end
+
+/-- Zeros above bits `y`: `y`'s number. -/
+theorem _root_.BitVec.toNat_zero_append {p w : Nat} (y : BitVec w) :
+    (0#p ++ y).toNat = y.toNat := by
+  simp [BitVec.toNat_append]
+
+mutual
+theorem toNat_flattenRaw : ∀ {t : Ty} (v : ⟦t⟧ᵣ), (flattenRaw t v).toNat = flattenNat t v
+  | bv _, _ => rfl
+  | ptr, _ => by simp [flattenRaw, flattenNat]
+  | vec _ _, v => BitVec.toNat_packLanes v
+  | array _ t, v => by
+    rw [flattenRaw]
+    erw [BitVec.toNat_packLanes]
+    rw [flattenNat, Vector.toList_map, List.map_map]
+    congr 1
+    apply List.map_congr_left
+    intro x _
+    simp only [Function.comp_apply, BitVec.toNat_zero_append, toNat_flattenRaw]
+  | struct _, v => toNat_flattenRawFields v
+theorem toNat_flattenRawFields :
+    ∀ {off a : Nat} {ts : List Ty} (v : denoteFieldsRaw ts),
+      (flattenRawFields off a ts v).toNat = flattenNatFields off a ts v
+  | _, _, [], _ => rfl
+  | _, _, [_], v => by
+    rw [flattenRawFields, flattenNatFields]
+    erw [BitVec.toNat_zero_append]
+    rw [toNat_flattenRaw]
+  | _, _, _ :: _ :: _, (x, xs) => by
+    rw [flattenRawFields, flattenNatFields]
+    erw [BitVec.toNat_append, BitVec.toNat_zero_append]
+    rw [toNat_flattenRaw, toNat_flattenRawFields]
+end
+
+/-- A value's bits and definedness as literals `B`, `D` at its width `w`, by `flattenNat`: what
+`step_addressof` has the kernel evaluate. -/
+theorem flattenDef_eq_ofNat {t : Ty} {x : ⟦t⟧} {w B D : Nat} (hw : t.width = w)
+    (hb : flattenNat t (valueOrZero t x) = B) (hd : flattenNat t (definedness t x) = D) :
+    t.flattenDef x = ((BitVec.ofNat w B).cast hw.symm, (BitVec.ofNat w D).cast hw.symm) := by
+  subst hw hb hd
+  simp only [flattenDef, BitVec.cast_eq, Prod.mk.injEq]
+  constructor <;> apply BitVec.eq_of_toNat_eq <;>
+    rw [BitVec.toNat_ofNat, ← toNat_flattenRaw, Nat.mod_eq_of_lt (BitVec.isLt _)]
 
 end FlattenUnflatten
 

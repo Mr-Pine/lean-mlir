@@ -59,7 +59,10 @@ Every step simplifies the value it writes (or the operation it runs) in passes:
 4. vector lanes `#v[.value x, …]` to `Ty.wrap #v[x, …]`; literal vectors equal to an `mlir_const`
    constant become that constant.
 
-Simprocs in these passes: `gepValue` (`gep (.value off) (.value p)` to `.value (p.add off)` when
+Simprocs in these passes: `gepDynValue` (a dynamic `gep` by a value index: its unsigned reading
+`gep (byteOff + i.toNat * stride)`, `gep i` for byte strides, simplified as the step does; when
+that is poison, `gepInt` of the signed offset, which `gepIntValue` resolves from the offsets'
+facts: a `gep` back by a negative index; unresolved, left for a later pass), `gepValue` (`gep (.value off) (.value p)` to `.value (p.add off)` when
 `p.offset + off` provably does not wrap: by the offsets' facts, a no-overflow fact
 `¬p.offset.uaddOverflow c` for a literal `c ≥ off`, or `omega` with the offsets' values
 (`x.offset = 0`) in, a `% 2 ^ 64` it shows is below the modulus dropped first: a symbolic index
@@ -152,14 +155,19 @@ operation (`add nsw`, `shl nuw`, …) whose overflow test does not simplify stay
 be poison") and `Fits S.mem q w` (the `w` bits known: live, in bounds, defined) by `mem_fact`,
 else `simp_all`. The loaded value is `S₀.mem.readAt q w` as the memory simprocs resolve it (a
 stored value, or a read of `S₀`). A load of bits not known to be defined (an uninitialized slot,
-a dead object, a struct's padding) is poison: no `Fits`, the step fails.
+a dead object, a struct's padding) is poison: no `Fits`, the step fails. A load of a pointer
+(`run_loadPtr`) needs `InBounds S.mem q 64`; its value is `S.mem.loadPtr q`, the pointer stored at
+`q` while its 64 bits stay undefined (a store over any of them, `lifetime.start`, drops it), by a
+read fact `hread_<q> : S.mem.loadPtr q = .value p` (`step_store`'s, or the theorem's).
 
 ### `step_store [only] [args] [consuming …]`
 
 `store v, p`. Needs `p` and `v` as `.value _`, `Room S.mem q w` (live, in bounds: a `Fits` fact
 gives it), `v`'s bits by `dsimp; try simp; rfl` (fails when the value is still an `if`/poison),
 and its type without padding by `decide` (`run_store`; a padded struct or a value with poison
-leaves stores partly undefined bits, `run_storeDef`, which no step takes). New facts:
+leaves stores partly undefined bits, `run_storeDef`, which no step takes). A pointer
+(`run_storePtr`, `Room S.mem q 64`) stores undefined bits and records the pointer:
+`hread_<q> : S.mem.loadPtr q = .value p`. New facts:
 `hfits_<p> : Fits S.mem p w` (the stored bits are known; named as the read-backs) unless a `Fits`
 fact says it already;
 `hread_<p> : S.mem.readAt p w = v` for a local pointer `p`, `hread_<p>_<k>` for `p.add k#64`,
@@ -228,12 +236,15 @@ are restated about `x` and named `<fact>_<x>`. Slots of one state are told apart
 
 `%k = llvm.mlir.addressof @g`. `hv : ∀ s, g.value s = .value (Ty.wrap r, s)` (proved by
 `GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩`), `g`'s type without
-padding (`decide`). Like `step_alloca`, and the new block holds `r`'s bits: `h<x>_room` for its
-bytes, `h<x>_fits : Fits S.mem x w`, `hread_<x> : S.mem.readAt x w = Ty.flatBits …`. A global with
-`undef` members has `hv : ∀ s, g.value s = .value (v, s)` for its value `v` with poison leaves
-(`(.value 7, .poison)`): the block stores `v`'s bits masked by their definedness, both literals
-(`run_addressof_def`, by `decide +kernel`); `h<x>_room`, `h<x>_fits(_k) : Fits S.mem (x.add k) w`
-for each run of defined bits from a byte, `hread_<x>` of all the bits.
+pointers and padding (by the kernel). Like `step_alloca`, and the new block holds `r`'s bits:
+`h<x>_room` for its bytes, `h<x>_fits : Fits S.mem x w`, `hread_<x> : S.mem.readAt x w = Ty.flatBits
+…`. A global with `undef` members (or pointer members, which a folded initializer holds undefined)
+has `hv : ∀ s, g.value s = .value (v, s)` for its value `v` with poison leaves
+(`(.value 7, .poison)`), or `hv` is the global `g` itself: its value is read off its block and `hv`
+left to the kernel. The block stores `v`'s bits masked by their definedness, both literals the
+kernel evaluates (`run_addressof_def`, `Ty.flattenDef_eq_ofNat`: seconds for a 21504-bit table);
+`h<x>_room`, `h<x>_fits(_k) : Fits S.mem (x.add k) w` for each run of defined bits from a byte (the
+mask's bits checked by the kernel, no `exponentiation.threshold`), `hread_<x>` of all the bits.
 
 ### `step_pattern using h [names]`
 

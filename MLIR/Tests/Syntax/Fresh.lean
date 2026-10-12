@@ -233,10 +233,10 @@ example (m : MemoryState) (p : Pointer) (x : BitVec 4096) (h : Room m p 4096) :
     Fits (m.storeAt p x) p 64 := by
   mem_fact
 
--- storing what a range holds changes nothing
+-- overlaying what a range holds changes nothing
 example (m : MemoryState) (p : Pointer) (h : InBounds m p 64) :
-    m.storeDef p (m.readAt p 64) (m.definedAt p 64) = m :=
-  MemoryState.storeDef_readAt_definedAt h
+    m.overlay p (m.readAt p 64) (m.definedAt p 64) = m :=
+  MemoryState.overlay_readAt_definedAt h
 
 /-! ## Copies of partly defined objects -/
 
@@ -307,6 +307,20 @@ example (s : GlobalState) (hwf : s.WF) :
   step_addressof half.value_eq with g
   guard_hyp hg_room : Room S.mem g 128
   guard_hyp hg_fits : Fits S.mem g 64
+  step_load with v
+  finish_block
+  subst hS
+  erase_frame
+  subst hv
+  rfl
+
+-- the same from the global itself, its value read off its block
+example (s : GlobalState) (hwf : s.WF) :
+    readHalf.call readHalf.args s =
+      .value (.cons (.value 7#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+  func_init
+  block_init
+  step_addressof half with g
   step_load with v
   finish_block
   subst hS

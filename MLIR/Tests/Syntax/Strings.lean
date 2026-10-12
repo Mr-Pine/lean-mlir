@@ -97,10 +97,12 @@ private def readGreetingOut (i : BitVec 64) : Option ⟦Ty.bv 32⟧ :=
   | .value (some (.cons v .nil), _) => v == Ty.wrap (t := .array 2 (.bv 8)) #v[0x57, 0]
   | _ => false)
 
--- a global holding a pointer: taking its address is UB
+-- a global holding a pointer: its block, the pointer undefined, line and column loaded
 #guard (match readLocation.eval 1 .nil ⟨⟨1⟩, ⟨∅⟩⟩ with
-  | .value _ => false
-  | _ => true)
+  | .value (some (.cons (.value l) .nil), s) =>
+    s.mem.loadPtr l == .poison && s.mem.definedAt l 64 == 0 &&
+      s.mem.readAt (l.add 8) 64 == 0x000000DD00000057 && s.mem.definedAt (l.add 8) 64 == -1
+  | _ => false)
 
 #guard (match readPad.eval 1 .nil ⟨⟨1⟩, ⟨∅⟩⟩ with
   | .value (some (.cons v .nil), _) => v == .value 0x80

@@ -50,7 +50,11 @@ GEP `inbounds`, `mustprogress`/`willreturn`; `volatile` (the access is a plain o
 conditions kept: one thread, no memory-mapped I/O). The importer itself drops `icmp samesign`,
 `initializes`, `captures` and intrinsic call attributes. A `fence` is nothing and an atomic access
 a plain one (one thread); `ptrtoaddr`/`ptrtoint` read `S.mem.addr`, unconstrained block
-addresses; `asm("" : "+r"(x))` is `x`; `undef` is poison.
+addresses; `asm("" : "+r"(x))` is `x`; `undef` is poison. A pointer stored in memory is recorded
+by its block and offset, its bits undefined (an integer load of them is poison); `memcpy` copies
+the bits, not the pointer (a load of the copy is poison: less defined than LLVM). A dynamic `gep`
+reads its index unsigned where that offset stays in `[0, 2 ^ 64)`, else signed (`gepInt`), poison
+where neither does.
 
 Build the lifts before opening proofs that import them. Never copy lifts from another project:
 lift from the canonicalized regions, which each lift's first line names.
