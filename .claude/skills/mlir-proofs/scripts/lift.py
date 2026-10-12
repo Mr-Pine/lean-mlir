@@ -4,9 +4,10 @@
         --prefix <Lib>.Ref.Mlir --ns MLIR.<Lib>.Ref fd_ed25519_verify
 
 writes `<out>/<f>.lean` for each `f` and every function and global it reaches, from
-`<src>/<impl>/op/<f>.mlir`. Each file quotes its `"llvm.func"` or `"llvm.mlir.global"` op
-verbatim, binds every callee and global (`with @f := f`), and is `noncomputable` when it
-reaches a table or a function too long for the code generator.
+`<src>/<impl>/op/<f>.mlir` (or the op file whose `sym_name` is `f`: the extractor hashes names
+over 200 characters, `<first 100>-<sha1[:12]>.mlir`). Each file quotes its `"llvm.func"` or
+`"llvm.mlir.global"` op verbatim, binds every callee and global (`with @f := f`), and is
+`noncomputable` when it reaches a table or a function too long for the code generator.
 
 With `--share-from ref --share-prefix <Lib>.Ref.Mlir --share-ns Ref`, a function whose op equals
 one of the other implementation's is bound to that lift instead (and `--all` skips it); the other
@@ -52,13 +53,38 @@ if not args.ops and not (args.src and args.impl):
 
 def external(f):
     """A callee with no body here: an external declaration (assembly, say)."""
-    return not os.path.exists(f'{SRC}/{f}.mlir')
+    return op_path(f) is None
 SRC = os.path.expanduser(args.ops) if args.ops else os.path.join(os.path.expanduser(args.src), args.impl, 'op')
 # the header names the op file from the build directory on, as the lifts quote it
 HDR = args.header or (SRC[SRC.index('build/'):] if 'build/' in SRC else SRC)
 
+# the extractor's file name for a symbol over 200 characters: its first 100, `-`, 12 hex digits
+HASHED = re.compile(r'.{100}-[0-9a-f]{12}')
+INDEX = {}
+
+def sym_of(src, stem):
+    """The symbol of `src`'s op file `<stem>.mlir`: `stem`, or a hashed one's `sym_name`."""
+    if not HASHED.fullmatch(stem):
+        return stem
+    op = re.search(r'^"llvm\.(?:func|mlir\.global)"\(\).*', open(f'{src}/{stem}.mlir').read(), re.M)
+    return re.search(r'sym_name = "([^"]+)"', op[0])[1]
+
+def op_path(f, src=None):
+    """`f`'s op file in `src`: `<f>.mlir`, else the hashed one whose `sym_name` is `f`, if any."""
+    src = src or SRC
+    if os.path.exists(f'{src}/{f}.mlir'):
+        return f'{src}/{f}.mlir'
+    if src not in INDEX:
+        INDEX[src] = {sym_of(src, fn[:-5]): f'{src}/{fn}' for fn in os.listdir(src)
+                      if fn.endswith('.mlir') and HASHED.fullmatch(fn[:-5])}
+    return INDEX[src].get(f)
+
+def op_syms(src):
+    """The symbols of `src`'s op files."""
+    return [sym_of(src, fn[:-5]) for fn in os.listdir(src) if fn.endswith('.mlir')]
+
 def region(f, src=None):
-    return open(f'{src or SRC}/{f}.mlir').read().rstrip('\n')
+    return open(op_path(f, src)).read().rstrip('\n')
 
 # `Translate.funcAttrUses`' inert and ignored function attributes, `passthroughUses`' entries
 INERT = {'CConv', 'linkage', 'visibility_', 'dso_local', 'unnamed_addr', 'no_inline', 'inline_hint',
@@ -145,7 +171,7 @@ def deps(f, src=None):
     calls = set()
     for line in s.splitlines():
         m = re.search(r'callee = @([A-Za-z_0-9.]+)', line)
-        lib = m and m[1] in LIBFUNCS and not os.path.exists(f'{src or SRC}/{m[1]}.mlir')
+        lib = m and m[1] in LIBFUNCS and op_path(m[1], src) is None
         if m and not lib and not re.search(r'[{,] noreturn[,}]', line):
             calls.add(m[1])
     globs = sorted(set(re.findall(r'global_name = @([A-Za-z_0-9.]+)', s)))
@@ -253,11 +279,11 @@ def names(syms):
 
 def all_syms(src=None):
     src = src or SRC
-    here = [f[:-5] for f in os.listdir(src) if f.endswith('.mlir')]
+    here = op_syms(src)
     ext = set()
     for f in here:
         c, _ = deps(f, src)
-        ext |= {d for d in c if not os.path.exists(f'{src}/{d}.mlir')}
+        ext |= {d for d in c if op_path(d, src) is None}
     return here + sorted(ext)
 
 def lean(f):
@@ -314,7 +340,7 @@ def write(f, seen):
     cmd = ('noncomputable ' if nc(f) else '') + ('mlir_const_def' if glob else 'mlir_def')
     dm = [f'-- {DEMANGLED[f]}'] if DEMANGLED.get(f, f) != f else []
     lines = ['module', '',
-             f'-- {HDR}/{f}.mlir'] + dm + ['',
+             f'-- {HDR}/{os.path.basename(op_path(f))}'] + dm + ['',
              f'public import MLIR.Semantics.{base}',
              'public import MLIR.Syntax.Elab']
     lines += [f'public import {i}' for i in imps]
@@ -331,9 +357,8 @@ NAMES, DEMANGLED = names(all_syms())
 if args.share_from or args.share_ops:
     OTHER_NAMES = names(all_syms(other_dir()))[0]
     OTHER_OPS = {g: norm(region(g, other_dir())) for g in OTHER_NAMES
-                 if os.path.exists(f'{other_dir()}/{g}.mlir')}
+                 if op_path(g, other_dir())}
 seen = set()
-funcs = sorted(f[:-5] for f in os.listdir(SRC) if f.endswith('.mlir') and not shared(f[:-5])) \
-    if args.all else args.funcs
+funcs = sorted(f for f in op_syms(SRC) if not shared(f)) if args.all else args.funcs
 for f in funcs:
     write(f, seen)
