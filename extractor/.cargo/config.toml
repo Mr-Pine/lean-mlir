@@ -1,0 +1,3 @@
+[env]
+MLIR_SYS_230_PREFIX = "/home/david.intern/.local/llvm-23/mlir-sys"
+TABLEGEN_230_PREFIX = "/home/david.intern/.local/llvm-23/mlir-sys"
