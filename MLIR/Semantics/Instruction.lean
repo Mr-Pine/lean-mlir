@@ -98,14 +98,10 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | call f args rets => do
     let vs ← f (args.read env)
     pure (env.writeMany rets vs)
-  | addressof (t := t) v dst => do
-    let x ← v
-    let (b, d) := t.flattenDef x
-    modifyGetThe GlobalState fun s =>
-        (env.write dst (.value s.allocaPtr),
-          let s' := s.alloca ((t.width + 7) / 8) -- Bits to bytes
-          { s' with
-            mem := (s'.mem.storeDef s.allocaPtr b d).recordPtrs s.allocaPtr (t.ptrLeaves 0 x) })
+  | addressof sym dst => do
+    let s ← get
+    let some (b, _) := s.mem.globals sym | throwUB
+    pure (env.write dst (.value ⟨b, 0⟩))
 
 /-- Jump to `jump.target`: read all arguments in `env` first, then write them into the target's
 parameters `params jump.target`, so `br ^bb1(%b, %a)` swaps. -/

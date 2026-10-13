@@ -30,7 +30,7 @@ mlir_def put :=
 
 -- a consumed fact the store's state cannot carry (`hm`) is no goal
 example (p : Pointer) (x : BitVec 64) (s : GlobalState) (m : MemoryState) (hwf : s.WF)
-    (hp : Fits s.mem p 64) (hm : m = s.mem) :
+    (hp : Room s.mem p 64) (hm : m = s.mem) :
     put.call (put.args (.value p) (.value x)) s =
       .value (.nil, { s with mem := s.mem.storeAt p x }) := by
   func_init
@@ -41,7 +41,7 @@ example (p : Pointer) (x : BitVec 64) (s : GlobalState) (m : MemoryState) (hwf :
 
 -- an equation about the state that the store cannot carry stays about the state before it
 example (p : Pointer) (x : BitVec 64) (b : Nat) (s : GlobalState) (hwf : s.WF)
-    (hp : Fits s.mem p 64) :
+    (hp : Room s.mem p 64) :
     put.call (put.args (.value p) (.value x)) s =
       .value (.nil, { s with mem := s.mem.storeAt p x }) := by
   func_init
@@ -49,6 +49,17 @@ example (p : Pointer) (x : BitVec 64) (b : Nat) (s : GlobalState) (hwf : s.WF)
   have hm : S.mem.eraseFrom b = S₀.mem.eraseFrom b := by rw [hS]
   step_store
   guard_hyp hm : S₀.mem.eraseFrom b = S₀.mem.eraseFrom b
+  finish_block
+  rw [hS]
+
+-- a store into known bits of a writable block: its `Room`, from `Fits` and `Writable`
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
+    (hw : Writable s.mem p) :
+    put.call (put.args (.value p) (.value x)) s =
+      .value (.nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  block_init
+  step_store
   finish_block
   rw [hS]
 
@@ -116,7 +127,7 @@ mlir_def copy :=
     "llvm.return"() : () -> ()
 }
 
-theorem copy.call_eq (r a : Pointer) (s : GlobalState) (hwf : s.WF) (hr : Fits s.mem r 64)
+theorem copy.call_eq (r a : Pointer) (s : GlobalState) (hwf : s.WF) (hr : Room s.mem r 64)
     (ha : Fits s.mem a 64) :
     copy.call (copy.args (.value r) (.value a)) s =
       .value (.nil, { s with mem := s.mem.storeAt r (s.mem.readAt a 64) }) := by
@@ -137,8 +148,8 @@ mlir_def copyTwice :=
 } with @copy := copy
 
 -- a call's stored value that is a read with a fact is read back: the second call reads `x`
-example (r a q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hr : Fits s.mem r 64)
-    (ha : Fits s.mem a 64) (hq : Fits s.mem q 64)
+example (r a q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hr : Room s.mem r 64)
+    (ha : Fits s.mem a 64) (hq : Room s.mem q 64)
     (hx : s.mem.readAt a 64 = x) :
     copyTwice.call (copyTwice.args (.value r) (.value a) (.value q)) s =
       .value (.nil, { s with mem := (s.mem.storeAt r x).storeAt q x }) := by
@@ -161,7 +172,7 @@ mlir_def jump :=
 
 /-- The entry block, its exit's env and state given to a continuation. -/
 theorem jump.entry (p : Pointer) (x : BitVec 64) (S : GlobalState) (E : ⟪jump.Γ⟫)
-    (hArgs : E.args = (jump.args (.value p) (.value x)).get) (hwf : S.WF) (hp : Fits S.mem p 64)
+    (hArgs : E.args = (jump.args (.value p) (.value x)).get) (hwf : S.WF) (hp : Room S.mem p 64)
     (K : PoisonOr (Vals [] × GlobalState))
     (hK :
       ∀ (E' : ⟪jump.Γ⟫) (S' : GlobalState), E'.args = (jump.args (.value p) (.value x)).get →
@@ -173,7 +184,7 @@ theorem jump.entry (p : Pointer) (x : BitVec 64) (S : GlobalState) (E : ⟪jump.
   step_loop using hK
 
 -- a continuation's state binder keeps its name; the args fact is `hArgs₀`
-example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64) :
     jump.call (jump.args (.value p) (.value x)) s =
       .value (.nil, { s with mem := s.mem.storeAt p x }) := by
   func_init
@@ -196,7 +207,7 @@ theorem Holds.storeAt {m : MemoryState} {p q : Pointer} {x y : BitVec 64} (h : H
 attribute [local mlir_transport] Holds.storeAt
 
 -- a transport lemma's `≠` premise from a `Nodup` fact
-example (p q : Pointer) (x y : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
+example (p q : Pointer) (x y : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64)
     (hq : Holds s.mem q y) (_hnd : [p.id, q.id].Nodup) :
     put.call (put.args (.value p) (.value x)) s =
       .value (.nil, { s with mem := s.mem.storeAt p x }) := by
@@ -220,8 +231,8 @@ trace: [rir] read fact hread_p dropped (a write not known to miss it):
 -/
 #guard_msgs in
 set_option trace.rir true in
-example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
-    (hq : Fits s.mem q 64) :
+example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64)
+    (hq : Room s.mem q 64) :
     put2.call (put2.args (.value p) (.value q) (.value x)) s =
       .value (.nil, { s with mem := (s.mem.storeAt p x).storeAt q x }) := by
   func_init
@@ -243,7 +254,7 @@ attribute [local mlir_state] storeAt_storeAt_both
 
 -- an `mlir_state` lemma over two writes merges a store with the one below it in `hS`
 example (p q : Pointer) (x : BitVec 64) (s : GlobalState) (E : ⟪put2.Γ⟫) (hwf : s.WF)
-    (hp : Fits s.mem p 64) (hq : Fits s.mem q 64)
+    (hp : Room s.mem p 64) (hq : Room s.mem q 64)
     (hArgs : E.args = (put2.args (.value p) (.value q) (.value x)).get) :
     put2.runFrom E 0 s = .value (.nil, { s with mem := storeBoth s.mem p q x }) := by
   block_init
@@ -402,11 +413,12 @@ theorem answer.value_eq (s : GlobalState) : answer.value s = .value (Ty.wrap 42#
   GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩
 
 -- a load below a frame's new blocks: by the entry facts about `S₀` that `func_init` keeps
-example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hg : s.mem.Globals frameLoad.globals)
+    (hp : Fits s.mem p 64) :
     frameLoad.call (frameLoad.args (.value p)) s =
       .value
         (.cons (.value (s.mem.readAt p 64)) .nil,
-          { s with alloc := ⟨s.alloc.nextFreeBlock + 2⟩ }) := by
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
   func_init
   block_init
   step_pure

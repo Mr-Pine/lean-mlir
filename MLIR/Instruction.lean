@@ -115,7 +115,8 @@ inductive Instr (Γ : Ctx)
   | assume (c : Reg Γ (.bv 1))
   /-- The semantics of the calle `f` should generally be `Func.call` -/
   | call {ts us : List Ty} (f : Vals ts → EffectM (Vals us)) (args : Regs Γ ts) (rets : Dsts Γ us)
-  | addressof {t : Ty} (v : EffectM ⟦t⟧) (dst : Dst Γ .ptr)
+  /-- `llvm.mlir.addressof @sym`: the address of the global `sym`'s block, UB if there is none. -/
+  | addressof (sym : String) (dst : Dst Γ .ptr)
 
 /-- A jump to block `target`, with one argument per parameter of the target (`blockTys target`). -/
 structure Jump (Γ : Ctx) (blockTys : Fin n → List Ty) where

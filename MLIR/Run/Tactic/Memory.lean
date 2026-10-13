@@ -354,10 +354,15 @@ def slotPtr? (p : Expr) : Option Expr := do
   let (b, k) ← counterBase? p.appArg!
   return mkApp2 (mkConst ``GlobalState.slot) b (mkNatLit k)
 
-/-- The memory predicates, weakest first: `InBounds`, `Room`, `Fits`; a stronger fact gives the
-weaker ones. -/
+/-- The memory predicates: `InBounds`, `Room`, `Fits`, `Live`; a fact gives those `kindImplies`
+names, and `Fits` gives `Room` in a writable block (`Fits.room`). -/
 def memPreds : Array Name :=
-  #[``InBounds, ``Room, ``Fits]
+  #[``InBounds, ``Room, ``Fits, ``Live]
+
+/-- Whether a fact of kind `k` gives kind `j` (`memPreds`): `InBounds` from any, `Live` from
+`Room` and `Fits`. -/
+def kindImplies (k j : Nat) : Bool :=
+  k == j || j == 0 || (j == 3 && (k == 1 || k == 2))
 
 /-- A natural number literal, raw or `OfNat.ofNat`. -/
 def natLit? (e : Expr) : Option Nat :=
@@ -390,14 +395,15 @@ def memPred? (ty : Expr) : Option (Nat × Expr × Expr × Expr) := do
   let k ← memPreds.findIdx? (ty.isAppOfArity · 3)
   return (k, ty.getArg! 0, canonPtr (ty.getArg! 1), ty.getArg! 2)
 
-/-- `pf`, a memory predicate of kind `k`, weakened to kind `j ≤ k`. -/
+/-- `pf`, a memory predicate of kind `k`, weakened to kind `j` (`kindImplies k j`). -/
 def weakenMemPred (pf : Expr) (k j : Nat) : MetaM Expr := do
-  let mut pf := pf
-  let mut k := k
-  while j < k do
-    pf ← mkAppM (if k == 2 then ``Fits.room else ``Room.inBounds) #[pf]
-    k := k - 1
-  return pf
+  if k == j then
+    return pf
+  if j == 0 then
+    return ← mkAppM (memPreds[k]! ++ `inBounds) #[pf]
+  if j == 3 then
+    return ← mkAppM (memPreds[k]! ++ `live) #[pf]
+  throwError "a `{memPreds[k]!}` fact gives no `{memPreds[j]!}`"
 
 /-- `p` without its `.add` offsets: the same block. -/
 partial def stripAdds (p : Expr) : Expr :=
@@ -544,6 +550,95 @@ partial def neProof? (facts : Array (Expr × Expr)) (a b : Expr) : MetaM (Option
     return none
   decideProof? ne
 
+/-- `c` a definition by recursion (structural or well-founded): its value refers to a `brecOn` or
+`WellFounded.fix`. -/
+def isRecursiveDef (c : Name) : MetaM Bool := do
+  let some (.defnInfo info) := (← getEnv).find? c | return false
+  return (info.value.find? fun e =>
+        match e.constName? with
+        | some (.str _ "brecOn") | some (.str _ "binductionOn") => true
+        | some n => n == ``WellFounded.fix
+        | none => false).isSome
+
+/-- `Writable m p`: a fact for `p`'s block (`Writable` or `Room`, at any pointer into it), a new
+`alloca`'s, or below `m`'s writes, which keep every block's writability (an object's write
+unfolded to them, unless recursive). -/
+partial def writableProof? (facts : Array (Expr × Expr)) (m p : Expr) : MetaM (Option Expr) := do
+  let goal ← mkAppM ``Writable #[m, p]
+  let blk := stripAdds p
+  -- `h : P m q` for `q` in `p`'s block, moved to `p`
+  let moved (h q : Expr) : MetaM Expr := do
+    let he ← mkEqRefl (← mkAppM ``Pointer.id #[p])
+    let he :=
+      mkExpectedPropHint he (← mkEq (← mkAppM ``Pointer.id #[p]) (← mkAppM ``Pointer.id #[q]))
+    return mkExpectedPropHint (← mkAppM ``Writable.of_id_eq #[h, he]) goal
+  for (pf, ty) in facts do
+    if ty.isAppOfArity ``Writable 2 && ty.getArg! 0 == m && stripAdds (ty.getArg! 1) == blk then
+      return some (← moved pf (ty.getArg! 1))
+    let some (k, m', q, _) := memPred? ty | continue
+    if k == 1 && m' == m && stripAdds q == blk then
+      return some (← moved (← mkAppM ``Room.writable #[pf]) q)
+  let viaWrite (lem : Name) (m' : Expr) : MetaM (Option Expr) := do
+    let some h ← writableProof? facts m' p | return none
+    proveBy? lem goal #[h]
+  if let some t := m.app1? ``GlobalState.mem then
+    -- an `alloca`'s block, or one below it
+    if t.isAppOfArity ``GlobalState.alloca 3 then
+      let s := t.getArg! 0
+      let slot := mkApp (mkConst ``GlobalState.allocaPtr) s
+      if blk == slot || slotPtr? slot == some blk then
+        return some
+            (mkExpectedPropHint (← mkAppOptM ``Writable.allocaPtr #[t.getArg! 1, t.getArg! 2, s])
+              goal)
+      -- a named slot `x = b.slot k` of this `alloca`: as the slot, then back along `hx`
+      if blk.isFVar then
+        for (hx, ty) in facts do
+          let some (_, l, r) := ty.consumeMData.eq? | continue
+          unless l == blk && (r == slot || slotPtr? slot == some r) do
+            continue
+          let h :=
+            mkExpectedPropHint (← mkAppOptM ``Writable.allocaPtr #[t.getArg! 1, t.getArg! 2, s])
+              (← mkAppM ``Writable #[m, r])
+          let motive ←
+            withLocalDeclD `y (mkConst ``Pointer) fun y => do
+                mkLambdaFVars #[y] (← mkAppM ``Writable #[m, y])
+          return some (← moved (← mkEqNDRec motive h (← mkEqSymm hx)) blk)
+      let some hwf ← wfProof? facts s | return none
+      let some h ← writableProof? facts (← mkAppM ``GlobalState.mem #[s]) p | return none
+      return ← proveBy? ``Writable.alloca goal #[hwf, h]
+    if t.isAppOfArity ``GlobalState.mk 2 then
+      return (← writableProof? facts t.appArg! p).map (mkExpectedPropHint · goal)
+    -- an abbreviation's state (`withT … S`): its memory
+    if let some c := t.getAppFn.constName? then
+      if (← isReducible c) && !(← isProjectionFn c) then
+        let m' ← whnfR m
+        if m' != m then
+          return (← writableProof? facts m' p).map (mkExpectedPropHint · goal)
+  match_expr m with
+  | MemoryState.storeAt m' _ _ _ =>
+    viaWrite ``Writable.storeAt m'
+  | MemoryState.storeDef m' _ _ _ _ =>
+    viaWrite ``Writable.storeDef m'
+  | MemoryState.overlay m' _ _ _ _ =>
+    viaWrite ``Writable.overlay m'
+  | MemoryState.storePtr m' _ _ =>
+    viaWrite ``Writable.storePtr m'
+  | MemoryState.lifetimeStart m' _ =>
+    viaWrite ``Writable.lifetimeStart m'
+  | MemoryState.lifetimeEnd m' _ =>
+    viaWrite ``Writable.lifetimeEnd m'
+  | _ =>
+    -- an object's write: unfolded to the writes it is made of; not a recursive one, whose
+    -- unfolding the kernel would evaluate (its transport lemma carries the fact)
+    let some c := m.getAppFn.constName? | return none
+    if (← isProjectionFn c) || c == ``GlobalState.mem || (← isRecursiveDef c) then
+      return none
+    let some m'' ← withTransparency .default (unfoldDefinition? m) | return none
+    let m'' := m''.headBeta
+    if m'' == m then
+      return none
+    return (← writableProof? facts m'' p).map (mkExpectedPropHint · goal)
+
 /-- The lemma `memPreds[j].suffix`: `Fits.mono`, `Room.alloca`, … -/
 def memPredLemma (j : Nat) (suffix : Name) : Name :=
   memPreds[j]! ++ suffix
@@ -559,41 +654,63 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     MetaM (Option Expr) := do
   let goal ← mkAppM memPreds[j]! #[m, p, w]
   let p := canonPtr p
+  -- `pf` of kind `k` as kind `j`: `kindImplies`, or `Room` from `Fits` in a writable block (asked
+  -- once, after the facts of other kinds)
+  let writable ← IO.mkRef (none : Option (Option Expr))
+  let weaken? (pf : Expr) (k : Nat) : MetaM (Option Expr) := do
+    if kindImplies k j then
+      return some (← weakenMemPred pf k j)
+    unless k == 2 && j == 1 do
+      return none
+    let hw ← match ← writable.get with
+      | some hw => pure hw
+      | none =>
+        let hw ← writableProof? facts m p
+        writable.set (some hw)
+        pure hw
+    let some hw := hw | return none
+    return some (← mkAppM ``Fits.room #[pf, hw])
+  -- the kinds giving `j`, those needing no writability first
+  let order (k : Nat) : Bool := kindImplies k j
+  let sorted := facts.filter (fun (_, ty) => (memPred? ty).any (order ·.1)) ++
+    facts.filter (fun (_, ty) => (memPred? ty).any (!order ·.1))
   -- an open width (a lemma's premise only fixes): a fact's
   if w.isMVar then
-    for (pf, ty) in facts do
+    for (pf, ty) in sorted do
       let some (k, m', p', w') := memPred? ty | continue
-      if j ≤ k && m' == m && p' == p && (← isDefEq w w') then
-        return some (← weakenMemPred pf k j)
+      if m' == m && p' == p && (← isDefEq w w') then
+        if let some h ← weaken? pf k then
+          return some h
   let w₁ ← normWidths w
-  for (pf, ty) in facts do
+  for (pf, ty) in sorted do
     let some (k, m', p', w') := memPred? ty | continue
-    unless j ≤ k && m' == m && p' == p do
+    unless m' == m && p' == p do
       continue
     if w' == w || w' == w₁ || (← normWidths w') == w₁ then
-      return some (mkExpectedPropHint (← weakenMemPred pf k j) goal)
+      if let some h ← weaken? pf k then
+        return some (mkExpectedPropHint h goal)
   -- a wider fact, both widths literals
   if let some n := w₁.nat? then
-    for (pf, ty) in facts do
+    for (pf, ty) in sorted do
       let some (k, m', p', w') := memPred? ty | continue
-      unless j ≤ k && m' == m && p' == p do
+      unless m' == m && p' == p do
         continue
       let w' ← normWidths w'
       let some n' := w'.nat? | continue
       if n ≤ n' then
+        let some h ← weaken? pf k | continue
         let hw ← mkDecideProof (← mkAppM ``LE.le #[w₁, w'])
-        let pf ← mkAppM (memPredLemma j `mono) #[hw, ← weakenMemPred pf k j]
+        let pf ← mkAppM (memPredLemma j `mono) #[hw, h]
         return some (mkExpectedPropHint pf goal)
   if let some (q, off) := p.app2? ``Pointer.add then
-    for (pf, ty) in facts do
+    for (pf, ty) in sorted do
       let some (k, m', q', v) := memPred? ty | continue
-      unless j ≤ k && m' == m && q' == q do
+      unless m' == m && q' == q do
         continue
       let some (hov, hw) ← addWithin? facts q off w₁ (← normWidths v) | continue
+      let some h ← weaken? pf k | continue
       return some
-          (←
-            mkAppOptM (memPredLemma j `add_of_le)
-                #[none, none, none, none, off, hov, hw, ← weakenMemPred pf k j])
+          (← mkAppOptM (memPredLemma j `add_of_le) #[none, none, none, none, off, hov, hw, h])
   -- a state literal's memory
   if let some t := m.app1? ``GlobalState.mem then
     if t.isAppOfArity ``GlobalState.mk 2 then
@@ -667,14 +784,21 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `overlay) goal #[h]
   | MemoryState.lifetimeStart m' q =>
-    -- the started object: room in its bounds
-    if j == 1 && q == p then
+    -- the started object: live in its bounds, room if writable (also past its start, `q.add k`)
+    if (j == 1 || j == 3) && stripAdds p == q then
       if let some h← memPredProof? facts 0 m' p w then
-        if let some pf← proveBy? ``Room.lifetimeStart_self goal #[h] then
-          return some pf
+        if let some hw ← writableProof? facts m' p then
+          let lem := if j == 3 then ``Live.lifetimeStart_of_id_eq else ``Room.lifetimeStart_of_id_eq
+          let he := mkExpectedPropHint (← mkEqRefl (← mkAppM ``Pointer.id #[q]))
+            (← mkEq (← mkAppM ``Pointer.id #[p]) (← mkAppM ``Pointer.id #[q]))
+          if let some pf← proveBy? lem goal #[h, hw, he] then
+            return some pf
     let some h ← memPredProof? facts j m' p w | return none
     if j == 0 then
       return ← proveBy? ``InBounds.lifetimeStart goal #[h]
+    -- liveness and room survive any start; known bits only another object's
+    if j == 1 || j == 3 then
+      return ← proveBy? (memPredLemma j `lifetimeStart') goal #[h]
     let some hne ←
       neProof? facts (← mkAppM ``Pointer.id #[p]) (← mkAppM ``Pointer.id #[q]) | return none
     proveBy? (memPredLemma j `lifetimeStart) goal #[h, hne]
@@ -713,7 +837,14 @@ where
       | l :: pre :: _ => l == last && pre == suffix
       | _ => false
     if lems.isEmpty then
-      return none
+      -- `Live`, which objects have no lemmas for: through the writes the object's is made of
+      unless j == 3 do
+        return none
+      let some m'' ← withTransparency .default (unfoldDefinition? m) | return none
+      let m'' := m''.headBeta
+      if m'' == m then
+        return none
+      return (← memPredProof? facts j m'' p w).map (mkExpectedPropHint · goal)
     let some h ← memPredProof? facts j m' p w | return none
     for lem in lems do
       let saved ← saveState
@@ -763,7 +894,7 @@ where
   allocaPtrPred? (facts : Array (Expr × Expr)) (j : Nat) (t p w goal : Expr) :
       MetaM (Option Expr) := do
     let_expr GlobalState.alloca s n dead := t | return none
-    if j == 2 || (j == 1 && !dead.isConstOf ``Bool.false) then
+    if j == 2 || ((j == 1 || j == 3) && !dead.isConstOf ``Bool.false) then
       return none
     let q := mkApp (mkConst ``GlobalState.allocaPtr) s
     -- the new block's pointer as `s.allocaPtr` or as a slot `b.slot k` of the same block
@@ -794,7 +925,8 @@ where
       return some (← mkEqNDRec motive h (← mkEqSymm hx))
     let goal' := goal.replace fun e => if base == some e then some q else none
     let v ← normWidths (← mkAppM ``HMul.hMul #[mkNatLit 8, n])
-    let lem := if j == 0 then ``InBounds.allocaPtr else ``Room.allocaPtr
+    let lem := if j == 0 then ``InBounds.allocaPtr else if j == 1 then ``Room.allocaPtr
+      else ``Live.allocaPtr
     -- about `s.allocaPtr`, the goal's slot by `rfl`
     let pf? ←
       match off? with
@@ -905,7 +1037,7 @@ simproc_decl readThroughStore (MemoryState.readAt (MemoryState.storeAt _ _ _) _ 
   let facts ← splitConjunctedFacts
   -- read back from write
   if ← isDefEq p q <&&> isDefEq v w then
-    if let some hf← memPredProof? facts 0 m p w then
+    if let some hf← memPredProof? facts 1 m p w then
       if let some pf← proveEqBy? ``MemoryState.readAt_storeAt_self e x [hf] then
         return .visit { expr := x, proof? := some pf }
   -- Disjoint writes
@@ -1335,6 +1467,8 @@ def premiseSearch? (c : FactCtx) (goal : Expr) : MetaM (Option Expr) := do
     neSlots? c a b
   if let some (j, m, p, w) := memPred? goal then
     return ← memPredProof? c.facts j m p w
+  if goal.isAppOfArity ``Writable 2 then
+    return ← writableProof? c.facts (goal.getArg! 0) (goal.getArg! 1)
   -- a width or offset bound (`37 ≤ 41`), a block number below a counter
   if isNatRel goal then
     return ← natArith? c.facts goal (← wfBounds c.facts goal)
@@ -1349,6 +1483,76 @@ def premiseSearch? (c : FactCtx) (goal : Expr) : MetaM (Option Expr) := do
       return none
     let some pf ← ne? a b | return none
     return some (mkExpectedPropHint pf goal)
+
+/-- `∀ g ∈ sub, g ∈ G` for globals lists: `sub` a part of `G` (through its appends, conses and
+`Func.globals` projections), or made of such parts, or empty. -/
+partial def globalsSubset? (sub G : Expr) : MetaM (Option Expr) := do
+  let gl := mkConst ``Global
+  -- `G` itself, or a part of it
+  let rec part? (G : Expr) : MetaM (Option Expr) := do
+    if G == sub then
+      return some (← withLocalDeclD `g gl fun g => do
+        withLocalDeclD `h (← mkAppM ``Membership.mem #[sub, g]) fun h => mkLambdaFVars #[g, h] h)
+    let lift (l₁ l₂ : Expr) : MetaM (Option Expr) := do
+      if let some h ← part? l₁ then
+        return some (← withLocalDeclD `g gl fun g => do
+          withLocalDeclD `hg (← mkAppM ``Membership.mem #[sub, g]) fun hg => do
+            mkLambdaFVars #[g, hg] (← mkAppM ``List.mem_append_left #[l₂, mkApp2 h g hg]))
+      let some h ← part? l₂ | return none
+      return some (← withLocalDeclD `g gl fun g => do
+        withLocalDeclD `hg (← mkAppM ``Membership.mem #[sub, g]) fun hg => do
+          mkLambdaFVars #[g, hg] (← mkAppM ``List.mem_append_right #[l₁, mkApp2 h g hg]))
+    match_expr G with
+    | HAppend.hAppend _ _ _ _ l₁ l₂ => lift l₁ l₂
+    | List.append _ l₁ l₂ => lift l₁ l₂
+    | List.cons _ a l =>
+      let some h ← part? l | return none
+      return some (← withLocalDeclD `g gl fun g => do
+        withLocalDeclD `hg (← mkAppM ``Membership.mem #[sub, g]) fun hg => do
+          mkLambdaFVars #[g, hg] (← mkAppM ``List.mem_cons_of_mem #[a, mkApp2 h g hg]))
+    | _ =>
+      let G' ← whnfR G
+      if G' == G then return none
+      part? G'
+  if let some h ← part? G then
+    return some h
+  -- empty, or an append of parts
+  let sub' ← whnfR sub
+  match_expr sub' with
+  | List.nil _ =>
+    return some (← withLocalDeclD `g gl fun g => do
+      withLocalDeclD `hg (← mkAppM ``Membership.mem #[sub, g]) fun hg => do
+        mkLambdaFVars #[g, hg] (← mkAppM ``absurd #[hg, ← mkAppOptM ``List.not_mem_nil #[none, g]]))
+  | HAppend.hAppend _ _ _ _ l₁ l₂ => appendSub l₁ l₂
+  | List.append _ l₁ l₂ => appendSub l₁ l₂
+  | _ =>
+    if sub' == sub then return none
+    globalsSubset? sub' G
+where
+  /-- `l₁ ++ l₂ ⊆ G` from the parts'. -/
+  appendSub (l₁ l₂ : Expr) : MetaM (Option Expr) := do
+    let gl := mkConst ``Global
+    let some h₁ ← globalsSubset? l₁ G | return none
+    let some h₂ ← globalsSubset? l₂ G | return none
+    let sub ← mkAppM ``HAppend.hAppend #[l₁, l₂]
+    return some (← withLocalDeclD `g gl fun g => do
+      withLocalDeclD `hg (← mkAppM ``Membership.mem #[sub, g]) fun hg => do
+        let hor ← mkAppM ``Iff.mp #[← mkAppOptM ``List.mem_append #[none, g, l₁, l₂], hg]
+        mkLambdaFVars #[g, hg] (← mkAppM ``Or.elim #[hor, mkApp h₁ g, mkApp h₂ g]))
+
+/-- `m'.Globals G'` from a fact `m.Globals G` of a memory with the same table, `G'` a part of
+`G` (`globalsSubset?`). -/
+def globalsProof? (facts : Array (Expr × Expr)) (m' G' : Expr) : MetaM (Option Expr) := do
+  for (pf, ty) in facts do
+    let_expr MemoryState.Globals m G := ty | continue
+    let t ← mkAppM ``MemoryState.globals #[m]
+    let t' ← mkAppM ``MemoryState.globals #[m']
+    unless ← withTransparency .default (isDefEq t' t) do
+      continue
+    let some hsub ← globalsSubset? G' G | continue
+    let ht := mkExpectedPropHint (← mkEqRefl t) (← mkEq t' t)
+    return some (← mkAppM ``MemoryState.Globals.mono #[pf, ht, hsub])
+  return none
 
 /-- A side condition from the facts `c`, cheapest first: a fact; `decide`, the offsets replaced by
 their facts (an offset's `¬uaddOverflow`, a width bound); `InBounds`, `Room`, `Fits`, disjointness
@@ -1371,6 +1575,15 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
       return some pf
   | Fits m p w =>
     if let some pf← fitsProof? c.facts m p w then
+      return some pf
+  | Live m p w =>
+    if let some pf← memPredProof? c.facts 3 m p w then
+      return some pf
+  | Writable m p =>
+    if let some pf← writableProof? c.facts m p then
+      return some pf
+  | MemoryState.Globals m G =>
+    if let some pf← globalsProof? c.facts m G then
       return some pf
   | GlobalState.WF s =>
     if let some pf← wfProof? c.facts s then

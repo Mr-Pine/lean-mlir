@@ -249,20 +249,20 @@ After: the slot `x` (default `vN`) with tagged `hx : x = b.slot k`, `h<x>_room :
 are restated about `x` and named `<fact>_<x>`. Slots of one state are told apart by index
 (`GlobalState.slot_id_ne`).
 
-### `step_addressof hv [names] [consuming …]`
+### `step_addressof [hv] [names] [consuming …]`
 
-`%k = llvm.mlir.addressof @g`. Every pointer with a memory fact, named slots included, gets
-`h<q>_ne` first, so the earlier globals' facts carry past this block's masked store. `hv : ∀ s, g.value s = .value (Ty.wrap r, s)` (proved by
-`GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩`), `g`'s type without
-pointers and padding (by the kernel). Like `step_alloca`, and the new block holds `r`'s bits:
-`h<x>_room` for its bytes, `h<x>_fits : Fits S.mem x w`, `hread_<x> : S.mem.readAt x w = Ty.flatBits
-…`. A global with `undef` members (or pointer members, which a folded initializer holds undefined)
-has `hv : ∀ s, g.value s = .value (v, s)` for its value `v` with poison leaves
-(`(.value 7, .poison)`), or `hv` is the global `g` itself: its value is read off its block and `hv`
-left to the kernel. The block stores `v`'s bits masked by their definedness, both literals the
-kernel evaluates (`run_addressof_def`, `Ty.flattenDef_eq_ofNat`: seconds for a 21504-bit table);
-`h<x>_room`, `h<x>_fits(_k) : Fits S.mem (x.add k) w` for each run of defined bits from a byte (the
-mask's bits checked by the kernel, no `exponentiation.threshold`), `hread_<x>` of all the bits.
+`%k = llvm.mlir.addressof @g`: the global's block's start, the state unchanged (no new block).
+Needs `hg : S.mem.Globals G` (the theorem's `hg : s.mem.Globals f.globals`, carried by every step:
+the table is the same in every later memory) with `⟨"g", t⟩` in `G`, and `S.WF` (constants' blocks
+hold their images). The pointer `x` (default `vN`) is opaque after; its facts:
+`hglobal_<x> : S.mem.globals "g" = some (x.id, t.image)`, `h<x>_off`, and for a constant
+`h<x>_live : Live S.mem x (8 * n)`, `h<x>_fits(_k)` for each run of defined bits from a byte,
+`hread_<x> : S.mem.readAt x w = Ty.flatBits r` (a plain value of a type without pointers and
+padding) or a literal (undefined members; the kernel evaluates the bits, `Ty.flattenDef_eq_ofNat`),
+and `h<q>_ne_<x> : q.id ≠ x.id` for each pointer `q` known writable (a `Room` or `Writable` fact):
+the block is read-only, so `Fits`/`Live`, never `Room`. A mutable global: `h<x>_bounds`,
+`hwritable_<x>`, no contents. `hv : ∀ s, t.value s = .value (v, s)` (a `value_eq` lemma) is
+optional: without it, `v` is read off `t`'s block and checked by the kernel.
 
 ### `step_pattern using h [names]`
 

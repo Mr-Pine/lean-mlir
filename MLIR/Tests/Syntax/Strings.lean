@@ -85,7 +85,9 @@ section Tests
 
 /-- The four bytes from byte `i` of the greeting, or `none` for UB. -/
 private def readGreetingOut (i : BitVec 64) : Option ⟦Ty.bv 32⟧ :=
-  match readGreeting.eval 1 (readGreeting.args (.value i)) ⟨⟨1⟩, ⟨∅⟩⟩ with
+  match
+    readGreeting.eval 1 (readGreeting.args (.value i))
+      (GlobalState.withGlobals readGreeting.globals ⟨⟨1⟩, ⟨∅⟩⟩) with
   | .value (some (.cons v .nil), _) => some v
   | _ => none
 
@@ -98,13 +100,17 @@ private def readGreetingOut (i : BitVec 64) : Option ⟦Ty.bv 32⟧ :=
   | _ => false)
 
 -- a global holding a pointer: its block, the pointer undefined, line and column loaded
-#guard (match readLocation.eval 1 .nil ⟨⟨1⟩, ⟨∅⟩⟩ with
+
+-- a global holding a pointer: its block, the pointer undefined, line and column loaded
+#guard
+  (match readLocation.eval 1 .nil (GlobalState.withGlobals readLocation.globals ⟨⟨1⟩, ⟨∅⟩⟩) with
   | .value (some (.cons (.value l) .nil), s) =>
     s.mem.loadPtr l == .poison && s.mem.definedAt l 64 == 0 &&
-      s.mem.readAt (l.add 8) 64 == 0x000000DD00000057 && s.mem.definedAt (l.add 8) 64 == -1
+      s.mem.readAt (l.add 8) 64 == 0x000000DD00000057 &&
+      s.mem.definedAt (l.add 8) 64 == -1
   | _ => false)
 
-#guard (match readPad.eval 1 .nil ⟨⟨1⟩, ⟨∅⟩⟩ with
+#guard (match readPad.eval 1 .nil (GlobalState.withGlobals readPad.globals ⟨⟨1⟩, ⟨∅⟩⟩) with
   | .value (some (.cons v .nil), _) => v == .value 0x80
   | _ => false)
 

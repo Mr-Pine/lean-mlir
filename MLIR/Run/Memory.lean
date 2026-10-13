@@ -1,6 +1,7 @@
 module
 
 public import MLIR.Semantics.Instruction
+public import MLIR.Semantics.GlobalInitializer
 
 namespace MLIR
 
@@ -55,13 +56,13 @@ theorem run_memcpy {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNa
     (Operation.memcpy (.value dst) (.value src) (.value len)) env s =
       .value (env, { s with mem := s.mem.storeAt dst (s.mem.readAt src (8 * n)) }) := by
   subst hn
-  simp [Operation.memcpy, hd, hfd, hfs.room, throwUBIf, mlir_effect,
+  simp [Operation.memcpy, hd, hfd, hfs.live, throwUBIf, mlir_effect,
     MemoryState.definedAt_of_fits hfs, MemoryState.storeAt_eq_storeDef]
 
 /-- `memcpy` of `n` bytes: their bits and which are defined. -/
 theorem run_memcpyDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
     (hd : (Range.of dst (8 * n)).Disjoint (Range.of src (8 * n))) (hfd : Room s.mem dst (8 * n))
-    (hfs : Room s.mem src (8 * n)) :
+    (hfs : Live s.mem src (8 * n)) :
     (Operation.memcpy (.value dst) (.value src) (.value len)) env s =
       .value
         (env,
@@ -77,12 +78,12 @@ theorem run_memmove {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toN
     (Operation.memmove (.value dst) (.value src) (.value len)) env s =
       .value (env, { s with mem := s.mem.storeAt dst (s.mem.readAt src (8 * n)) }) := by
   subst hn
-  simp [Operation.memmove, hfd, hfs.room, throwUBIf, mlir_effect,
+  simp [Operation.memmove, hfd, hfs.live, throwUBIf, mlir_effect,
     MemoryState.definedAt_of_fits hfs, MemoryState.storeAt_eq_storeDef]
 
 /-- `memmove` of `n` bytes: their bits and which are defined. -/
 theorem run_memmoveDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
-    (hfd : Room s.mem dst (8 * n)) (hfs : Room s.mem src (8 * n)) :
+    (hfd : Room s.mem dst (8 * n)) (hfs : Live s.mem src (8 * n)) :
     (Operation.memmove (.value dst) (.value src) (.value len)) env s =
       .value
         (env,
@@ -172,50 +173,119 @@ theorem run_lifetimeEnd_poison : (Operation.lifetimeEnd .poison) env s = .value 
 theorem run_assume : (Operation.assume (.value 1#1)) env s = .value (env, s) :=
   rfl
 
-theorem run_addressof {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧} {x : ⟦t⟧}
-    {b : BitVec t.width} {dst : Dst Γ .ptr} (hv : v s = .value (x, s)) (hb : t.flatten x = .value b)
-    (hpad : t.hasPadding = false) :
-    Instr.run env (.addressof v dst) s =
-      .value
-        (env.write dst (.value s.allocaPtr),
-          let s' := s.alloca ((t.width + 7) / 8)
-          { s' with mem := s'.mem.storeAt s.allocaPtr b }) := by
-  have hp := Ty.hasPtr_of_flatten hb
-  simp only [Instr.run, EffectM.bind_eq, hv, PoisonOr.value_bind, Ty.flattenDef_of_flatten hb hpad,
-    Ty.ptrLeaves_of_hasPtr hp, MemoryState.recordPtrs_nil, MemoryState.storeAt_eq_storeDef]
-  rfl
+theorem run_addressof {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {dst : Dst Γ .ptr}
+    (h : s.mem.globals sym = some (b, g)) :
+    Instr.run env (.addressof sym dst) s = .value (env.write dst (.value ⟨b, 0⟩), s) := by
+  simp [Instr.run, h, mlir_effect]
 
-/-- `run_addressof` of a global whose initializer gives `wrap r`: a fresh block of `n` bytes holding
-`r`'s bits, at their literal width `w`. -/
-theorem run_addressof_wrap {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧}
-    {r : ⟦t⟧ᵣ} {dst : Dst Γ .ptr} {w n : Nat} (hv : v s = .value (Ty.wrap r, s))
-    (hp : t.hasPtr = false) (hpad : t.hasPadding = false) (hw : t.width = w)
-    (hn : (w + 7) / 8 = n) :
-    Instr.run env (.addressof v dst) s =
-      .value
-        (env.write dst (.value s.allocaPtr),
-          { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
-            mem := s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n (Ty.flatBits r (hw := hw)) }) := by
-  rw [← GlobalState.alloca_storeAt_allocaPtr, Ty.flatBits_eq]
-  subst hw hn
-  exact run_addressof hv (Ty.flatten_wrap hp) hpad
+/-! ### A global's block, from its image -/
 
-/-- `run_addressof` of a global with undefined members (`x`'s bits `b`, defined where `d` is set,
-at their literal width `w`), no pointer stored: a fresh block of `n` bytes holding them, masked. -/
-theorem run_addressof_def {Γ : Ctx} {env : ⟪Γ⟫} {s : GlobalState} {t : Ty} {v : EffectM ⟦t⟧}
-    {x : ⟦t⟧} {dst : Dst Γ .ptr} {w n : Nat} {b d : BitVec w} (hv : v s = .value (x, s))
-    (hl : t.ptrLeaves 0 x = []) (hw : t.width = w)
-    (hx : t.flattenDef x = (b.cast hw.symm, d.cast hw.symm))
-    (hn : (w + 7) / 8 = n) :
-    Instr.run env (.addressof v dst) s =
-      .value
-        (env.write dst (.value s.allocaPtr),
-          let s' := s.alloca n
-          { s' with mem := s'.mem.storeDef s.allocaPtr b d }) := by
-  subst hn hw
-  simp only [Instr.run, EffectM.bind_eq, hv, PoisonOr.value_bind, hx, BitVec.cast_eq, hl,
-    MemoryState.recordPtrs_nil]
-  rfl
+/-- A global's image is `(t.width + 7) / 8` bytes long. -/
+theorem GlobalInitializer.image_bytes {g : GlobalInitializer} :
+    g.image.bytes = (g.t.width + 7) / 8 := by
+  unfold image; split <;> rfl
+
+/-- A block holding an image, from its start: in bounds for its bytes. -/
+theorem GlobalImage.inBounds {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
+    (hn : img.bytes = n) : InBounds m ⟨b, 0⟩ (8 * n) :=
+  ⟨_, hb, by simp [Pointer.offsetInBits, MemoryBlock.lengthInBits, GlobalImage.block, hn]⟩
+
+/-- A block holding an image is live in its bounds. -/
+theorem GlobalImage.live {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
+    (hn : img.bytes = n) : Live m ⟨b, 0⟩ (8 * n) :=
+  ⟨_, hb, rfl, by simp [Pointer.offsetInBits, MemoryBlock.lengthInBits, GlobalImage.block, hn]⟩
+
+/-- A mutable global's image's block: writable, so room in its bounds. -/
+theorem GlobalImage.room {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
+    (hn : img.bytes = n) (hc : img.constant = false) : Room m ⟨b, 0⟩ (8 * n) :=
+  ⟨GlobalImage.live hb hn, _, hb, by simp [GlobalImage.block, hc]⟩
+
+/-- A global's bits read from its block's start, `w` of them: its value's. -/
+theorem GlobalInitializer.readAt {m : MemoryState} {g : GlobalInitializer} {x : ⟦g.t⟧}
+    (hb : m[b]? = some g.image.block) (hv : ∀ s, g.value s = .value (x, s)) (hw : g.t.width = w)
+    {B : BitVec w} (hB : (g.t.flattenDef x).1 = B.cast hw.symm) : m.readAt ⟨b, 0⟩ w = B := by
+  subst hw
+  simp only [BitVec.cast_eq] at hB
+  rw [image_eq hv] at hb
+  simp only [MemoryState.readAt, hb, GlobalImage.block, hB, Pointer.offsetInBits]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  have : i < 8 * ((g.t.width + 7) / 8) := by omega
+  simp [hi, this]
+
+/-- A global's defined bits at its block's start, `w` of them: its value's. -/
+theorem GlobalInitializer.definedAt {m : MemoryState} {g : GlobalInitializer} {x : ⟦g.t⟧}
+    (hb : m[b]? = some g.image.block) (hv : ∀ s, g.value s = .value (x, s)) (hw : g.t.width = w)
+    {D : BitVec w} (hD : (g.t.flattenDef x).2 = D.cast hw.symm) : m.definedAt ⟨b, 0⟩ w = D := by
+  subst hw
+  simp only [BitVec.cast_eq] at hD
+  rw [image_eq hv] at hb
+  simp only [MemoryState.definedAt, hb, GlobalImage.block, hD, Pointer.offsetInBits]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  have : i < 8 * ((g.t.width + 7) / 8) := by omega
+  simp [hi, this]
+
+/-- A plain global's bits: its raw value's, all defined. -/
+theorem GlobalInitializer.flattenDef_wrap {g : GlobalInitializer} {w : Nat} {r : ⟦g.t⟧ᵣ}
+    (hp : g.t.hasPtr = false) (hpad : g.t.hasPadding = false) (hw : g.t.width = w) :
+    g.t.flattenDef (Ty.wrap r) =
+      ((Ty.flatBits r (hw := hw)).cast hw.symm, (BitVec.allOnes w).cast hw.symm) := by
+  subst hw
+  rw [Ty.flattenDef_of_flatten (Ty.flatten_wrap hp) hpad]
+  simp [Ty.flatBits_eq]
+
+/-- A writable block is no read-only one's. -/
+theorem Writable.ne_of_readOnly {m : MemoryState} {blk : MemoryBlock} (hq : Writable m q)
+    (hb : m[b]? = some blk) (hro : blk.writable = false) : q.id ≠ b := by
+  rintro rfl
+  obtain ⟨blk', hb', hw⟩ := hq
+  rw [hb] at hb'
+  cases hb'
+  simp [hw] at hro
+
+/-- A constant global's block is read-only. -/
+theorem GlobalImage.block_writable {img : GlobalImage} (hc : img.constant = true) :
+    img.block.writable = false := by simp [GlobalImage.block, hc]
+
+/-- A mutable global's block in a `WF` state: in bounds for its bytes. -/
+theorem GlobalState.WF.mutable_inBounds {s : GlobalState} (hwf : s.WF)
+    (h : s.mem.globals sym = some (b, g)) (hc : g.constant = false) (hn : g.bytes = n) :
+    InBounds s.mem ⟨b, 0⟩ (8 * n) := by
+  obtain ⟨blk, hb, -, hl⟩ := hwf.mutable_block h hc
+  exact ⟨blk, hb, by simp [Pointer.offsetInBits, MemoryBlock.lengthInBits, hl, hn]⟩
+
+/-- A mutable global's block in a `WF` state is writable. -/
+theorem GlobalState.WF.mutable_writable {s : GlobalState} (hwf : s.WF)
+    (h : s.mem.globals sym = some (b, g)) (hc : g.constant = false) : Writable s.mem ⟨b, 0⟩ := by
+  obtain ⟨blk, hb, hw, -⟩ := hwf.mutable_block h hc
+  exact ⟨blk, hb, hw⟩
+
+/-- Live, with its first `w` bits defined: they fit. -/
+theorem Fits.of_definedAt_self {m : MemoryState} {p : Pointer} {D : BitVec v} (hl : Live m p v)
+    (hd : m.definedAt p v = D) (hw : w ≤ v) (hD : D.extractLsb' 0 w = BitVec.allOnes w) :
+    Fits m p w := by
+  obtain ⟨blk, hblk, hlv, hsz⟩ := hl
+  refine ⟨blk, hblk, hlv, by omega, ?_⟩
+  subst hd
+  simp only [MemoryState.definedAt, hblk,
+    BitVec.extractLsb'_extractLsb'_add (show 0 + w ≤ v by omega), Nat.add_zero] at hD
+  exact hD
+
+/-- Live, with its bits at `p.add off` defined: they fit. -/
+theorem Fits.of_definedAt {m : MemoryState} {p : Pointer} {off : BitVec 64} {D : BitVec v}
+    (hl : Live m p v) (hd : m.definedAt p v = D) (hov : ¬p.offset.uaddOverflow off)
+    (hw : off.toNat * 8 + w ≤ v) (hD : D.extractLsb' (off.toNat * 8) w = BitVec.allOnes w) :
+    Fits m (p.add off) w := by
+  obtain ⟨blk, hblk, hlv, hsz⟩ := hl
+  have hblk' : m[(p.add off).id]? = some blk := hblk
+  refine
+    ⟨blk, hblk', hlv, by
+      rw [Pointer.offsetInBits_add hov]; omega, ?_⟩
+  subst hd
+  simp only [MemoryState.definedAt, hblk, BitVec.extractLsb'_extractLsb'_add hw] at hD
+  rw [Pointer.offsetInBits_add hov]
+  exact hD
 
 /-- `gep` without flags: the address, wrapping. -/
 @[mlir_operation]

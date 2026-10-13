@@ -157,8 +157,8 @@ mlir_def callPut6 :=
     "llvm.return"() : () -> ()
 } with @put6 := put6
 
--- six object writes: each word known, its fact named as the room it supersedes; the premise of
--- the outermost's fresh lemma is five transports deep
+-- six object writes: each word known, its fact named as its room, which stays shadowed (known bits
+-- need not be writable); the premise of the outermost's fresh lemma is five transports deep
 example (p0 p1 p2 p3 p4 p5 : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF)
     (hp0 : WordRoom s.mem p0) (hp1 : WordRoom s.mem p1) (hp2 : WordRoom s.mem p2)
     (hp3 : WordRoom s.mem p3) (hp4 : WordRoom s.mem p4) (hp5 : WordRoom s.mem p5) :
@@ -177,17 +177,12 @@ example (p0 p1 p2 p3 p4 p5 : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s
   block_init
   step_call using put6.call_eq
   guard_hyp hp0 : WordFit S.mem p0
-  guard_hyp hp1 : WordFit S.mem p1
-  guard_hyp hp2 : WordFit S.mem p2
-  guard_hyp hp3 : WordFit S.mem p3
-  guard_hyp hp4 : WordFit S.mem p4
   guard_hyp hp5 : WordFit S.mem p5
-  -- the rooms are gone
-  fail_if_success have : WordRoom S.mem p0 := by assumption
+  have : WordRoom S.mem p0 := by assumption
   finish_block
   rw [hS]
 
--- a consumed room the fresh fact supersedes: the fresh fact stays
+-- a consumed room: the fresh fact stays
 example (p0 p1 p2 p3 p4 p5 : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF)
     (hp0 : WordRoom s.mem p0) (hp1 : WordRoom s.mem p1) (hp2 : WordRoom s.mem p2)
     (hp3 : WordRoom s.mem p3) (hp4 : WordRoom s.mem p4) (hp5 : WordRoom s.mem p5) :
@@ -206,6 +201,7 @@ example (p0 p1 p2 p3 p4 p5 : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s
   block_init
   step_call using put6.call_eq consuming hp0
   guard_hyp hp0 : WordFit S.mem p0
+  fail_if_success have : WordRoom S.mem p0 := by assumption
   finish_block
   rw [hS]
 
@@ -266,7 +262,7 @@ example (p q : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 128)
   rw [hS, hv]
 
 -- a word inside a copy: known from the source's, read as the source's
-example (m : MemoryState) (p q : Pointer) (hp : InBounds m p 128) (hq : InBounds m q 128)
+example (m : MemoryState) (p q : Pointer) (hp : Room m p 128) (hq : InBounds m q 128)
     (hpo : p.offset = 0) (hqo : q.offset = 0) :
     (m.storeDef p (m.readAt q 128) (m.definedAt q 128)).readAt (p.add 8#64) 64 =
       m.readAt (q.add 8#64) 64 :=
@@ -298,21 +294,44 @@ mlir_def readHalf := {
     "llvm.return"(%1) : (i64) -> ()
 } with @half := half
 
--- the block has room, its defined word is known and read back
-example (s : GlobalState) (hwf : s.WF) :
-    readHalf.call readHalf.args s =
-      .value (.cons (.value 7#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+-- the block is live, its defined word is known and read back
+example (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals readHalf.globals) :
+    readHalf.call readHalf.args s = .value (.cons (.value 7#64) .nil, s) := by
   func_init
   block_init
   step_addressof half.value_eq with g
-  guard_hyp hg_room : Room S.mem g 128
+  fail_if_success have := b
+  guard_hyp hg_live : Live S.mem g 128
   guard_hyp hg_fits : Fits S.mem g 64
   step_load with v
   finish_block
   subst hS
-  erase_frame
   subst hv
   rfl
+
+theorem readHalf.call_eq (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals readHalf.globals) :
+    readHalf.call readHalf.args s = .value (.cons (.value 7#64) .nil, s) := by
+  func_init
+  block_init
+  step_addressof with g
+  step_load with v
+  finish_block
+  subst hS hv
+  rfl
+
+mlir_def callReadHalf := {
+    %0 = "llvm.call"() <{callee = @readHalf}> : () -> i64
+    "llvm.return"(%0) : (i64) -> ()
+} with @readHalf := readHalf
+
+-- a callee's globals, from the caller's
+example (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals callReadHalf.globals) :
+    callReadHalf.call callReadHalf.args s = .value (.cons (.value 7#64) .nil, s) := by
+  func_init
+  block_init
+  step_call using readHalf.call_eq
+  finish_block
+  rw [hS]
 
 mlir_def readHalf2 := {
     %0 = "llvm.mlir.addressof"() <{global_name = @half}> : () -> !llvm.ptr
@@ -325,10 +344,10 @@ mlir_def readHalf2 := {
     "llvm.return"(%6) : (i64) -> ()
 } with @half := half
 
--- a second partly defined global, then a slot: the first's facts carried, no goals
-example (s : GlobalState) (hwf : s.WF) :
+-- the global twice, then a slot: the first's facts carried, no goals
+example (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals readHalf2.globals) :
     readHalf2.call readHalf2.args s =
-      .value (.cons (.value 14#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 3⟩ }) := by
+      .value (.cons (.value 14#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
   func_init
   block_init
   step_addressof half.value_eq with g
@@ -345,17 +364,15 @@ example (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
--- the same from the global itself, its value read off its block
-example (s : GlobalState) (hwf : s.WF) :
-    readHalf.call readHalf.args s =
-      .value (.cons (.value 7#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+-- the same with its value read off its block
+example (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals readHalf.globals) :
+    readHalf.call readHalf.args s = .value (.cons (.value 7#64) .nil, s) := by
   func_init
   block_init
-  step_addressof half with g
+  step_addressof with g
   step_load with v
   finish_block
   subst hS
-  erase_frame
   subst hv
   rfl
 
@@ -379,9 +396,8 @@ mlir_def readArrHalf := {
 } with @arrHalf := arrHalf
 
 -- an array member: its words known, read inside the block
-example (s : GlobalState) (hwf : s.WF) :
-    readArrHalf.call readArrHalf.args s =
-      .value (.cons (.value 2#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+example (s : GlobalState) (hwf : s.WF) (hgl : s.mem.Globals readArrHalf.globals) :
+    readArrHalf.call readArrHalf.args s = .value (.cons (.value 2#64) .nil, s) := by
   func_init
   block_init
   step_addressof arrHalf.value_eq with g
@@ -390,7 +406,6 @@ example (s : GlobalState) (hwf : s.WF) :
   step_load with v
   finish_block
   subst hS
-  erase_frame
   subst hv
   rfl
 

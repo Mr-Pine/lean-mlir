@@ -142,16 +142,20 @@ private def ret (f : Func) (t : Ty) : Option ⟦t⟧ :=
 
 /-- What `readPairs` returns from an empty state, or `none` for UB. -/
 private def out : Option (BitVec 64) :=
-  match readPairs.eval 1 readPairs.args ⟨⟨0⟩, ⟨∅⟩⟩ with
+  match readPairs.eval 1 readPairs.args (GlobalState.withGlobals readPairs.globals ⟨⟨1⟩, ⟨∅⟩⟩) with
   | .value (some (.cons (.value v) .nil), _) => some v
   | _ => none
 
 #guard out == some 9#64
 
 -- the undefined field's bytes are undefined: its load is poison, the other field's not
-#guard (match readHalf.eval 1 readHalf.args ⟨⟨0⟩, ⟨∅⟩⟩ with
-  | .value (some (.cons a (.cons b .nil)), _) => some (a, b)
-  | _ => none) == some (.value 7, .poison)
+
+-- the undefined field's bytes are undefined: its load is poison, the other field's not
+#guard
+  (match readHalf.eval 1 readHalf.args (GlobalState.withGlobals readHalf.globals ⟨⟨1⟩, ⟨∅⟩⟩) with
+    | .value (some (.cons a (.cons b .nil)), _) => some (a, b)
+    | _ => none) ==
+    some (.value 7, .poison)
 
 end Tests
 

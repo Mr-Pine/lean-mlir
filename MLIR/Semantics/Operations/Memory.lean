@@ -28,8 +28,8 @@ def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM �
       (τ.unflattenDef (state.mem.readAt ptr τ.width) (state.mem.definedAt ptr τ.width))
   return env.write dst value
 
-/-- A store: UB unless into a live object; poison leaves and padding stored undefined, pointer
-leaves undefined and recorded. -/
+/-- A store: UB unless into a live writable object; poison leaves and padding stored undefined,
+pointer leaves undefined and recorded. -/
 def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let ptr ←
     match ptr with
@@ -122,7 +122,7 @@ def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env
   let state ← get
   throwUBIf (¬Room state.mem dst (8 * len))
   -- reading a dead object is an access too
-  throwUBIf (¬Room state.mem src (8 * len))
+  throwUBIf (¬Live state.mem src (8 * len))
   let replacement := state.mem.readAt src (8 * len)
   let defined := state.mem.definedAt src (8 * len)
   let updated := { state with mem := state.mem.storeDef dst replacement defined }
@@ -136,7 +136,7 @@ def memmove (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (en
     return (← dst, ← src, (← len).toNat) | throwUB
   let state ← get
   throwUBIf (¬Room state.mem dst (8 * len))
-  throwUBIf (¬Room state.mem src (8 * len))
+  throwUBIf (¬Live state.mem src (8 * len))
   let replacement := state.mem.readAt src (8 * len)
   let defined := state.mem.definedAt src (8 * len)
   let updated := { state with mem := state.mem.storeDef dst replacement defined }

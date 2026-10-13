@@ -51,7 +51,7 @@ private def b : Pointer := ⟨⟨2⟩, 0⟩
 /-- `a` and `b`, 4 bytes each; `b`'s top byte undefined if `undef`. -/
 private def s0 (x y : BitVec 32) (undef := false) : GlobalState :=
   ⟨⟨3⟩, ⟨Std.ExtHashMap.ofList [(⟨1⟩, .ofBytes 4 x),
-    (⟨2⟩, if undef then ⟨4, y, 0x00FFFFFF, true, fun _ => none⟩ else .ofBytes 4 y)]⟩⟩
+    (⟨2⟩, if undef then ⟨4, y, 0x00FFFFFF, true, fun _ => none, true⟩ else .ofBytes 4 y)]⟩⟩
 
 private def sameOut (s : GlobalState) (n : Nat) : Option ⟦Ty.bv 1⟧ :=
   match same.eval 1 (same.args (.value a) (.value b) (.value (BitVec.ofNat 64 n))) s with

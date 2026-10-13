@@ -133,6 +133,11 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option 
           if pf?.isNone && key.isEq then
             trace[rir] m!"fact {decl.userName} kept about the state before the step"
             continue
+          -- a shadowed fact (a `Room` a `Fit` took the name of) not carried is dropped
+          if pf?.isNone && decl.userName.hasMacroScopes then
+            trace[rir] m!"shadowed fact {decl.userName} not carried: dropped"
+            g ← g.tryClear hyp
+            continue
           -- past a lifetime marker, a fact not carried is dropped rather than a goal
           if pf?.isNone && about?.isSome then
             trace[rir] m!"fact {decl.userName} not carried past the lifetime marker: dropped"

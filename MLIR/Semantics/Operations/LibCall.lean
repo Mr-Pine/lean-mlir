@@ -63,7 +63,7 @@ def compareBytes (cmp : Unspecified → (n : Nat) → BitVec (8 * n) → BitVec 
   | .cons a (.cons b (.cons n .nil)) => do
     let .value (a, b, n) := (do return (← a, ← b, (← n).toNat) : PoisonOr _) | throwUB
     let s ← get
-    throwUBIf (¬Room s.mem a (8 * n) ∨ ¬Room s.mem b (8 * n))
+    throwUBIf (¬Live s.mem a (8 * n) ∨ ¬Live s.mem b (8 * n))
     let r : IntW 32 :=
       if Fits s.mem a (8 * n) ∧ Fits s.mem b (8 * n) then
         .value (cmp s.mem.unspec n (s.mem.readAt a (8 * n)) (s.mem.readAt b (8 * n)))
@@ -78,7 +78,7 @@ def memcmp : Vals [.ptr, .ptr, .bv 64] → EffectM (Vals [.bv 32]) :=
 def bcmp : Vals [.ptr, .ptr, .bv 64] → EffectM (Vals [.bv 32]) :=
   compareBytes bcmpResult
 
-/-- `n` zero bytes at `p`: UB unless into a live object. -/
+/-- `n` zero bytes at `p`: UB unless into a live writable object. -/
 def storeZeros (p : PoisonOr Pointer) (n : IntW 64) : EffectM Unit := do
   let .value (p, n) := (do return (← p, (← n).toNat) : PoisonOr _) | throwUB
   let s ← get
@@ -126,7 +126,7 @@ theorem compareBytes_eq {a b : Pointer} {n : BitVec 64} (ha : Fits s.mem a (8 * 
                 (s.mem.readAt b (8 * n.toNat))))
             .nil,
           s) := by
-  simp [compareBytes, ha, hb, ha.room, hb.room, throwUBIf, mlir_effect]
+  simp [compareBytes, ha, hb, ha.live, hb.live, throwUBIf, mlir_effect]
 
 theorem memcmp_eq {a b : Pointer} {n : BitVec 64} (ha : Fits s.mem a (8 * n.toNat))
     (hb : Fits s.mem b (8 * n.toNat)) :

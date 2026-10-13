@@ -52,7 +52,7 @@ next instruction (infoview "Instructions" panel)
 │    @explicit_bzero, @__explicit_bzero_chk) → step_call using Operation.bcmp_eq (memcmp_eq,
 │    explicitBzero_eq, explicitBzeroChk_eq); a noreturn call or unreachable is UB: never stepped,
 │    the branch to it is shown not taken
-├─ alloca → step_alloca        ├─ addressof @g → step_addressof g.value_eq (or g)
+├─ alloca → step_alloca        ├─ addressof @g → step_addressof [g.value_eq] (needs `hg`)
 ├─ a run of instructions that recurs → step_pattern using <pattern lemma>
 └─ end of body → finish_block
      ├─ return → close the final equation (tactics-guide §11)

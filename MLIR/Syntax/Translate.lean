@@ -512,7 +512,7 @@ def paramAttrUses : List (String × AttrUse) :=
 def globalAttrUses : List (String × AttrUse) :=
   [("sym_name", .modeled), ("global_type", .modeled), ("constant", .modeled),
     ("addr_space", .modeled), ("value", .modeled), ("linkage", .inert), ("visibility_", .inert),
-    ("dso_local", .inert), ("unnamed_addr", .inert), ("alignment", .ignored)]
+    ("dso_local", .inert), ("unnamed_addr", .modeled), ("alignment", .ignored)]
 
 /-- Reject an attribute of `d` that `uses` does not list, and a parameter attribute
 `paramAttrUses` does not. -/
@@ -555,11 +555,9 @@ def checkFuncAttrs (d : AttrDict) : Except String Unit := do
       unless (passthroughUses.lookup k).isSome do
         throw s!"unsupported function attribute `{k}`"
 
-/-- A global's attributes: those `globalAttrUses` lists, `constant`, address space `0`. -/
+/-- A global's attributes: those `globalAttrUses` lists, address space `0`. -/
 def checkGlobalAttrs (d : AttrDict) : Except String Unit := do
   checkAttrs globalAttrUses d
-  unless (d.getAttr? "constant").isSome do
-    throw "a global must be constant"
   if let some (.int s _) := d.getAttr? "addr_space" then
     unless s == 0 do
       throw "a global must be in address space 0"
@@ -1291,10 +1289,6 @@ def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
 
 /-! ## Building the `Func` -/
 
-/-- A global's initializer, typically `G.value` for a `G : GlobalInitializer`. -/
-abbrev Global :=
-  Σ (t : Ty), EffectM ⟦t⟧
-
 /-- A callee's semantics, typically `g.call` for a `g : Func`. -/
 abbrev Callee :=
   Σ (ts us : List Ty), Vals ts → EffectM (Vals us)
@@ -1380,8 +1374,7 @@ def mkDsts : (ts : List Ty) → List Nat → Except String (Dsts Γ ts)
   | t :: ts, d :: ds => return .cons (← mkDst Γ t d) (← mkDsts ts ds)
   | _, _ => throw "wrong number of registers"
 
-def mkInstr (callees : String → Option Callee) (globals : String → Option Global) :
-    PInstr → Except String (Instr Γ)
+def mkInstr (callees : String → Option Callee) : PInstr → Except String (Instr Γ)
   | .const c d => return .const c.value (← mkDst Γ _ d)
   | .poison t d => return .poison (← mkDst Γ t d)
   | .unop op d a => return .unop op (← mkDst Γ _ d) (← mkReg Γ _ a)
@@ -1410,9 +1403,7 @@ def mkInstr (callees : String → Option Callee) (globals : String → Option Gl
       return .call (h.1 ▸ h.2 ▸ f) (← mkRegs Γ ts args) (← mkDsts Γ us rets)
     else
       throw s!"@{name} does not have the type the call site needs"
-  | .addressof name dst => do
-    let some ⟨_, v⟩ := globals name | throw s!"no global bound for @{name}"
-    return .addressof v (← mkDst Γ .ptr dst)
+  | .addressof name dst => return .addressof name (← mkDst Γ .ptr dst)
 
 variable {n : Nat} (blockTys : Fin n → List Ty)
 
@@ -1434,9 +1425,9 @@ def mkExit (tRets : List Ty) : PExit → Except String (Exit Γ tRets blockTys)
 
 end Prog
 
-/-- The `Func` of `p`, calling `callees name` for `@name`. -/
+/-- The `Func` of `p`, calling `callees name` for `@name`, its globals `globals`. -/
 def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
-    (globals : String → Option Global := fun _ => none) : Except String Func := do
+    (globals : List Global := []) : Except String Func := do
   let n := p.blocks.length
   let params ←
     p.blocks.toArray.mapM fun b => do
@@ -1449,12 +1440,12 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
       let blocks ←
         p.blocks.toArray.mapM fun b => do
             return ({
-                  body := ← b.body.mapM (mkInstr p.Γ callees globals)
+                  body := ← b.body.mapM (mkInstr p.Γ callees)
                   exit := ← mkExit p.Γ blockTys p.tRets b.exit } :
                 BasicBlock p.Γ p.tRets blockTys)
       if hs : blocks.size = n then
         return { Γ := p.Γ, tRets := p.tRets, n, blockTys, blockParams, hhasBlock := hn, hentry,
-                 blocks := fun k => blocks[k.val] }
+                 blocks := fun k => blocks[k.val], globals }
       else
         throw "internal: block count"
     else
@@ -1464,7 +1455,7 @@ def Prog.toFunc (p : Prog) (callees : String → Option Callee := fun _ => none)
 
 /-- Translate `reg` to a `Func`. -/
 def translate (reg : Region) (callees : String → Option Callee := fun _ => none)
-    (globals : String → Option Global := fun _ => none) : Except String Func := do
+    (globals : List Global := []) : Except String Func := do
   (← Prog.ofRegion reg).toFunc callees globals
 
 end

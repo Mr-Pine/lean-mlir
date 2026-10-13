@@ -199,16 +199,18 @@ Mistakes:
 ```
 
 ```lean
--- fd_ed25519_point_set_zero.lean
+-- fd_ed25519_point_set_zero.lean: hg : s.mem.Globals fd_ed25519_point_set_zero.globals
   step_addressof fd_f25519_zero.value_eq with zero
   step_addressof fd_f25519_one.value_eq with one
   …
-  finish_block
-  subst hS
-  erase_frame
 ```
 
-A function with an `alloca` or `addressof` is framed: its final state has
+A global's block is the program's, placed before any call (`hg`, one hypothesis per theorem:
+`s.mem.Globals f.globals`, the list `mlir_def` builds of `f`'s globals and its `Func` callees');
+`addressof` allocates nothing. A constant's block is read-only: `Fits`/`Live` facts, no `Room`;
+a callee storing through a pointer needs it writable (`Room`, or `Fits` and `Writable`).
+
+A function with an `alloca` is framed: its final state has
 `alloc := ⟨s.alloc.nextFreeBlock + k⟩` and the proof ends with `erase_frame` (or
 `simp [mlir_frame, …]`). A slot is undefined until stored to: `step_alloca` gives `hv0_room`, not
 a `Fits`; a callee writing it takes `Room` for its output. An `alloca` with lifetime markers is

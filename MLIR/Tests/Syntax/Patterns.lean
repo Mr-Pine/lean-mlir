@@ -217,7 +217,7 @@ theorem runBodyFrom_put3Run {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos :
     {X : BitVec 64} {P : Pointer} {S : GlobalState} {g : ⟪Γ⟫ × GlobalState → PoisonOr β}
     {K : PoisonOr β} (hbody : blk.body.drop pos = put3Run x y p q q' ++ rest)
     (hR : E ⊨ [x := X, p := P]) (hpq : p ≠ .val q.i q.h) (hwf : S.WF)
-    (hP : Fits S.mem P 64) (hP8 : Fits S.mem (P.add 8#64) 64) (hP16 : Fits S.mem (P.add 16#64) 64)
+    (hP : Room S.mem P 64) (hP8 : Room S.mem (P.add 8#64) 64) (hP16 : Room S.mem (P.add 16#64) 64)
     (hK :
       ∀ vq vq',
         (blk.runBodyFrom E[y := .value (X + X), q := vq, q' := vq'] (pos + 6)
@@ -237,8 +237,8 @@ theorem runBodyFrom_put3Run {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos :
   subst_vars
   exact hK _ _
 
-example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
-    (hp8 : Fits s.mem (p.add 8#64) 64) (hp16 : Fits s.mem (p.add 16#64) 64) :
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64)
+    (hp8 : Room s.mem (p.add 8#64) 64) (hp16 : Room s.mem (p.add 16#64) 64) :
     put3.call (put3.args (.value p)) s =
       .value
         (.nil,

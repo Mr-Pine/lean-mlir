@@ -14,10 +14,14 @@ open Memory
 
 @[expose] public section
 
-/-- `m` with block `i` changed by `f`, if there is one. -/
+/-- `f` on a writable block; a read-only one (a `constant` global's) unchanged. -/
+def MemoryBlock.update (f : MemoryBlock → MemoryBlock) (b : MemoryBlock) : MemoryBlock :=
+  if b.writable then f b else b
+
+/-- `m` with block `i` changed by `f`, if there is one and it is writable. -/
 def MemoryState.modifyBlock (m : MemoryState) (i : BlockId) (f : MemoryBlock → MemoryBlock) :
     MemoryState :=
-  { m with mem := m.mem.modify i f }
+  { m with mem := m.mem.modify i (MemoryBlock.update f) }
 
 /-- `ptrs` without the entries whose 64 bits meet bits `off … off + w`, unless `d` sets them all:
 an entry under defined bits loads as poison anyway. -/
@@ -119,7 +123,8 @@ def GlobalState.alloca (s : GlobalState) (bytes : Nat) (dead : Bool := false) : 
   { alloc := ⟨s.alloc.nextFreeBlock + 1⟩,
     mem :=
       { s.mem with
-        mem := s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead, fun _ => none⟩ } }
+        mem :=
+          s.mem.mem.insert ⟨s.alloc.nextFreeBlock⟩ ⟨bytes, 0, 0, !dead, fun _ => none, true⟩ } }
 
 /-- Add a live block of `bytes` bytes under `b`, holding `x` from its start, the rest undefined: an
 `alloca` stored into at once. -/
@@ -128,7 +133,7 @@ def MemoryState.addBlock (m : MemoryState) (b : BlockId) (bytes : Nat) {w : Nat}
   { m with
     mem :=
       m.mem.insert b
-        ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true, fun _ => none⟩ }
+        ⟨bytes, spliceBits 0 0 x, spliceBits 0 0 (BitVec.allOnes w), true, fun _ => none, true⟩ }
 
 /-- Remove every block with id `n` or above: a returning callee's frame. -/
 def MemoryState.eraseFrom (m : MemoryState) (n : Nat) : MemoryState :=
@@ -203,30 +208,183 @@ theorem GlobalState.addr_alloca {s : GlobalState} : (s.alloca n d).mem.addr = s.
 /-! ### Changing one block -/
 
 theorem MemoryState.getElem?_modifyBlock {m : MemoryState} :
-    (m.modifyBlock i f)[j]? = if i = j then m[i]?.map f else m[j]? := by
+    (m.modifyBlock i f)[j]? = if i = j then m[i]?.map (MemoryBlock.update f) else m[j]? := by
   simp only [modifyBlock, getElem?_eq, Std.ExtHashMap.getElem?_modify, beq_iff_eq]
 
 theorem MemoryState.getElem?_modifyBlock_self {m : MemoryState} :
-    (m.modifyBlock i f)[i]? = m[i]?.map f := by simp [getElem?_modifyBlock]
+    (m.modifyBlock i f)[i]? = m[i]?.map (MemoryBlock.update f) := by simp [getElem?_modifyBlock]
 
 theorem MemoryState.getElem?_modifyBlock_ne {m : MemoryState} (h : j ≠ i) :
     (m.modifyBlock i f)[j]? = m[j]? := by simp [getElem?_modifyBlock, Ne.symm h]
 
+/-- A writable block, changed. -/
+theorem MemoryState.getElem?_modifyBlock_of_writable {m : MemoryState} {i : BlockId}
+    {b : MemoryBlock} {f : MemoryBlock → MemoryBlock} (h : m[i]? = some b)
+    (hw : b.writable = true) : (m.modifyBlock i f)[i]? = some (f b) := by
+  simp [getElem?_modifyBlock_self, h, MemoryBlock.update, hw]
+
+/-- A read-only block, unchanged. -/
+theorem MemoryState.getElem?_modifyBlock_readOnly {m : MemoryState} {i j : BlockId}
+    {b : MemoryBlock} {f : MemoryBlock → MemoryBlock} (h : m[j]? = some b)
+    (hw : b.writable = false) : (m.modifyBlock i f)[j]? = m[j]? := by
+  rw [getElem?_modifyBlock]
+  split
+  · subst_vars; simp [h, MemoryBlock.update, hw]
+  · rfl
+
 theorem MemoryState.mem_modifyBlock {m : MemoryState} : k ∈ (m.modifyBlock i f).mem ↔ k ∈ m.mem :=
   Std.ExtHashMap.mem_modify
 
-theorem GlobalState.WF_modifyBlock {s : GlobalState} :
+/-! ### Memories with the same blocks -/
+
+/-- A block's length, lifetime and writability: what `InBounds`, `Live`, `Room` read. -/
+def MemoryBlock.shape (b : MemoryBlock) : Nat × Bool × Bool :=
+  (b.length, b.live, b.writable)
+
+/-- `m` and `m'` have the same blocks, of the same shapes. -/
+def MemoryState.SameShape (m m' : MemoryState) : Prop :=
+  ∀ i : BlockId, (m[i]?).map MemoryBlock.shape = (m'[i]?).map MemoryBlock.shape
+
+theorem MemoryState.SameShape.block {m m' : MemoryState} (h : m.SameShape m') {i : BlockId}
+    {b : MemoryBlock} (hb : m[i]? = some b) : ∃ b', m'[i]? = some b' ∧ b'.shape = b.shape := by
+  have := h i
+  rw [hb] at this
+  cases hb' : m'[i]? with
+  | none => simp [hb'] at this
+  | some b' => exact ⟨b', rfl, by simpa [hb'] using this.symm⟩
+
+theorem MemoryState.SameShape.symm {m m' : MemoryState} (h : m.SameShape m') : m'.SameShape m :=
+  fun i => (h i).symm
+
+theorem InBounds.of_sameShape {m m' : MemoryState} (h : m.SameShape m') (hp : InBounds m p w) :
+    InBounds m' p w := by
+  obtain ⟨b, hb, hw⟩ := hp
+  obtain ⟨b', hb', he⟩ := h.block hb
+  have : b'.length = b.length := congrArg Prod.fst he
+  exact ⟨b', hb', by simp only [MemoryBlock.lengthInBits] at hw ⊢; omega⟩
+
+theorem Live.of_sameShape {m m' : MemoryState} (h : m.SameShape m') (hp : Live m p w) :
+    Live m' p w := by
+  obtain ⟨b, hb, hl, hw⟩ := hp
+  obtain ⟨b', hb', he⟩ := h.block hb
+  have hl' : b'.live = b.live := congrArg (·.2.1) he
+  have : b'.length = b.length := congrArg Prod.fst he
+  exact ⟨b', hb', hl' ▸ hl, by simp only [MemoryBlock.lengthInBits] at hw ⊢; omega⟩
+
+theorem Writable.of_sameShape {m m' : MemoryState} (h : m.SameShape m') (hp : Writable m p) :
+    Writable m' p := by
+  obtain ⟨b, hb, hw⟩ := hp
+  obtain ⟨b', hb', he⟩ := h.block hb
+  exact ⟨b', hb', (congrArg (·.2.2) he).trans hw⟩
+
+theorem Room.of_sameShape {m m' : MemoryState} (h : m.SameShape m') (hp : Room m p w) :
+    Room m' p w :=
+  ⟨hp.1.of_sameShape h, hp.2.of_sameShape h⟩
+
+theorem MemoryState.SameShape.mem {m m' : MemoryState} (h : m.SameShape m') :
+    k ∈ m.mem ↔ k ∈ m'.mem := by
+  have := h k
+  simp only [Std.ExtHashMap.mem_iff_isSome_getElem?, ← MemoryState.getElem?_eq]
+  cases hb : m[k]? <;> cases hb' : m'[k]? <;> simp_all
+
+/-- A change keeping each block's shape keeps the memory's. -/
+theorem MemoryState.sameShape_modifyBlock {m : MemoryState} {i : BlockId}
+    {f : MemoryBlock → MemoryBlock}
+    (hf : ∀ b, (f b).shape = b.shape) : (m.modifyBlock i f).SameShape m := by
+  intro j
+  rw [getElem?_modifyBlock]
+  split
+  · rename_i h; subst h
+    cases m[i]? with
+    | none => rfl
+    | some b =>
+      simp only [Option.map_some, MemoryBlock.update]
+      split <;> simp [hf]
+  · rfl
+
+theorem MemoryState.sameShape_storeDef {m : MemoryState} {x d : BitVec w} :
+    (m.storeDef p x d).SameShape m :=
+  sameShape_modifyBlock fun _ => rfl
+
+theorem MemoryState.sameShape_storeAt {m : MemoryState} {x : BitVec w} :
+    (m.storeAt p x).SameShape m :=
+  sameShape_modifyBlock fun _ => rfl
+
+theorem MemoryState.sameShape_overlay {m : MemoryState} {x d : BitVec w} :
+    (m.overlay p x d).SameShape m :=
+  sameShape_modifyBlock fun _ => rfl
+
+theorem MemoryState.sameShape_recordPtr {m : MemoryState} : (m.recordPtr i o q).SameShape m :=
+  sameShape_modifyBlock fun _ => rfl
+
+theorem MemoryState.sameShape_storePtr {m : MemoryState} : (m.storePtr p q).SameShape m :=
+  sameShape_modifyBlock fun _ => rfl
+
+/-- `WF` does not depend on a change keeping each block's length and writability. -/
+theorem GlobalState.WF_modifyBlock {s : GlobalState} {i : BlockId} {f : MemoryBlock → MemoryBlock}
+    (hf : ∀ b, (f b).length = b.length ∧ (f b).writable = b.writable) :
     ({ s with mem := m.modifyBlock i f } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF := by
+  have hlw :
+    ∀ b,
+      (MemoryBlock.update f b).length = b.length ∧
+        (MemoryBlock.update f b).writable = b.writable := by
+    intro b; unfold MemoryBlock.update; split <;> simp [hf]
+  have hconst :
+    ∀ (b : BlockId) (g : GlobalImage),
+      g.constant = true → ((m.modifyBlock i f)[b]? = some g.block ↔ m[b]? = some g.block) := by
+    intro b g hc
+    constructor
+    · intro h
+      rw [MemoryState.getElem?_modifyBlock] at h
+      split at h
+      · rename_i he; subst he
+        cases hb : m[i]? with
+        | none =>
+          rw [hb] at h; simp at h
+        | some blk =>
+          rw [hb] at h
+          simp only [Option.map_some, Option.some.injEq, MemoryBlock.update] at h
+          split at h
+          · rename_i hw
+            have := (hf blk).2
+            rw [h, hw] at this
+            simp [GlobalImage.block, hc] at this
+          · rw [h]
+      · exact h
+    · intro h
+      rw [MemoryState.getElem?_modifyBlock_readOnly h (by simp [GlobalImage.block, hc]), h]
+  have hmut :
+    ∀ (b : BlockId) (n : Nat),
+      (∃ blk, (m.modifyBlock i f)[b]? = some blk ∧ blk.writable = true ∧ blk.length = n) ↔
+        ∃ blk, m[b]? = some blk ∧ blk.writable = true ∧ blk.length = n := by
+    intro b n
+    rw [MemoryState.getElem?_modifyBlock]
+    split
+    · rename_i he; subst he
+      cases m[i]? with
+      | none => simp
+      | some blk =>
+        simp only [Option.map_some, Option.some.injEq, exists_eq_left']
+        rw [(hlw blk).1, (hlw blk).2]
+    · rfl
   constructor
-  · rintro ⟨hb, hp, hn⟩
-    exact
+  · rintro ⟨hb, hp, hn, hg, hm⟩
+    refine
       ⟨fun k hk => hb k (MemoryState.mem_modifyBlock.2 hk), hp, fun h =>
-        hn (MemoryState.mem_modifyBlock.2 h)⟩
-  · rintro ⟨hb, hp, hn⟩
-    exact
+        hn (MemoryState.mem_modifyBlock.2 h), fun sym b g he => ?_, hm⟩
+    have := hg sym b g he
+    split at this
+    · rename_i hc; simpa [hc] using (hconst b g hc).1 this
+    · rename_i hc; simpa [hc] using (hmut b g.bytes).1 this
+  · rintro ⟨hb, hp, hn, hg, hm⟩
+    refine
       ⟨fun k hk => hb k (MemoryState.mem_modifyBlock.1 hk), hp, fun h =>
-        hn (MemoryState.mem_modifyBlock.1 h)⟩
+        hn (MemoryState.mem_modifyBlock.1 h), fun sym b g he => ?_, hm⟩
+    have := hg sym b g he
+    split at this
+    · rename_i hc; simpa [hc] using (hconst b g hc).2 this
+    · rename_i hc; simpa [hc] using (hmut b g.bytes).2 this
 
 theorem MemoryState.eraseFrom_modifyBlock {m : MemoryState} :
     (m.modifyBlock i f).eraseFrom n = (m.eraseFrom n).modifyBlock i f := by
@@ -271,25 +429,36 @@ theorem MemoryState.storeAt_eq_overlay {m : MemoryState} {x : BitVec w} :
     m.storeAt p x = m.overlay p x (BitVec.allOnes w) :=
   rfl
 
-theorem MemoryState.getElem?_storeDef_self {m : MemoryState} (h : m[p.id]? = some blk) :
+theorem MemoryState.getElem?_storeDef_self {m : MemoryState} (h : m[p.id]? = some blk)
+    (hw : blk.writable = true) :
     (m.storeDef p x d)[p.id]? =
       some
         { blk with
           bytes := spliceBits blk.bytes p.offsetInBits x
           defined := spliceBits blk.defined p.offsetInBits d
-          ptrs := MemoryBlock.clearPtrs blk.ptrs p.offsetInBits d } := by
-  simp [storeDef, getElem?_modifyBlock_self, h]
+          ptrs := MemoryBlock.clearPtrs blk.ptrs p.offsetInBits d } :=
+  getElem?_modifyBlock_of_writable h hw
 
 /-- The an existing block is overwritten with `storeAt` -/
 @[mlir_mem]
 theorem MemoryState.getElem?_storeAt_self {m : MemoryState} {x : BitVec w}
-    (h : m[p.id]? = some blk) :
+    (h : m[p.id]? = some blk) (hw : blk.writable = true) :
     (m.storeAt p x)[p.id]? =
       some
         { blk with
           bytes := spliceBits blk.bytes p.offsetInBits x
-          defined := spliceBits blk.defined p.offsetInBits (BitVec.allOnes w) } := by
-  simp [storeAt, getElem?_modifyBlock_self, h]
+          defined := spliceBits blk.defined p.offsetInBits (BitVec.allOnes w) } :=
+  getElem?_modifyBlock_of_writable h hw
+
+/-- A store into a read-only block does nothing. -/
+theorem MemoryState.getElem?_storeDef_readOnly {m : MemoryState} {q : BlockId} {x d : BitVec w}
+    (h : m[q]? = some blk) (hw : blk.writable = false) : (m.storeDef p x d)[q]? = m[q]? :=
+  getElem?_modifyBlock_readOnly h hw
+
+/-- A store into a read-only block does nothing. -/
+theorem MemoryState.getElem?_storeAt_readOnly {m : MemoryState} {q : BlockId} {x : BitVec w}
+    (h : m[q]? = some blk) (hw : blk.writable = false) : (m.storeAt p x)[q]? = m[q]? :=
+  getElem?_modifyBlock_readOnly h hw
 
 theorem MemoryState.getElem?_storeDef_ne {m : MemoryState} {p q : Pointer} (hptr : q.id ≠ p.id) :
     (m.storeDef p x d)[q.id]? = m[q.id]? :=
@@ -305,7 +474,7 @@ theorem MemoryState.getElem?_storeDef_isSome {m : MemoryState} {i : BlockId} :
     ((m.storeDef p x d)[i]?).isSome = (m[i]?).isSome := by
   simp only [storeDef, getElem?_modifyBlock]
   split
-  · rename_i h; subst h; simp
+  · rename_i h; subst h; cases m[p.id]? <;> rfl
   · rfl
 
 /-- `storeAt` does not change whether an id is allocated or not. -/
@@ -315,22 +484,22 @@ theorem MemoryState.getElem?_storeAt_isSome {m : MemoryState} {i : BlockId} :
   rw [storeAt_eq_storeDef]; exact getElem?_storeDef_isSome
 
 @[mlir_mem, mlir_read]
-theorem MemoryState.readAt_storeDef_self (hfits : InBounds m p w) (x d : BitVec w) :
+theorem MemoryState.readAt_storeDef_self (hfits : Room m p w) (x d : BitVec w) :
     (m.storeDef p x d).readAt p w = x := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
+  obtain ⟨blk, hblk, -, hsz, hw⟩ := hfits.block
   unfold MemoryBlock.lengthInBits at hsz
-  simp [readAt, getElem?_storeDef_self hblk, extractLsb'_spliceBits_self, hsz]
+  simp [readAt, getElem?_storeDef_self hblk hw, extractLsb'_spliceBits_self, hsz]
 
 @[mlir_mem, mlir_read]
-theorem MemoryState.readAt_storeAt_self (hfits : InBounds m p w) (x : BitVec w) :
+theorem MemoryState.readAt_storeAt_self (hfits : Room m p w) (x : BitVec w) :
     (m.storeAt p x).readAt p w = x := by
   rw [storeAt_eq_storeDef]; exact readAt_storeDef_self hfits x _
 
-theorem MemoryState.definedAt_storeDef_self (hfits : InBounds m p w) (x d : BitVec w) :
+theorem MemoryState.definedAt_storeDef_self (hfits : Room m p w) (x d : BitVec w) :
     (m.storeDef p x d).definedAt p w = d := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
+  obtain ⟨blk, hblk, -, hsz, hw⟩ := hfits.block
   unfold MemoryBlock.lengthInBits at hsz
-  simp [definedAt, getElem?_storeDef_self hblk, extractLsb'_spliceBits_self, hsz]
+  simp [definedAt, getElem?_storeDef_self hblk hw, extractLsb'_spliceBits_self, hsz]
 
 /-- Overlaying what a range holds, defined as it is, changes nothing. -/
 theorem MemoryState.overlay_readAt_definedAt {m : MemoryState} (h : InBounds m p w) :
@@ -350,14 +519,15 @@ theorem MemoryState.overlay_readAt_definedAt {m : MemoryState} (h : InBounds m p
       omega
     · rfl
   simp only [overlay, readAt, definedAt, hblk, modifyBlock]
-  refine MemoryState.ext ?_ rfl
+  refine MemoryState.ext ?_ rfl rfl
   apply Std.ExtHashMap.ext_getElem?
   intro k
   simp only [Std.ExtHashMap.getElem?_modify, beq_iff_eq]
   split
   · subst_vars
     rw [hb]
-    simp only [Option.map_some, hsp]
+    simp only [Option.map_some, MemoryBlock.update, hsp]
+    split <;> rfl
   · rfl
 
 @[mlir_mem, mlir_read]
@@ -374,8 +544,10 @@ theorem MemoryState.readAt_storeDef_disjoint {v w : Nat} {m : MemoryState}
       rw [h'] at this
       cases h'' : (m.storeDef p x d)[p.id]? <;> simp_all
     | some blk =>
-      rw [getElem?_storeDef_self h']
-      exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
+      cases hw : blk.writable
+      · rw [getElem?_storeDef_readOnly h' hw, h']
+      · rw [getElem?_storeDef_self h' hw]
+        exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
   · rw [getElem?_storeDef_ne hid]
 
 @[mlir_mem, mlir_read]
@@ -397,17 +569,19 @@ theorem MemoryState.definedAt_storeDef_disjoint {v w : Nat} {m : MemoryState}
       rw [h'] at this
       cases h'' : (m.storeDef p x d)[p.id]? <;> simp_all
     | some blk =>
-      rw [getElem?_storeDef_self h']
-      exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
+      cases hw : blk.writable
+      · rw [getElem?_storeDef_readOnly h' hw, h']
+      · rw [getElem?_storeDef_self h' hw]
+        exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
   · rw [getElem?_storeDef_ne hid]
 
 @[mlir_mem]
-theorem MemoryState.readAt_storeAt_subrange (hfits : InBounds m p v) (hid : q.id = p.id)
+theorem MemoryState.readAt_storeAt_subrange (hfits : Room m p v) (hid : q.id = p.id)
     (hle : p.offsetInBits ≤ q.offsetInBits) (hw : (q.offsetInBits - p.offsetInBits) + w' ≤ v)
     (x : BitVec v) :
     (m.storeAt p x).readAt q w' = x.extractLsb' (q.offsetInBits - p.offsetInBits) w' := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
-  simp only [readAt, hid, getElem?_storeAt_self hblk]
+  obtain ⟨blk, hblk, -, hsz, hwr⟩ := hfits.block
+  simp only [readAt, hid, getElem?_storeAt_self hblk hwr]
   exact extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) hw hsz
 
 /-- `p.add off`'s offset in bits, without overflow. -/
@@ -431,12 +605,16 @@ theorem InBounds.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
     ⟨blk, hblk, by
       rw [Pointer.offsetInBits_add hov]; omega⟩
 
-theorem Room.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
-    (hw : off.toNat * 8 + w ≤ v) (h : Room m p v) : Room m (p.add off) w := by
+theorem Live.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
+    (hw : off.toNat * 8 + w ≤ v) (h : Live m p v) : Live m (p.add off) w := by
   obtain ⟨blk, hblk, hl, hsz⟩ := h
   exact
     ⟨blk, hblk, hl, by
       rw [Pointer.offsetInBits_add hov]; omega⟩
+
+theorem Room.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
+    (hw : off.toNat * 8 + w ≤ v) (h : Room m p v) : Room m (p.add off) w :=
+  ⟨h.1.add_of_le hov hw, h.2.of_id_eq rfl⟩
 
 /-- A range inside `p`'s fits too. -/
 theorem Fits.add_of_le {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off)
@@ -481,7 +659,7 @@ theorem Fits.append {off : BitVec 64} (hov : ¬p.offset.uaddOverflow off) (hv : 
 
 /-- A read inside a store: the stored value's bits. -/
 @[mlir_read]
-theorem MemoryState.readAt_storeAt_add {off : BitVec 64} (hfits : InBounds m p v)
+theorem MemoryState.readAt_storeAt_add {off : BitVec 64} (hfits : Room m p v)
     (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x : BitVec v) :
     (m.storeAt p x).readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w := by
   rw [readAt_storeAt_subrange (q := p.add off) hfits rfl
@@ -517,17 +695,17 @@ theorem MemoryState.readAt_of_readAt_le {m : MemoryState} {p : Pointer} {x : Bit
 
 /-- A read over a store inside it: the bits read before, with the stored ones spliced in. -/
 @[mlir_read]
-theorem MemoryState.readAt_add_storeAt {off : BitVec 64} (hfits : InBounds m p v)
+theorem MemoryState.readAt_add_storeAt {off : BitVec 64} (hfits : Room m p v)
     (hov : ¬p.offset.uaddOverflow off) (_hw : off.toNat * 8 + w ≤ v) (x : BitVec w) :
     (m.storeAt (p.add off) x).readAt p v = spliceBits (m.readAt p v) (off.toNat * 8) x := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
+  obtain ⟨blk, hblk, -, hsz, hwr⟩ := hfits.block
   have hs :
     (m.storeAt (p.add off) x)[p.id]? =
       some
         { blk with
           bytes := spliceBits blk.bytes (p.add off).offsetInBits x
           defined := spliceBits blk.defined (p.add off).offsetInBits (BitVec.allOnes w) } :=
-    getElem?_storeAt_self (p := p.add off) hblk
+    getElem?_storeAt_self (p := p.add off) hblk hwr
   simp only [readAt, hs, hblk]
   unfold MemoryBlock.lengthInBits at hsz
   rw [Pointer.offsetInBits_add hov]
@@ -556,30 +734,16 @@ theorem MemoryState.definedAt_of_fits (h : Fits m p w) : m.definedAt p w = BitVe
 /-! #### What fits after a store -/
 
 theorem InBounds.storeDef_iff {m : MemoryState} {x d : BitVec v} :
-    InBounds (m.storeDef q x d) p w ↔ InBounds m p w := by
-  unfold InBounds
-  by_cases h : q.id = p.id
-  · rw [← h]
-    cases hb : m[q.id]? with
-    | none =>
-      have := MemoryState.getElem?_storeDef_isSome (m := m) (p := q) (x := x) (d := d) (i := q.id)
-      rw [hb] at this
-      cases h' : (m.storeDef q x d)[q.id]? <;> simp_all
-    | some blk => simp [MemoryState.getElem?_storeDef_self hb, MemoryBlock.lengthInBits]
-  · rw [MemoryState.getElem?_storeDef_ne (Ne.symm h)]
+    InBounds (m.storeDef q x d) p w ↔ InBounds m p w :=
+  ⟨.of_sameShape MemoryState.sameShape_storeDef, .of_sameShape MemoryState.sameShape_storeDef.symm⟩
+
+theorem Live.storeDef_iff {m : MemoryState} {x d : BitVec v} :
+    Live (m.storeDef q x d) p w ↔ Live m p w :=
+  ⟨.of_sameShape MemoryState.sameShape_storeDef, .of_sameShape MemoryState.sameShape_storeDef.symm⟩
 
 theorem Room.storeDef_iff {m : MemoryState} {x d : BitVec v} :
-    Room (m.storeDef q x d) p w ↔ Room m p w := by
-  unfold Room
-  by_cases h : q.id = p.id
-  · rw [← h]
-    cases hb : m[q.id]? with
-    | none =>
-      have := MemoryState.getElem?_storeDef_isSome (m := m) (p := q) (x := x) (d := d) (i := q.id)
-      rw [hb] at this
-      cases h' : (m.storeDef q x d)[q.id]? <;> simp_all
-    | some blk => simp [MemoryState.getElem?_storeDef_self hb, MemoryBlock.lengthInBits]
-  · rw [MemoryState.getElem?_storeDef_ne (Ne.symm h)]
+    Room (m.storeDef q x d) p w ↔ Room m p w :=
+  ⟨.of_sameShape MemoryState.sameShape_storeDef, .of_sameShape MemoryState.sameShape_storeDef.symm⟩
 
 /-- A store keeps every block and its length. -/
 @[simp]
@@ -609,18 +773,36 @@ theorem InBounds.storeDef (hq : InBounds m p w) : InBounds (m.storeDef q x d) p 
 theorem Room.storeDef (hq : Room m p w) : Room (m.storeDef q x d) p w :=
   Room.storeDef_iff.2 hq
 
+@[mlir_mem, mlir_transport]
+theorem Live.storeAt (hq : Live m p w) : Live (m.storeAt q x) p w :=
+  hq.of_sameShape MemoryState.sameShape_storeAt.symm
+
+@[mlir_mem, mlir_transport]
+theorem Live.storeDef (hq : Live m p w) : Live (m.storeDef q x d) p w :=
+  hq.of_sameShape MemoryState.sameShape_storeDef.symm
+
+@[mlir_mem, mlir_transport]
+theorem Writable.storeAt (hq : Writable m p) : Writable (m.storeAt q x) p :=
+  hq.of_sameShape MemoryState.sameShape_storeAt.symm
+
+@[mlir_mem, mlir_transport]
+theorem Writable.storeDef (hq : Writable m p) : Writable (m.storeDef q x d) p :=
+  hq.of_sameShape MemoryState.sameShape_storeDef.symm
+
 /-- A store keeps known bits known: it defines the bits it writes. -/
 @[mlir_mem, mlir_transport]
 theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
   obtain ⟨blk, hblk, hl, hsz, hd⟩ := hq
   by_cases h : q.id = p.id
   · rw [← h] at hblk
+    cases hwr : blk.writable
+    · exact ⟨blk, by rw [← h, MemoryState.getElem?_storeAt_readOnly hblk hwr, hblk], hl, hsz, hd⟩
     refine
       ⟨{ blk with
           bytes := spliceBits blk.bytes q.offsetInBits x
           defined := spliceBits blk.defined q.offsetInBits (BitVec.allOnes _) },
         by
-        rw [← h]; exact MemoryState.getElem?_storeAt_self hblk, hl, hsz, ?_⟩
+        rw [← h]; exact MemoryState.getElem?_storeAt_self hblk hwr, hl, hsz, ?_⟩
     apply BitVec.eq_of_getLsbD_eq
     intro i hi
     have := congrArg (·.getLsbD i) hd
@@ -638,9 +820,10 @@ theorem Fits.storeAt (hq : Fits m p w) : Fits (m.storeAt q x) p w := by
 @[mlir_fresh, mlir_mem]
 theorem Fits.storeAt_self {m : MemoryState} {x : BitVec w} (h : Room m p w) :
     Fits (m.storeAt p x) p w := by
-  obtain ⟨blk, hblk, hl, hsz⟩ := h
+  obtain ⟨blk, hblk, hl, hsz, hwr⟩ := h.block
   unfold MemoryBlock.lengthInBits at hsz
-  exact ⟨_, MemoryState.getElem?_storeAt_self hblk, hl, hsz, extractLsb'_spliceBits_self _ _ _ hsz⟩
+  exact
+    ⟨_, MemoryState.getElem?_storeAt_self hblk hwr, hl, hsz, extractLsb'_spliceBits_self _ _ _ hsz⟩
 
 /-- A store into a live block's room: a range from its start is known. -/
 theorem Fits.storeAt_self_of_le {m : MemoryState} {x : BitVec v} (h : Room m p v) (hw : w ≤ v) :
@@ -658,9 +841,9 @@ theorem Fits.storeDef_of_mask {m : MemoryState} {x d : BitVec v} {off : BitVec 6
     (h : Room m p v) (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v)
     (hd : d.extractLsb' (off.toNat * 8) w = BitVec.allOnes w) :
     Fits (m.storeDef p x d) (p.add off) w := by
-  obtain ⟨blk, hblk, hl, hsz⟩ := h
+  obtain ⟨blk, hblk, hl, hsz, hwr⟩ := h.block
   unfold MemoryBlock.lengthInBits at hsz
-  refine ⟨_, MemoryState.getElem?_storeDef_self hblk, hl, ?_, ?_⟩
+  refine ⟨_, MemoryState.getElem?_storeDef_self hblk hwr, hl, ?_, ?_⟩
   · simp only [MemoryBlock.lengthInBits, Pointer.offsetInBits_add hov]; omega
   · rw [Pointer.offsetInBits_add hov,
       extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
@@ -669,9 +852,9 @@ theorem Fits.storeDef_of_mask {m : MemoryState} {x d : BitVec v} {off : BitVec 6
 /-- `storeDef_of_mask` from the masked store's start. -/
 theorem Fits.storeDef_of_mask_self {m : MemoryState} {x d : BitVec v} (h : Room m p v)
     (hw : w ≤ v) (hd : d.extractLsb' 0 w = BitVec.allOnes w) : Fits (m.storeDef p x d) p w := by
-  obtain ⟨blk, hblk, hl, hsz⟩ := h
+  obtain ⟨blk, hblk, hl, hsz, hwr⟩ := h.block
   unfold MemoryBlock.lengthInBits at hsz
-  refine ⟨_, MemoryState.getElem?_storeDef_self hblk, hl, ?_, ?_⟩
+  refine ⟨_, MemoryState.getElem?_storeDef_self hblk hwr, hl, ?_, ?_⟩
   · simp only [MemoryBlock.lengthInBits]; omega
   · rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
       Nat.sub_self, hd]
@@ -698,27 +881,27 @@ theorem Fits.storeDef_definedAt_self {m : MemoryState} {x : BitVec v} (h : Room 
   exact hd
 
 /-- A read inside a masked store: the stored bits. -/
-theorem MemoryState.readAt_storeDef_add {off : BitVec 64} (hfits : InBounds m p v)
+theorem MemoryState.readAt_storeDef_add {off : BitVec 64} (hfits : Room m p v)
     (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x d : BitVec v) :
     (m.storeDef p x d).readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
+  obtain ⟨blk, hblk, -, hsz, hwr⟩ := hfits.block
   unfold MemoryBlock.lengthInBits at hsz
-  have hb : (m.storeDef p x d)[(p.add off).id]? = _ := getElem?_storeDef_self hblk
+  have hb : (m.storeDef p x d)[(p.add off).id]? = _ := getElem?_storeDef_self hblk hwr
   simp only [readAt, hb, Pointer.offsetInBits_add hov]
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega),
     Nat.add_sub_cancel_left]
 
 /-- A read at a masked store's start: the stored bits' low ones. -/
-theorem MemoryState.readAt_storeDef_le (hfits : InBounds m p v) (hw : w ≤ v) (x d : BitVec v) :
+theorem MemoryState.readAt_storeDef_le (hfits : Room m p v) (hw : w ≤ v) (x d : BitVec v) :
     (m.storeDef p x d).readAt p w = x.extractLsb' 0 w := by
-  obtain ⟨blk, hblk, hsz⟩ := hfits
+  obtain ⟨blk, hblk, -, hsz, hwr⟩ := hfits.block
   unfold MemoryBlock.lengthInBits at hsz
-  simp only [readAt, getElem?_storeDef_self hblk]
+  simp only [readAt, getElem?_storeDef_self hblk hwr]
   rw [extractLsb'_spliceBits_of_subrange _ _ _ _ (by omega) (by omega) (by omega), Nat.sub_self]
 
 /-- A read inside a copy: the source's bits. -/
 @[mlir_read]
-theorem MemoryState.readAt_storeDef_readAt_add {off : BitVec 64} (hp : InBounds m p v)
+theorem MemoryState.readAt_storeDef_readAt_add {off : BitVec 64} (hp : Room m p v)
     (hq : InBounds m q v) (hov : ¬p.offset.uaddOverflow off) (hovq : ¬q.offset.uaddOverflow off)
     (hw : off.toNat * 8 + w ≤ v) (d : BitVec v) :
     (m.storeDef p (m.readAt q v) d).readAt (p.add off) w = m.readAt (q.add off) w := by
@@ -726,7 +909,7 @@ theorem MemoryState.readAt_storeDef_readAt_add {off : BitVec 64} (hp : InBounds 
 
 /-- A read at a copy's start: the source's bits. -/
 @[mlir_read]
-theorem MemoryState.readAt_storeDef_readAt_le (hp : InBounds m p v) (hw : w ≤ v) (d : BitVec v) :
+theorem MemoryState.readAt_storeDef_readAt_le (hp : Room m p v) (hw : w ≤ v) (d : BitVec v) :
     (m.storeDef p (m.readAt q v) d).readAt p w = m.readAt q w := by
   rw [readAt_storeDef_le hp hw, readAt_of_readAt_le hw rfl]
   apply BitVec.eq_of_getLsbD_eq
@@ -743,13 +926,15 @@ theorem Fits.storeDef_of_disjoint (hq : Fits m p w) (hd : (Range.of q v).Disjoin
   obtain ⟨blk, hblk, hl, hsz, hdef⟩ := hq
   by_cases h : q.id = p.id
   · rw [← h] at hblk
+    cases hwr : blk.writable
+    · exact ⟨blk, by rw [← h, MemoryState.getElem?_storeDef_readOnly hblk hwr, hblk], hl, hsz, hdef⟩
     refine
       ⟨{ blk with
           bytes := spliceBits blk.bytes q.offsetInBits x
           defined := spliceBits blk.defined q.offsetInBits d
           ptrs := MemoryBlock.clearPtrs blk.ptrs q.offsetInBits d },
         by
-        rw [← h]; exact MemoryState.getElem?_storeDef_self hblk, hl, hsz, ?_⟩
+        rw [← h]; exact MemoryState.getElem?_storeDef_self hblk hwr, hl, hsz, ?_⟩
     simp only [Range.Disjoint, Range.of, h, ne_eq, not_true_eq_false, false_or] at hd
     rw [extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)]
     exact hdef
@@ -770,13 +955,13 @@ theorem MemoryState.mem_storeAt {m : MemoryState} : k ∈ (m.storeAt p x).mem �
 theorem GlobalState.WF_storeDef {s : GlobalState} :
     ({ s with mem := m.storeDef p x d } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 /-- A store keeps the set of blocks, so `WF` does not depend on it. -/
 @[simp, mlir_mem]
 theorem GlobalState.WF_storeAt {s : GlobalState} :
     ({ s with mem := m.storeAt p x } : GlobalState).WF ↔ ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.storeAt {s : GlobalState} (h : s.WF) :
@@ -791,7 +976,8 @@ theorem GlobalState.WF.storeDef {s : GlobalState} (h : s.WF) :
 @[mlir_mem]
 theorem GlobalState.eraseFrom_self {s : GlobalState} (hs : s.WF) :
     { s with mem := s.mem.eraseFrom s.alloc.nextFreeBlock } = s := by
-  ext : 2 <;> dsimp
+  ext : 2 <;> try rfl
+  dsimp
   rw [MemoryState.eraseFrom]
   dsimp
   rw [Std.ExtHashMap.filter_eq_self_iff]
@@ -810,7 +996,9 @@ theorem MemoryState.readAt_setLifetime {m : MemoryState} :
   unfold readAt
   by_cases h : q.id = p.id
   · rw [← h, setLifetime, getElem?_modifyBlock_self]
-    cases m[q.id]? <;> rfl
+    cases m[q.id]? with
+    | none => rfl
+    | some b => by_cases hw : b.writable <;> simp [MemoryBlock.update, hw]
   · rw [setLifetime, getElem?_modifyBlock_ne (Ne.symm h)]
 
 /-- A lifetime marker keeps the bits. -/
@@ -830,7 +1018,11 @@ theorem InBounds.setLifetime_iff {m : MemoryState} :
   unfold InBounds
   by_cases h : q.id = p.id
   · rw [← h, MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_self]
-    cases m[q.id]? <;> simp [MemoryBlock.lengthInBits]
+    cases m[q.id]? with
+    | none => simp
+    | some b =>
+      simp only [Option.map_some, MemoryBlock.update]
+      split <;> simp [MemoryBlock.lengthInBits]
   · rw [MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_ne (Ne.symm h)]
 
 @[simp]
@@ -851,19 +1043,48 @@ theorem InBounds.lifetimeStart (h : InBounds m p w) : InBounds (m.lifetimeStart 
 theorem InBounds.lifetimeEnd (h : InBounds m p w) : InBounds (m.lifetimeEnd q) p w :=
   InBounds.lifetimeEnd_iff.2 h
 
+/-- A lifetime marker keeps every block's length and writability. -/
+theorem Writable.setLifetime_iff {m : MemoryState} :
+    Writable (m.setLifetime q l) p ↔ Writable m p := by
+  unfold Writable
+  by_cases h : q.id = p.id
+  · rw [← h, MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_self]
+    cases m[q.id]? with
+    | none => simp
+    | some b =>
+      simp only [Option.map_some, MemoryBlock.update]
+      split <;> simp
+  · rw [MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_ne (Ne.symm h)]
+
 @[mlir_mem, mlir_transport]
-theorem Room.lifetimeStart (h : Room m p w) (hne : p.id ≠ q.id) : Room (m.lifetimeStart q) p w := by
+theorem Writable.lifetimeStart (h : Writable m p) : Writable (m.lifetimeStart q) p :=
+  Writable.setLifetime_iff.2 h
+
+@[mlir_mem, mlir_transport]
+theorem Writable.lifetimeEnd (h : Writable m p) : Writable (m.lifetimeEnd q) p :=
+  Writable.setLifetime_iff.2 h
+
+@[mlir_mem, mlir_transport]
+theorem Live.lifetimeStart (h : Live m p w) (hne : p.id ≠ q.id) : Live (m.lifetimeStart q) p w := by
   obtain ⟨blk, hblk, hl, hsz⟩ := h
   exact
     ⟨blk, by
       rw [MemoryState.lifetimeStart, MemoryState.getElem?_setLifetime_ne hne]; exact hblk, hl, hsz⟩
 
 @[mlir_mem, mlir_transport]
-theorem Room.lifetimeEnd (h : Room m p w) (hne : p.id ≠ q.id) : Room (m.lifetimeEnd q) p w := by
+theorem Live.lifetimeEnd (h : Live m p w) (hne : p.id ≠ q.id) : Live (m.lifetimeEnd q) p w := by
   obtain ⟨blk, hblk, hl, hsz⟩ := h
   exact
     ⟨blk, by
       rw [MemoryState.lifetimeEnd, MemoryState.getElem?_setLifetime_ne hne]; exact hblk, hl, hsz⟩
+
+@[mlir_mem, mlir_transport]
+theorem Room.lifetimeStart (h : Room m p w) (hne : p.id ≠ q.id) : Room (m.lifetimeStart q) p w :=
+  ⟨h.1.lifetimeStart hne, h.2.lifetimeStart⟩
+
+@[mlir_mem, mlir_transport]
+theorem Room.lifetimeEnd (h : Room m p w) (hne : p.id ≠ q.id) : Room (m.lifetimeEnd q) p w :=
+  ⟨h.1.lifetimeEnd hne, h.2.lifetimeEnd⟩
 
 @[mlir_mem, mlir_transport]
 theorem Fits.lifetimeStart (h : Fits m p w) (hne : p.id ≠ q.id) : Fits (m.lifetimeStart q) p w := by
@@ -881,29 +1102,64 @@ theorem Fits.lifetimeEnd (h : Fits m p w) (hne : p.id ≠ q.id) : Fits (m.lifeti
       rw [MemoryState.lifetimeEnd, MemoryState.getElem?_setLifetime_ne hne]; exact hblk, hl, hsz,
       hd⟩
 
-/-- After `lifetimeStart`, its object is live: room in its bounds. -/
-@[mlir_fresh, mlir_mem]
-theorem Room.lifetimeStart_self (h : InBounds m p w) : Room (m.lifetimeStart p) p w := by
+/-- After `lifetimeStart q`, its (writable) object is live: room in its bounds, at any pointer `p`
+into it. -/
+theorem Room.lifetimeStart_of_id_eq (h : InBounds m p w) (hw : Writable m p) (he : p.id = q.id) :
+    Room (m.lifetimeStart q) p w := by
   obtain ⟨blk, hblk, hsz⟩ := h
+  obtain ⟨blk', hblk', hwr⟩ := hw
+  rw [hblk] at hblk'
+  cases hblk'
   refine
-    ⟨{ blk with
-        defined := 0, live := true, ptrs := fun _ => none },
-      ?_, rfl, hsz⟩
-  simp [MemoryState.lifetimeStart, MemoryState.setLifetime, MemoryState.getElem?_modifyBlock_self,
-    hblk]
+    Room.of_block (b := { blk with defined := 0, live := true, ptrs := fun _ => none }) ?_ rfl hsz
+      hwr
+  rw [he] at hblk ⊢
+  exact MemoryState.getElem?_modifyBlock_of_writable hblk hwr
+
+/-- After `lifetimeStart`, its (writable) object is live: room in its bounds. -/
+@[mlir_fresh, mlir_mem]
+theorem Room.lifetimeStart_self (h : InBounds m p w) (hw : Writable m p) :
+    Room (m.lifetimeStart p) p w :=
+  Room.lifetimeStart_of_id_eq h hw rfl
+
+/-- After `lifetimeStart`, its (writable) object is live in its bounds. -/
+@[mlir_mem]
+theorem Live.lifetimeStart_self (h : InBounds m p w) (hw : Writable m p) :
+    Live (m.lifetimeStart p) p w :=
+  (Room.lifetimeStart_self h hw).live
+
+/-- After `lifetimeStart q`, its (writable) object is live in its bounds, at any `p` into it. -/
+theorem Live.lifetimeStart_of_id_eq (h : InBounds m p w) (hw : Writable m p) (he : p.id = q.id) :
+    Live (m.lifetimeStart q) p w :=
+  (Room.lifetimeStart_of_id_eq h hw he).live
+
+/-- `lifetimeStart` of any object keeps a live block live: it restarts only writable ones. -/
+theorem Live.lifetimeStart' (h : Live m p w) : Live (m.lifetimeStart q) p w := by
+  by_cases he : p.id = q.id
+  · obtain ⟨blk, hblk, hl, hsz⟩ := h
+    cases hwr : blk.writable
+    · refine ⟨blk, ?_, hl, hsz⟩
+      rw [MemoryState.lifetimeStart, MemoryState.setLifetime,
+        MemoryState.getElem?_modifyBlock_readOnly hblk hwr, hblk]
+    · exact Live.lifetimeStart_of_id_eq ⟨blk, hblk, hsz⟩ ⟨blk, hblk, hwr⟩ he
+  · exact h.lifetimeStart he
+
+/-- `lifetimeStart` of any object keeps room: a writable block it restarts is live. -/
+theorem Room.lifetimeStart' (h : Room m p w) : Room (m.lifetimeStart q) p w :=
+  ⟨h.1.lifetimeStart', h.2.lifetimeStart⟩
 
 /-- A lifetime marker keeps the set of blocks, so `WF` does not depend on it. -/
 @[simp, mlir_mem]
 theorem GlobalState.WF_lifetimeStart {s : GlobalState} :
     ({ s with mem := m.lifetimeStart p } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 /-- A lifetime marker keeps the set of blocks, so `WF` does not depend on it. -/
 @[simp, mlir_mem]
 theorem GlobalState.WF_lifetimeEnd {s : GlobalState} :
     ({ s with mem := m.lifetimeEnd p } : GlobalState).WF ↔ ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.lifetimeStart {s : GlobalState} (h : s.WF) :
@@ -1040,6 +1296,26 @@ theorem GlobalState.WF.add_blocks {s : GlobalState} (h : s.WF) :
     dsimp
     omega
   null := h.null
+  global := h.global
+  merged := h.merged
+
+/-- `alloca` adds a block under a fresh id: the others are unchanged. -/
+theorem GlobalState.getElem?_alloca {s : GlobalState} (hq : q ≠ s.allocaPtr.id) :
+    (s.alloca n d).mem[q]? = s.mem[q]? := by
+  simp only [GlobalState.alloca, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
+  split
+  · rename_i h
+    exact absurd (show s.allocaPtr.id = q by simpa [GlobalState.allocaPtr] using h) (Ne.symm hq)
+  · rfl
+
+/-- A block in a `WF` state is below the counter: not the next `alloca`'s. -/
+theorem GlobalState.WF.ne_allocaPtr {s : GlobalState} (h : s.WF) (hb : s.mem[q]? = some b) :
+    q ≠ s.allocaPtr.id := by
+  intro he
+  have hm : q ∈ s.mem.mem :=
+    Std.ExtHashMap.mem_iff_isSome_getElem?.2 (by rw [← MemoryState.getElem?_eq, hb]; rfl)
+  have := h.bound q hm
+  simp [he, GlobalState.allocaPtr] at this
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n d).WF where
@@ -1056,15 +1332,18 @@ theorem GlobalState.WF.alloca {s : GlobalState} (h : s.WF) : (s.alloca n d).WF w
     exact
       ⟨by
         simp; omega, h.null⟩
-
-/-- `alloca` adds a block under a fresh id: the others are unchanged. -/
-theorem GlobalState.getElem?_alloca {s : GlobalState} (hq : q ≠ s.allocaPtr.id) :
-    (s.alloca n d).mem[q]? = s.mem[q]? := by
-  simp only [GlobalState.alloca, MemoryState.getElem?_eq, Std.ExtHashMap.getElem?_insert]
-  split
-  · rename_i h
-    exact absurd (show s.allocaPtr.id = q by simpa [GlobalState.allocaPtr] using h) (Ne.symm hq)
-  · rfl
+  global sym b g he := by
+    have := h.global sym b g he
+    split at this
+    · rename_i hc
+      simp only [hc, ↓reduceIte]
+      rw [GlobalState.getElem?_alloca (h.ne_allocaPtr this)]
+      exact this
+    · rename_i hc
+      simp only [hc, Bool.false_eq_true, ↓reduceIte]
+      obtain ⟨blk, hb, hw, hl⟩ := this
+      exact ⟨blk, by rw [GlobalState.getElem?_alloca (h.ne_allocaPtr hb)]; exact hb, hw, hl⟩
+  merged := h.merged
 
 @[mlir_transport]
 theorem InBounds.alloca {s : GlobalState} (hwf : s.WF) (h : InBounds s.mem q w) :
@@ -1075,12 +1354,23 @@ theorem InBounds.alloca {s : GlobalState} (hwf : s.WF) (h : InBounds s.mem q w) 
   exact hb
 
 @[mlir_transport]
-theorem Room.alloca {s : GlobalState} (hwf : s.WF) (h : Room s.mem q w) :
-    Room (s.alloca n d).mem q w := by
+theorem Live.alloca {s : GlobalState} (hwf : s.WF) (h : Live s.mem q w) :
+    Live (s.alloca n d).mem q w := by
   obtain ⟨b, hb, hl, hs⟩ := h
   refine ⟨b, ?_, hl, hs⟩
   rw [GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_inBounds hwf ⟨b, hb, hs⟩)]
   exact hb
+
+@[mlir_transport]
+theorem Writable.alloca {s : GlobalState} (hwf : s.WF) (h : Writable s.mem q) :
+    Writable (s.alloca n d).mem q := by
+  obtain ⟨b, hb, hw⟩ := h
+  exact ⟨b, by rw [GlobalState.getElem?_alloca (hwf.ne_allocaPtr hb)]; exact hb, hw⟩
+
+@[mlir_transport]
+theorem Room.alloca {s : GlobalState} (hwf : s.WF) (h : Room s.mem q w) :
+    Room (s.alloca n d).mem q w :=
+  ⟨h.1.alloca hwf, h.2.alloca hwf⟩
 
 @[mlir_transport]
 theorem Fits.alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
@@ -1092,13 +1382,30 @@ theorem Fits.alloca {s : GlobalState} (hwf : s.WF) (h : Fits s.mem q w) :
 
 theorem InBounds.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
     InBounds (s.alloca n d).mem s.allocaPtr w := by
-  refine ⟨⟨n, 0, 0, !d, fun _ => none⟩, ?_, ?_⟩
+  refine ⟨⟨n, 0, 0, !d, fun _ => none, true⟩, ?_, ?_⟩
+  · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
+  · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
+
+/-- An `alloca`'s block is writable. -/
+theorem Writable.allocaPtr {s : GlobalState} : Writable (s.alloca n d).mem s.allocaPtr :=
+  ⟨⟨n, 0, 0, !d, fun _ => none, true⟩, by
+    simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq], rfl⟩
+
+/-- A dead `alloca`'s block is writable, for its `lifetime.start`. -/
+@[mlir_fresh]
+theorem Writable.allocaPtr_self {n : Nat} {s : GlobalState} :
+    Writable (s.alloca n true).mem s.allocaPtr :=
+  Writable.allocaPtr
+
+theorem Live.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
+    Live (s.alloca n).mem s.allocaPtr w := by
+  refine ⟨⟨n, 0, 0, true, fun _ => none, true⟩, ?_, rfl, ?_⟩
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
 theorem Room.allocaPtr {s : GlobalState} (hw : w ≤ 8 * n) :
     Room (s.alloca n).mem s.allocaPtr w := by
-  refine ⟨⟨n, 0, 0, true, fun _ => none⟩, ?_, rfl, ?_⟩
+  refine Room.of_block (b := ⟨n, 0, 0, true, fun _ => none, true⟩) ?_ rfl ?_ rfl
   · simp [GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq]
   · simp [Pointer.offsetInBits, GlobalState.allocaPtr, MemoryBlock.lengthInBits]; omega
 
@@ -1236,7 +1543,7 @@ theorem GlobalState.alloca_storeAt_allocaPtr {s : GlobalState} {x : BitVec w} :
   intro k
   simp only [Std.ExtHashMap.getElem?_modify, Std.ExtHashMap.getElem?_insert, beq_iff_eq]
   split
-  · rename_i h; subst h; simp
+  · rename_i h; subst h; simp [MemoryBlock.update]
   · rfl
 
 /-- A new block keeps what fits. -/
@@ -1245,6 +1552,20 @@ theorem Fits.addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF) (h : Fits s.
     Fits (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) q w := by
   rw [← GlobalState.alloca_storeAt_allocaPtr]
   exact (Fits.alloca hwf h).storeAt
+
+/-- A new block keeps what is live. -/
+@[mlir_transport]
+theorem Live.addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF) (h : Live s.mem q w) :
+    Live (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) q w := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact (Live.alloca hwf h).storeAt
+
+/-- A new block keeps what is writable. -/
+@[mlir_transport]
+theorem Writable.addBlock {s : GlobalState} {x : BitVec v} (hwf : s.WF) (h : Writable s.mem q) :
+    Writable (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x) q := by
+  rw [← GlobalState.alloca_storeAt_allocaPtr]
+  exact (Writable.alloca hwf h).storeAt
 
 /-- A new block keeps what has room. -/
 @[mlir_transport]
@@ -1287,7 +1608,7 @@ theorem Fits.addBlock_allocaPtr {n : Nat} {s : GlobalState} {v : Nat} {x : BitVe
 theorem MemoryState.readAt_addBlock_allocaPtr {w n : Nat} {s : GlobalState} {x : BitVec w}
     (hw : w ≤ 8 * n) : (s.mem.addBlock ⟨s.alloc.nextFreeBlock⟩ n x).readAt s.allocaPtr w = x := by
   rw [← GlobalState.alloca_storeAt_allocaPtr]
-  exact MemoryState.readAt_storeAt_self (InBounds.allocaPtr hw) x
+  exact MemoryState.readAt_storeAt_self (Room.allocaPtr hw) x
 
 /-- A read of a block in bounds before a new one: the read before it. -/
 @[mlir_read]
@@ -1382,8 +1703,8 @@ theorem InBounds.alloca_allocaPtr_add {s : GlobalState} :
 @[simp]
 theorem Room.alloca_allocaPtr_add {s : GlobalState} :
     Room (s.alloca n).mem (s.allocaPtr.add off) w ↔ off.toNat * 8 + w ≤ 8 * n := by
-  simp [Room, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq, Pointer.add,
-    Pointer.offsetInBits, MemoryBlock.lengthInBits]
+  simp [Room, Live, Writable, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq,
+    Pointer.add, Pointer.offsetInBits, MemoryBlock.lengthInBits]
   omega
 
 @[simp]
@@ -1395,7 +1716,7 @@ theorem InBounds.alloca_allocaPtr {s : GlobalState} :
 @[simp]
 theorem Room.alloca_allocaPtr {s : GlobalState} :
     Room (s.alloca n).mem s.allocaPtr w ↔ w ≤ 8 * n := by
-  simp [Room, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq,
+  simp [Room, Live, Writable, GlobalState.alloca, GlobalState.allocaPtr, MemoryState.getElem?_eq,
     Pointer.offsetInBits, MemoryBlock.lengthInBits]
 
 end Theorems

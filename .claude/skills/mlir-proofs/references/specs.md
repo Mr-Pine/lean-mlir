@@ -47,10 +47,12 @@ public theorem fiat_25519_add.call_eq (out x y : Pointer) (s : GlobalState) (hwf
 ```
 
 - **Arguments**: the pointers and scalars as plain values, passed as `.value p`; `s` and
-  `hwf : s.WF` always.
+  `hwf : s.WF` always; `hg : s.mem.Globals f.globals` when `f` or a callee takes a global's
+  address. Outputs (stored to) need `Room` (live and writable); inputs only read need `Fits`/`Live`
+  (a constant global's block has no `Room`).
 - **Result**: an equation, `.value (rets, s')`; `rets` lists the returned values (`.cons (.value r)
   .nil`), `s'` the final state:
-  - frame-free (no `alloca`/`addressof`): `{ s with mem := <writes over s.mem> }`;
+  - frame-free (no `alloca`): `{ s with mem := <writes over s.mem> }`;
   - framed: `{ alloc := ⟨s.alloc.nextFreeBlock + k⟩, mem := <writes over s.mem> }`, `k` the
     blocks the function allocates (its frame is erased, the counter is not).
 - **Writes** go through the object's store function (`storeLimbs`), outermost last, in the order

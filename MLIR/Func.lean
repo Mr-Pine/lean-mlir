@@ -12,6 +12,21 @@ structure BasicBlock (Γ : Ctx) (tRets : List Ty) (blockTys : Fin n → List Ty)
   body : List (Instr Γ)
   exit : Exit Γ tRets blockTys
 
+/-- A global's initializer region: one block without arguments that returns the global's value of
+type `t`; the global is read-only if `constant`, its address insignificant if `unnamedAddr`. -/
+structure GlobalInitializer where
+  Γ : Ctx
+  hΓ : Γ.args = []
+  t : Ty
+  block : BasicBlock Γ [t] (fun _ : Fin 1 => [])
+  constant : Bool := true
+  unnamedAddr : Bool := false
+
+/-- A global: its symbol and initializer. -/
+structure Global where
+  sym : String
+  init : GlobalInitializer
+
 /-- Represents an entire function in `mlir` -/
 structure Func where
   Γ : Ctx
@@ -24,6 +39,9 @@ structure Func where
   hhasBlock : n > 0
   hentry : blockTys ⟨0, hhasBlock⟩ = [] -- Block 0 is the entry block and has no parameters
   blocks : Fin n → BasicBlock Γ tRets blockTys
+  /-- The globals whose addresses it, or a callee, takes (callees' lists appended, with repeats):
+  a call's state must hold them (`MemoryState.Globals`). -/
+  globals : List Global := []
 
 end
 

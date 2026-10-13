@@ -81,14 +81,22 @@ theorem inBounds (h : m.SameBits m') (hq : InBounds m p w) : InBounds m' p w := 
   simp only [MemoryBlock.lengthInBits] at hw ⊢
   omega
 
-theorem room (h : m.SameBits m') (hq : Room m p w) : Room m' p w := by
-  obtain ⟨b, hb, hl, hw⟩ := hq
-  obtain ⟨b', hb', he⟩ := h.block hb
-  refine ⟨b', hb', ?_, ?_⟩
-  · rw [← hl]; simpa [MemoryBlock.bits] using congrArg MemoryBlock.live he
-  · have : b'.length = b.length := by simpa [MemoryBlock.bits] using congrArg MemoryBlock.length he
-    simp only [MemoryBlock.lengthInBits] at hw ⊢
-    omega
+/-- The same bits: the same shapes. -/
+theorem sameShape (h : m.SameBits m') : m.SameShape m' := by
+  intro i
+  have := h i
+  cases hb : m[i]? <;> cases hb' : m'[i]? <;> simp only [hb, hb', Option.map] at this ⊢
+  · simp at this
+  · simp at this
+  · rename_i b b'
+    simp only [Option.some.injEq] at this ⊢
+    simp only [MemoryBlock.shape]
+    rw [show b.length = b'.length from congrArg (·.length) this,
+      show b.live = b'.live from congrArg (·.live) this,
+      show b.writable = b'.writable from congrArg (·.writable) this]
+
+theorem room (h : m.SameBits m') (hq : Room m p w) : Room m' p w :=
+  hq.of_sameShape h.sameShape
 
 theorem fits (h : m.SameBits m') (hq : Fits m p w) : Fits m' p w := by
   obtain ⟨b, hb, hl, hw, hd⟩ := hq
@@ -113,7 +121,9 @@ theorem MemoryState.sameBits_modifyBlock_modifyBlock {m : MemoryState}
   intro j
   rw [getElem?_modifyBlock, getElem?_modifyBlock]
   split
-  · cases m[i]? <;> simp [hfg]
+  · cases m[i]? with
+    | none => rfl
+    | some b => by_cases hw : b.writable <;> simp [MemoryBlock.update, hw, hfg]
   · rfl
 
 /-! ### `overlay` -/
@@ -140,24 +150,25 @@ theorem MemoryState.overlay_allOnes {x : BitVec w} :
     m.overlay p x (BitVec.allOnes w) = m.storeAt p x :=
   rfl
 
-theorem MemoryState.getElem?_overlay_self {x d : BitVec w} (h : m[p.id]? = some blk) :
+theorem MemoryState.getElem?_overlay_self {x d : BitVec w} (h : m[p.id]? = some blk)
+    (hw : blk.writable = true) :
     (m.overlay p x d)[p.id]? =
       some
         { blk with
           bytes := spliceBits blk.bytes p.offsetInBits x
-          defined := spliceBits blk.defined p.offsetInBits d } := by
-  simp [overlay, getElem?_modifyBlock_self, h]
+          defined := spliceBits blk.defined p.offsetInBits d } :=
+  getElem?_modifyBlock_of_writable h hw
 
 theorem MemoryState.getElem?_overlay_ne {x d : BitVec w} (h : q.id ≠ p.id) :
     (m.overlay p x d)[q.id]? = m[q.id]? :=
   getElem?_modifyBlock_ne h
 
 @[mlir_mem, mlir_read]
-theorem MemoryState.readAt_overlay_self (hfits : InBounds m p w) (x d : BitVec w) :
+theorem MemoryState.readAt_overlay_self (hfits : Room m p w) (x d : BitVec w) :
     (m.overlay p x d).readAt p w = x :=
   sameBits_overlay.readAt.trans (readAt_storeDef_self hfits x d)
 
-theorem MemoryState.definedAt_overlay_self (hfits : InBounds m p w) (x d : BitVec w) :
+theorem MemoryState.definedAt_overlay_self (hfits : Room m p w) (x d : BitVec w) :
     (m.overlay p x d).definedAt p w = d :=
   sameBits_overlay.definedAt.trans (definedAt_storeDef_self hfits x d)
 
@@ -173,13 +184,13 @@ theorem MemoryState.definedAt_overlay_disjoint {v w : Nat}
   sameBits_overlay.definedAt.trans (definedAt_storeDef_disjoint h x d)
 
 /-- A read inside an overlay: the overlaid bits. -/
-theorem MemoryState.readAt_overlay_add {off : BitVec 64} (hfits : InBounds m p v)
+theorem MemoryState.readAt_overlay_add {off : BitVec 64} (hfits : Room m p v)
     (hov : ¬p.offset.uaddOverflow off) (hw : off.toNat * 8 + w ≤ v) (x d : BitVec v) :
     (m.overlay p x d).readAt (p.add off) w = x.extractLsb' (off.toNat * 8) w :=
   sameBits_overlay.readAt.trans (readAt_storeDef_add hfits hov hw x d)
 
 /-- A read at an overlay's start: the overlaid bits' low ones. -/
-theorem MemoryState.readAt_overlay_le (hfits : InBounds m p v) (hw : w ≤ v) (x d : BitVec v) :
+theorem MemoryState.readAt_overlay_le (hfits : Room m p v) (hw : w ≤ v) (x d : BitVec v) :
     (m.overlay p x d).readAt p w = x.extractLsb' 0 w :=
   sameBits_overlay.readAt.trans (readAt_storeDef_le hfits hw x d)
 
@@ -190,6 +201,20 @@ theorem InBounds.overlay_iff {x d : BitVec v} :
     InBounds (m.overlay q x d) p w ↔ InBounds m p w :=
   ⟨fun h => InBounds.storeDef_iff.1 (MemoryState.sameBits_overlay.inBounds h), fun h =>
     MemoryState.sameBits_overlay.symm.inBounds (InBounds.storeDef_iff.2 h)⟩
+
+theorem Live.overlay_iff {x d : BitVec v} : Live (m.overlay q x d) p w ↔ Live m p w :=
+  ⟨.of_sameShape MemoryState.sameShape_overlay, .of_sameShape MemoryState.sameShape_overlay.symm⟩
+
+theorem Writable.overlay_iff {x d : BitVec v} : Writable (m.overlay q x d) p ↔ Writable m p :=
+  ⟨.of_sameShape MemoryState.sameShape_overlay, .of_sameShape MemoryState.sameShape_overlay.symm⟩
+
+@[mlir_mem, mlir_transport]
+theorem Live.overlay {x d : BitVec v} (h : Live m p w) : Live (m.overlay q x d) p w :=
+  Live.overlay_iff.2 h
+
+@[mlir_mem, mlir_transport]
+theorem Writable.overlay {x d : BitVec v} (h : Writable m p) : Writable (m.overlay q x d) p :=
+  Writable.overlay_iff.2 h
 
 theorem Room.overlay_iff {x d : BitVec v} : Room (m.overlay q x d) p w ↔ Room m p w :=
   ⟨fun h => Room.storeDef_iff.1 (MemoryState.sameBits_overlay.room h), fun h =>
@@ -237,7 +262,7 @@ theorem Fits.overlay_definedAt_self {x : BitVec v} (h : Room m p v) (hs : Fits m
 theorem GlobalState.WF_overlay {s : GlobalState} {x d : BitVec v} :
     ({ s with mem := m.overlay p x d } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.overlay {s : GlobalState} {x d : BitVec v} (h : s.WF) :
@@ -297,7 +322,9 @@ theorem MemoryState.storePtr_eq :
   simp only [Std.ExtHashMap.getElem?_modify, beq_iff_eq]
   split
   · subst_vars
-    cases m.mem[p.id]? <;> rfl
+    cases m.mem[p.id]? with
+    | none => rfl
+    | some b => by_cases hw : b.writable <;> simp [MemoryBlock.update, hw]
   · rfl
 
 theorem MemoryState.getElem?_storePtr_ne (h : q.id ≠ p.id) : (m.storePtr p x)[q.id]? = m[q.id]? :=
@@ -313,13 +340,21 @@ theorem MemoryState.definedAt_storePtr_disjoint (h : (Range.of p 64).Disjoint (R
   sameBits_storePtr.definedAt.trans (definedAt_storeDef_disjoint h _ _)
 
 /-- A stored pointer's bits are undefined. -/
-theorem MemoryState.definedAt_storePtr_self (h : InBounds m p 64) :
+theorem MemoryState.definedAt_storePtr_self (h : Room m p 64) :
     (m.storePtr p x).definedAt p 64 = 0#64 :=
   sameBits_storePtr.definedAt.trans (definedAt_storeDef_self h _ _)
 
 theorem InBounds.storePtr_iff : InBounds (m.storePtr q x) p w ↔ InBounds m p w :=
   ⟨fun h => InBounds.storeDef_iff.1 (MemoryState.sameBits_storePtr.inBounds h), fun h =>
     MemoryState.sameBits_storePtr.symm.inBounds (InBounds.storeDef_iff.2 h)⟩
+
+@[mlir_mem, mlir_transport]
+theorem Live.storePtr (h : Live m p w) : Live (m.storePtr q x) p w :=
+  h.of_sameShape MemoryState.sameShape_storePtr.symm
+
+@[mlir_mem, mlir_transport]
+theorem Writable.storePtr (h : Writable m p) : Writable (m.storePtr q x) p :=
+  h.of_sameShape MemoryState.sameShape_storePtr.symm
 
 theorem Room.storePtr_iff : Room (m.storePtr q x) p w ↔ Room m p w :=
   ⟨fun h => Room.storeDef_iff.1 (MemoryState.sameBits_storePtr.room h), fun h =>
@@ -343,7 +378,7 @@ theorem Fits.storePtr_of_disjoint (hq : Fits m p w) (hd : (Range.of q 64).Disjoi
 theorem GlobalState.WF_storePtr {s : GlobalState} :
     ({ s with mem := m.storePtr p x } : GlobalState).WF ↔
       ({ s with mem := m } : GlobalState).WF :=
-  WF_modifyBlock
+  WF_modifyBlock fun _ => ⟨rfl, rfl⟩
 
 @[mlir_mem, mlir_transport]
 theorem GlobalState.WF.storePtr {s : GlobalState} (h : s.WF) :
@@ -406,12 +441,12 @@ theorem MemoryState.loadPtr_eq_of_block {b : MemoryBlock} (h : m[p.id]? = some b
 
 /-- A pointer stored in bounds loads back. -/
 @[mlir_mem, mlir_read]
-theorem MemoryState.loadPtr_storePtr_self (h : InBounds m p 64) :
+theorem MemoryState.loadPtr_storePtr_self (h : Room m p 64) :
     (m.storePtr p x).loadPtr p = .value x := by
-  obtain ⟨blk, hblk, hsz⟩ := h
+  obtain ⟨blk, hblk, -, hsz, hw⟩ := h.block
   unfold MemoryBlock.lengthInBits at hsz
   simp [loadPtr, ptrAt, storePtr, getElem?_modifyBlock_self, hblk, MemoryBlock.ptrAt,
-    extractLsb'_spliceBits_self _ _ _ hsz]
+    MemoryBlock.update, hw, extractLsb'_spliceBits_self _ _ _ hsz]
 
 /-- A block's entry and definedness at `o` past a masked store disjoint from it. -/
 theorem MemoryBlock.ptrAt_storeDef {blk : MemoryBlock} {off o v : Nat} {y d : BitVec v}
@@ -434,7 +469,9 @@ theorem MemoryState.loadPtr_modifyBlock {i : BlockId} {f : MemoryBlock → Memor
   by_cases h : i = q.id
   · subst h
     simp only [ite_true]
-    cases m[q.id]? <;> simp [hf]
+    cases m[q.id]? with
+    | none => rfl
+    | some b => by_cases hw : b.writable <;> simp [MemoryBlock.update, hw, hf]
   · simp [h]
 
 @[mlir_mem, mlir_read]
@@ -519,6 +556,86 @@ theorem MemoryState.loadPtr_addBlock {s : GlobalState} {y : BitVec v} (hwf : s.W
   loadPtr_addBlock_of_id_ne (GlobalState.ne_allocaPtr_of_inBounds hwf h)
 
 end LoadPtr
+
+
+/-! ### A block made writable: the same reads -/
+
+section MakeWritable
+
+variable {m : MemoryState} {p q : Pointer}
+
+/-- `m` with block `i` writable: for proofs of reads, which do not depend on writability, through
+writes into it. -/
+def MemoryState.makeWritable (m : MemoryState) (i : BlockId) : MemoryState :=
+  { m with mem := m.mem.modify i fun b => { b with writable := true } }
+
+theorem MemoryState.getElem?_makeWritable {i j : BlockId} :
+    (m.makeWritable i)[j]? =
+      (m[j]?).map fun b => if i = j then { b with writable := true } else b := by
+  simp only [makeWritable, getElem?_eq, Std.ExtHashMap.getElem?_modify, beq_iff_eq]
+  split
+  · simp [*]
+  · cases m.mem[j]? <;> simp [*]
+
+theorem MemoryState.readAt_makeWritable : (m.makeWritable i).readAt p w = m.readAt p w := by
+  unfold readAt
+  rw [getElem?_makeWritable]
+  cases m[p.id]? with
+  | none => rfl
+  | some b => by_cases h : i = p.id <;> simp [h]
+
+theorem MemoryState.definedAt_makeWritable :
+    (m.makeWritable i).definedAt p w = m.definedAt p w := by
+  unfold definedAt
+  rw [getElem?_makeWritable]
+  cases m[p.id]? with
+  | none => rfl
+  | some b => by_cases h : i = p.id <;> simp [h]
+
+theorem MemoryState.loadPtr_makeWritable : (m.makeWritable i).loadPtr p = m.loadPtr p := by
+  unfold loadPtr ptrAt
+  rw [getElem?_makeWritable]
+  cases m[p.id]? with
+  | none => rfl
+  | some b => by_cases h : i = p.id <;> simp [h, MemoryBlock.ptrAt]
+
+theorem InBounds.makeWritable (h : InBounds m p w) : InBounds (m.makeWritable i) p w := by
+  obtain ⟨b, hb, hw⟩ := h
+  refine
+    ⟨_, by
+      rw [MemoryState.getElem?_makeWritable, hb]; rfl, ?_⟩
+  by_cases h : i = p.id <;> simpa [h, MemoryBlock.lengthInBits] using hw
+
+theorem Live.makeWritable (h : Live m p w) : Live (m.makeWritable i) p w := by
+  obtain ⟨b, hb, hl, hw⟩ := h
+  refine
+      ⟨_, by
+        rw [MemoryState.getElem?_makeWritable, hb]; rfl, ?_, ?_⟩ <;>
+    by_cases h : i = p.id <;>
+    simpa [h, MemoryBlock.lengthInBits]
+
+theorem Fits.makeWritable (h : Fits m p w) : Fits (m.makeWritable i) p w := by
+  obtain ⟨b, hb, hl, hw, hd⟩ := h
+  by_cases h : i = p.id
+  · exact
+      ⟨{ b with writable := true }, by
+        rw [MemoryState.getElem?_makeWritable, hb]; simp [h], hl, hw, hd⟩
+  · exact
+      ⟨b, by
+        rw [MemoryState.getElem?_makeWritable, hb]; simp [h], hl, hw, hd⟩
+
+/-- The block made writable is. -/
+theorem Writable.makeWritable_self (h : InBounds m p w) : Writable (m.makeWritable p.id) p := by
+  obtain ⟨b, hb, -⟩ := h
+  exact
+    ⟨_, by
+      rw [MemoryState.getElem?_makeWritable, hb]; rfl, by simp⟩
+
+/-- Live in a block made writable: room. -/
+theorem Room.makeWritable_self (h : Live m p w) : Room (m.makeWritable p.id) p w :=
+  ⟨h.makeWritable, Writable.makeWritable_self h.inBounds⟩
+
+end MakeWritable
 
 end
 

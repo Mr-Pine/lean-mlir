@@ -86,9 +86,9 @@ meta def topConjuncts (h ty : Expr) : MetaM (Array (Expr × Expr)) := do
   return out.push (h, ty)
 
 /-- With the initial state `S₀` (`hS : S = S₀`), `hwf : S.WF` and each `h : Fits S.mem p w` (or
-`Room`, `InBounds`) also about `S₀` (`hwf₀`, `h₀`; an object predicate's such conjuncts `h₀`,
-`h₀_1`, …): the steps carry only facts of the current state, and reads through `hS` below a frame's
-new blocks, like removing the frame at the end, need the initial ones. -/
+`Room`, `InBounds`, `Live`, `Writable`) also about `S₀` (`hwf₀`, `h₀`; an object predicate's such
+conjuncts `h₀`, `h₀_1`, …): the steps carry only facts of the current state, and reads through `hS`
+below a frame's new blocks, like removing the frame at the end, need the initial ones. -/
 meta def addInitialFacts : TacticM Unit :=
   withMainContext do
     let (g, goal) ← getGoalType
@@ -106,7 +106,8 @@ meta def addInitialFacts : TacticM Unit :=
         else
           pure
               ((← topConjuncts d.toExpr ty).filter fun (_, t) =>
-                [``InBounds, ``Room, ``Fits].any (t.isAppOfArity · 3))
+                [``InBounds, ``Room, ``Fits, ``Live].any (t.isAppOfArity · 3) ||
+                  t.isAppOfArity ``Writable 2)
       for ((pf, ty), k) in parts.toList.zipIdx do
         let motive := .lam `s (← inferType S) (← kabstract ty S) .default
         let pf ← mkEqNDRec motive pf (mkFVar hS)

@@ -43,14 +43,14 @@ private def distOut (s : GlobalState) (p q : ⟦Ty.ptr⟧) : Option ⟦Ty.bv 64�
 
 -- in one block, the offsets' difference, whatever the addresses
 #guard distOut ⟨⟨1⟩, ⟨∅⟩⟩ (.value ⟨⟨1⟩, 8⟩) (.value ⟨⟨1⟩, 40⟩) == some (.value 32)
-#guard distOut ⟨⟨1⟩, @MemoryState.mk ∅ spread⟩ (.value ⟨⟨1⟩, 8⟩) (.value ⟨⟨1⟩, 40⟩) ==
+#guard distOut ⟨⟨1⟩, @MemoryState.mk ∅ spread _⟩ (.value ⟨⟨1⟩, 8⟩) (.value ⟨⟨1⟩, 40⟩) ==
   some (.value 32)
 -- across blocks, the choice's
-#guard distOut ⟨⟨1⟩, @MemoryState.mk ∅ spread⟩ (.value ⟨⟨1⟩, 0⟩) (.value ⟨⟨3⟩, 0⟩) ==
+#guard distOut ⟨⟨1⟩, @MemoryState.mk ∅ spread _⟩ (.value ⟨⟨1⟩, 0⟩) (.value ⟨⟨3⟩, 0⟩) ==
   some (.value 0x200000000)
 #guard distOut ⟨⟨1⟩, ⟨∅⟩⟩ (.value .null) .poison == some .poison
 
-#guard (match low.eval 1 (low.args (.value ⟨⟨5⟩, 4⟩)) ⟨⟨1⟩, @MemoryState.mk ∅ spread⟩ with
+#guard (match low.eval 1 (low.args (.value ⟨⟨5⟩, 4⟩)) ⟨⟨1⟩, @MemoryState.mk ∅ spread _⟩ with
   | .value (some (.cons v .nil), _) => v == .value 20
   | _ => false)
 

@@ -97,7 +97,8 @@ def nameAllocaSlot : TacticM Unit :=
                 match r.app2? ``Pointer.add with
                 | some (_, off) => pure ((← getBitVecValue? off).map fun ⟨_, o⟩ => s!"_{o.toNat}")
                 | none => pure none
-              pure ((`h).appendAfter s!"{xName}_{#["bounds", "room", "fits"][k]!}{at_.getD ""}")
+              pure ((`h).appendAfter
+                s!"{xName}_{#["bounds", "room", "fits", "live"][k]!}{at_.getD ""}")
           | none => pure (d.userName.appendAfter s!"_{xName}")
         let (_, g') ←
           (← g.assert name ty' (← g.withContext (mkEqNDRec motive d.toExpr pfq))).intro1P
