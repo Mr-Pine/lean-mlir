@@ -476,6 +476,15 @@ simproc [simp]pullWrapOfFn (Vector.ofFn _) := fun e => do
   return .done
       { expr := wrapped, proof? := some (← mkExpectedTypeHint (← mkEqSymm pf) (← mkEq e wrapped)) }
 
+/-- An `insertelement` of a value into a vector of values: the vector of values, set. -/
+@[simp, mlir_operation]
+theorem Ty.wrap_set {l w : Nat} (xs : Vector (BitVec w) l) (i : Nat) (x : BitVec w) (h : i < l) :
+    (Ty.wrap (t := .vec l w) xs).set i (.value x) h = Ty.wrap (t := .vec l w) (xs.set i x h) := by
+  simp only [Ty.wrap]
+  ext j hj
+  simp only [Vector.getElem_set, Vector.getElem_map]
+  split <;> rfl
+
 open Lean Meta in
 /-- `(Ty.wrap vs)[i]` to `.value vs[i]`. -/
 simproc [simp]wrapGetElem (GetElem.getElem _ _ _) := fun e => do

@@ -4,6 +4,7 @@ public import MLIR.Semantics.Func
 public meta import MLIR.Run.BasicBlock
 public meta import MLIR.Run.Scalar
 public meta import MLIR.Run.Tactic.Env
+public meta import MLIR.Run.Tactic.State
 public meta import MLIR.Run.Tactic.Step.Syntax
 public meta import Lean.Elab.Tactic
 public import MLIR.Run.Tactic.Trace
@@ -130,19 +131,47 @@ def finishJumpingBlock (only : Bool) (simpArgs : Syntax) : TacticM Unit := do
     goals := goals ++ (← getGoals)
   setGoals goals
 
+/-- A body fact `block.body.drop idx = []` at the goal's position: from the context (the steps'),
+else a concrete block's made now; `none` for a block whose body does not reduce. -/
+def bodyEnd? (block idx : Expr) : MetaM (Option Expr) := do
+  if (← bodyFact? block idx).isSome then
+    throwError "`finish_block`: instructions left at position {idx}"
+  if let some h ← bodyEndFact? block idx then
+    return some h
+  let some (ty, pf) ← literalBodyFact? block idx | return none
+  unless (ty.eq?.map (·.2.2.isAppOf ``List.nil)).getD false do
+    throwError "`finish_block`: instructions left at position {idx}"
+  return some pf
+
 def finishBlockAt (stx : Syntax) : TacticM Unit :=
   withMainContext do
-    -- at the block's end: `body.drop pos` reduces to `[]` here, so a wrong position fails at the
-    -- tactic; `hpos` itself by `decide`, for the kernel only, as each step's
     let (g, goal) ← getGoalType
     let run ← getRunBodyFrom goal
-    unless (← bodyFrom run.block run.idx).isAppOfArity ``List.nil 1 do
-      throwError "`finish_block`: instructions left at position {run.idx}"
-    let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``BasicBlock.runBodyFrom_done)
-    for m in r.mvarIds do
-      unless ← m.isAssigned do
-        m.assign (← mkDecideProof (← instantiateMVars (← m.getType)).consumeTypeAnnotations)
-    replaceMainGoal [← g.replaceTargetEq r.eNew r.eqProof]
+    match ← bodyEnd? run.block run.idx with
+    | some h =>
+      let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``BasicBlock.runBodyFrom_done_of_drop)
+      for m in r.mvarIds do
+        unless ← m.isAssigned do
+          unless ← isDefEq (← m.getType) (← inferType h) do
+            throwError "`finish_block`: the body fact does not match{indentExpr (← inferType h)}"
+          m.assign h
+      let mut g ← g.replaceTargetEq r.eNew r.eqProof
+      -- the block's body facts: done with
+      for e in ← bodyFactEqs do
+        if let some (_, b) := bodyDrop? e.lhs then
+          if ← isDefEq b run.block then
+            g ← g.tryClear e.decl.fvarId
+      replaceMainGoal [g]
+    | none =>
+      -- at the block's end: `body.drop pos` reduces to `[]` here, so a wrong position fails at the
+      -- tactic; `hpos` itself by `decide`, for the kernel only, as each step's
+      unless (← bodyFrom run.block run.idx).isAppOfArity ``List.nil 1 do
+        throwError "`finish_block`: instructions left at position {run.idx}"
+      let r ← g.rewrite goal (← mkConstWithFreshMVarLevels ``BasicBlock.runBodyFrom_done)
+      for m in r.mvarIds do
+        unless ← m.isAssigned do
+          m.assign (← mkDecideProof (← instantiateMVars (← m.getType)).consumeTypeAnnotations)
+      replaceMainGoal [← g.replaceTargetEq r.eNew r.eqProof]
     evalTactic
         (←
           `(tactic|
@@ -155,7 +184,8 @@ def finishBlockAt (stx : Syntax) : TacticM Unit :=
       | finishJumpingBlock (!stx[1][0].isNone) stx[1][1]
     let env := ret.getArg! 2
     let r ← simpValue (only := !stx[1][0].isNone) (simpArgs := stx[1][1]) ret env true
-    replaceMainGoal [← replaceBySimp g ret r]
+    -- the states' bases substituted back: the end state over the entry state
+    replaceMainGoal [← collapseStates (← replaceBySimp g ret r)]
 
 @[tactic finishBlock]
 def evalFinishBlock : Tactic := fun stx =>

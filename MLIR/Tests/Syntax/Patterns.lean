@@ -253,6 +253,65 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64)
   subst_vars
   rfl
 
+/-! ## Values and states the continuation binds -/
+
+-- `y = x + x`, the value bound by the continuation with its equation
+theorem runBodyFrom_dblRunBound {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos : Nat}
+    {x y : Dst Γ (.bv 64)} {rest : List (Instr Γ)} {X : BitVec 64} {S : GlobalState}
+    {g : ⟪Γ⟫ × GlobalState → PoisonOr β} {K : PoisonOr β}
+    (hbody : blk.body.drop pos = dblRun x y ++ rest) (hR : E ⊨ [x := X])
+    (hK : ∀ Y : BitVec 64, Y = X + X → (blk.runBodyFrom E[y := .value Y] (pos + 1) S >>= g) = K) :
+    (blk.runBodyFrom E pos S >>= g) = K := by
+  step_pure
+  rw [hE]
+  exact hK _ rfl
+
+-- `with` names the bound value, its anonymous equation after it
+example (s : GlobalState) (hwf : s.WF) :
+    dbl3.call (dbl3.args (.value 0)) s = .value (.cons (.value 8#64) .nil, s) := by
+  func_init
+  block_init
+  step_pure
+  step_pattern using runBodyFrom_dblRunBound with a
+  have : a = 1#64 + 1#64 := ha
+  step_pattern using runBodyFrom_dblRunBound with b
+  have : b = a + a := hb
+  step_pattern using runBodyFrom_dblRun
+  finish_block
+  subst_vars
+  rfl
+
+/-- `*p = y`, then `z = *p`. -/
+def putGetRun (y : Dst Γ (.bv 64)) (p : Reg Γ .ptr) (z : Dst Γ (.bv 64)) : List (Instr Γ) :=
+  [.store p (.val y.i y.h), .load z p]
+
+-- the store's state bound by the continuation, known only by the facts it states
+theorem runBodyFrom_putRun {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos : Nat}
+    {y : Dst Γ (.bv 64)} {p : Reg Γ .ptr} {rest : List (Instr Γ)} {Y : BitVec 64} {P : Pointer}
+    {S : GlobalState} {g : ⟪Γ⟫ × GlobalState → PoisonOr β} {K : PoisonOr β}
+    (hbody : blk.body.drop pos = [.store p (.val y.i y.h)] ++ rest) (hR : E ⊨ [y := Y, p := P])
+    (hP : Room S.mem P 64)
+    (hK :
+      ∀ S' : GlobalState,
+        Fits S'.mem P 64 → S'.mem.readAt P 64 = Y → (blk.runBodyFrom E (pos + 1) S' >>= g) = K) :
+    (blk.runBodyFrom E pos S >>= g) = K := by
+  step_store
+  exact hK _ hfits_P hread_P
+
+-- a fresh state: the old state's facts dropped (no goals), the continuation's about `S`
+theorem runBodyFrom_putGetRun {blk : BasicBlock Γ tRets bp} {E : ⟪Γ⟫} {pos : Nat}
+    {y z : Dst Γ (.bv 64)} {p : Reg Γ .ptr} {rest : List (Instr Γ)} {Y : BitVec 64}
+    {P : Pointer} {S : GlobalState} {g : ⟪Γ⟫ × GlobalState → PoisonOr β} {K : PoisonOr β}
+    (hbody : blk.body.drop pos = putGetRun y p z ++ rest) (hR : E ⊨ [y := Y, p := P])
+    (hP : Room S.mem P 64) (hwf : S.WF)
+    (hK : ∀ S' : GlobalState, (blk.runBodyFrom E[z := .value Y] (pos + 2) S' >>= g) = K) :
+    (blk.runBodyFrom E pos S >>= g) = K := by
+  step_pattern using runBodyFrom_putRun
+  fail_if_success have := hwf
+  step_load
+  subst_vars
+  exact hK _
+
 end
 
 end MLIR.Tests.Syntax.Patterns

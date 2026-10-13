@@ -143,7 +143,7 @@ elab "addressof_value" hv:term:max : tactic =>
 
 @[tactic stepAddressof]
 def evalStepAddressof : Tactic := fun stx => do
-  addAllocaFreshness "step_addressof"
+  addAllocaFreshness "step_addressof" (slots := true)
   runStep (StepArgs.parse mkNullNode stx[2] stx[3] mkNullNode (named := true))
       (← `(tacticSeq| addressof_value $(⟨stx[1]⟩)))
   nameAllocaSlot

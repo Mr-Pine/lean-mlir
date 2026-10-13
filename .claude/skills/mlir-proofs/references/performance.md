@@ -42,7 +42,8 @@ In the proof:
 | unifying pointers (`(f p k).id =?= p.id`) | `whnf` evaluates offset arithmetic; timeout at the declaration | `rfl` lemma `(f p k).id = p.id`, rewrite explicitly |
 | `generalize`/`subst` of a computed value | kernel evaluates it back ("deep recursion") | `obtain ⟨b, hb⟩ : ∃ b, e = b := ⟨_, rfl⟩` |
 | `obtain`/`rcases` on big goals | reverts the goal per layer | continuation-form lemmas, `refine` |
-| a long straight-line block (an unrolled loop) | per-step cost grows with the position: quadratic in the block | a `step_pattern` per iteration (`tactics-guide.md` §10) |
+| a long straight-line block (an unrolled loop) | many steps (the position no longer costs: steps carry a body fact) | a `step_pattern` per iteration (`tactics-guide.md` §10) |
+| a long chain of calls over a growing frame (`hS` over `S₀` deeper and deeper) | every read's proof carries the state term; the final `instantiateMVars` walks it per step (minutes) | `set_option rir.stateDepth 64 in` before the theorem: a call past that depth starts from a bare base (no hand-placed `replace hS := hS.symm`) |
 | editing a module many files import | every importer rebuilds | stage new lemmas in the working file, move them when done |
 | a callee premise derived from a composite fact (`LimbsFit (a.add 80)` from `PointFit a`) | `mem_fact`'s transport search through `hS`, ~290 ms per premise | `mlir_transport` projection lemmas (tried two deep on the current facts first), or the coordinate facts as locals |
 

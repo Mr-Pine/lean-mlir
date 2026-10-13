@@ -12,9 +12,11 @@ over 200 characters, `<first 100>-<sha1[:12]>.mlir`). Each file quotes its `"llv
 With `--share-from ref --share-prefix <Lib>.Ref.Mlir --share-ns Ref`, a function whose op equals
 one of the other implementation's is bound to that lift instead (and `--all` skips it); the other
 is the function of the same symbol or Lean name, else any whose op equals. Ops are compared up to
-SSA numbering, symbol names (callees as bound), TBAA (alias definitions and access tags), and the
-function attributes and `passthrough` entries `Translate.funcAttrUses`/`passthroughUses` mark
-inert or ignored (target, calling convention, linkage, memory effects, `warn-stack-size`, …): the
+SSA numbering, symbol names (callees as bound), TBAA (alias definitions and access tags), alias
+scopes, the parameter and result attributes of functions, calls and memory intrinsics
+`Translate.paramAttrUses` lists (`noundef`, `nonnull`, `range`, `align`, …), and the function
+attributes and `passthrough` entries `Translate.funcAttrUses`/`passthroughUses` mark inert or
+ignored (target, calling convention, linkage, memory effects, `warn-stack-size`, …): the
 translation reads none of them. `--share-src` compares against another extraction's ops (another
 checkout or profile), `--share-ops <dir>` against an op directory itself (another project's,
 `--share-ns` then its full namespace).
@@ -113,6 +115,31 @@ def split_attrs(s):
         i += 1
     return out + [cur]
 
+# `Translate.paramAttrUses`' parameter and result attributes, all inert or ignored, and the ops
+# whose `arg_attrs`/`res_attrs` the translation ignores (`funcAttrUses`, `opAttrUses`)
+PARAM = {'llvm.zeroext', 'llvm.signext', 'llvm.immarg', 'llvm.noundef', 'llvm.nonnull',
+         'llvm.range', 'llvm.align', 'llvm.dereferenceable', 'llvm.dereferenceable_or_null',
+         'llvm.noalias', 'llvm.nocapture', 'llvm.nofree', 'llvm.readonly', 'llvm.writeonly',
+         'llvm.readnone', 'llvm.returned', 'llvm.writable', 'llvm.dead_on_unwind',
+         'llvm.dead_on_return', 'llvm.sret'}
+PARAM_OPS = re.compile(r'"llvm\.(?:func|call|call_intrinsic|intr\.mem(?:set|cpy|move))"\(')
+
+def norm_params(l):
+    """`l` without `PARAM`'s entries in its `arg_attrs` and `res_attrs`, one left empty dropped."""
+    out = ''
+    while m := re.search(r'\b(?:arg|res)_attrs = \[', l):
+        j, depth = m.end(), 1
+        while depth:
+            depth += {'[': 1, ']': -1}.get(l[j], 0)
+            j += 1
+        ds = ['{' + ', '.join(e for e in split_attrs(d[1:-1]) if e.split(' = ')[0] not in PARAM)
+              + '}' for d in split_attrs(l[m.end():j - 1])]
+        pre, a, l = l[:m.start()], l[m.start():m.end()] + ', '.join(ds) + ']', l[j:]
+        if all(d == '{}' for d in ds):
+            pre, a, l = (pre[:-2], '', l) if pre.endswith(', ') else (pre, '', l.removeprefix(', '))
+        out += pre + a
+    return out + l
+
 def norm_head(h):
     """A function's header without the attributes the translation does not read."""
     m = re.match(r'(.*?"llvm.func"\(\) <\{)(.*)(\}> \(\{)$', h, re.S)
@@ -130,14 +157,15 @@ def norm_head(h):
     return m.group(1) + ', '.join(keep) + m.group(3)
 
 def norm(t, sym=lambda d: d):
-    """`t` up to SSA numbering, TBAA, symbol names (each `@d` as `sym(d)`) and, for a function,
-    the attributes the translation does not read."""
+    """`t` up to SSA numbering, TBAA, alias scopes, parameter and result attributes, symbol names
+    (each `@d` as `sym(d)`) and, for a function, the attributes the translation does not read."""
     t = '\n'.join(l for l in t.splitlines() if not re.match(r'#tbaa\w* = #llvm\.tbaa_', l))
     t = re.sub(r', tbaa = \[[^\]]*\]|tbaa = \[[^\]]*\], ', '', t)
     # alias scopes, which the translation ignores (`noalias.scope.decl` translates to nothing)
     t = '\n'.join(l for l in t.splitlines() if not re.match(r'#alias_scope\w* = #llvm\.alias_scope', l)
                   and '"llvm.intr.experimental.noalias.scope.decl"' not in l)
     t = re.sub(r', (?:no)?alias_scopes = \[[^\]]*\]|(?:no)?alias_scopes = \[[^\]]*\], ', '', t)
+    t = '\n'.join(norm_params(l) if PARAM_OPS.search(l) else l for l in t.splitlines())
     t = re.sub(r'%(?:arg)?\d+\b', '%', t)
     t = re.sub(r'((?:callee|global_name) = )@([A-Za-z_0-9.]+)', lambda m: m[1] + '@' + sym(m[2]), t)
     t = re.sub(r'sym_name = "[^"]*"', 'sym_name', t)

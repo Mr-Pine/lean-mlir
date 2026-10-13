@@ -314,6 +314,37 @@ example (s : GlobalState) (hwf : s.WF) :
   subst hv
   rfl
 
+mlir_def readHalf2 := {
+    %0 = "llvm.mlir.addressof"() <{global_name = @half}> : () -> !llvm.ptr
+    %1 = "llvm.mlir.addressof"() <{global_name = @half}> : () -> !llvm.ptr
+    %2 = "llvm.mlir.constant"() <{value = 1 : i64}> : () -> i64
+    %3 = "llvm.alloca"(%2) <{alignment = 8 : i64, elem_type = i64}> : (i64) -> !llvm.ptr
+    %4 = "llvm.load"(%0) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %5 = "llvm.load"(%1) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %6 = "llvm.add"(%4, %5) : (i64, i64) -> i64
+    "llvm.return"(%6) : (i64) -> ()
+} with @half := half
+
+-- a second partly defined global, then a slot: the first's facts carried, no goals
+example (s : GlobalState) (hwf : s.WF) :
+    readHalf2.call readHalf2.args s =
+      .value (.cons (.value 14#64) .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 3⟩ }) := by
+  func_init
+  block_init
+  step_addressof half.value_eq with g
+  step_addressof half.value_eq with g'
+  guard_hyp hg_fits : Fits S.mem g 64
+  step_pure
+  step_alloca with t
+  step_load with v
+  step_load with v'
+  step_pure
+  finish_block
+  subst hS
+  erase_frame
+  subst_vars
+  rfl
+
 -- the same from the global itself, its value read off its block
 example (s : GlobalState) (hwf : s.WF) :
     readHalf.call readHalf.args s =

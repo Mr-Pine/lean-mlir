@@ -12,20 +12,6 @@ open Lean Elab Tactic Meta
 
 public meta section
 
-/-- Exit and instructions in `block` from `pos` on. -/
-def blockParts (block pos : Expr) : MetaM (Array Expr) := do
-  let mut parts := #[← whnfD (← mkAppM ``BasicBlock.exit #[block])] -- Check all used in exit
-  let mut rest :=
-    ←
-      whnfD
-          (←
-            mkAppM ``List.drop
-                #[pos, (← mkAppM ``BasicBlock.body #[block])]) -- Ignore previous instructions
-  while rest.isAppOfArity ``List.cons 3 do
-    parts := parts.push rest.appFn!.appArg! -- `x` of `List.cons α x xs` (`x::xs`)
-    rest ← whnfD rest.appArg! -- `xs`
-  return parts
-
 /-- The target blocks of the jumps in `exit`. -/
 def jumpTargets (exit : Expr) : MetaM (Array Expr) := do
   let targets ← IO.mkRef #[]
@@ -77,23 +63,6 @@ initialize blockUseCache : IO.Ref (Std.HashMap (Expr × Nat) (Std.HashSet Nat ×
 by position: each step asks for the next, and walking the instruction list again per step is
 quadratic in the block's length. -/
 initialize blockSuffixCache : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Nat))) ← IO.mkRef {}
-
-/-- A closed block's instructions: each step takes the one at its position, where unfolding
-`body[pos]` walks the list to it. -/
-initialize blockInstrsCache : IO.Ref (Std.HashMap Expr (Array Expr)) ← IO.mkRef {}
-
-/-- Instruction `pos` of a closed `block` at a literal `pos`, from `blockInstrsCache`. -/
-def blockInstr? (block pos : Expr) : MetaM (Option Expr) := do
-  let block ← instantiateMVars block
-  if block.hasFVar || block.hasMVar then
-    return none
-  let pos ← instantiateMVars pos
-  let some i := pos.nat? <|> pos.rawNatLit? | return none
-  if let some instrs := (← blockInstrsCache.get)[block]? then
-    return instrs[i]?
-  let instrs := (← blockParts block (mkNatLit 0)).extract 1
-  blockInstrsCache.modify (·.insert block instrs)
-  return instrs[i]?
 
 /-- `exposedRegs (blockParts block pos)` for every `pos`, last position (the exit alone) last. -/
 def suffixExposed (block : Expr) : MetaM (Array (Std.HashSet Nat)) := do

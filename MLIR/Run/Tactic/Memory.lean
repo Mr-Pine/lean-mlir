@@ -359,10 +359,36 @@ weaker ones. -/
 def memPreds : Array Name :=
   #[``InBounds, ``Room, ``Fits]
 
-/-- `(kind, m, p, w)` of a memory predicate `P m p w`, `kind` its index in `memPreds`. -/
+/-- A natural number literal, raw or `OfNat.ofNat`. -/
+def natLit? (e : Expr) : Option Nat :=
+  e.rawNatLit? <|> (do
+    let_expr OfNat.ofNat _ n _ := e | none
+    n.rawNatLit?)
+
+/-- `p` with each literal offset `p.add k` spelled `BitVec.ofNat w k` (not `(k : BitVec 64)` or
+`k#64` elaborated otherwise): facts and goals about one pointer compare syntactically. -/
+partial def canonPtr (p : Expr) : Expr :=
+  match p.app2? ``Pointer.add with
+  | none => p
+  | some (q, off) =>
+    let lit? : Option (Nat × Nat) :=
+      (do
+          let_expr BitVec.ofNat w n := off | none
+          return (← natLit? w, ← natLit? n)) <|>
+        (do
+          let_expr OfNat.ofNat ty n _ := off | none
+          let_expr BitVec w := ty | none
+          return (← natLit? w, ← n.rawNatLit?))
+    let off := match lit? with
+      | some (w, n) => mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit w) (mkNatLit (n % 2 ^ w))
+      | none => off
+    mkApp2 p.getAppFn (canonPtr q) off
+
+/-- `(kind, m, p, w)` of a memory predicate `P m p w`, `kind` its index in `memPreds`; `p`'s
+offsets canonical (`canonPtr`). -/
 def memPred? (ty : Expr) : Option (Nat × Expr × Expr × Expr) := do
   let k ← memPreds.findIdx? (ty.isAppOfArity · 3)
-  return (k, ty.getArg! 0, ty.getArg! 1, ty.getArg! 2)
+  return (k, ty.getArg! 0, canonPtr (ty.getArg! 1), ty.getArg! 2)
 
 /-- `pf`, a memory predicate of kind `k`, weakened to kind `j ≤ k`. -/
 def weakenMemPred (pf : Expr) (k j : Nat) : MetaM Expr := do
@@ -532,6 +558,7 @@ object's write by its transport lemma. -/
 partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr) :
     MetaM (Option Expr) := do
   let goal ← mkAppM memPreds[j]! #[m, p, w]
+  let p := canonPtr p
   -- an open width (a lemma's premise only fixes): a fact's
   if w.isMVar then
     for (pf, ty) in facts do
@@ -624,14 +651,19 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     let some h ← memPredProof? facts j m' p w | return none
     return some (← mkAppOptM (memPredLemma j `storeAt) #[m', p, w, q, none, x, h])
   | MemoryState.storeDef m' q v _ d =>
-    -- known where the mask defines it: a copy's (`memcpy`, the source's definedness) or a literal
+    -- known where the mask defines it: a copy's (`memcpy`, the source's definedness) or a literal;
+    -- else known below, and the store elsewhere (a later global's block)
     if j == 2 then
-      return ← storeDefFits? `storeDef facts goal m' q (← normWidths v) d p w₁
+      if let some pf ← storeDefFits? `storeDef facts goal m' q (← normWidths v) d p w₁ then
+        return some pf
+      return ← fitsPast? ``Fits.storeDef_of_disjoint facts goal m' q v p w
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `storeDef) goal #[h]
   | MemoryState.overlay m' q v _ d =>
     if j == 2 then
-      return ← storeDefFits? `overlay facts goal m' q (← normWidths v) d p w₁
+      if let some pf ← storeDefFits? `overlay facts goal m' q (← normWidths v) d p w₁ then
+        return some pf
+      return ← fitsPast? ``Fits.overlay_of_disjoint facts goal m' q v p w
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `overlay) goal #[h]
   | MemoryState.lifetimeStart m' q =>
@@ -657,6 +689,15 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     objectWrite? facts j m p w goal
 
 where
+  /-- `Fits (m.storeDef q x d) p w` (or an `overlay`'s, by `lem`) from `Fits m p w`, the write in
+  another block. -/
+  fitsPast? (lem : Name) (facts : Array (Expr × Expr)) (goal m q v p w : Expr) :
+      MetaM (Option Expr) := do
+    let some hne ← neProof? facts (← mkAppM ``Pointer.id #[q]) (← mkAppM ``Pointer.id #[p])
+      | return none
+    let hd := mkAppN (mkConst ``Range.disjoint_of_id_ne) #[q, p, v, w, hne]
+    let some h ← memPredProof? facts 2 m p w | return none
+    proveBy? lem goal #[h, hd]
   /-- Through an object's write `m = f m' …` (`storeVec`, `hashMem`): by its transport lemma
   `P.f` (`InBounds.storeVec`) from the predicate below, one layer at a time, not a search; its other
   premises a `≠` or disjointness of blocks. -/

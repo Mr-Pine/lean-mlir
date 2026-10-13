@@ -43,16 +43,68 @@ def simpState (e : Expr) (c? : Option MemCtx := none) : MetaM Simp.Result := do
     factDischarge c.toFactCtx 64 p
   return (← simp e ctx (simprocs := procs) (discharge? := disch)).1
 
-/-- Substitute each state local of `e` that has an equation `x = _` by it. -/
-def substStates (g : MVarId) (e : Expr) : MetaM MVarId := do
+/-- Substitute each state local of `e` that has an equation `x = _` by it, and those of the
+states it brings in (the bases a deep state keeps, `rir.stateDepth`). -/
+partial def substStates (g : MVarId) (e : Expr) : MetaM MVarId := do
   let mut g := g
+  let mut more := #[]
   for x in (collectFVars {} e).fvarIds do
-    g ←
+    let (g', t?) ←
       g.withContext do
           unless (← getLCtx).contains x && (← x.getType).isConstOf ``GlobalState do
-            return g
-          let some h ← findEqWithLhs? (.fvar x) | return g
-          return (← substCore g h (symm := false)).2
+            return (g, none)
+          let some h ← findLocalEq? (.fvar x) | return (g, none)
+          return ((← substCore g h.decl.fvarId (symm := false)).2, some h.rhs)
+    g := g'
+    more := more ++ t?.toArray
+  for t in more do
+    g ← substStates g t
+  return g
+
+/-- The bases deep states keep (`rir.stateDepth`) substituted back into the states built on them;
+whether there were any. -/
+partial def substBases (g : MVarId) : MetaM (MVarId × Bool) :=
+  g.withContext do
+    let goal ← instantiateMVars (← g.getType)
+    let eqs ← localEqs
+    -- a base's reversed equation `t = x`, the inaccessible `hS✝` of a cut (a proof's own stays)
+    for e in eqs do
+      let .fvar x := e.rhs | continue
+      unless e.decl.userName.hasMacroScopes && e.decl.userName.eraseMacroScopes == `hS do
+        continue
+      unless (← x.getType).isConstOf ``GlobalState && !goal.containsFVar x do
+        continue
+      unless eqs.any fun e' => e'.rhs != e.rhs && e'.rhs.containsFVar x do
+        continue
+      return ((← substBases (← substCore g e.decl.fvarId (symm := true)).2).1, true)
+    return (g, false)
+
+/-- `g` with the bases deep states keep substituted back (`substBases`), and the reads of them in
+the values' equations resolved (`simpState`): at a function's end, the states and values over the
+entry state again, as without the bases. -/
+def collapseStates (g : MVarId) : MetaM MVarId := do
+  let (g, any) ← substBases g
+  unless any do
+    return g
+  let hs ← g.withContext do
+      return (← localEqs).filterMap fun e =>
+        if e.lhs.isFVar && (e.rhs.find? fun t =>
+            t.isAppOfArity ``GlobalState.mem 1 && !t.appArg!.isFVar).isSome then
+          some e.decl.fvarId
+        else none
+  let mut g := g
+  for h in hs do
+    g ← g.withContext do
+        let d ← h.getDecl
+        let some (_, l, rhs) := (← instantiateMVars d.type).consumeMData.eq? | return g
+        let r ← simpState rhs
+        if r.expr == rhs then
+          return g
+        let ty ← mkEq l r.expr
+        -- asserted last: the proof reads facts declared after `h`
+        let (_, g') ← (← g.assert d.userName (if isNamedEq d.type then tagNamed ty else ty)
+            (← mkEqTrans d.toExpr (← r.getProof))).intro1P
+        g'.tryClear h
   return g
 
 /-- `h : l = r` with `r`'s projections reduced (`dsimpState`). -/
@@ -77,9 +129,20 @@ def mergeStateEq (g : MVarId) (h : FVarId) : MetaM MVarId :=
     let ty ← mkEq S r.expr
     return (← g.replace h (← mkEqTrans (mkFVar h) (← r.getProof)) (type? := ty)).mvarId
 
-/-- Close `g` by `factDischarge`: its searches, then the transport search, about a state `S` with
-`hS : S = s` from the facts about `s`. -/
-def memFact (g : MVarId) : MetaM Bool :=
+/-- `ty` with the widths of a memory predicate or a disjointness as literals (`8 * 40`,
+`8 * (40#64).toNat` as `320`), so facts and lemmas match it. -/
+def normPredWidths (ty : Expr) : MetaM Expr := do
+  if let some (k, m, p, w) := memPred? ty then
+    let w' ← normWidths w
+    return if w' == w then ty else mkApp3 (mkConst memPreds[k]!) m p w'
+  let_expr Range.Disjoint a b := ty | return ty
+  let norm (r : Expr) : MetaM Expr := do
+    let_expr Range.of p v := r | return r
+    return mkApp2 r.getAppFn p (← normWidths v)
+  return mkApp2 ty.getAppFn (← norm a) (← norm b)
+
+/-- `memFact`'s searches, on a goal as it is. -/
+def memFactCore (g : MVarId) : MetaM Bool :=
   g.withContext do
     -- a local, before gathering the facts
     if let some h← withReducible (findLocalDeclWithType? (← g.getType)) then
@@ -104,6 +167,18 @@ def memFact (g : MVarId) : MetaM Bool :=
     unless ok do
       saved.restore
     return ok
+
+/-- Close `g` by `factDischarge`: its searches, then the transport search, about a state `S` with
+`hS : S = s` from the facts about `s`; a predicate's widths first as literals. -/
+def memFact (g : MVarId) : MetaM Bool := do
+  let saved ← saveState
+  let ty ← instantiateMVars (← g.getType)
+  let ty' ← g.withContext (normPredWidths ty)
+  let g' ← if ty' == ty then pure g else g.replaceTargetDefEq ty'
+  if ← memFactCore g' then
+    return true
+  saved.restore
+  return false
 
 /-- Close a side condition from the facts (`memFact`): `Fits`, disjointness, `≠`, a closed fact by
 `decide`, or a fact carried by `mlir_transport` lemmas. -/

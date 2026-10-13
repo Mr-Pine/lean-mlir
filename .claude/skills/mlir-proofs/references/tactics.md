@@ -44,6 +44,16 @@ ha : a = S₀.mem.readAt y 64               -- a named value
   and `finish_block` keep `x` and never unfold `hx`. Default names (a load's `vN`) and
   `transparent` names are untagged and unfold into later values.
 
+- **Body facts.** A step on a concrete block reads its instruction off a hidden local
+  `blk.body.drop pos = x :: xs` (made at the block's first step, carried one instruction on per
+  step, as an abstract block's visible `hbody`), so the kernel's check of a step does not walk the
+  body: a step costs the same at any position.
+- **Deep states (`set_option rir.stateDepth n`, default `0`: off).** Before a `step_call` whose
+  state term is deeper than `n`, `S` becomes a bare base (`hS✝ : … = S`), the call's state built on
+  it; reads stop at the base. `finish_block` at a `return` substitutes the bases back (and resolves
+  the values' reads of them), so the end state is over `S₀`. For long chains of calls over a
+  growing frame (Agave `decompress`, `sqrt_ratio_i`: `64`).
+
 ### Resolving a step's value
 
 Every step simplifies the value it writes (or the operation it runs) in passes:
@@ -58,6 +68,9 @@ Every step simplifies the value it writes (or the operation it runs) in passes:
    values), except tagged names and stack slots; with `opaque`, only the state's;
 4. vector lanes `#v[.value x, …]` to `Ty.wrap #v[x, …]`; literal vectors equal to an `mlir_const`
    constant become that constant.
+
+A flag's overflow test on literals (`(0#64).saddOverflow 1#64`, `umulOverflow`, …) evaluates
+(default simprocs), so an `nsw`/`nuw` operation on constants needs no lemma.
 
 Simprocs in these passes: `gepDynValue` (a dynamic `gep` by a value index: without `nusw` its
 unsigned reading `gep f (byteOff + i.toNat * stride)`, `gep f i` for byte strides; with `nusw` the
@@ -108,7 +121,7 @@ step_xxx [opaque] [only] [simp args] [names] [consuming h₁ h₂ …]
 | `inline` | keep the value in the env; no local |
 | `named` | name it `vN` (`N` = destination register), equation `hvN`, tagged |
 | `named transparent` | `vN`/`hvN`, untagged |
-| `with x` | name it `x`, equation `hx`, tagged |
+| `with x` | name it `x`, equation `hx`, tagged (an error if `hx` names another fact; an earlier `x`'s may be shadowed) |
 | `with x h` | name it `x`, equation `h` |
 | `with transparent x` | name it `x`, untagged |
 | `consuming h₁ …` | clear these facts after the step: carried only if two transport lemmas do it, never a goal; a name may be the step's own read-back |
@@ -183,8 +196,9 @@ fact.
 
 ### `step_memcpy [only] [args] [consuming …]` / `step_memmove …` / `step_memset …`
 
-`memcpy(dst, src, len)`: `len.toNat = n` by `rfl`, `Range.Disjoint` of the two ranges, `Room` of
-`dst` and `Fits` of `src`, each by `mem_fact` else `simp_all`; the new memory stores
+`memcpy(dst, src, len)`: `len.toNat = n` by `rfl` (`n` a numeral for a literal `len`), `Range.Disjoint`
+of the two ranges, `Room` of `dst` and `Fits` of `src`, each by `mem_fact` (no fallback); the new
+memory stores
 `S.mem.readAt src (8 * n)` at `dst` (`run_memcpy`). A source only partly known (`Room`, with
 `Fits` of sub-ranges: a flag and an undefined tail) is copied with its definedness (`run_memcpyDef`,
 `S.mem.storeDef dst (S.mem.readAt src _) (S.mem.definedAt src _)`): each `Fits` fact of `src` or
@@ -237,7 +251,8 @@ are restated about `x` and named `<fact>_<x>`. Slots of one state are told apart
 
 ### `step_addressof hv [names] [consuming …]`
 
-`%k = llvm.mlir.addressof @g`. `hv : ∀ s, g.value s = .value (Ty.wrap r, s)` (proved by
+`%k = llvm.mlir.addressof @g`. Every pointer with a memory fact, named slots included, gets
+`h<q>_ne` first, so the earlier globals' facts carry past this block's masked store. `hv : ∀ s, g.value s = .value (Ty.wrap r, s)` (proved by
 `GlobalInitializer.compute_value _ _ ⟨_, by with_unfolding_all rfl⟩`), `g`'s type without
 pointers and padding (by the kernel). Like `step_alloca`, and the new block holds `r`'s bits:
 `h<x>_room` for its bytes, `h<x>_fits : Fits S.mem x w`, `hread_<x> : S.mem.readAt x w = Ty.flatBits
@@ -254,10 +269,10 @@ mask's bits checked by the kernel, no `exponentiation.threshold`), `hread_<x>` o
 Steps a run of instructions with a pattern lemma proved once over registers. `h` concludes
 `(blk.runBodyFrom E pos S >>= g) = K` and has:
 
-- a body fact `blk.body.drop pos = pat … ++ rest`: closed by unfolding, or inside another pattern
-  lemma's proof (an abstract block) by its body fact, carried past the pattern; it fixes the
-  registers, and fails ("the body at the position is not the pattern of …") when the instructions
-  differ;
+- a body fact `blk.body.drop pos = pat … ++ rest`: from the body fact the steps carry (a concrete
+  block's, or inside another pattern lemma's proof an abstract block's), carried past the pattern;
+  it fixes the registers, and fails ("the body at the position is not the pattern of …") when the
+  instructions differ;
 - reads `E.read r = v` (or `E ⊨ […]`, also as an `abbrev Holds E … := E ⊨ […]`): closed through
   the env's writes, locals' equations unfolded if needed, an outer pattern's registers by the step
   passes ("no value for the read …; add a fact `h : E.read %k = _`" when none);
@@ -265,7 +280,11 @@ Steps a run of instructions with a pattern lemma proved once over registers. `h`
   `decide` ("side condition false or undecidable");
 - a continuation `∀ …, (blk.runBodyFrom E' pos' S >>= g) = K`: entered; its last write is named
   per `[names]` (an abstract register's after its variable: `vy` for `y`), the pattern's dead
-  intermediates are cleared, and a pattern that stores has its new state sealed.
+  intermediates are cleared, and a pattern that stores has its new state sealed. Values it binds
+  (`∀ A' E' : BitVec 64, …`) are named by `with a e`, in order, folded; anonymous facts it binds
+  after the value they equate (`ha`) or their predicate (`htablePhase`). A state it binds is the new
+  state: by its equation among the binders (`S' = t`), else bare (the old state's facts dropped,
+  the continuation's about `S`).
 
 A pointer operand may be any register `p : Reg Γ .ptr` (an argument at one site, a value at
 another), with `hp : E.read p = .value P`: its reads pass writes of other types, and a write of a
@@ -289,11 +308,14 @@ becomes `E`, each write a goal `E.read r = v`. Then:
   sealed, the state simplified and named `S` as after a step.
 
 If `h` does not apply to the state `S` as is, `S` is substituted by its definition and the lemma
-retried, with a warning (none when `h` is about a fixed state, e.g. an induction hypothesis).
+retried, with a warning (none when `h` is about a fixed state, e.g. an induction hypothesis). A
+lemma stated under a bind (`(runFrom … >>= g) = K`) also closes a bare run, `g` being `pure`; its
+`by` arguments are elaborated before the continuation is entered.
 
 ### `finish_block [only] [args]`
 
-At the end of a block's body ("`finish_block`: instructions left at position N" otherwise).
+At the end of a block's body ("`finish_block`: instructions left at position N" otherwise), by the
+body fact the steps carry (`blk.body.drop pos = []`), at any length.
 
 - `return`: resolves the returned registers; the goal becomes `.value (vals, S) = K` (framed: the
   erase bind still around it).
@@ -303,6 +325,12 @@ At the end of a block's body ("`finish_block`: instructions left at position N" 
   so its goals are `isTrue`, `isFalse.isTrue`, …, and the default `isFalse.….isFalse` gets every
   negation as `hbr0`, `hbr1`, …. Each goal is `f.runFrom E k S = K` with the target's parameters
   written into a sealed `E`.
+
+### `folded h₁ …`
+
+The equations `hᵢ : x = e` (premises, `have`s) stay folded as a `with x`'s do: later steps keep `x`
+and never rewrite by `hᵢ`. Untagged equations of locals are otherwise unfolded into the values that
+mention them.
 
 ### `erase_frame`
 
@@ -319,7 +347,8 @@ slots' equations (`hx : x = b.slot k`), then `omega`.
 ### `mem_fact`
 
 Closes a side condition from the context: a local up to reducible unfolding; `decide` on closed
-facts after replacing pointer offsets by their facts (`x.offset = 0`); `InBounds`, `Room`, `Fits`
+facts after replacing pointer offsets by their facts (`x.offset = 0`); `InBounds`, `Room`, `Fits`,
+their widths first as literals (`8 * (40#64).toNat` as `320`) and literal offsets in one spelling
 (a fact of that kind or a stronger one, `Fits → Room → InBounds`: same pointer and width, a wider
 literal width by `.mono`, `q.add off` inside `q` by `.add_of_le` (a variable `off`, `2 * j` with
 `j < 256`, by `omega` from the facts), through `alloca` (a new block's own bounds and room),

@@ -141,7 +141,10 @@ Mistakes:
 `step_memcpy` needs the two ranges disjoint: give the theorem `p.id ≠ q.id` (or a `Nodup` list of
 ids) when they are not distinct slots; `Room` of the destination, `Fits` of the source, or only
 `Room` of it (its definedness copied; the known sub-ranges stay known) (`memset`: `Room`).
-`step_memmove` takes the same facts but disjointness.
+`step_memmove` takes the same facts but disjointness. A literal length is a numeral count
+(`n := 40`), and `mem_fact` compares widths and literal offsets as literals, so facts in any
+spelling (`Fits S.mem p 320`, an object predicate's conjunct at `p.add 40#64`) serve; there is no
+`simp_all` fallback: a missing fact is a `mem_fact` error naming it.
 
 ## 6. `step_call`
 
@@ -347,15 +350,21 @@ Mistakes:
   constant (`vecRun`) steps `inline` for the same reason: named `vN`, reads of it give `vN`.
 - A `Nodup` premise over registers the site does not keep apart fails by `decide`: the pattern
   does not fit that site.
-- `with x` names a value the pattern computes; a value the continuation binds (`∀ A' E', …`) keeps
-  the lemma's binder name. Rename it after the step (`rename' A' => a5`, `Mathlib.Tactic.Rename`;
-  a bound fact by `rename_i`).
+- `with x` names a value the pattern computes; values the continuation binds (`∀ A' E', …`) are
+  named by `with a e`, in order, and stay folded (their equations among the binders too). An
+  anonymous fact the continuation binds is named after the value it equates (`ha`) or its
+  predicate (`htablePhase`).
+- A continuation that binds a state (`∀ S', P S' → (blk.runBodyFrom E' pos' S' >>= g) = K`) gives a
+  fresh state: by its equation among the binders (`S' = t`) as after a step, else bare, the old
+  state's facts dropped and the continuation's kept about the new `S`.
+- In a macro, annotate antiquotations after `step_pattern using lem` (`$t:num`, `with $a:ident`):
+  a bare `$t` also matches the `inline`/`named`/`transparent` keywords and misparses.
 
 **Unrolled loops.** A loop the compiler unrolls (a Zig `inline for`, an unrolled C loop) is one
-long block; stepping it costs more per instruction the deeper it goes, because each step's kernel
-check walks the body to its position. Prove one iteration as a pattern and step each with it
-(`Zig/Sha512_round.lean`: 75 of 80 rounds one 26-instruction pattern; 4 rounds at position 1887,
-47 s → 6 s). Finding the template:
+long block. Steps read the instruction off a body fact the steps carry (hidden, made at a concrete
+block's first step), so a step costs the same at any position and `finish_block` works at any
+length; still, prove one iteration as a pattern and step each with it
+(`Zig/Sha512_round.lean`: 75 of 80 rounds one 26-instruction pattern). Finding the template:
 - Cut the block at an instruction each iteration has once (the load of its word), write each run
   with registers relative to its start, and group equal runs. LLVM interleaves iterations: pick
   the cut whose runs read only registers written before them.

@@ -31,25 +31,45 @@ structure RewriteStepResult where
   stepGoal : MVarId
   mainGoal : MVarId
 
-/-- Rewrite the goal `g` with `lem`, closing the `hpos` goal by `decide`,
-returning the remaining goals. -/
-def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
-  let lem ← mkConstWithFreshMVarLevels lem
-  -- an abstract block's instructions come from a body fact `blk.body.drop pos = x :: xs`
-  let run ←
-    g.withContext do
-        getRunBodyFrom (← instantiateMVars (← g.getType))
-  let fact? ←
-    g.withContext do
-        bodyFact? run.block run.idx
+/-- `g` with a body fact for the block and position of `run`: one in context (an abstract block's,
+or a concrete one's carried from its last step), else a concrete block's made now (hidden): each
+step reads its instruction off the fact, so the kernel's check of a step does not walk the body. -/
+def withBodyFact (g : MVarId) (run : RunBodyFrom) : MetaM (MVarId × Option BodyFact) :=
+  g.withContext do
+    if let some f ← bodyFact? run.block run.idx then
+      return (g, some f)
+    let some (ty, pf) ← literalBodyFact? run.block run.idx | return (g, none)
+    let g ← assertBodyFact g ty pf (hidden := true)
+    return (g, ← g.withContext (bodyFact? run.block run.idx))
+
+/-- The body fact `fact` at a position, carried to the goal `main`'s (one instruction on, its index
+as `main` spells it), hidden as `fact` is. -/
+def carryBodyFact (main : MVarId) (fact : BodyFact) : MetaM MVarId :=
+  main.withContext do
+    let h' ← mkAppM ``List.drop_succ_of_drop_eq_cons #[fact.proof]
+    let some (_, l, xs) := (← inferType h').eq? | throwError "body fact: not an equation"
+    -- `[…].append rest` from unfolding the pattern, back to `[…] ++ rest`
+    let xs ←
+      match_expr xs with
+      | List.append _ ys zs =>
+        mkAppM ``HAppend.hAppend #[ys, zs]
+      | _ =>
+        pure xs
+    let run ← getRunBodyFrom (← instantiateMVars (← main.getType))
+    let ty ← mkEq (← mkAppM ``List.drop #[run.idx, l.appArg!]) xs
+    assertBodyFact main ty (mkExpectedPropHint h' ty) fact.hidden
+
+/-- `rewriteStep` after `withBodyFact`, in `g`'s context. -/
+def rewriteStepWith (g : MVarId) (lem : Expr) (run : RunBodyFrom) (fact? : Option BodyFact) :
+    MetaM RewriteStepResult := do
   let r ← g.rewrite (← g.getType) lem -- Rewrite
   let mut stepGoal? := none
   for m in r.mvarIds do
     let ty := (← instantiateMVars (← m.getType)).consumeTypeAnnotations
     if ty.isAppOf ``LT.lt then -- hpos
       match fact? with
-      | some (h, _, _) =>
-        m.assign (← mkAppM ``List.lt_length_of_drop_eq_cons #[h])
+      | some f =>
+        m.assign (← mkAppM ``List.lt_length_of_drop_eq_cons #[f.proof])
       | none =>
         m.assign (← mkDecideProof ty)
     else if ty.isEq then -- h
@@ -64,9 +84,9 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
     | throwError "no body[pos]"
   let stepGoal ←
     match fact? with
-    | some (h, _, _) =>
+    | some f =>
       stepGoal.withContext do
-          let eq ← mkAppM ``List.getElem_of_drop_eq_cons #[h]
+          let eq ← mkAppM ``List.getElem_of_drop_eq_cons #[f.proof]
           let rw ← stepGoal.rewrite ty eq
           unless rw.mvarIds.isEmpty do
             throwError "body fact: unexpected side goals"
@@ -74,41 +94,54 @@ def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
     | none =>
       let instr' ← whnfD ((← blockInstr? run.block run.idx).getD instr)
       stepGoal.replaceTargetDefEq ((← kabstract ty instr).instantiate1 instr')
-  let main ← g.replaceTargetEq (← instantiateMVars r.eNew) r.eqProof
+  let main ← reduceIndex (← g.replaceTargetEq (← instantiateMVars r.eNew) r.eqProof)
   -- carry the body fact on to the next instruction
   let main ←
     match fact? with
-    | some (h, _, _) =>
-      main.withContext do
-          let h' ← mkAppM ``List.drop_succ_of_drop_eq_cons #[h]
-          -- `[…].append rest` from unfolding the pattern, back to `[…] ++ rest`
-          let some (_, l, xs) := (← inferType h').eq? | throwError "body fact: not an equation"
-          let xs ←
-            match_expr xs with
-            | List.append _ ys zs =>
-              mkAppM ``HAppend.hAppend #[ys, zs]
-            | _ =>
-              pure xs
-          let (_, main) ← (← main.assert `hbody (← mkEq l xs) h').intro1P
-          pure main
-    | none =>
-      pure main
-  return ⟨stepGoal, ← reduceIndex main⟩
+    | some f => carryBodyFact main f
+    | none => pure main
+  return ⟨stepGoal, main⟩
+
+/-- Rewrite the goal `g` with `lem`, its `hpos` and instruction from a body fact (`withBodyFact`;
+without one, by `decide` and unfolding), returning the remaining goals. -/
+def rewriteStep (g : MVarId) (lem : Name) : MetaM RewriteStepResult := do
+  let lem ← mkConstWithFreshMVarLevels lem
+  let run ←
+    g.withContext do
+        getRunBodyFrom (← instantiateMVars (← g.getType))
+  let (g, fact?) ← withBodyFact g run
+  g.withContext (rewriteStepWith g lem run fact?)
+
+/-- `folded h₁ …`: the equations `hᵢ : x = e` (premises, `have`s) stay folded as a `with x`'s do:
+later steps keep `x`, never rewriting by `hᵢ`. -/
+elab "folded" hs:(ppSpace colGt ident)+ : tactic =>
+  withMainContext do
+    let mut g ← getMainGoal
+    for h in hs do
+      let fv ← getFVarId h
+      let ty := (← instantiateMVars (← fv.getType)).consumeMData
+      unless ty.isEq do
+        throwError "`folded`: {h} is not an equation"
+      g ← g.replaceLocalDeclDefEq fv (Tactic.tagNamed ty)
+    replaceMainGoal [g]
 
 /-- `dsimp [mlir_instr]` -/
 def dsimpMlirInstr? (m : MVarId) : MetaM (Option MVarId) := do
   let (m?, _) ← dsimpGoal m (← simpSetContext #[`mlir_instr]) (simprocs := #[← Simp.getSimprocs])
   return m?
 
-/-- Clear the body facts `block.body.drop i = _` behind the goal's position. -/
+/-- Clear the body facts `block.body.drop i = _` behind the goal's position; a concrete block's
+hidden again where a step reintroduced it (`substCore`, `revert`). -/
 def clearStaleBodyFacts : TacticM Unit :=
   withMainContext do
     let some run := getRunBodyFrom? (← getMainTarget) | return
     let mut g ← getMainGoal
-    for e in ← localEqs do
+    for e in ← bodyFactEqs do
       let some (n, b) := bodyDrop? e.lhs | continue
       if ← isDefEq b run.block <&&> notM (isDefEq n run.idx) then
         g ← g.tryClear e.decl.fvarId
+      else if !e.decl.isImplementationDetail && !b.hasFVar && !b.hasMVar then
+        g ← hideLocal g e.decl.fvarId
     replaceMainGoal [g]
 
 /-- The value an effectful step writes, its reads resolved while the state they read is a local
@@ -179,6 +212,16 @@ def finishStep (args : StepArgs) : TacticM Unit :=
         else r.expr
       -- a value that already is a local stays: naming it would capture that local everywhere
       unless target.isFVar do
+        -- a name given by `with`: its equation shadows only an earlier `x`'s, not another fact
+        if let .named _ := args.value then
+          if let some d := (← g.getDecl).lctx.findFromUserName? hx then
+            let earlierX ← g.withContext do
+                let some (_, .fvar y, _) := (← instantiateMVars d.type).consumeMData.eq?
+                  | return false
+                return (← y.getUserName) == x
+            unless d.isImplementationDetail || earlierX do
+              throwError "`with {x}`: `{hx}` names a hypothesis already; name the equation \
+                (`with {x} h`) or clear `{hx}`"
         let (_, g) ←
           g.withContext do
               -- a tagged value stays folded where later steps and the state take it

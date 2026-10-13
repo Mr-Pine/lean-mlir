@@ -217,7 +217,9 @@ def stepLoopApply (stx : Syntax) (subst : Bool) : TacticM (Expr × MVarId × Lis
       he? := some g
   let (some he, some run) := (he?, run?) | throwError "`step_loop`: no env or run goal"
   setGoals [run]
-  evalTactic (← `(tactic| apply $(⟨stx[2]⟩)))
+  -- the lemma's `by` arguments elaborated now, in this context: later the env and state locals
+  -- they may mention are sealed away
+  Term.withSynthesize <| evalTactic (← `(tactic| apply $(⟨stx[2]⟩)))
   return (E, he, ← getGoals)
 
 /-- `step_loop` after the lemma applied: the env's reads, the premises, the continuation. -/
@@ -297,13 +299,21 @@ def stepLoopAt (stx : Syntax) : TacticM Unit := do
       stepLoopApply stx false
     catch ex =>
       saved.restore
-      -- a warning, unless the lemma is about a fixed state, which needs `S` substituted: the steps
-      -- after a loop lemma would work on `S`'s definition, not on `S`
-      unless ← fixedStateLemma stx[2] do
-        logWarning
-            m!"`step_loop`: the lemma does not apply to the state `S`, so `S` is \
-          substituted by its definition:{indentD ex.toMessageData}"
-      stepLoopApply stx true
+      -- a lemma stated under a bind (a framed function's) for a bare run: the bind `pure`
+      try
+        withMainContext do
+            replaceMainGoal
+                (← (← getMainGoal).apply (← mkConstWithFreshMVarLevels ``Func.runFrom_of_bind_pure))
+        stepLoopApply stx false
+      catch _ =>
+        saved.restore
+        -- a warning, unless the lemma is about a fixed state, which needs `S` substituted: the
+        -- steps after a loop lemma would work on `S`'s definition, not on `S`
+        unless ← fixedStateLemma stx[2] do
+          logWarning
+              m!"`step_loop`: the lemma does not apply to the state `S`, so `S` is \
+            substituted by its definition:{indentD ex.toMessageData}"
+        stepLoopApply stx true
   stepLoopFinish E he premises
 
 @[tactic stepLoop]

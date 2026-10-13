@@ -24,6 +24,12 @@ syntax stepNames :=
   (" with" (stepTransparent)? ppSpace ident (colGt !&"consuming" ident)?) <|>
     &" inline" <|> (&" named" (stepTransparent)?)
 
+/-- `step_pattern`'s names: `with x₁ … xₖ` names the values the continuation binds (`∀ A' E', …`),
+in order; without such binders, `with x hx` as `stepNames`. -/
+syntax stepPatternNames :=
+  (" with" (stepTransparent)? (ppSpace colGt ident)+) <|> &" inline" <|>
+    (&" named" (stepTransparent)?)
+
 /-- A lemma applied to arguments, as a term; its arguments stop at `inline` and `named`, which
 start `stepNames` (a term would take them as identifiers). -/
 syntax stepLemma := term:max (!(&"inline" <|> &"named") Lean.Parser.Term.argument)*
@@ -72,6 +78,24 @@ def StepArgs.parse (simp names consuming sopaque : Syntax) (named := false) : St
     consumed := if consuming.isNone then #[] else consuming[0][1].getArgs.map (⟨·⟩),
     expand := sopaque.isNone,
   }
+
+/-- Read an optional `stepPatternNames` node: the `StepArgs` of its `with x hx` (or `inline`,
+`named`; else `vN`), and every name after `with`. -/
+def StepArgs.parsePattern (names : Syntax) : StepArgs × Array Ident :=
+  if names.isNone then
+    (StepArgs.parse mkNullNode mkNullNode mkNullNode mkNullNode (named := true), #[])
+  else
+    let alt := names[0][0]
+    match firstAtom alt with
+    | "with" =>
+      let ids : Array Ident := alt[2].getArgs.map (⟨·⟩)
+      let name (i : Nat) : EnvName :=
+        match ids[i]? with
+        | some x => .named x
+        | none => .auto
+      ({ value := name 0, hyp := name 1, tag := alt[1].isNone }, ids)
+    | "named" => ({ value := .auto, hyp := .auto, tag := alt[1].isNone }, #[])
+    | _ => ({ value := .inline, hyp := .inline }, #[])
 
 end
 

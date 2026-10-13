@@ -27,7 +27,7 @@ registers: `h` concludes `(blk.runBodyFrom E pos S >>= g) = K` and takes
 - decidable side conditions (the registers' `≠`), closed by `decide`;
 - a continuation `∀ …, (blk.runBodyFrom E' pos' S >>= g) = K`, entered: its last write is named
   like `step_pure`'s, and its other binders (the pattern's dead intermediates) are sealed away. -/
-syntax (name := stepPattern) "step_pattern" " using " stepLemma (stepNames)? : tactic
+syntax (name := stepPattern) "step_pattern" " using " stepLemma (stepPatternNames)? : tactic
 
 /-- `pf : lhs = v` into `lhs = v'`, each local of `v` with a definition `x = t` in context replaced by
 `t`. -/
@@ -157,11 +157,79 @@ def concreteBodyFact? (lhs rhs : Expr) : MetaM (Option (Expr × Array Expr)) := 
     return none
   return some (mkExpectedPropHint (← mkEqRefl lhs) (← mkEq lhs (← instantiateMVars rhs)), instrs)
 
+/-- A body fact `block.body.drop idx = pat ++ rest` from a concrete block's literal body fact
+`block.body.drop idx = xs`: the pattern's instructions the first of `xs`, `rest` the others; the
+kernel checks only the pattern's instructions. The fact and the instructions, or `none`. -/
+def literalPatternFact? (lhs rhs : Expr) : MetaM (Option (Expr × Array Expr)) := do
+  let some (idx, block) := Tactic.bodyDrop? lhs | return none
+  let some f ← Tactic.bodyFact? block idx | return none
+  unless f.hidden do
+    return none
+  let_expr HAppend.hAppend _ _ _ _ pat _ := rhs | return none
+  let mut k := 0
+  let mut p ← whnfD pat
+  while p.isAppOfArity ``List.cons 3 do
+    k := k + 1
+    p ← whnfD p.appArg!
+  unless p.isAppOfArity ``List.nil 1 do
+    return none
+  let mut instrs := #[f.instr]
+  let mut rest := f.rest
+  for _ in [1:k] do
+    let_expr List.cons _ x xs := rest | return none
+    instrs := instrs.push x
+    rest := xs
+  let_expr List.drop α _ _ := lhs | return none
+  let fact :=
+    mkAppN rhs.getAppFn (rhs.getAppArgs.extract 0 4 ++ #[← mkListLit α instrs.toList, rest])
+  unless ← isDefEq fact rhs do
+    return none
+  return some (mkExpectedPropHint f.proof (← mkEq lhs (← instantiateMVars rhs)), instrs)
+
+/-- Substitute a state the continuation bound (`bound`, the goal's state) by its equation among the
+binders (`hS' : S' = t`); whether the state is bound without one (a fresh state). -/
+def bindStateEq (bound : Array FVarId) : TacticM Bool :=
+  withMainContext do
+    let st := (← getRunBodyFrom (← getMainTarget)).state
+    let some sv := st.fvarId? | return false
+    unless bound.contains sv do
+      return false
+    for h in bound do
+      let some d := (← getLCtx).find? h | continue
+      let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
+      let symm? :=
+        if l == st && !r.containsFVar sv then some false
+        else if r == st && !l.containsFVar sv then some true
+        else none
+      let some symm := symm? | continue
+      replaceMainGoal [(← substCore (← getMainGoal) h (symm := symm)).2]
+      return false
+    return true
+
+/-- `g` without the facts about the state `S` before a pattern whose continuation binds a fresh
+state: they do not hold of it. Equations and continuations stay; `S` and its equation go if
+nothing else mentions them. -/
+def dropStateFacts (g : MVarId) (S : Expr) : MetaM MVarId :=
+  g.withContext do
+    let some hS ← Tactic.findEqWithLhs? S | return g
+    let hs ← (← hypsMentioning S (except := #[hS])).filterM fun h => do
+        let ty ← instantiateMVars (← h.getType)
+        return (← isProp ty) && !ty.isEq && !(← Tactic.isContinuation ty)
+    let g ← g.tryClearMany hs
+    let g ← g.tryClear hS
+    match S.fvarId? with
+    | some s => g.tryClear s
+    | none => pure g
+
 def stepPatternAt (stx : Syntax) : TacticM Unit := do
+  -- a concrete block's body fact, as a step's: the pattern's instructions read off it
+  withMainContext do
+      let (g, goal) ← getGoalType
+      replaceMainGoal [(← withBodyFact g (← getRunBodyFrom goal)).1]
   -- the state as `S` with `hS`, to seal what the pattern stores
   Tactic.ensureStateEq
   withMainContext do
-      let args := StepArgs.parse mkNullNode stx[3] mkNullNode mkNullNode (named := true)
+      let (args, names) := StepArgs.parsePattern stx[3]
       let g ← getMainGoal
       let inState := (← getRunBodyFrom (← getGoalType).2).state
       -- a constant with all its arguments open, so its implicit registers are ours to split
@@ -195,7 +263,11 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
       for m in ms do
         let some (_, lhs, rhs) := (← instantiateMVars (← m.mvarId!.getType)).eq? | continue
         if lhs.isAppOf ``List.drop then
-          if let some (h, xs)← concreteBodyFact? lhs rhs then
+          if let some (h, xs)← literalPatternFact? lhs rhs then
+            m.mvarId!.assign h
+            instrs := xs
+            bodyFact? := some (h, true)
+          else if let some (h, xs)← concreteBodyFact? lhs rhs then
             m.mvarId!.assign h
             instrs := xs
           else if ← withDefault (isDefEq lhs rhs) then
@@ -203,7 +275,7 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
           else if let some h← bodyFactAs? lhs rhs then
             -- an abstract block (a pattern lemma's proof): through its body fact
             m.mvarId!.assign h
-            bodyFact? := some h
+            bodyFact? := some (h, false)
           else
             throwError "step_pattern: the body at the position is not the pattern of{indentExpr lem}"
       let mut cont? := none
@@ -236,34 +308,76 @@ def stepPatternAt (stx : Syntax) : TacticM Unit := do
       let some cont := cont? | throwError "step_pattern: no continuation premise"
       g.assign (← instantiateMVars (mkAppN lem ms))
       -- the lemma's names: a kept fact is referred to by them
-      let (dead, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
-      replaceMainGoal [← Tactic.reduceIndex main]
+      let (bound, main) ← cont.introNP (getIntrosSize (← instantiateMVars (← cont.getType)))
+      let main ← Tactic.reduceIndex main
+      -- the values the continuation binds (`∀ A' E', …`): named by `with`, in order
+      let (args, main) ← main.withContext do
+          let results ← bound.filterM fun x => do
+              let ty ← instantiateMVars (← x.getType)
+              if ← isProp ty then
+                return false
+              let heads := [``Ty.denote, ``PoisonOr, ``GlobalState, ``Env, ``MemoryState]
+              return !heads.any (ty.isAppOf ·)
+          if names.isEmpty || results.isEmpty || stx[3][0][0][1].getNumArgs > 0 then
+            return (args, main)
+          unless names.size ≤ results.size do
+            throwError "step_pattern: {names.size} names for the {results.size} values the \
+              continuation binds ({← results.mapM (·.getUserName)})"
+          let mut main := main
+          for x in results, n in names do
+            main ← main.rename x n.getId
+          -- named, so folded: their equations among the binders (`a = …`) tagged as `with`'s
+          for h in bound do
+            let ty ← instantiateMVars (← h.getType)
+            let some (_, .fvar y, _) := ty.eq? | continue
+            if (results.extract 0 names.size).contains y then
+              main ← main.replaceLocalDeclDefEq h (Tactic.tagNamed ty)
+          return ({ args with value := .auto, hyp := .auto, tag := false }, main)
+      -- its facts: an anonymous one named after the value it equates (`ha` for `a = …`), else
+      -- after its predicate (`htablePhase`)
+      let main ← main.withContext do
+          let mut main := main
+          for x in bound do
+            let ty := (← instantiateMVars (← x.getType)).consumeMData
+            unless (← x.getUserName).hasMacroScopes && (← isProp ty) do
+              continue
+            main ← main.rename x (← Tactic.factName ty)
+          return main
+      replaceMainGoal [main]
       -- an abstract block's body fact, carried past the pattern
-      if let some h := bodyFact? then
+      if let some (h, hidden) := bodyFact? then
         withMainContext do
             let h ← instantiateMVars h
             let h' ← mkAppM ``List.drop_add_of_drop_eq_append #[h]
             let some (_, l, rest) := (← inferType h').eq? | throwError "body fact: not an equation"
             let run ← getRunBodyFrom (← getMainTarget)
             let ty ← mkEq (← mkAppM ``List.drop #[run.idx, l.appArg!]) rest
-            let (_, main) ← (← (← getMainGoal).assert `hbody ty (mkExpectedPropHint h' ty)).intro1P
-            replaceMainGoal [main]
+            replaceMainGoal [← assertBodyFact (← getMainGoal) ty (mkExpectedPropHint h' ty) hidden]
+      -- a state the continuation binds: by its equation among the binders (`S' = t`), substituted
+      let bare ← bindStateEq bound
       finishStep args
       -- the pattern's intermediates: sealed away, so unused; its facts about them kept
       let mut main ← getMainGoal
-      for x in dead.reverse do
+      for x in bound.reverse do
         let some d := (← main.getDecl).lctx.find? x | continue
         unless ← main.withContext (isProp d.type) do
           main ← main.tryClear x
       replaceMainGoal [main]
       -- a pattern that stores: its new state sealed, as an impure step's (last: `substCore`
-      -- reintroduces the locals after the state)
+      -- reintroduces the locals after the state); a bound state without an equation is a fresh
+      -- one: the old state's facts dropped, the continuation's about it kept
       let outState ←
         withMainContext do
             return (← getRunBodyFrom (← getGoalType).2).state
-      if outState != inState then
+      if bare then
+        withMainContext do
+            replaceMainGoal [← dropStateFacts (← getMainGoal) inState]
+        Tactic.ensureStateEq
+      else if outState != inState then
         let (goals, _) ← sealStep inState
         replaceMainGoal ((← getMainGoal) :: goals.toList)
+        -- the body fact, reintroduced by the sealing, hidden again
+        clearStaleBodyFacts
 
 @[tactic stepPattern]
 def evalStepPattern : Tactic := fun stx => Tactic.atStepDepth (stepPatternAt stx)

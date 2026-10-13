@@ -206,7 +206,7 @@ public theorem fd_f25519_sub.call_eq (r a b : Pointer) (s : GlobalState) (hwf : 
   step_pure with zero
   step_pure with eightteen
   step_pure with first_elem_mask
-  step_pure with b
+  step_pure with bv
   step_load with x
   step_load with y
   step_pure opaque

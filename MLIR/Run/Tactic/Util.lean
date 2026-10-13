@@ -187,7 +187,8 @@ def hypsMentioning (e : Expr) (except : Array FVarId := #[]) : MetaM (Array FVar
         return acc
       return if e.occurs (← instantiateMVars d.type) then acc.push d.fvarId else acc
 
-/-- The unique equation `_ : lhs = _`, if there is one; `what` names it in errors. -/
+/-- The unique equation `_ : lhs = _`, if there is one (copies of it, `have h := hS`, count once);
+`what` names it in errors. -/
 def findLocalEq? (lhs : Expr) (what : MessageData := m!"`{lhs} = _`") : MetaM (Option LocalEq) := do
   match (← localEqs).filter (·.lhs == lhs) with
   | #[] =>
@@ -195,6 +196,9 @@ def findLocalEq? (lhs : Expr) (what : MessageData := m!"`{lhs} = _`") : MetaM (O
   | #[e] =>
     return some e
   | es =>
+    if let some e := es.back? then
+      if es.all (·.rhs == e.rhs) then
+        return some e
     throwError "ambiguous: {es.size} hypotheses {what}"
 
 /-- The unique hypothesis `_ : lhs = _`, if there is one. -/
@@ -230,6 +234,15 @@ def nodupNe? (h ty a b : Expr) : MetaM (Option Expr) := do
   if j < i then
     return some (← mkAppM ``Ne.symm #[← ne j i])
   return none
+
+/-- A name for an anonymous fact `ty` a continuation binds: after the value it equates (`ha` for
+`a = …`), else after its predicate (`htablePhase`). -/
+def factName (ty : Expr) : MetaM Name := do
+  let ty := ty.consumeMData
+  if let some (_, .fvar y, _) := ty.eq? then
+    return (← y.getUserName).appendBefore "h"
+  let base := (ty.getAppFn.constName?.bind (·.componentsRev.head?)).map (·.toString.decapitalize)
+  return .mkSimple s!"h{base.getD "fact"}"
 
 /-- The tag on the equation `hx : x = _` of a step value named with `with`. -/
 def namedTag : Name :=

@@ -106,9 +106,20 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option 
           let pf? ←
             observing? do
                 let some new := new? | failure
-                let some pf ←
-                  Tactic.carryFact fc locals (.fvar hyp) key (motive.beta #[new]) (deep :=
-                      !consumed.contains hyp && !aboutMarker) | failure
+                let deep := !consumed.contains hyp && !aboutMarker
+                let tgt := motive.beta #[new]
+                let carried ←
+                  observing? (Tactic.carryFact fc locals (.fvar hyp) key tgt (deep := deep))
+                let pf ←
+                  match carried.join with
+                  | some pf => pure pf
+                  | none =>
+                    -- a memory fact through the new state's layers (a global's masked store), as
+                    -- `mem_fact` finds it
+                    unless deep && (Tactic.memPred? tgt).isSome do
+                      failure
+                    let some pf ← Tactic.factDischarge fc 2 (← Tactic.dsimpState tgt) | failure
+                    pure (mkExpectedPropHint pf tgt)
                 mkEqNDRec motive pf (← mkEqSymm (.fvar hS'))
           -- a consumed fact not carried stays about the old state, to be cleared after the step;
           -- an equation (`S.mem.eraseFrom b = m`) stays about it, true there, rather than a goal
@@ -149,10 +160,28 @@ def sealStep (inState : Expr) (consumed : Array FVarId := #[]) (about? : Option 
         return goals
   return (goals, renamed)
 
+/-- Before a call: past `rir.stateDepth` (when set), the state `S` becomes a bare base, its equation
+reversed (`hS✝ : … = S`), the call's state built on it. Along a chain of calls, a state term
+growing over the entry state ends up in every read's proof, and instantiating the proof walks it
+per step. -/
+def cutDeepState : TacticM Unit :=
+  withMainContext do
+    let S := (← getRunBodyFrom (← getMainTarget)).state
+    let some hS ← Tactic.findLocalEq? S | return
+    let depth := rir.stateDepth.get (← getOptions)
+    unless depth > 0 && hS.rhs.approxDepth.toNat ≥ depth do
+      return
+    let g ← getMainGoal
+    let (_, g) ← (← g.assert (← mkFreshUserName `hS) (← mkEq hS.rhs S)
+        (← mkEqSymm hS.decl.toExpr)).intro1P
+    replaceMainGoal [← g.clear hS.decl.fvarId]
+
 /-- Step an effectful instruction, proving it with `runTactics`; with `resolveFirst`, the written
 value's reads resolved before the state is sealed (a call's result, which reads the old state). -/
 def runStepAt (args : StepArgs) (runTactics : Syntax) (resolveFirst := false) : TacticM Unit :=
   focus do
+    if resolveFirst then
+      cutDeepState
     Tactic.ensureStateEq
     withMainContext do
         let (g, goal) ← getGoalType
@@ -305,6 +334,25 @@ def evalStepLifetime : Tactic := fun stx =>
 def evalStepAssume : Tactic := fun stx =>
   runAssumeStep (StepArgs.parse stx[1] mkNullNode mkNullNode mkNullNode)
 
+/-- The byte count of a `memcpy`/`memmove`/`memset` run goal as a numeral when its length is a
+literal (`40`, not `(40#64).toNat`), else a hole: the premises' widths are then `8 * 40`. -/
+def memopCount : TacticM Term :=
+  withMainContext do
+    let_expr Eq _ lhs _ := ← instantiateMVars (← getMainTarget) | `(_)
+    -- `op dst src len env s`
+    let_expr PoisonOr.value _ len := lhs.appFn!.appFn!.appArg! | `(_)
+    match ← getBitVecValue? len with
+    | some ⟨_, v⟩ => pure (Syntax.mkNumLit (toString v.toNat))
+    | none => `(_)
+
+/-- `exact lem (n := k) rfl …` for a memory operation, `k` its count (`memopCount`), each other
+premise by `mem_fact`. -/
+elab "memop_run " lem:ident k:num : tactic =>
+  withMainContext do
+    let n ← memopCount
+    let holes : Array Term ← (List.replicate k.getNat ()).toArray.mapM fun _ => `((by mem_fact))
+    evalTactic (← `(tactic| exact $lem (n := $n) rfl $holes*))
+
 @[tactic stepMemcpy]
 def evalStepMemcpy : Tactic := fun stx => do
   runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
@@ -312,11 +360,9 @@ def evalStepMemcpy : Tactic := fun stx => do
         `(tacticSeq|
         expect_values
         first
-        | exact run_memcpy (by rfl) (by first | mem_fact | simp_all)
-            (by first | mem_fact | simp_all) (by mem_fact)
+        | memop_run run_memcpy 3
         -- a source not known throughout: its definedness copied
-        | exact run_memcpyDef (by rfl) (by first | mem_fact | simp_all)
-            (by first | mem_fact | simp_all) (by first | mem_fact | simp_all)))
+        | memop_run run_memcpyDef 3))
 
 @[tactic stepMemmove]
 def evalStepMemmove : Tactic := fun stx => do
@@ -325,10 +371,9 @@ def evalStepMemmove : Tactic := fun stx => do
         `(tacticSeq|
         expect_values
         first
-        | exact run_memmove (by rfl) (by first | mem_fact | simp_all) (by mem_fact)
+        | memop_run run_memmove 2
         -- a source not known throughout: its definedness copied
-        | exact run_memmoveDef (by rfl) (by first | mem_fact | simp_all)
-            (by first | mem_fact | simp_all)))
+        | memop_run run_memmoveDef 2))
 
 @[tactic stepMemset]
 def evalStepMemset : Tactic := fun stx => do
@@ -336,7 +381,7 @@ def evalStepMemset : Tactic := fun stx => do
       (←
         `(tacticSeq|
         expect_values
-        exact run_memset (by rfl) (by first | mem_fact | simp_all)))
+        memop_run run_memset 1))
 
 end InstructionSpecific
 

@@ -17,6 +17,11 @@ theorem Func.runFrom_bind_of_env_eq {f : Func} {E E' : ⟪f.Γ⟫} {k s}
     (h : (f.runFrom E' k s >>= g) = K) : (f.runFrom E k s >>= g) = K :=
   he ▸ h
 
+/-- A bare run by a lemma stated under a bind (a framed function's), the bind `pure`. -/
+theorem Func.runFrom_of_bind_pure {f : Func} {E : ⟪f.Γ⟫} {k s K}
+    (h : (f.runFrom E k s >>= pure) = K) : f.runFrom E k s = K := by
+  rwa [bind_pure] at h
+
 /-- A body fact `l.drop n = x :: xs` puts `n` inside `l`. -/
 theorem List.lt_length_of_drop_eq_cons {l : List α} (h : l.drop n = x :: xs) : n < l.length := by
   rcases Nat.lt_or_ge n l.length with h' | h'
@@ -70,6 +75,11 @@ theorem BasicBlock.runBodyFrom_step_pure {block : BasicBlock Γ tRets bp} {env :
 theorem BasicBlock.runBodyFrom_done {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
     (hpos : pos ≥ block.body.length := by decide) : block.runBodyFrom env pos = pure env := by
   rw [runBodyFrom, List.drop_eq_nil_of_le hpos, List.foldlM_nil]
+
+/-- At the end of a body, by a body fact `block.body.drop pos = []`. -/
+theorem BasicBlock.runBodyFrom_done_of_drop {block : BasicBlock Γ tRets bp} {env : ⟪Γ⟫}
+    (h : block.body.drop pos = []) : block.runBodyFrom env pos = pure env := by
+  rw [runBodyFrom, h, List.foldlM_nil]
 
 theorem BasicBlock.run_eq {bt : Fin n → List Ty} (block : BasicBlock Γ tRets bt)
     (params : (k : Fin n) → Dsts Γ (bt k)) (env : ⟪Γ⟫) :
