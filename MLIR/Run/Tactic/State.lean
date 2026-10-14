@@ -253,7 +253,7 @@ under a `Fit`), else `hlimbsFit_x`. -/
 def freshName (c : MemCtx) (concl : Expr) (oldMem : Expr) (prems : Array Expr) :
     MetaM (Name × Option FVarId × Option FVarId) := do
   if let some (k, _, p, _) := memPred? concl then
-    return (← namedAfterPtr #[`hbounds, `hroom, `hfits, `hlive][k]! p, none, none)
+    return (← namedAfterPtr #[`hbounds, `hroom, `hfits, `hlive, `hptrFree][k]! p, none, none)
   let some p ← factPtr? concl | return (`hfresh, none, none)
   -- `LimbsRoom` and `LimbsFit`: one object's predicates
   let object (n : Name) : Name := n.modifyBase fun
@@ -408,6 +408,7 @@ def memFactsOf (g : MVarId) (S new : Expr) :
           (match_expr wm with
             | MemoryState.storeDef m' q v _ d => some (m', q, v, d)
             | MemoryState.overlay m' q v _ d => some (m', q, v, d)
+            | MemoryState.storeCopy m' q v _ d _ => some (m', q, v, d)
             | _ => none) | continue
       let v ← normWidths v
       let mut cands : Array (Expr × Expr) := #[]
@@ -459,7 +460,8 @@ def memFactsOf (g : MVarId) (S new : Expr) :
     -- the writes read back: an `mlir_read` lemma's read of each write, at the new memory
     for w in layers do
       for l in c.lemmas do
-        unless w.isAppOf l.write do
+        -- a copy's pointers are read through, never read back
+        unless w.isAppOf l.write && l.read != ``MemoryState.ptrsIn do
           continue
         let read? ←
           observing? do
@@ -487,6 +489,9 @@ def memFactsOf (g : MVarId) (S new : Expr) :
         -- the value's own reads of `S` by `S`'s facts
         let r ← simpState v c
         let (v, pf) := (r.expr, ← mkEqTrans pf (← r.getProof))
+        -- a pointer read back only as a pointer (a copy's of a known one)
+        if e.isAppOf ``MemoryState.loadPtr && !v.isAppOf ``PoisonOr.value then
+          continue
         -- named after the pointer read, so facts at distinct pointers stay accessible
         -- (`q.add k` after `q` and `k`)
         let ptr? ←
