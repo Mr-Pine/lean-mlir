@@ -175,6 +175,12 @@ syntax "[" attrValue,* "]" : mlir_attr_val
 /-- `<#tbaa_type_desc, 0>`, an element of a TBAA type's `members = {…}`. -/
 syntax attrTuple := "<" attrValue,* ">"
 
+syntax namedAttr := ident " = " attrValue
+
+/-- `<id = "omnipotent char", members = {…}>`: an attribute without a dialect prefix, as an inline
+TBAA type descriptor. -/
+syntax "<" namedAttr,+ ">" : mlir_attr_val
+
 syntax "{" attrTuple,+ "}" : mlir_attr_val
 
 syntax mlir_type : mlir_attr_val
@@ -358,6 +364,11 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
       match t with
       | `(attrTuple| < $vs,* >) => return .list (← vs.getElems.toList.mapM anyAttrVal)
       | t => throwErrorAt t "malformed `<…>` tuple"
+  | `(mlir_attr_val| < $es:namedAttr,* >) =>
+    .dict <$> .mk <$> es.getElems.toList.mapM fun (e : TSyntax ``namedAttr) => do
+      match e with
+      | `(namedAttr| $k:ident = $v) => return AttrEntry.mk k.getId.toString (← anyAttrVal v)
+      | e => throwErrorAt e "malformed `key = value` entry"
   | `(mlir_attr_val| $t:mlir_type) => do
     match leaves t.raw with
     | #[x] =>
