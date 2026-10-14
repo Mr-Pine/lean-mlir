@@ -19,7 +19,11 @@ pub struct Args {
     output: PathBuf,
 }
 
-pub fn run(args: Args, llvm: &Llvm) -> Result<(), Report> {
+pub fn run(mut args: Args, llvm: &Llvm) -> Result<(), Report> {
+    // Clang runs in each command's directory, so outputs must not be relative.
+    args.output = std::path::absolute(&args.output)
+        .context("Could not make output path absolute")
+        .attach(format!("Path: {}", args.output.display()))?;
     let db: CompilationDatabase = read_json(&args.compile_commands)?;
     let commands = db
         .into_iter()

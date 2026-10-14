@@ -32,25 +32,26 @@ pub struct Args {
     target: PathBuf,
     /// Default target module, e.g. `Firedancer.Ref.Mlir`.
     target_module: String,
-    /// The `func_mappings.json` file (default: no mappings).
-    func_mappings: Option<PathBuf>,
+    /// The JSON file of target mappings (default: none).
+    mappings: Option<PathBuf>,
     /// Root functions to import (repeatable).
     #[arg(long = "root-func")]
     root_funcs: Vec<String>,
 }
 
-/// Mapping: function name regex -> alternative subpath and module.
+/// Mapping: symbol regex -> alternative subpath and module.
 #[derive(Debug, Default, Deserialize)]
-struct FuncMappings {
+#[serde(transparent)]
+struct Mappings {
     /// Symbol regex, target path, target module; first match wins.
     functions: Vec<(String, PathBuf, String)>,
 }
 
 pub fn run(args: Args) -> Result<(), Report> {
-    let mappings: FuncMappings = {
-        let mut mappings = match &args.func_mappings {
+    let mappings: Mappings = {
+        let mut mappings = match &args.mappings {
             Some(path) => read_json(path)?,
-            None => FuncMappings::default(),
+            None => Mappings::default(),
         };
         mappings
             .functions
@@ -150,6 +151,13 @@ fn build_file_content(
         other => Err(report!("Unexpected top-level operation").attach(format!("Op: {other}")))?,
     };
 
+    let bindings = if dependency_bindings == "" {String::new()} else {
+        format!(r#"
+    with
+{dependency_bindings}
+"#)
+    };
+
     let content = format!(
         r#"
 module
@@ -164,9 +172,7 @@ namespace {module}
 @[expose] public section
 
 {def_keyword} {name} := {body}
-    with
-{dependency_bindings}
-
+{bindings}
 end
 
 end {module}
