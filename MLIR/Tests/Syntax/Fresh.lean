@@ -245,13 +245,17 @@ mlir_def copy16 :=
     "llvm.return"(%1) : (i64) -> ()
 }
 
--- a source known only in its first word: the copy's definedness, its first word known and read
+-- a source known only in its first word: the copy's definedness and pointers, its first word
+-- known and read
 example (p q : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 128)
     (hq : Room s.mem q 128) (hq8 : Fits s.mem q 64) (hpq : p.id ≠ q.id) :
     copy16.call (copy16.args (.value p) (.value q)) s =
       .value
         (.cons (.value ((s.mem.readAt q 128).setWidth 64)) .nil,
-          { s with mem := s.mem.storeDef p (s.mem.readAt q 128) (s.mem.definedAt q 128) }) := by
+          { s with
+            mem :=
+              s.mem.storeCopy p (s.mem.readAt q 128) (s.mem.definedAt q 128)
+                (s.mem.ptrsIn q 128) }) := by
   func_init
   block_init
   step_pure
@@ -260,6 +264,47 @@ example (p q : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 128)
   step_load with v
   finish_block
   rw [hS, hv]
+
+-- a source whose definedness leaves no 64-bit window undefined: no pointer to copy, a `storeDef`
+example (p q : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 128)
+    (hq : Room s.mem q 128) (hq8 : Fits s.mem q 64) (hpq : p.id ≠ q.id)
+    (hd : s.mem.definedAt q 128 = 0xffffffffffffffffff#128) :
+    copy16.call (copy16.args (.value p) (.value q)) s =
+      .value
+        (.cons (.value ((s.mem.readAt q 128).setWidth 64)) .nil,
+          { s with mem := s.mem.storeDef p (s.mem.readAt q 128) (s.mem.definedAt q 128) }) := by
+  func_init
+  block_init
+  step_pure
+  step_memcpy
+  step_load with v
+  finish_block
+  rw [hS, hv]
+
+-- a source with no stored pointer over it (`PtrFree`): none to copy, a `storeDef`
+example (p q : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 128)
+    (hq : Room s.mem q 128) (hq8 : Fits s.mem q 64) (hpq : p.id ≠ q.id)
+    (hpf : PtrFree s.mem q 128) :
+    copy16.call (copy16.args (.value p) (.value q)) s =
+      .value
+        (.cons (.value ((s.mem.readAt q 128).setWidth 64)) .nil,
+          { s with mem := s.mem.storeDef p (s.mem.readAt q 128) (s.mem.definedAt q 128) }) := by
+  func_init
+  block_init
+  step_pure
+  step_memcpy
+  step_load with v
+  finish_block
+  rw [hS, hv]
+
+-- bits stored leave no pointer over them; a fresh block has none
+example (m : MemoryState) (p : Pointer) (x : BitVec 128) (h : Room m p 128) (ho : p.offset = 0) :
+    PtrFree (m.storeAt p x) (p.add 8#64) 64 := by
+  mem_fact
+
+example (s : GlobalState) (x : BitVec 64) :
+    PtrFree ((s.alloca 16).mem.storeAt (s.allocaPtr.add 8#64) x) s.allocaPtr 128 := by
+  mem_fact
 
 -- a word inside a copy: known from the source's, read as the source's
 example (m : MemoryState) (p q : Pointer) (hp : Room m p 128) (hq : InBounds m q 128)

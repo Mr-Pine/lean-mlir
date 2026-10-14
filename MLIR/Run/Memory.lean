@@ -24,7 +24,7 @@ theorem run_storeDef {ptr : Pointer} {t : Ty} {v : ⟦t⟧} (hroom : Room s.mem 
   simp [Operation.store, hroom, Ty.ptrLeaves_of_hasPtr hp, throwUBIf, mlir_effect]
 
 /-- A store of any value: its bits, defined but in poison leaves, padding and pointers, and its
-pointers recorded. -/
+pointers recorded, their addresses there. -/
 theorem run_storeValue {ptr : Pointer} {t : Ty} {v : ⟦t⟧} (hroom : Room s.mem ptr t.width) :
     (Operation.store (.value ptr) v) env s =
       .value
@@ -35,7 +35,7 @@ theorem run_storeValue {ptr : Pointer} {t : Ty} {v : ⟦t⟧} (hroom : Room s.me
                 (t.ptrLeaves 0 v) }) := by
   simp [Operation.store, hroom, throwUBIf, mlir_effect]
 
-/-- A store of a pointer: its bits undefined, the pointer recorded. -/
+/-- A store of a pointer: its address, the pointer recorded. -/
 theorem run_storePtr {ptr q : Pointer} (hroom : Room s.mem ptr 64) :
     (Operation.store (τ := .ptr) (.value ptr) (.value q)) env s =
       .value (env, { s with mem := s.mem.storePtr ptr q }) := by
@@ -57,9 +57,9 @@ theorem run_memcpy {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNa
       .value (env, { s with mem := s.mem.storeAt dst (s.mem.readAt src (8 * n)) }) := by
   subst hn
   simp [Operation.memcpy, hd, hfd, hfs.live, throwUBIf, mlir_effect,
-    MemoryState.definedAt_of_fits hfs, MemoryState.storeAt_eq_storeDef]
+    MemoryState.storeCopy_of_fits hfs]
 
-/-- `memcpy` of `n` bytes: their bits and which are defined. -/
+/-- `memcpy` of `n` bytes: their bits, which are defined, and the live pointers among them. -/
 theorem run_memcpyDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
     (hd : (Range.of dst (8 * n)).Disjoint (Range.of src (8 * n))) (hfd : Room s.mem dst (8 * n))
     (hfs : Live s.mem src (8 * n)) :
@@ -68,9 +68,22 @@ theorem run_memcpyDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.t
         (env,
           { s with
             mem :=
-              s.mem.storeDef dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n)) }) := by
+              s.mem.storeCopy dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n))
+                (s.mem.ptrsIn src (8 * n)) }) := by
   subst hn
   simp [Operation.memcpy, hd, hfd, hfs, throwUBIf, mlir_effect]
+
+/-- `memcpy` of `n` bytes carrying no live pointer: their bits and which are defined. -/
+theorem run_memcpyDef_noPtrs {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
+    (hd : (Range.of dst (8 * n)).Disjoint (Range.of src (8 * n))) (hfd : Room s.mem dst (8 * n))
+    (hfs : Live s.mem src (8 * n)) (hp : s.mem.ptrsIn src (8 * n) = fun _ => none) :
+    (Operation.memcpy (.value dst) (.value src) (.value len)) env s =
+      .value
+        (env,
+          { s with
+            mem :=
+              s.mem.storeDef dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n)) }) := by
+  rw [run_memcpyDef hn hd hfd hfs, MemoryState.storeCopy_of_ptrsIn hp]
 
 /-- `memmove` of `n` known bytes: a store at `dst` of the bits read at `src`, which may overlap. -/
 theorem run_memmove {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
@@ -79,9 +92,9 @@ theorem run_memmove {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toN
       .value (env, { s with mem := s.mem.storeAt dst (s.mem.readAt src (8 * n)) }) := by
   subst hn
   simp [Operation.memmove, hfd, hfs.live, throwUBIf, mlir_effect,
-    MemoryState.definedAt_of_fits hfs, MemoryState.storeAt_eq_storeDef]
+    MemoryState.storeCopy_of_fits hfs]
 
-/-- `memmove` of `n` bytes: their bits and which are defined. -/
+/-- `memmove` of `n` bytes: their bits, which are defined, and the live pointers among them. -/
 theorem run_memmoveDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
     (hfd : Room s.mem dst (8 * n)) (hfs : Live s.mem src (8 * n)) :
     (Operation.memmove (.value dst) (.value src) (.value len)) env s =
@@ -89,9 +102,22 @@ theorem run_memmoveDef {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.
         (env,
           { s with
             mem :=
-              s.mem.storeDef dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n)) }) := by
+              s.mem.storeCopy dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n))
+                (s.mem.ptrsIn src (8 * n)) }) := by
   subst hn
   simp [Operation.memmove, hfd, hfs, throwUBIf, mlir_effect]
+
+/-- `memmove` of `n` bytes carrying no live pointer: their bits and which are defined. -/
+theorem run_memmoveDef_noPtrs {dst src : Pointer} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
+    (hfd : Room s.mem dst (8 * n)) (hfs : Live s.mem src (8 * n))
+    (hp : s.mem.ptrsIn src (8 * n) = fun _ => none) :
+    (Operation.memmove (.value dst) (.value src) (.value len)) env s =
+      .value
+        (env,
+          { s with
+            mem :=
+              s.mem.storeDef dst (s.mem.readAt src (8 * n)) (s.mem.definedAt src (8 * n)) }) := by
+  rw [run_memmoveDef hn hfd hfs, MemoryState.storeCopy_of_ptrsIn hp]
 
 /-- `ptrtoaddr`: the value of the state's addresses, the state unchanged. -/
 theorem run_ptrtoaddr {dst : Dst Γ (.bv w)} {p : Reg Γ .ptr} :
@@ -112,26 +138,45 @@ theorem run_load {ptr : Pointer} {t : Ty} {v} {dst : Dst Γ t} (hfits : Fits s.m
     (hv : (t.unflatten (s.mem.readAt ptr t.width)) = v) (hp : t.hasPtr = false := by simp) :
     (Operation.load dst (.value ptr)) env s = .value (env[dst := v], s) := by
   simp [Operation.load, hfits.inBounds, throwUBIf, ← hv, mlir_effect,
-    MemoryState.definedAt_of_fits hfits, Ty.unflattenDef_allOnes, Ty.setPtrs_of_hasPtr hp]
+    MemoryState.knownAt_of_fits hfits, Ty.unflattenDef_allOnes, Ty.setPtrs_of_hasPtr hp]
 
-/-- A load of any bits in bounds, of a type without pointers: poison leaves where they are
-undefined. -/
+/-- A load of bits all read as known (a stored pointer's address), of a type without pointers:
+their value. -/
+theorem run_load_known {ptr : Pointer} {t : Ty} {v} {dst : Dst Γ t}
+    (h : InBounds s.mem ptr t.width) (hk : s.mem.knownAt ptr t.width = BitVec.allOnes _)
+    (hv : (t.unflatten (s.mem.readAt ptr t.width)) = v) (hp : t.hasPtr = false := by simp) :
+    (Operation.load dst (.value ptr)) env s = .value (env[dst := v], s) := by
+  simp [Operation.load, h, throwUBIf, ← hv, mlir_effect, hk, Ty.unflattenDef_allOnes,
+    Ty.setPtrs_of_hasPtr hp]
+
+/-- A load of any bits in bounds, of a type without pointers: poison leaves where they are not
+known. -/
 theorem run_loadDef {ptr : Pointer} {t : Ty} {dst : Dst Γ t} (h : InBounds s.mem ptr t.width)
+    (hp : t.hasPtr = false := by simp) :
+    (Operation.load dst (.value ptr)) env s =
+      .value
+        (env[dst := t.unflattenDef (s.mem.readAt ptr t.width) (s.mem.knownAt ptr t.width)], s) := by
+  simp [Operation.load, h, throwUBIf, mlir_effect, Ty.setPtrs_of_hasPtr hp]
+
+/-- A load of any bits in bounds with no live pointer over them, of a type without pointers:
+poison leaves where they are undefined. -/
+theorem run_loadDef_of_ptrFree {ptr : Pointer} {t : Ty} {dst : Dst Γ t}
+    (h : InBounds s.mem ptr t.width) (hf : PtrFree s.mem ptr t.width)
     (hp : t.hasPtr = false := by simp) :
     (Operation.load dst (.value ptr)) env s =
       .value
         (env[dst := t.unflattenDef (s.mem.readAt ptr t.width) (s.mem.definedAt ptr t.width)],
           s) := by
-  simp [Operation.load, h, throwUBIf, mlir_effect, Ty.setPtrs_of_hasPtr hp]
+  rw [run_loadDef h hp, MemoryState.knownAt_of_ptrFree hf]
 
-/-- A load of any value in bounds: poison leaves where they are undefined, pointer leaves the
+/-- A load of any value in bounds: poison leaves where they are not known, pointer leaves the
 pointers stored there. -/
 theorem run_loadValue {ptr : Pointer} {t : Ty} {dst : Dst Γ t} (h : InBounds s.mem ptr t.width) :
     (Operation.load dst (.value ptr)) env s =
       .value
         (env[dst :=
             t.setPtrs 0 (fun o => s.mem.ptrAt ptr.id (ptr.offsetInBits + o))
-              (t.unflattenDef (s.mem.readAt ptr t.width) (s.mem.definedAt ptr t.width))],
+              (t.unflattenDef (s.mem.readAt ptr t.width) (s.mem.knownAt ptr t.width))],
           s) := by
   simp [Operation.load, h, throwUBIf, mlir_effect]
 
@@ -186,28 +231,31 @@ theorem GlobalInitializer.image_bytes {g : GlobalInitializer} :
   unfold image; split <;> rfl
 
 /-- A block holding an image, from its start: in bounds for its bytes. -/
-theorem GlobalImage.inBounds {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
-    (hn : img.bytes = n) : InBounds m ⟨b, 0⟩ (8 * n) :=
+theorem GlobalImage.inBounds {m : MemoryState} {img : GlobalImage}
+    (hb : m[b]? = some (img.block r a)) (hn : img.bytes = n) : InBounds m ⟨b, 0⟩ (8 * n) :=
   ⟨_, hb, by simp [Pointer.offsetInBits, MemoryBlock.lengthInBits, GlobalImage.block, hn]⟩
 
 /-- A block holding an image is live in its bounds. -/
-theorem GlobalImage.live {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
+theorem GlobalImage.live {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some (img.block r a))
     (hn : img.bytes = n) : Live m ⟨b, 0⟩ (8 * n) :=
   ⟨_, hb, rfl, by simp [Pointer.offsetInBits, MemoryBlock.lengthInBits, GlobalImage.block, hn]⟩
 
 /-- A mutable global's image's block: writable, so room in its bounds. -/
-theorem GlobalImage.room {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some img.block)
+theorem GlobalImage.room {m : MemoryState} {img : GlobalImage} (hb : m[b]? = some (img.block r a))
     (hn : img.bytes = n) (hc : img.constant = false) : Room m ⟨b, 0⟩ (8 * n) :=
   ⟨GlobalImage.live hb hn, _, hb, by simp [GlobalImage.block, hc]⟩
 
-/-- A global's bits read from its block's start, `w` of them: its value's. -/
+/-- A global's bits read from its block's start, `w` of them: its value's, without pointer
+members. -/
 theorem GlobalInitializer.readAt {m : MemoryState} {g : GlobalInitializer} {x : ⟦g.t⟧}
-    (hb : m[b]? = some g.image.block) (hv : ∀ s, g.value s = .value (x, s)) (hw : g.t.width = w)
-    {B : BitVec w} (hB : (g.t.flattenDef x).1 = B.cast hw.symm) : m.readAt ⟨b, 0⟩ w = B := by
+    (hb : m[b]? = some (g.image.block r a)) (hv : ∀ s, g.value s = .value (x, s))
+    (hp : g.ptrs = []) (hw : g.t.width = w) {B : BitVec w}
+    (hB : (g.t.flattenDef x).1 = B.cast hw.symm) : m.readAt ⟨b, 0⟩ w = B := by
   subst hw
   simp only [BitVec.cast_eq] at hB
   rw [image_eq hv] at hb
-  simp only [MemoryState.readAt, hb, GlobalImage.block, hB, Pointer.offsetInBits]
+  simp only [MemoryState.readAt, hb, GlobalImage.block, GlobalImage.linkedBits, hp, List.foldl_nil,
+    hB, Pointer.offsetInBits]
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   have : i < 8 * ((g.t.width + 7) / 8) := by omega
@@ -215,8 +263,9 @@ theorem GlobalInitializer.readAt {m : MemoryState} {g : GlobalInitializer} {x : 
 
 /-- A global's defined bits at its block's start, `w` of them: its value's. -/
 theorem GlobalInitializer.definedAt {m : MemoryState} {g : GlobalInitializer} {x : ⟦g.t⟧}
-    (hb : m[b]? = some g.image.block) (hv : ∀ s, g.value s = .value (x, s)) (hw : g.t.width = w)
-    {D : BitVec w} (hD : (g.t.flattenDef x).2 = D.cast hw.symm) : m.definedAt ⟨b, 0⟩ w = D := by
+    (hb : m[b]? = some (g.image.block r a)) (hv : ∀ s, g.value s = .value (x, s))
+    (hw : g.t.width = w) {D : BitVec w} (hD : (g.t.flattenDef x).2 = D.cast hw.symm) :
+    m.definedAt ⟨b, 0⟩ w = D := by
   subst hw
   simp only [BitVec.cast_eq] at hD
   rw [image_eq hv] at hb
@@ -225,6 +274,16 @@ theorem GlobalInitializer.definedAt {m : MemoryState} {g : GlobalInitializer} {x
   intro i hi
   have : i < 8 * ((g.t.width + 7) / 8) := by omega
   simp [hi, this]
+
+/-- A constant global without pointer members holds no pointer. -/
+theorem PtrFree.of_global {s : GlobalState} {g : GlobalInitializer} {q : Pointer} (hwf : s.WF)
+    (hg : s.mem.globals sym = some (q.id, g.image)) (hc : g.constant = true) (hp : g.ptrs = []) :
+    PtrFree s.mem q w := by
+  have hb := hwf.const_block hg (by rw [GlobalInitializer.image_constant, hc])
+  have hi : g.image.ptrs = [] := by unfold GlobalInitializer.image; split <;> simp [hp]
+  refine ⟨fun o _ _ => ?_⟩
+  simp [MemoryState.ptrAt, hb, MemoryState.imageBlock, GlobalImage.block, MemoryBlock.ptrAt,
+    GlobalImage.linkedPtrs, hi]
 
 /-- A plain global's bits: its raw value's, all defined. -/
 theorem GlobalInitializer.flattenDef_wrap {g : GlobalInitializer} {w : Nat} {r : ⟦g.t⟧ᵣ}
@@ -246,7 +305,12 @@ theorem Writable.ne_of_readOnly {m : MemoryState} {blk : MemoryBlock} (hq : Writ
 
 /-- A constant global's block is read-only. -/
 theorem GlobalImage.block_writable {img : GlobalImage} (hc : img.constant = true) :
-    img.block.writable = false := by simp [GlobalImage.block, hc]
+    (img.block r a).writable = false := by simp [GlobalImage.block, hc]
+
+/-- A constant global's block in `m` is read-only. -/
+theorem MemoryState.imageBlock_writable {m : MemoryState} {img : GlobalImage}
+    (hc : img.constant = true) : (m.imageBlock img).writable = false :=
+  GlobalImage.block_writable hc
 
 /-- A mutable global's block in a `WF` state: in bounds for its bytes. -/
 theorem GlobalState.WF.mutable_inBounds {s : GlobalState} (hwf : s.WF)

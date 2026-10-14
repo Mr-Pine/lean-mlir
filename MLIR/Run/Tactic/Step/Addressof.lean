@@ -13,10 +13,10 @@ public meta section
 /-- `step_pure` for an `addressof` of a global `@g`: its block's start `x`, from the fact
 `hg : S.mem.Globals G` (`G` listing `⟨"g", t⟩`) and `S.WF`; the state unchanged. Facts: `hglobal_x`
 (its table entry), `hx_off`; a constant's `hx_live` (its bytes), `hx_fits` (its defined bits, each
-run from a byte), `hread_x` (its bits, as `Ty.flatBits` for a plain value, else a literal),
-`hdefined_x`, and `hq_ne_x` for each pointer `q` known writable; a mutable one's `hx_bounds` and
-`hwritable_x`. The term, a `value_eq` lemma `∀ s, t.value s = .value (v, s)` or `t`, is optional:
-else `t`'s value is read off its block. -/
+run from a byte), `hread_x` (its bits, as `Ty.flatBits` for a plain value, else a literal; none for
+a global with pointer members), `hdefined_x`, and `hq_ne_x` for each pointer `q` known writable; a
+mutable one's `hx_bounds` and `hwritable_x`. The term, a `value_eq` lemma
+`∀ s, t.value s = .value (v, s)` or `t`, is optional: else `t`'s value is read off its block. -/
 syntax (name := stepAddressof) "step_addressof" (ppSpace colGt term:max)? (stepNames)?
   (stepConsuming)? : tactic
 
@@ -268,8 +268,12 @@ def addGlobalFacts (g : MVarId) (S x hx hglobal entry : Expr) (hv? : Option Expr
           let hx ←
             mkAppOptM ``Ty.flattenDef_eq_ofNat #[gt, v, wE, mkNatLit b, mkNatLit d, hw, hb, hd]
           pure (← proj ``Prod.fst hx, ← proj ``Prod.snd hx, some d)
-    let hread ← mkAppM ``GlobalInitializer.readAt #[hblk, hv, hw, hB]
-    hyps ← add hyps (name "hread_x") hread
+    -- its bits, but at pointer members, which hold their targets' addresses
+    let ptrs ← Tactic.kernelWhnf (← mkAppM ``GlobalInitializer.ptrs #[tt])
+    if ptrs.isAppOf ``List.nil then
+      let hp ← Tactic.kernelRfl (← mkAppM ``GlobalInitializer.ptrs #[tt]) ptrs
+      let hread ← mkAppM ``GlobalInitializer.readAt #[hblk, hv, hp, hw, hB]
+      hyps ← add hyps (name "hread_x") hread
     let hdef ← mkAppM ``GlobalInitializer.definedAt #[hblk, hv, hw, hD]
     hyps ← add hyps (name "hdefined_x") hdef
     -- the known runs, `Live` at the value's width
@@ -314,7 +318,7 @@ def addGlobalFacts (g : MVarId) (S x hx hglobal entry : Expr) (hv? : Option Expr
         let pf ← mkAppM ``Fits.of_definedAt #[hliveW, hdef, hov, hlw, hD']
         hyps ← add hyps (name s!"hx_fits_{a / 8}") pf
     -- the pointers known writable are not into the global's read-only block
-    let hro ← mkAppM ``GlobalImage.block_writable #[hc]
+    let hro ← mkAppOptM ``MemoryState.imageBlock_writable #[mem, none, hc]
     let blk ← mkAppM ``Pointer.id #[P]
     let mut seen : Array Expr := #[]
     for (pf, ty) in ← Tactic.splitConjunctedFacts do

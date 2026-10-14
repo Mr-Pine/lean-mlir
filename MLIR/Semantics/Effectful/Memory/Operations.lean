@@ -67,37 +67,87 @@ def MemoryState.definedAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :
   | some block => block.defined.extractLsb' p.offsetInBits _
   | _ => 0
 
-/-- The pointer stored at bit `o` of `b`: its entry while its 64 bits are undefined, else
-poison. -/
-def MemoryBlock.ptrAt (b : MemoryBlock) (o : Nat) : PoisonOr Pointer :=
+/-- The pointer stored at bit `o` of `b`: its entry while no integer write has defined its 64 bits
+and they hold its address, else poison. -/
+def MemoryBlock.ptrAt (addr : BlockId → BitVec 64) (b : MemoryBlock) (o : Nat) :
+    PoisonOr Pointer :=
   match b.ptrs o with
-  | some q => if b.defined.extractLsb' o 64 = 0 then .value q else .poison
+  | some q =>
+    if b.defined.extractLsb' o 64 = 0 ∧ b.bytes.extractLsb' o 64 = q.addrBits addr then .value q
+    else .poison
   | none => .poison
 
 /-- The pointer stored at bit `o` of block `i`; poison if there is no block. -/
 def MemoryState.ptrAt (m : MemoryState) (i : BlockId) (o : Nat) : PoisonOr Pointer :=
   match m[i]? with
-  | some b => b.ptrAt o
+  | some b => b.ptrAt m.addr o
   | none => .poison
+
+/-- Whether bit `j` of `b` lies in a stored pointer's 64 bits, the pointer live (`ptrAt`). -/
+def MemoryBlock.inPtr (addr : BlockId → BitVec 64) (b : MemoryBlock) (j : Nat) : Bool :=
+  (List.range 64).any fun k => k ≤ j && !(b.ptrAt addr (j - k)).isPoison
+
+/-- Which of the `w` bits from bit `o` of `b` lie in a live stored pointer's (`inPtr`). -/
+def MemoryBlock.inPtrs (addr : BlockId → BitVec 64) (b : MemoryBlock) (o w : Nat) : BitVec w :=
+  (BitVec.ofBoolListLE ((List.range w).map fun i => b.inPtr addr (o + i))).cast (by simp)
+
+/-- Which bits at a pointer a load reads as known: the defined ones, and a live stored pointer's
+(its address), looked for only when some bit is undefined. Returns `0#w` if there is no block for
+the pointer. -/
+def MemoryState.knownAt (m : MemoryState) (p : Pointer) (w : Nat) : BitVec w :=
+  match m[p.id]? with
+  | some b =>
+    let d := b.defined.extractLsb' p.offsetInBits w
+    if d = BitVec.allOnes w then d else d ||| b.inPtrs m.addr p.offsetInBits w
+  | none => 0
 
 /-- The pointer stored at `p`: what a `load` of a pointer reads. -/
 def MemoryState.loadPtr (m : MemoryState) (p : Pointer) : PoisonOr Pointer :=
   m.ptrAt p.id p.offsetInBits
 
-/-- `q` recorded as stored at bit `o` of block `i`. -/
+/-- `q` recorded as stored at bit `o` of block `i`: its address in the 64 bits there. -/
 def MemoryState.recordPtr (m : MemoryState) (i : BlockId) (o : Nat) (q : Pointer) : MemoryState :=
-  m.modifyBlock i fun blk => { blk with ptrs := fun o' => if o' = o then some q else blk.ptrs o' }
+  m.modifyBlock i fun blk =>
+    { blk with
+      bytes := spliceBits blk.bytes o (q.addrBits m.addr)
+      ptrs := fun o' => if o' = o then some q else blk.ptrs o' }
 
-/-- Store the pointer `q` at `p`: its 64 bits undefined (an integer load of them is poison), `q`
-recorded, the stored pointers it meets dropped. -/
+/-- Store the pointer `q` at `p`: its address in the 64 bits, which no integer write defines (a
+load reads them as known while `q` stays live), `q` recorded, the stored pointers it meets
+dropped. -/
 def MemoryState.storePtr (m : MemoryState) (p : Pointer) (q : Pointer) : MemoryState :=
   m.modifyBlock p.id fun blk =>
     { blk with
-      bytes := spliceBits blk.bytes p.offsetInBits 0#64
+      bytes := spliceBits blk.bytes p.offsetInBits (q.addrBits m.addr)
       defined := spliceBits blk.defined p.offsetInBits 0#64
       ptrs := fun o =>
         if o = p.offsetInBits then some q
         else MemoryBlock.clearPtrs blk.ptrs p.offsetInBits 0#64 o }
+
+/-- The live pointers stored wholly inside the `w` bits at `p`, by their bit offset from `p`: what a
+copy of them carries. -/
+def MemoryState.ptrsIn (m : MemoryState) (p : Pointer) (w : Nat) : Nat → Option Pointer :=
+  fun o =>
+    if o + 64 ≤ w then (m.ptrAt p.id (p.offsetInBits + o)).toOption else none
+
+/-- `ptrs` after a copy of `w` bits to bit `off`, defined where `d` is set, of the pointers `P`
+(by offset from `off`): those recorded, the others as `storeDef` leaves them. -/
+def MemoryBlock.copyPtrs (ptrs : Nat → Option Pointer) (off : Nat) {w : Nat} (d : BitVec w)
+    (P : Nat → Option Pointer) : Nat → Option Pointer :=
+  fun o =>
+    if off ≤ o ∧ o + 64 ≤ off + w ∧ (P (o - off)).isSome then P (o - off)
+    else MemoryBlock.clearPtrs ptrs off d o
+
+/-- A copy's write: bits `x` at `p`, defined where `d` is set, and the pointers `P` (by bit offset
+from `p`) recorded (`copyPtrs`). `memcpy` and `memmove` write the bits, definedness and live
+pointers (`ptrsIn`) read at their source. -/
+def MemoryState.storeCopy (m : MemoryState) (p : Pointer) {w : Nat} (x d : BitVec w)
+    (P : Nat → Option Pointer) : MemoryState :=
+  m.modifyBlock p.id fun blk =>
+    { blk with
+      bytes := spliceBits blk.bytes p.offsetInBits x
+      defined := spliceBits blk.defined p.offsetInBits d
+      ptrs := MemoryBlock.copyPtrs blk.ptrs p.offsetInBits d P }
 
 /-- `p`'s object live (`live`) or dead, its bits undefined and its pointers gone either way. -/
 def MemoryState.setLifetime (m : MemoryState) (p : Pointer) (live : Bool) : MemoryState :=
@@ -206,6 +256,19 @@ theorem GlobalState.addr_alloca {s : GlobalState} : (s.alloca n d).mem.addr = s.
   rfl
 
 /-! ### Changing one block -/
+
+@[simp]
+theorem MemoryState.unspec_modifyBlock {m : MemoryState} : (m.modifyBlock i f).unspec = m.unspec :=
+  rfl
+
+@[simp]
+theorem MemoryState.addr_modifyBlock {m : MemoryState} : (m.modifyBlock i f).addr = m.addr :=
+  rfl
+
+@[simp]
+theorem MemoryState.imageBlock_modifyBlock {m : MemoryState} :
+    (m.modifyBlock i f).imageBlock g = m.imageBlock g :=
+  rfl
 
 theorem MemoryState.getElem?_modifyBlock {m : MemoryState} :
     (m.modifyBlock i f)[j]? = if i = j then m[i]?.map (MemoryBlock.update f) else m[j]? := by
@@ -332,7 +395,8 @@ theorem GlobalState.WF_modifyBlock {s : GlobalState} {i : BlockId} {f : MemoryBl
     intro b; unfold MemoryBlock.update; split <;> simp [hf]
   have hconst :
     ∀ (b : BlockId) (g : GlobalImage),
-      g.constant = true → ((m.modifyBlock i f)[b]? = some g.block ↔ m[b]? = some g.block) := by
+      g.constant = true →
+        ((m.modifyBlock i f)[b]? = some (m.imageBlock g) ↔ m[b]? = some (m.imageBlock g)) := by
     intro b g hc
     constructor
     · intro h
@@ -349,11 +413,12 @@ theorem GlobalState.WF_modifyBlock {s : GlobalState} {i : BlockId} {f : MemoryBl
           · rename_i hw
             have := (hf blk).2
             rw [h, hw] at this
-            simp [GlobalImage.block, hc] at this
+            simp [MemoryState.imageBlock, GlobalImage.block, hc] at this
           · rw [h]
       · exact h
     · intro h
-      rw [MemoryState.getElem?_modifyBlock_readOnly h (by simp [GlobalImage.block, hc]), h]
+      rw [MemoryState.getElem?_modifyBlock_readOnly h
+          (by simp [MemoryState.imageBlock, GlobalImage.block, hc]), h]
   have hmut :
     ∀ (b : BlockId) (n : Nat),
       (∃ blk, (m.modifyBlock i f)[b]? = some blk ∧ blk.writable = true ∧ blk.length = n) ↔

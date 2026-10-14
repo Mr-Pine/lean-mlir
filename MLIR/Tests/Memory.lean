@@ -251,13 +251,31 @@ private def memcpyLoad? (src : Pointer) (s : GlobalState) : Option ⟦Ty.bv 64�
 
 /-! ## Stored pointers -/
 
-/-- `s0` with block `1`, 16 bytes, fresh from an `alloca`. -/
+/-- Addresses: block `b` at `0x1000 * b`. -/
+private instance addrs : Unspecified :=
+  ⟨fun b => BitVec.ofNat 64 (0x1000 * b.id), fun _ _ _ => 0, fun _ _ _ => 0⟩
+
+/-- `s0` with block `1`, 16 bytes, fresh from an `alloca`, the blocks at `addrs`. -/
 private def sP : GlobalState :=
-  s0.alloca 16
+  let s := s0.alloca 16
+  { s with mem := @MemoryState.mk s.mem.mem addrs s.mem.table }
 
 /-- `sP` with `q 3` stored at byte `off` of block `1`. -/
 private def withPtr (off : Nat) : Option GlobalState :=
   store? (τ := .ptr) (.value (a off)) (.value (q 3)) sP
+
+/-- `q 3`'s address, as `ptrtoaddr` reads it. -/
+private def q3Addr : BitVec 64 :=
+  0x2003#64
+
+#guard Operation.ptrtoaddr sP.mem.addr (w := 64) (.value (q 3)) == .value q3Addr
+
+/-- `memcpy dst src len` over `s`, then a load at `at_`; `none` for UB. -/
+private def copyLoad? (τ : Ty) (dst src : Pointer) (len : Nat) (at_ : Pointer) (s : GlobalState) :
+    Option ⟦τ⟧ :=
+  match Operation.memcpy (.value dst) (.value src) (.value (BitVec.ofNat 64 len)) env0 s with
+  | .value (_, s') => load? τ (.value at_) s'
+  | .poison => none
 
 -- a stored pointer loads back, at any byte offset
 #guard ((withPtr 0).bind (load? .ptr (.value (a 0)) ·)) == some (.value (q 3))
@@ -267,10 +285,15 @@ private def withPtr (off : Nat) : Option GlobalState :=
 -- not from another offset
 #guard ((withPtr 0).bind (load? .ptr (.value (a 1)) ·)) == some .poison
 
--- its bits are undefined: an integer load of them is poison
-#guard ((withPtr 0).bind (load? (.bv 64) (.value (a 0)) ·)) == some .poison
+-- its bits are its address: an integer load of them is `ptrtoaddr`'s value
+#guard ((withPtr 0).bind (load? (.bv 64) (.value (a 0)) ·)) == some (.value q3Addr)
 
-#guard ((withPtr 0).bind (load? (.bv 8) (.value (a 7)) ·)) == some .poison
+#guard ((withPtr 0).bind (load? (.bv 8) (.value (a 1)) ·)) == some (.value 0x20#8)
+
+#guard ((withPtr 0).bind (load? (.bv 8) (.value (a 7)) ·)) == some (.value 0#8)
+
+-- an integer load past it reads the undefined bits there as poison
+#guard ((withPtr 0).bind (load? (.bv 64) (.value (a 4)) ·)) == some .poison
 
 -- a byte stored over it, defined or poison, leaves it poison
 #guard
@@ -283,6 +306,13 @@ private def withPtr (off : Nat) : Option GlobalState :=
         (store? (τ := .bv 8) (.value (a 3)) .poison ·)).bind
       (load? .ptr (.value (a 0)) ·)) ==
     some .poison
+
+-- so does its own address stored over it as an integer: the bits, not the pointer
+#guard
+  (((withPtr 0).bind (store? (τ := .bv 64) (.value (a 0)) (.value q3Addr) ·)).bind
+      (fun s => (load? .ptr (.value (a 0)) s).bind fun x =>
+        (load? (.bv 64) (.value (a 0)) s).map (x, ·))) ==
+    some (.poison, .value q3Addr)
 
 -- a store next to it leaves it
 #guard
@@ -297,10 +327,12 @@ private def withPtr (off : Nat) : Option GlobalState :=
         (load? .ptr (.value (a 4)) s).map (x, ·))) ==
     some (.poison, .value (p 1))
 
--- a poison pointer stores nothing
+-- a poison pointer stores nothing, its bits undefined
 #guard
-  ((store? (τ := .ptr) (.value (a 0)) .poison sP).bind (load? .ptr (.value (a 0)) ·)) ==
-    some .poison
+  ((store? (τ := .ptr) (.value (a 0)) .poison sP).bind
+      (fun s => (load? .ptr (.value (a 0)) s).bind fun x =>
+        (load? (.bv 64) (.value (a 0)) s).map (x, ·))) ==
+    some (.poison, .poison)
 
 -- a struct's pointer leaf is recorded, its integer leaf stored
 #guard
@@ -308,13 +340,36 @@ private def withPtr (off : Nat) : Option GlobalState :=
       (load? (.struct [.ptr, .bv 32]) (.value (a 0)) ·)) ==
     some (.value (q 3), .value 7#32)
 
--- `memcpy` copies the bits, not the pointer: the copy loads as poison
+-- `memcpy` copies the pointer with its bits: the copy loads back, as a pointer or its address
+#guard ((withPtr 0).bind (copyLoad? .ptr (a 8) (a 0) 8 (a 8) ·)) == some (.value (q 3))
+
+#guard ((withPtr 0).bind (copyLoad? (.bv 64) (a 8) (a 0) 8 (a 8) ·)) == some (.value q3Addr)
+
+-- into another block; one reaching past the copied bytes is not carried
+#guard ((withPtr 0).bind (copyLoad? .ptr (p 0) (a 0) 8 (p 0) ·)) == some (.value (q 3))
+
+#guard ((withPtr 4).bind (copyLoad? .ptr (p 0) (a 0) 8 (p 0) ·)) == some .poison
+
+-- a copy of part of it carries no pointer, its bits undefined
+#guard ((withPtr 0).bind (copyLoad? .ptr (a 8) (a 0) 4 (a 8) ·)) == some .poison
+
+#guard ((withPtr 0).bind (copyLoad? (.bv 32) (a 8) (a 0) 4 (a 8) ·)) == some .poison
+
+-- a copy over it of other bits leaves it poison
+#guard
+  ((withPtr 8).bind fun s =>
+      (store? (τ := .bv 64) (.value (a 0)) (.value 5#64) s).bind
+        (copyLoad? .ptr (a 8) (a 0) 8 (a 8) ·)) ==
+    some .poison
+
+-- `memmove` reads before it writes: a pointer moved over itself by 4 bytes loads at its new place
 #guard
   ((withPtr 0).bind fun s =>
-      match Operation.memcpy (.value (a 8)) (.value (a 0)) (.value 8#64) env0 s with
-      | .value (_, s') => load? .ptr (.value (a 8)) s'
+      match Operation.memmove (.value (a 4)) (.value (a 0)) (.value 8#64) env0 s with
+      | .value (_, s') =>
+        (load? .ptr (.value (a 4)) s').bind fun x => (load? .ptr (.value (a 0)) s').map (x, ·)
       | .poison => none) ==
-    some .poison
+    some (.value (q 3), .poison)
 
 -- `lifetime.start` drops it
 #guard

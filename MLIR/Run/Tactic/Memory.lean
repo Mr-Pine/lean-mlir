@@ -354,15 +354,15 @@ def slotPtr? (p : Expr) : Option Expr := do
   let (b, k) ← counterBase? p.appArg!
   return mkApp2 (mkConst ``GlobalState.slot) b (mkNatLit k)
 
-/-- The memory predicates: `InBounds`, `Room`, `Fits`, `Live`; a fact gives those `kindImplies`
-names, and `Fits` gives `Room` in a writable block (`Fits.room`). -/
+/-- The memory predicates: `InBounds`, `Room`, `Fits`, `Live`, `PtrFree`; a fact gives those
+`kindImplies` names, and `Fits` gives `Room` in a writable block (`Fits.room`). -/
 def memPreds : Array Name :=
-  #[``InBounds, ``Room, ``Fits, ``Live]
+  #[``InBounds, ``Room, ``Fits, ``Live, ``PtrFree]
 
-/-- Whether a fact of kind `k` gives kind `j` (`memPreds`): `InBounds` from any, `Live` from
-`Room` and `Fits`. -/
+/-- Whether a fact of kind `k` gives kind `j` (`memPreds`): `InBounds` from any but `PtrFree`,
+`Live` from `Room` and `Fits`. -/
 def kindImplies (k j : Nat) : Bool :=
-  k == j || j == 0 || (j == 3 && (k == 1 || k == 2))
+  k == j || (k != 4 && (j == 0 || (j == 3 && (k == 1 || k == 2))))
 
 /-- A natural number literal, raw or `OfNat.ofNat`. -/
 def natLit? (e : Expr) : Option Nat :=
@@ -621,6 +621,8 @@ partial def writableProof? (facts : Array (Expr × Expr)) (m p : Expr) : MetaM (
     viaWrite ``Writable.storeDef m'
   | MemoryState.overlay m' _ _ _ _ =>
     viaWrite ``Writable.overlay m'
+  | MemoryState.storeCopy m' _ _ _ _ _ =>
+    viaWrite ``Writable.storeCopy m'
   | MemoryState.storePtr m' _ _ =>
     viaWrite ``Writable.storePtr m'
   | MemoryState.lifetimeStart m' _ =>
@@ -724,6 +726,9 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
         if m' != m then
           let some h ← memPredProof? facts j m' p w | return none
           return some (mkExpectedPropHint h goal)
+  -- no live pointer over a range: through the writes, which add none but a pointer's and a copy's
+  if j == 4 then
+    return ← ptrFreeWrite? facts m p w goal
   -- the new block of an `alloca`, at its start or inside it: its bounds, room if live
   if let some t := m.app1? ``GlobalState.mem then
     if let some h← allocaPtrPred? facts j t p w₁ goal then
@@ -783,6 +788,13 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
       return ← fitsPast? ``Fits.overlay_of_disjoint facts goal m' q v p w
     let some h ← memPredProof? facts j m' p w | return none
     proveBy? (memPredLemma j `overlay) goal #[h]
+  | MemoryState.storeCopy m' q v _ d _ =>
+    if j == 2 then
+      if let some pf ← storeDefFits? `storeCopy facts goal m' q (← normWidths v) d p w₁ then
+        return some pf
+      return ← fitsPast? ``Fits.storeCopy_of_disjoint facts goal m' q v p w
+    let some h ← memPredProof? facts j m' p w | return none
+    proveBy? (memPredLemma j `storeCopy) goal #[h]
   | MemoryState.lifetimeStart m' q =>
     -- the started object: live in its bounds, room if writable (also past its start, `q.add k`)
     if (j == 1 || j == 3) && stripAdds p == q then
@@ -813,8 +825,81 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
     objectWrite? facts j m p w goal
 
 where
-  /-- `Fits (m.storeDef q x d) p w` (or an `overlay`'s, by `lem`) from `Fits m p w`, the write in
-  another block. -/
+  /-- `PtrFree m p w` below `m`'s last write (`memPredProof?` past the facts): a new block's, past
+  an `alloca`, an integer write (in bounds), a pointer stored or copied elsewhere, a copy of bits
+  with none, a lifetime marker, an object's write by its `PtrFree` lemma or its writes. -/
+  ptrFreeWrite? (facts : Array (Expr × Expr)) (m p w goal : Expr) : MetaM (Option Expr) := do
+    let rec' (m' : Expr) : MetaM (Option Expr) := memPredProof? facts 4 m' p w
+    let inBounds (m' q v : Expr) : MetaM (Option Expr) := memPredProof? facts 0 m' q v
+    -- a write in another block
+    let apart (q v : Expr) : MetaM (Option Expr) := do
+      let some hne ← neProof? facts (← mkAppM ``Pointer.id #[q]) (← mkAppM ``Pointer.id #[p])
+        | return none
+      return some (mkAppN (mkConst ``Range.disjoint_of_id_ne) #[q, p, v, w, hne])
+    if let some t := m.app1? ``GlobalState.mem then
+      let_expr GlobalState.alloca s _ _ := t | return none
+      let q := mkApp (mkConst ``GlobalState.allocaPtr) s
+      let blk := stripAdds p
+      if blk == q || slotPtr? q == some blk then
+        let he := mkExpectedPropHint (← mkEqRefl (← mkAppM ``Pointer.id #[q]))
+          (← mkEq (← mkAppM ``Pointer.id #[p]) (← mkAppM ``Pointer.id #[q]))
+        return ← proveBy? ``PtrFree.alloca_new goal #[he]
+      let some hwf ← wfProof? facts s | return none
+      let sMem ← mkAppM ``GlobalState.mem #[s]
+      let some h ← memPredProof? facts 4 sMem p w | return none
+      let some hb ← inBounds sMem p w | return none
+      return ← proveBy? ``PtrFree.alloca goal #[hwf, hb, h]
+    -- inside an integer write into room for it: it left no pointer there
+    let inside? (kind : Name) (m' q v : Expr) : MetaM (Option Expr) := do
+      let v ← normWidths v
+      let w₁ ← normWidths w
+      let some hw0 ← decideProof? (← mkAppM ``LT.lt #[mkNatLit 0, w₁]) | return none
+      if p == q then
+        let some hw ← natArith? facts (← mkAppM ``LE.le #[w₁, v]) | return none
+        let some hr ← memPredProof? facts 1 m' q v | return none
+        return ← proveBy? (if kind == `storeAt then ``PtrFree.storeAt_self
+          else ``PtrFree.storeDef_self) goal #[hr, hw, hw0]
+      let some (q', off) := p.app2? ``Pointer.add | return none
+      unless q' == q do
+        return none
+      let some (hov, hw) ← addWithin? facts q off w₁ v | return none
+      let some hr ← memPredProof? facts 1 m' q v | return none
+      proveBy? (if kind == `storeAt then ``PtrFree.storeAt_add_self
+        else ``PtrFree.storeDef_add_self) goal #[hr, hov, hw, hw0]
+    match_expr m with
+    | MemoryState.storeAt m' q v _ =>
+      if let some pf ← inside? `storeAt m' q v then
+        return some pf
+      let some h ← rec' m' | return none
+      let some hb ← inBounds m' q v | return none
+      proveBy? ``PtrFree.storeAt goal #[h, hb]
+    | MemoryState.storeDef m' q v _ _ =>
+      if let some pf ← inside? `storeDef m' q v then
+        return some pf
+      let some h ← rec' m' | return none
+      let some hb ← inBounds m' q v | return none
+      proveBy? ``PtrFree.storeDef goal #[h, hb]
+    | MemoryState.storePtr m' q _ =>
+      let some h ← rec' m' | return none
+      let some hd ← apart q (mkNatLit 64) | return none
+      proveBy? ``PtrFree.storePtr_of_disjoint goal #[h, hd]
+    | MemoryState.storeCopy m' q v _ _ P =>
+      let some h ← rec' m' | return none
+      let some hb ← inBounds m' q v | return none
+      if let some hd ← apart q v then
+        return ← proveBy? ``PtrFree.storeCopy_of_disjoint goal #[h, hd, hb]
+      let_expr MemoryState.ptrsIn m'' r v' := P | return none
+      let some hs ← memPredProof? facts 4 m'' r v' | return none
+      proveBy? ``PtrFree.storeCopy_ptrsIn goal #[h, hs, hb]
+    | MemoryState.lifetimeStart m' _ =>
+      let some h ← rec' m' | return none
+      proveBy? ``PtrFree.lifetimeStart goal #[h]
+    | MemoryState.lifetimeEnd m' _ =>
+      let some h ← rec' m' | return none
+      proveBy? ``PtrFree.lifetimeEnd goal #[h]
+    | _ => objectWrite? facts 4 m p w goal
+  /-- `Fits (m.storeDef q x d) p w` (or an `overlay`'s or `storeCopy`'s, by `lem`) from
+  `Fits m p w`, the write in another block. -/
   fitsPast? (lem : Name) (facts : Array (Expr × Expr)) (goal m q v p w : Expr) :
       MetaM (Option Expr) := do
     let some hne ← neProof? facts (← mkAppM ``Pointer.id #[q]) (← mkAppM ``Pointer.id #[p])
@@ -837,8 +922,9 @@ where
       | l :: pre :: _ => l == last && pre == suffix
       | _ => false
     if lems.isEmpty then
-      -- `Live`, which objects have no lemmas for: through the writes the object's is made of
-      unless j == 3 do
+      -- `Live` and `PtrFree`, which objects have no lemmas for: through the writes the object's is
+      -- made of
+      unless j == 3 || j == 4 do
         return none
       let some m'' ← withTransparency .default (unfoldDefinition? m) | return none
       let m'' := m''.headBeta
@@ -940,9 +1026,9 @@ where
         pure (some (← mkAppOptM (memPredLemma j `add_of_le)
           #[none, none, none, none, off, hov, hw, h]))
     return pf?.map (mkExpectedPropHint · goal)
-  /-- `Fits (m.storeDef q x d) p w` (the `goal`; `m.overlay` for `kind := overlay`) for `p` at `q`
-  or inside it, `v` bits stored with room for them: from the source's `Fits` for a copy's mask
-  `m.definedAt src v`, by the kernel's `decide` for a literal mask (no
+  /-- `Fits (m.storeDef q x d) p w` (the `goal`; `m.overlay`, `m.storeCopy` for `kind`) for `p`
+  at `q` or inside it, `v` bits stored with room for them: from the source's `Fits` for a copy's
+  mask `m.definedAt src v`, by the kernel's `decide` for a literal mask (no
   `exponentiation.threshold`). -/
   storeDefFits? (kind : Name) (facts : Array (Expr × Expr)) (goal m q v d p w : Expr) :
       MetaM (Option Expr) := do
@@ -1579,6 +1665,9 @@ def factDischarge (c : FactCtx) (fuel : Nat) (goal : Expr) : MetaM (Option Expr)
   | Live m p w =>
     if let some pf← memPredProof? c.facts 3 m p w then
       return some pf
+  | PtrFree m p w =>
+    if let some pf← memPredProof? c.facts 4 m p w then
+      return some pf
   | Writable m p =>
     if let some pf← writableProof? c.facts m p then
       return some pf
@@ -1765,10 +1854,25 @@ def readPastWrites (c : MemCtx) : Simp.Simproc := fun e => do
     return .continue
   return .visit { expr := v, proof? := some pf }
 
+/-- A state local's addresses, `S.mem.addr`, as its equation's `hS : S = s`, `s.mem.addr`: the
+`mlir_state` lemmas then take them to the base state's, which every write keeps. -/
+def addrThroughState : Simp.Simproc := fun e => do
+  let_expr MemoryState.addr m := e | return .continue
+  let_expr GlobalState.mem S := m | return .continue
+  unless S.isFVar do
+    return .continue
+  let some hS ← findLocalEq? S | return .continue
+  let e' := mkApp (mkConst ``MemoryState.addr) (mkApp (mkConst ``GlobalState.mem) hS.rhs)
+  let motive ← motiveOver e S (mkConst ``GlobalState)
+  return .visit { expr := e', proof? := some (← mkCongrArg motive hS.decl.toExpr) }
+
 /-- `readMemFact`, `readThroughState` and `readPastWrites` for one `simp` call, keyed on the
-registered reads. -/
+registered reads, and `addrThroughState`. -/
 def memSimprocs (c : MemCtx) : MetaM Simp.Simprocs := do
   let mut procs : Simp.Simprocs := {}
+  let addrKeys ← DiscrTree.mkPath
+    (mkApp (mkConst ``MemoryState.addr) (← mkFreshExprMVar (mkConst ``MemoryState)))
+  procs := procs.addCore addrKeys `addrThroughState true (.inl addrThroughState)
   for h in c.heads do
     let some l := c.lemmas.find? (·.read == h) | continue
     -- `read _ … _`: the lemma's left side with its arguments open

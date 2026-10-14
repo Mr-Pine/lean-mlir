@@ -37,7 +37,7 @@ def addAllocaFreshness (tac : String) (slots := false) : TacticM Unit := do
       let mut hyps : Array Hypothesis := #[]
       for (pf, ty) in ← Tactic.splitConjunctedFacts do
         let some (k, m, q, _) := Tactic.memPred? ty | continue
-        unless q.isFVar && !seen.contains q && m == memS do
+        unless k != 4 && q.isFVar && !seen.contains q && m == memS do
           continue
         seen := seen.push q
         if let some (s, _) := named[q]? then
@@ -98,7 +98,7 @@ def nameAllocaSlot : TacticM Unit :=
                 | some (_, off) => pure ((← getBitVecValue? off).map fun ⟨_, o⟩ => s!"_{o.toNat}")
                 | none => pure none
               pure ((`h).appendAfter
-                s!"{xName}_{#["bounds", "room", "fits", "live"][k]!}{at_.getD ""}")
+                s!"{xName}_{#["bounds", "room", "fits", "live", "ptrFree"][k]!}{at_.getD ""}")
           | none => pure (d.userName.appendAfter s!"_{xName}")
         let (_, g') ←
           (← g.assert name ty' (← g.withContext (mkEqNDRec motive d.toExpr pfq))).intro1P

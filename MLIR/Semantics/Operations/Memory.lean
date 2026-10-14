@@ -5,15 +5,16 @@ public import MLIR.Ty
 public import MLIR.IntPred
 public import MLIR.Semantics.Env
 public import MLIR.Semantics.Operations.Scalar
-public import MLIR.Semantics.Effectful.Memory.Pointers
+public import MLIR.Semantics.Effectful.Memory.Copy
 public import MLIR.Semantics.Effectful.EffectM
 
 namespace MLIR.Operation
 
 @[expose] public section
 
-/-- A load: UB outside its block, each leaf poison where a bit is undefined (a dead object's), a
-pointer leaf the pointer stored there while its bits stay undefined. -/
+/-- A load: UB outside its block, each integer leaf poison where a bit is not known (undefined, a
+dead object's, and not a live stored pointer's), a pointer leaf the pointer stored there while it
+stays live. -/
 def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let ptr ←
     match ptr with
@@ -25,11 +26,11 @@ def load (dst : Dst Γ τ) (ptr : PoisonOr Pointer) (env : ⟪Γ⟫) : EffectM �
   throwUBIf (¬InBounds state.mem ptr τ.width)
   let value : ⟦τ⟧ :=
     τ.setPtrs 0 (fun o => state.mem.ptrAt ptr.id (ptr.offsetInBits + o))
-      (τ.unflattenDef (state.mem.readAt ptr τ.width) (state.mem.definedAt ptr τ.width))
+      (τ.unflattenDef (state.mem.readAt ptr τ.width) (state.mem.knownAt ptr τ.width))
   return env.write dst value
 
 /-- A store: UB unless into a live writable object; poison leaves and padding stored undefined,
-pointer leaves undefined and recorded. -/
+pointer leaves their addresses, recorded. -/
 def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let ptr ←
     match ptr with
@@ -114,6 +115,8 @@ def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ�
   _ ← set updated
   return env
 
+/-- `llvm.memcpy`: UB unless `dst` is room for `len` bytes, `src` live and the ranges disjoint; the
+bits, their definedness and the live pointers wholly inside them copied. -/
 def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env : ⟪Γ⟫) :
     EffectM ⟪Γ⟫ := do
   let .value (dst, src, len) := do
@@ -125,11 +128,13 @@ def memcpy (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env
   throwUBIf (¬Live state.mem src (8 * len))
   let replacement := state.mem.readAt src (8 * len)
   let defined := state.mem.definedAt src (8 * len)
-  let updated := { state with mem := state.mem.storeDef dst replacement defined }
+  let ptrs := state.mem.ptrsIn src (8 * len)
+  let updated := { state with mem := state.mem.storeCopy dst replacement defined ptrs }
   _ ← set updated
   return env
 
-/-- `llvm.memmove`: `memcpy` whose ranges may overlap, `src` read before `dst` is written. -/
+/-- `llvm.memmove`: `memcpy` whose ranges may overlap, `src` (its bits and pointers) read before
+`dst` is written. -/
 def memmove (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (env : ⟪Γ⟫) :
     EffectM ⟪Γ⟫ := do
   let .value (dst, src, len) := do
@@ -139,7 +144,8 @@ def memmove (dst : PoisonOr Pointer) (src : PoisonOr Pointer) (len : IntW w) (en
   throwUBIf (¬Live state.mem src (8 * len))
   let replacement := state.mem.readAt src (8 * len)
   let defined := state.mem.definedAt src (8 * len)
-  let updated := { state with mem := state.mem.storeDef dst replacement defined }
+  let ptrs := state.mem.ptrsIn src (8 * len)
+  let updated := { state with mem := state.mem.storeCopy dst replacement defined ptrs }
   _ ← set updated
   return env
 

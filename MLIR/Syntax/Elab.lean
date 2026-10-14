@@ -28,8 +28,10 @@ checks.
 A call to `@f` calls `t.call` for the `Func` bound by `with @f := t`, or `t` for a function of the
 call's type (with a warning: no lifted region backs it); an `llvm.mlir.addressof`
 of `@g` returns the start of `g`'s block in the state's global table, and `X.globals` records
-`g` with the `GlobalInitializer` bound by `with @g := t` (and the callees' globals). The terms may
-use the binders. Every called or addressed symbol needs a binding, and a symbol cannot be both.
+`g` with the `GlobalInitializer` bound by `with @g := t` (and the callees' globals), as it does a
+bound global the region does not address (another global's pointer members may point into it).
+The terms may use the binders. Every called or addressed symbol needs a binding, and a symbol
+cannot be both.
 -/
 
 namespace MLIR
@@ -552,9 +554,13 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
           let t ← globalTerm r binders table g
           globals := globals ++ [(g, t)]
 
+  -- a bound global no instruction addresses: in the table for other globals' pointer members
   for (f, _) in table do
     unless (terms.lookup f).isSome || (globals.lookup f).isSome do
-      logWarning m!"@{f} is bound but never called or loaded"
+      try
+        globals := globals ++ [(f, ← globalTerm r binders table f)]
+      catch _ =>
+        logWarning m!"@{f} is bound but never called or loaded"
   let callee (f : String) : TSyntax `term := (terms.lookup f).getD (mkIdent (.mkSimple f))
   -- its globals, then its `Func` callees'
   let own ← globals.toArray.mapM fun (g, t) => `(⟨$(Syntax.mkStrLit g), $t⟩)
@@ -636,11 +642,19 @@ def elabMlirDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc :
     pure (#[Γdef, treeDef, htyDef, tysDef, paramsDef] ++ blockDefs ++ #[funcDef, argsDef])
   elabLift nc cmds
 
+/-- A pointer member `(bit offset, symbol, byte offset)` as a term. -/
+def ptrStx : Nat × String × Int → CommandElabM (TSyntax `term)
+  | (o, sym, off) => do
+    let offStx ← MlirDef.intLit off
+    `(($(Syntax.mkNumLit (toString o)), $(Syntax.mkStrLit sym), BitVec.ofInt 64 $offStx))
+
 open MlirDef in
 /-- Define `x : GlobalInitializer` from a constant global's initializer region, as `mlir_def`
 defines a `Func`: `x.Γ`, `x.tree`, `x.hty`, the block `x.entry`, and `x`. A region that builds a
 constant (`Prog.constant?`) folds to `x.lit : ⟦x.t⟧ᵣ`, and its block to the one `const x.lit`, then
-an `insertvalue` of poison for each undefined member.
+an `insertvalue` of poison for each undefined member; its addresses of globals, poison there, are
+`x.ptrs` (`Prog.constantPtrs`). One that is a global's address alone folds to `poison`, with that
+pointer member.
 -/
 def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) (nc : Bool) (x : Ident)
     (r : Syntax) (rgn : Region) (constant : Bool := true) (unnamedAddr : Bool := false) :
@@ -659,13 +673,21 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
   let tree := name `tree
   let lit := name `lit
   let c? := p.constant?
-  if c?.isNone && b.body.any (· matches .addressof ..) then
-    throwErrorAt r "an initializer takes addresses only as a folded constant's members"
+  -- a global's address alone: the one pointer member
+  let addr? : Option Unit := do
+    let (.addr .., .ptr) ← p.folded? | none
+  if c?.isNone && addr?.isNone && b.body.any (· matches .addressof ..) then
+    throwErrorAt r "an initializer takes addresses only as a folded constant or its members"
+  -- its pointer members, poison in the block
+  let ptrs := if c?.isSome || addr?.isSome then p.constantPtrs else []
   -- folded: the literal, then per undefined member its poison and the `insertvalue` of it
   let undefs := (c?.map (·.2)).getD []
-  let vals := if c?.isSome then t :: undefs.flatMap fun (_, τ) => [τ, t] else p.Γ.vals
+  let vals :=
+    if c?.isSome then t :: undefs.flatMap fun (_, τ) => [τ, t]
+    else if addr?.isSome then [t]
+    else p.Γ.vals
   -- a folded constant's one register is no value of the region
-  let valBase := if c?.isSome then 0 else p.Γ.valBase
+  let valBase := if c?.isSome || addr?.isSome then 0 else p.Γ.valBase
   let tys : ValTys := { hty := name `hty }
   let d := depth vals.length
   let tStx ← tyStx t
@@ -686,7 +708,10 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
         (#[← `(def $lit : Ty.denoteRaw $tStx := $(← constStx c))], body,
           ← exitStx tys (.ret [.val (2 * undefs.length)]))
     | none =>
-      pure (#[], ← b.body.toArray.mapM (instrStx tys noSymbol), ← exitStx tys b.exit)
+      if addr?.isSome then
+        pure (#[], #[← instrStx tys noSymbol (.poison t 0)], ← exitStx tys (.ret [.val 0]))
+      else
+        pure (#[], ← b.body.toArray.mapM (instrStx tys noSymbol), ← exitStx tys b.exit)
   let valStxs ← vals.toArray.mapM tyStx
   let cmds ← do
     pure <| #[
@@ -701,7 +726,8 @@ def elabMlirConstDef (doc? : Option (TSyntax ``Lean.Parser.Command.docComment)) 
           { body := [$body,*], exit := $exit }),
       ← `($[$doc?:docComment]? @[reducible] def $x : GlobalInitializer :=
           { Γ := $Γ, hΓ := rfl, t := $tStx, block := $(name `entry),
-            constant := $(quote constant), unnamedAddr := $(quote unnamedAddr) })]
+            constant := $(quote constant), unnamedAddr := $(quote unnamedAddr),
+            ptrs := [$(← ptrs.toArray.mapM ptrStx),*] })]
   elabLift nc cmds
 
 /-- The function `s`'s region, its attributes checked. -/
