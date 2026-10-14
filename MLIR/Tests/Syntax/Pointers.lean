@@ -22,6 +22,46 @@ mlir_def viaSlot := {
     "llvm.return"(%3) : (i64) -> ()
 }
 
+/-- A pointer stored into a slot, its bits loaded back as an integer and compared with its
+`ptrtoaddr`. -/
+mlir_def addrViaSlot := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.mlir.constant"() <{value = 1 : i32}> : () -> i32
+    %1 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = !llvm.ptr}> : (i32) -> !llvm.ptr
+    "llvm.store"(%arg0, %1) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr, !llvm.ptr) -> ()
+    %2 = "llvm.load"(%1) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    %3 = "llvm.ptrtoaddr"(%arg0) : (!llvm.ptr) -> i64
+    %4 = "llvm.icmp"(%2, %3) <{predicate = 0 : i64}> : (i64, i64) -> i1
+    "llvm.return"(%2, %4) : (i64, i1) -> ()
+}
+
+/-- A pointer stored into a slot, copied to another by `memcpy`, loaded from there and through. -/
+mlir_def viaCopy := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.mlir.constant"() <{value = 1 : i32}> : () -> i32
+    %1 = "llvm.mlir.constant"() <{value = 8 : i64}> : () -> i64
+    %2 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = !llvm.ptr}> : (i32) -> !llvm.ptr
+    %3 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = !llvm.ptr}> : (i32) -> !llvm.ptr
+    "llvm.store"(%arg0, %2) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr, !llvm.ptr) -> ()
+    "llvm.intr.memcpy"(%3, %2, %1) <{isVolatile = false}> : (!llvm.ptr, !llvm.ptr, i64) -> ()
+    %4 = "llvm.load"(%3) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> !llvm.ptr
+    %5 = "llvm.load"(%4) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> i64
+    "llvm.return"(%5) : (i64) -> ()
+}
+
+/-- A pointer stored into a slot, a byte stored over it, then loaded as a pointer. -/
+mlir_def overwritten := {
+  ^bb0(%arg0: !llvm.ptr):
+    %0 = "llvm.mlir.constant"() <{value = 1 : i32}> : () -> i32
+    %1 = "llvm.mlir.constant"() <{value = 0 : i8}> : () -> i8
+    %2 = "llvm.alloca"(%0) <{alignment = 8 : i64, elem_type = !llvm.ptr}> : (i32) -> !llvm.ptr
+    "llvm.store"(%arg0, %2) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr, !llvm.ptr) -> ()
+    "llvm.store"(%1, %2) <{alignment = 1 : i64, ordering = 0 : i64}> : (i8, !llvm.ptr) -> ()
+    %3 = "llvm.load"(%2) <{alignment = 8 : i64, ordering = 0 : i64}> : (!llvm.ptr) -> !llvm.ptr
+    %4 = "llvm.icmp"(%3, %arg0) <{predicate = 0 : i64}> : (!llvm.ptr, !llvm.ptr) -> i1
+    "llvm.return"(%4) : (i1) -> ()
+}
+
 /-- `p[-1]`, by a dynamic index. -/
 mlir_def back := {
   ^bb0(%arg0: !llvm.ptr):
@@ -169,6 +209,66 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
   subst hS
   erase_frame
   subst hv
+  rfl
+
+-- the stored pointer's bits: its address, as `ptrtoaddr` reads it
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) :
+    addrViaSlot.call (addrViaSlot.args (.value p)) s =
+      .value
+        (.cons (.value (p.addrBits s.mem.addr)) (.cons (.value 1#1) .nil),
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+  func_init
+  block_init
+  step_pure
+  step_alloca
+  step_store
+  guard_hyp hread_v1_readAt : S.mem.readAt v1 64 = p.addrBits S₀.mem.addr
+  step_load with v
+  step_pure
+  step_pure
+  finish_block
+  subst hS
+  erase_frame
+  subst hv
+  simp [Pointer.addrBits]
+
+-- copied, the pointer loads back from the copy, and through it the word at `p`
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem p 64) :
+    viaCopy.call (viaCopy.args (.value p)) s =
+      .value
+        (.cons (.value (s.mem.readAt p 64)) .nil,
+          { s with alloc := ⟨s.alloc.nextFreeBlock + 2⟩ }) := by
+  func_init
+  block_init
+  iterate 2 step_pure
+  iterate 2 step_alloca
+  step_store
+  step_memcpy
+  guard_hyp hread_v2 : S.mem.loadPtr v2 = .value p
+  step_load
+  step_load with v
+  finish_block
+  subst hS
+  erase_frame
+  subst hv
+  rfl
+
+-- a byte stored over it: the pointer loads as poison, and its comparison is
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) :
+    overwritten.call (overwritten.args (.value p)) s =
+      .value (.cons .poison .nil, { s with alloc := ⟨s.alloc.nextFreeBlock + 1⟩ }) := by
+  func_init
+  block_init
+  iterate 2 step_pure
+  step_alloca
+  step_store
+  step_store
+  step_load
+  step_pure
+  finish_block
+  subst hS
+  erase_frame
+  rw [MemoryState.loadPtr_storeAt_self (by mem_fact) (by decide)]
   rfl
 
 -- a byte back from `q`, which is a byte into its block

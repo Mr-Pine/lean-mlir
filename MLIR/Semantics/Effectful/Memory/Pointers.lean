@@ -309,11 +309,12 @@ theorem MemoryState.unspec_storePtr : (m.storePtr p x).unspec = m.unspec :=
 theorem MemoryState.addr_storePtr : (m.storePtr p x).addr = m.addr :=
   rfl
 
-/-- `storePtr` holds `storeDef`'s bits of an undefined pointer. -/
-theorem MemoryState.sameBits_storePtr : (m.storePtr p x).SameBits (m.storeDef p 0#64 0#64) :=
+/-- `storePtr` holds `storeDef`'s bits of the pointer's address, undefined. -/
+theorem MemoryState.sameBits_storePtr :
+    (m.storePtr p x).SameBits (m.storeDef p (x.addrBits m.addr) 0#64) :=
   sameBits_modifyBlock_modifyBlock fun _ => rfl
 
-/-- `storePtr` is `storeDef` of its undefined bits, then `x` recorded. -/
+/-- `storePtr` is `storeDef` of undefined bits, then `x` recorded. -/
 theorem MemoryState.storePtr_eq :
     m.storePtr p x = (m.storeDef p 0#64 0#64).recordPtr p.id p.offsetInBits x := by
   simp only [storePtr, recordPtr, storeDef, modifyBlock, MemoryState.mk.injEq, and_true]
@@ -324,7 +325,8 @@ theorem MemoryState.storePtr_eq :
   · subst_vars
     cases m.mem[p.id]? with
     | none => rfl
-    | some b => by_cases hw : b.writable <;> simp [MemoryBlock.update, hw]
+    | some b =>
+      by_cases hw : b.writable <;> simp [MemoryBlock.update, hw, spliceBits_spliceBits_self, addr]
   · rfl
 
 theorem MemoryState.getElem?_storePtr_ne (h : q.id ≠ p.id) : (m.storePtr p x)[q.id]? = m[q.id]? :=
@@ -339,7 +341,13 @@ theorem MemoryState.definedAt_storePtr_disjoint (h : (Range.of p 64).Disjoint (R
     (m.storePtr p x).definedAt q w = m.definedAt q w :=
   sameBits_storePtr.definedAt.trans (definedAt_storeDef_disjoint h _ _)
 
-/-- A stored pointer's bits are undefined. -/
+/-- A stored pointer's bits: its address. -/
+@[mlir_mem, mlir_read]
+theorem MemoryState.readAt_storePtr_self (h : Room m p 64) :
+    (m.storePtr p x).readAt p 64 = x.addrBits m.addr :=
+  sameBits_storePtr.readAt.trans (readAt_storeDef_self h _ _)
+
+/-- A stored pointer's bits are not defined by an integer write. -/
 theorem MemoryState.definedAt_storePtr_self (h : Room m p 64) :
     (m.storePtr p x).definedAt p 64 = 0#64 :=
   sameBits_storePtr.definedAt.trans (definedAt_storeDef_self h _ _)
@@ -429,14 +437,16 @@ section LoadPtr
 
 variable {m : MemoryState} {p q x : Pointer}
 
-/-- A block's stored pointer at bit `o`, by its entry and its 64 bits' definedness. -/
+/-- A block's stored pointer at bit `o`, by its entry and its 64 bits' definedness and value. -/
 theorem MemoryBlock.ptrAt_congr {b b' : MemoryBlock} (hp : b'.ptrs o = b.ptrs o)
-    (hd : b'.defined.extractLsb' o 64 = b.defined.extractLsb' o 64) : b'.ptrAt o = b.ptrAt o := by
-  simp only [MemoryBlock.ptrAt, hp, hd]
+    (hd : b'.defined.extractLsb' o 64 = b.defined.extractLsb' o 64)
+    (hb : b'.bytes.extractLsb' o 64 = b.bytes.extractLsb' o 64) :
+    b'.ptrAt addr o = b.ptrAt addr o := by
+  simp only [MemoryBlock.ptrAt, hp, hd, hb]
 
-/-- `loadPtr` by the block's entry and definedness at `p`. -/
+/-- `loadPtr` by the block's entry, definedness and bits at `p`. -/
 theorem MemoryState.loadPtr_eq_of_block {b : MemoryBlock} (h : m[p.id]? = some b) :
-    m.loadPtr p = b.ptrAt p.offsetInBits := by
+    m.loadPtr p = b.ptrAt m.addr p.offsetInBits := by
   simp [loadPtr, ptrAt, h]
 
 /-- A pointer stored in bounds loads back. -/
@@ -448,24 +458,27 @@ theorem MemoryState.loadPtr_storePtr_self (h : Room m p 64) :
   simp [loadPtr, ptrAt, storePtr, getElem?_modifyBlock_self, hblk, MemoryBlock.ptrAt,
     MemoryBlock.update, hw, extractLsb'_spliceBits_self _ _ _ hsz]
 
-/-- A block's entry and definedness at `o` past a masked store disjoint from it. -/
+/-- A block's entry, definedness and bits at `o` past a masked store disjoint from it. -/
 theorem MemoryBlock.ptrAt_storeDef {blk : MemoryBlock} {off o v : Nat} {y d : BitVec v}
     (h : o + 64 ≤ off ∨ off + v ≤ o) :
     ({ blk with
         bytes := spliceBits blk.bytes off y
         defined := spliceBits blk.defined off d
-        ptrs := MemoryBlock.clearPtrs blk.ptrs off d } : MemoryBlock).ptrAt o = blk.ptrAt o := by
+        ptrs := MemoryBlock.clearPtrs blk.ptrs off d } : MemoryBlock).ptrAt addr o =
+      blk.ptrAt addr o := by
   apply MemoryBlock.ptrAt_congr
   · simp only [MemoryBlock.clearPtrs]
     split <;> simp [h]
   · exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
+  · exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
 
-/-- `loadPtr` past a change of `p`'s block by `f`, which keeps the entry and definedness at `q`. -/
+/-- `loadPtr` past a change of `p`'s block by `f`, which keeps the entry, definedness and bits at
+`q`. -/
 theorem MemoryState.loadPtr_modifyBlock {i : BlockId} {f : MemoryBlock → MemoryBlock}
-    (hf : ∀ b : MemoryBlock, (f b).ptrAt q.offsetInBits = b.ptrAt q.offsetInBits) :
+    (hf : ∀ b : MemoryBlock, (f b).ptrAt m.addr q.offsetInBits = b.ptrAt m.addr q.offsetInBits) :
     (m.modifyBlock i f).loadPtr q = m.loadPtr q := by
   unfold loadPtr ptrAt
-  rw [getElem?_modifyBlock]
+  rw [getElem?_modifyBlock, addr_modifyBlock]
   by_cases h : i = q.id
   · subst h
     simp only [ite_true]
@@ -482,6 +495,7 @@ theorem MemoryState.loadPtr_storeDef_disjoint {v : Nat}
   · simp only [Range.Disjoint, Range.of, hid, ne_eq, not_true_eq_false, false_or] at h
     exact loadPtr_modifyBlock fun _ => MemoryBlock.ptrAt_storeDef (by omega)
   · simp only [loadPtr, ptrAt, storeDef, getElem?_modifyBlock_ne hid]
+    rfl
 
 @[mlir_mem, mlir_read]
 theorem MemoryState.loadPtr_storeAt_disjoint {v : Nat}
@@ -495,9 +509,10 @@ theorem MemoryState.loadPtr_overlay_disjoint {v : Nat}
     (m.overlay p y d).loadPtr q = m.loadPtr q := by
   by_cases hid : q.id = p.id
   · simp only [Range.Disjoint, Range.of, hid, ne_eq, not_true_eq_false, false_or] at h
-    refine loadPtr_modifyBlock fun _ => MemoryBlock.ptrAt_congr rfl ?_
-    exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
+    refine loadPtr_modifyBlock fun _ => MemoryBlock.ptrAt_congr rfl ?_ ?_ <;>
+      exact extractLsb'_spliceBits_of_disjoint _ _ _ _ (by omega)
   · simp only [loadPtr, ptrAt, overlay, getElem?_modifyBlock_ne hid]
+    rfl
 
 @[mlir_mem, mlir_read]
 theorem MemoryState.loadPtr_storePtr_disjoint (h : (Range.of p 64).Disjoint (Range.of q 64)) :
@@ -505,29 +520,33 @@ theorem MemoryState.loadPtr_storePtr_disjoint (h : (Range.of p 64).Disjoint (Ran
   by_cases hid : q.id = p.id
   · simp only [Range.Disjoint, Range.of, hid, ne_eq, not_true_eq_false, false_or] at h
     refine loadPtr_modifyBlock fun b => ?_
-    rw [← MemoryBlock.ptrAt_storeDef (blk := b) (y := 0#64) (d := 0#64) (off := p.offsetInBits)
-      (o := q.offsetInBits) (by omega)]
-    refine MemoryBlock.ptrAt_congr ?_ rfl
+    rw [← MemoryBlock.ptrAt_storeDef (blk := b) (y := x.addrBits m.addr) (d := 0#64)
+      (off := p.offsetInBits) (o := q.offsetInBits) (by omega)]
+    refine MemoryBlock.ptrAt_congr ?_ rfl rfl
     simp only [show q.offsetInBits ≠ p.offsetInBits by omega, ite_false]
   · simp only [loadPtr, ptrAt, storePtr, getElem?_modifyBlock_ne hid]
+    rfl
 
 /-- A lifetime marker of another object keeps the stored pointers. -/
 @[mlir_mem, mlir_read]
 theorem MemoryState.loadPtr_lifetimeStart (h : q.id ≠ p.id) :
     (m.lifetimeStart p).loadPtr q = m.loadPtr q := by
   simp only [loadPtr, ptrAt, lifetimeStart, setLifetime, getElem?_modifyBlock_ne h]
+  rfl
 
 /-- A lifetime marker of another object keeps the stored pointers. -/
 @[mlir_mem, mlir_read]
 theorem MemoryState.loadPtr_lifetimeEnd (h : q.id ≠ p.id) :
     (m.lifetimeEnd p).loadPtr q = m.loadPtr q := by
   simp only [loadPtr, ptrAt, lifetimeEnd, setLifetime, getElem?_modifyBlock_ne h]
+  rfl
 
 @[mlir_read]
 theorem MemoryState.loadPtr_alloca {s : GlobalState} (hwf : s.WF) (h : InBounds s.mem q w') :
     (s.alloca n d).mem.loadPtr q = s.mem.loadPtr q := by
   simp only [loadPtr, ptrAt,
     GlobalState.getElem?_alloca (GlobalState.ne_allocaPtr_of_inBounds hwf h)]
+  rfl
 
 /-- `loadPtr_alloca` with the pointer's own width, which `loadPtr_alloca`'s open width never
 matches. -/
@@ -547,6 +566,7 @@ theorem MemoryState.loadPtr_addBlock_of_id_ne {b : BlockId} {y : BitVec v} (h : 
       exact absurd (beq_iff_eq.mp heq).symm h
     · rfl
   simp only [loadPtr, ptrAt, hget]
+  rfl
 
 /-- A load of a block in bounds before a new one: the load before it. -/
 @[mlir_read]
@@ -597,7 +617,7 @@ theorem MemoryState.loadPtr_makeWritable : (m.makeWritable i).loadPtr p = m.load
   rw [getElem?_makeWritable]
   cases m[p.id]? with
   | none => rfl
-  | some b => by_cases h : i = p.id <;> simp [h, MemoryBlock.ptrAt]
+  | some b => by_cases h : i = p.id <;> simp [h, MemoryBlock.ptrAt] <;> rfl
 
 theorem InBounds.makeWritable (h : InBounds m p w) : InBounds (m.makeWritable i) p w := by
   obtain ⟨b, hb, hw⟩ := h

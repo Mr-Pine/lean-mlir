@@ -21,22 +21,26 @@ syntax (name := stepImpure)
   "step_impure" stepSimpArgs (stepNames)? (stepConsuming)? " => " tacticSeq : tactic
 
 /-- `step_impure` for a `load`, closing the instruction with `run_load`; of a pointer, with
-`run_loadPtr`, its value the pointer stored there (`S.mem.loadPtr p`, by a read fact). -/
+`run_loadPtr`, its value the pointer stored there (`S.mem.loadPtr p`, by a read fact); of a stored
+pointer's bits, with `run_load_known`, its read fact `S.mem.loadPtr q = .value _` making them
+known. -/
 syntax (name := stepLoad) "step_load" stepSimpArgs (stepNames)? (stepConsuming)? : tactic
 
 /-- `step_impure` for a `memcpy`, closing the instruction with `run_memcpy`, or with `run_memcpyDef`
-for a source only partly known. -/
+for a source only partly known: a `storeCopy` of its bits, definedness and live pointers, which
+load back as at the source (`loadPtr_storeCopy_add`). -/
 syntax (name := stepMemcpy) "step_memcpy" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `memmove`, closing the instruction with `run_memmove`, or `run_memmoveDef`
-for a source only partly known. -/
+for a source only partly known (a `storeCopy`, as `step_memcpy`'s). -/
 syntax (name := stepMemmove) "step_memmove" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `memset`, closing the instruction with `run_memset`. -/
 syntax (name := stepMemset) "step_memset" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `store`, closing the instruction with `run_store`; of a pointer, with
-`run_storePtr`, which records it: `hread_p : S.mem.loadPtr p = .value q` after. -/
+`run_storePtr`, which records it: `hread_p : S.mem.loadPtr p = .value q` and its bits
+`hread_p_readAt : S.mem.readAt p 64 = q.addrBits S.mem.addr` after. -/
 syntax (name := stepStore) "step_store" stepSimpArgs (stepConsuming)? : tactic
 
 /-- `step_impure` for a `lifetime.start` or `lifetime.end`: the state's memory as
@@ -294,7 +298,17 @@ def evalStepLoad : Tactic := fun stx => do
         expect_values
         first
         | expect_ptr; exact run_loadPtr (by mem_fact)
-        | exact run_load (by first | mem_fact | simp_all) (by dsimp; try simp; rfl)))
+        | exact run_load (by mem_fact) (by dsimp; try simp; rfl)
+        -- a stored pointer's bits, its address: known by its read fact
+        | exact
+            run_load_known (by mem_fact)
+              (MemoryState.knownAt_of_loadPtr (by assumption) (by decide))
+              (by dsimp; try simp; rfl)
+        | exact
+            run_load_known (by mem_fact)
+              (MemoryState.knownAt_add_of_loadPtr (by assumption) (by decide) (by decide))
+              (by dsimp; try simp; rfl)
+        | exact run_load (by simp_all) (by dsimp; try simp; rfl)))
 
 @[tactic stepStore]
 def evalStepStore : Tactic := fun stx => do
@@ -358,6 +372,71 @@ elab "memop_run " lem:ident k:num : tactic =>
     let holes : Array Term ← (List.replicate k.getNat ()).toArray.mapM fun _ => `((by mem_fact))
     evalTactic (← `(tactic| exact $lem (n := $n) rfl $holes*))
 
+/-- `m.ptrsIn src w = fun _ => none`, by a mask `D` with `m.definedAt src w = D` (a fact, or the
+memory simprocs' value of it) that leaves no 64-bit window undefined (the kernel's `decide`), or by
+an `mlir_no_ptrs` lemma (an object's facts). -/
+elab "no_ptrs" : tactic =>
+  withMainContext do
+    let_expr Eq _ lhs _ := ← instantiateMVars (← getMainTarget)
+      | throwError "no_ptrs: expected `m.ptrsIn src w = fun _ => none`"
+    let_expr MemoryState.ptrsIn m src w := lhs | throwError "no_ptrs: not a `ptrsIn`"
+    let w₁ ← Tactic.normWidths w
+    -- `pf : m.definedAt src w' = D`, its windows checked
+    let close? (pf w' D : Expr) : TacticM Bool := do
+      if D.hasFVar || D.hasMVar then
+        return false
+      let hDTy ← withLocalDeclD `o (mkConst ``Nat) fun o => do
+        let lt ← mkAppM ``LT.lt #[o, ← mkAppM ``HSub.hSub
+          #[← mkAppM ``HAdd.hAdd #[w', mkNatLit 1], mkNatLit 64]]
+        let ne ← mkAppM ``Ne #[← mkAppM ``BitVec.extractLsb' #[o, mkNatLit 64, D],
+          mkApp2 (mkConst ``BitVec.ofNat) (mkNatLit 64) (mkNatLit 0)]
+        mkForallFVars #[o] (← mkArrow lt ne)
+      let some hD ← Tactic.kernelDecide? hDTy | return false
+      closeMainGoal `no_ptrs (← mkAppM ``MemoryState.ptrsIn_eq_none_of_definedAt #[pf, hD])
+      return true
+    for (pf, ty) in ← Tactic.splitConjunctedFacts do
+      let some (_, l, D) := ty.eq? | continue
+      let_expr MemoryState.definedAt m' src' w' := l | continue
+      unless m' == m && src' == src && (← Tactic.normWidths w') == w₁ do
+        continue
+      if ← close? pf w' D then
+        return
+    let e ← mkAppM ``MemoryState.definedAt #[m, src, w]
+    let r ← Tactic.simpState e
+    if ← close? (← r.getProof) w r.expr then
+      return
+    -- an `mlir_no_ptrs` lemma, its premises from the facts
+    let target ← instantiateMVars (← getMainTarget)
+    let goal ← Tactic.normWidths target
+    let fc ← Tactic.FactCtx.build
+    for lem in ← labelled `mlir_no_ptrs do
+      let saved ← saveState
+      let c ← mkConstWithFreshMVarLevels lem
+      let (ms, _, ty) ← forallMetaTelescopeReducing (← inferType c)
+      if ← withReducible (isDefEq ty goal) then
+        let ok ← ms.allM fun mv => do
+          if ← mv.mvarId!.isAssigned then
+            return true
+          let pty ← instantiateMVars (← inferType mv)
+          unless ← isProp pty do
+            return false
+          let some pf ← Tactic.factDischarge fc 2 pty | return false
+          mv.mvarId!.assign pf
+          return true
+        if ok then
+          closeMainGoal `no_ptrs (mkExpectedPropHint (← instantiateMVars (mkAppN c ms)) target)
+          return
+      saved.restore
+    throwError "no_ptrs: no mask `{m}.definedAt {src} _ = D` leaving no 64-bit window undefined, \
+      nor an `mlir_no_ptrs` lemma"
+
+/-- `memop_run lem k`, then the source's `ptrsIn` by `no_ptrs`. -/
+elab "memop_run_no_ptrs " lem:ident k:num : tactic =>
+  withMainContext do
+    let n ← memopCount
+    let holes : Array Term ← (List.replicate k.getNat ()).toArray.mapM fun _ => `((by mem_fact))
+    evalTactic (← `(tactic| exact $lem (n := $n) rfl $holes* (by no_ptrs)))
+
 @[tactic stepMemcpy]
 def evalStepMemcpy : Tactic := fun stx => do
   runStep (StepArgs.parse stx[1] mkNullNode stx[2] mkNullNode)
@@ -366,7 +445,9 @@ def evalStepMemcpy : Tactic := fun stx => do
         expect_values
         first
         | memop_run run_memcpy 3
-        -- a source not known throughout: its definedness copied
+        -- a source not known throughout: its definedness copied, and its pointers unless its
+        -- definedness leaves none
+        | memop_run_no_ptrs run_memcpyDef_noPtrs 3
         | memop_run run_memcpyDef 3))
 
 @[tactic stepMemmove]
@@ -377,7 +458,9 @@ def evalStepMemmove : Tactic := fun stx => do
         expect_values
         first
         | memop_run run_memmove 2
-        -- a source not known throughout: its definedness copied
+        -- a source not known throughout: its definedness copied, and its pointers unless its
+        -- definedness leaves none
+        | memop_run_no_ptrs run_memmoveDef_noPtrs 2
         | memop_run run_memmoveDef 2))
 
 @[tactic stepMemset]

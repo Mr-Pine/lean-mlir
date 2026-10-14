@@ -51,8 +51,13 @@ one, its UB conditions kept: one thread, no memory-mapped I/O). The importer its
 samesign`, `initializes`, `captures` and intrinsic call attributes. A `fence` is nothing and an atomic access
 a plain one (one thread); `ptrtoaddr`/`ptrtoint` read `S.mem.addr`, unconstrained block
 addresses; `asm("" : "+r"(x))` is `x`; `undef` is poison. A pointer stored in memory is recorded
-by its block and offset, its bits undefined (an integer load of them is poison); `memcpy` copies
-the bits, not the pointer (a load of the copy is poison: less defined than LLVM). A `gep`'s no-wrap
+by its block and offset, its bits its address (an integer load of them reads `ptrtoaddr`'s value);
+it loads back while live: an integer write over any of its bits, even of its own address, kills it
+(poison then, less defined than LLVM), and its bits never decode to a pointer without its record.
+`memcpy`/`memmove` copy the bits, their definedness and the pointers wholly inside the copied range;
+a partial copy carries no pointer and leaves its bits undefined (less defined than LLVM). A
+global's pointer member `addressof @h` (with a constant `getelementptr`) points into `h`'s block
+when `h` is in the table, else is undefined. A `gep`'s no-wrap
 flags are kept: without them the address wraps; `nuw` is poison where the unsigned offset or
 address wraps; `nusw` (and `inbounds`) reads the index signed and is poison where the offset or an
 address it passes through leaves the signed or address range (`gepSigned`; below `2 ^ 63` the

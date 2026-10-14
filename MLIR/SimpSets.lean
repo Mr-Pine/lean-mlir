@@ -45,6 +45,10 @@ register_label_attr mlir_read
 it about an allocating step's new memory -/
 register_label_attr mlir_fresh
 
+/-- Bits carrying no live pointer (`m.ptrsIn q w = fun _ => none`, from an object's facts):
+`step_memcpy` copies them as a masked store (`no_ptrs`) -/
+register_label_attr mlir_no_ptrs
+
 /-- A program constant (`def quadMask : Vector (BitVec 64) 8 := #v[…]`): the step tactics write it
 into the env by its name, not its unfolded value -/
 register_label_attr mlir_const

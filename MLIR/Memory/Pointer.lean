@@ -24,6 +24,11 @@ def Pointer.offsetInBits (p : Pointer) : Nat :=
 def Pointer.add (p : Pointer) (off : BitVec 64) :=
   { p with offset := p.offset + off }
 
+/-- The bits a pointer is stored as: its block's address plus its offset, as `ptrtoaddr` reads it
+(`addr`, a state's choice of addresses). -/
+def Pointer.addrBits (addr : BlockId → BitVec 64) (q : Pointer) : BitVec 64 :=
+  addr q.id + q.offset
+
 @[simp]
 theorem Pointer.add_zero (p : Pointer) : (p.add 0#64) = p := by simp [Pointer.add]
 

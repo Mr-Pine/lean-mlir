@@ -173,8 +173,11 @@ else `simp_all`. The loaded value is `S₀.mem.readAt q w` as the memory simproc
 stored value, or a read of `S₀`). A load of bits not known to be defined (an uninitialized slot,
 a dead object, a struct's padding) is poison: no `Fits`, the step fails. A load of a pointer
 (`run_loadPtr`) needs `InBounds S.mem q 64`; its value is `S.mem.loadPtr q`, the pointer stored at
-`q` while its 64 bits stay undefined (a store over any of them, `lifetime.start`, drops it), by a
-read fact `hread_<q> : S.mem.loadPtr q = .value p` (`step_store`'s, or the theorem's).
+`q` while it stays live (an integer write over any of its bits, `lifetime.start`, kills it: poison,
+`loadPtr_storeAt_self`), by a read fact `hread_<q> : S.mem.loadPtr q = .value p` (`step_store`'s,
+or the theorem's). An integer load of a stored pointer's bits (`run_load_known`, no `Fits`: no
+integer write defined them) reads its address, `p.addrBits S₀.mem.addr` (`ptrtoaddr`'s value), the
+bits known by that read fact (`knownAt_of_loadPtr`).
 
 ### `step_store [only] [args] [consuming …]`
 
@@ -182,8 +185,9 @@ read fact `hread_<q> : S.mem.loadPtr q = .value p` (`step_store`'s, or the theor
 gives it), `v`'s bits by `dsimp; try simp; rfl` (fails when the value is still an `if`/poison),
 and its type without padding by `decide` (`run_store`; a padded struct or a value with poison
 leaves stores partly undefined bits, `run_storeDef`, which no step takes). A pointer
-(`run_storePtr`, `Room S.mem q 64`) stores undefined bits and records the pointer:
-`hread_<q> : S.mem.loadPtr q = .value p`. New facts:
+(`run_storePtr`, `Room S.mem q 64`) stores its address, not defined by an integer write, and
+records the pointer: `hread_<q> : S.mem.loadPtr q = .value p`,
+`hread_<q>_readAt : S.mem.readAt q 64 = p.addrBits S₀.mem.addr` (no `Fits`). New facts:
 `hfits_<p> : Fits S.mem p w` (the stored bits are known; named as the read-backs) unless a `Fits`
 fact says it already;
 `hread_<p> : S.mem.readAt p w = v` for a local pointer `p`, `hread_<p>_<k>` for `p.add k#64`,
@@ -199,12 +203,21 @@ fact.
 `memcpy(dst, src, len)`: `len.toNat = n` by `rfl` (`n` a numeral for a literal `len`), `Range.Disjoint`
 of the two ranges, `Room` of `dst` and `Fits` of `src`, each by `mem_fact` (no fallback); the new
 memory stores
-`S.mem.readAt src (8 * n)` at `dst` (`run_memcpy`). A source only partly known (`Room`, with
-`Fits` of sub-ranges: a flag and an undefined tail) is copied with its definedness (`run_memcpyDef`,
-`S.mem.storeDef dst (S.mem.readAt src _) (S.mem.definedAt src _)`): each `Fits` fact of `src` or
-`src.add k` gives `hfits_<dst>(_k)` of the copy, and its reads are the source's
-(`readAt_storeDef_readAt_add`). `memmove`: the same without `Range.Disjoint` (`run_memmove`,
-`run_memmoveDef`).
+`S.mem.readAt src (8 * n)` at `dst` (`run_memcpy`: known bits carry no pointer). A source only
+partly known (`Room`, with `Fits` of sub-ranges: a flag and an undefined tail, or a stored pointer)
+is copied with its definedness and the live pointers wholly inside it (`run_memcpyDef`,
+`S.mem.storeCopy dst (S.mem.readAt src _) (S.mem.definedAt src _) (S.mem.ptrsIn src _)`). When
+the source carries none (`no_ptrs`: a fact `S.mem.definedAt src _ = D` whose mask leaves no 64-bit
+window undefined, by the kernel; a `PtrFree S.mem src _` fact; an `mlir_no_ptrs` lemma from an
+object's facts, `MemoryState.ptrsIn_of_ptFit`), the copy is `S.mem.storeDef dst (S.mem.readAt src
+_) (S.mem.definedAt src _)` (`run_memcpyDef_noPtrs`). `PtrFree m p w` (no live pointer over the
+range) holds for a fresh `alloca` (`PtrFree.allocaPtr`, `mem_fact` on `rw [hS, hx]`), a constant
+global without pointer members (`PtrFree.of_global hwf hglobal_x rfl rfl`) and a range inside an
+integer write into room for it; the steps carry it (`mlir_transport`, `mem_fact`): state it where
+a later copy of a partly defined object should stay a `storeDef`. Each `Fits` fact of `src` or `src.add k` gives
+`hfits_<dst>(_k)` of the copy, its reads are the source's (`readAt_storeCopy_readAt_add`), and a
+copied pointer loads back as at the source (`loadPtr_storeCopy_add`, `hread_<dst>`). `memmove`: the
+same without `Range.Disjoint` (`run_memmove`, `run_memmoveDef(_noPtrs)`), the source read first.
 `memset(dst, val, len)`: `Room` of `dst`; the new memory stores `val.replicate n`. A volatile one
 steps as the plain one.
 
@@ -258,7 +271,8 @@ hold their images). The pointer `x` (default `vN`) is opaque after; its facts:
 `hglobal_<x> : S.mem.globals "g" = some (x.id, t.image)`, `h<x>_off`, and for a constant
 `h<x>_live : Live S.mem x (8 * n)`, `h<x>_fits(_k)` for each run of defined bits from a byte,
 `hread_<x> : S.mem.readAt x w = Ty.flatBits r` (a plain value of a type without pointers and
-padding) or a literal (undefined members; the kernel evaluates the bits, `Ty.flattenDef_eq_ofNat`),
+padding) or a literal (undefined members; the kernel evaluates the bits, `Ty.flattenDef_eq_ofNat`;
+none for a global with pointer members, `t.ptrs`, whose bits there are their targets' addresses),
 and `h<q>_ne_<x> : q.id ≠ x.id` for each pointer `q` known writable (a `Room` or `Writable` fact):
 the block is read-only, so `Fits`/`Live`, never `Room`. A mutable global: `h<x>_bounds`,
 `hwritable_<x>`, no contents. `hv : ∀ s, t.value s = .value (v, s)` (a `value_eq` lemma) is
@@ -353,7 +367,8 @@ their widths first as literals (`8 * (40#64).toNat` as `320`) and literal offset
 literal width by `.mono`, `q.add off` inside `q` by `.add_of_le` (a variable `off`, `2 * j` with
 `j < 256`, by `omega` from the facts), through `alloca` (a new block's own bounds and room),
 `addBlock`, `storeAt` (`Fits` of the stored range, or a range inside it, from `Room`), `storeDef`
-(`Fits` where its mask is set or a copy's source is known), lifetime markers, an abbreviated state
+and `storeCopy` (`Fits` where its mask is set or a copy's source is known), lifetime markers, an
+abbreviated state
 (`withT … S`), an object's write `f m …` by its `P.f` transport lemma (`InBounds.storeVec`));
 `Range.Disjoint` (distinct ids, else offsets by `omega`); `≠` of block ids (facts, either way
 round, `List.Nodup` literals, distinct slots, the blocks' order by `omega` from bounds like

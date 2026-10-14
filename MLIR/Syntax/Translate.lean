@@ -1214,10 +1214,12 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
 
 namespace Translate
 
-/-- A value being folded: undefined (`undef`, `poison`), a constant, or an aggregate's members. -/
+/-- A value being folded: undefined (`undef`, `poison`), a constant, a global's address (`off` bytes
+into `sym`), or an aggregate's members. -/
 inductive Folded
   | undef
   | lit (c : ConstLit)
+  | addr (sym : String) (off : Int)
   | agg (t : Ty) (ms : List Folded)
 
 /-- `f`'s members, at array or struct type `t`. -/
@@ -1232,6 +1234,7 @@ def Folded.members (t : Ty) : Folded → Option (List Folded)
   | .lit (.bytes n v) => some ((List.range n).map fun i => .lit (.bv 8 (v / 256 ^ i % 256)))
   | .lit (.agg _ ms) => some (ms.map .lit)
   | .lit _ => none
+  | .addr .. => none
   | .agg _ ms => some ms
 
 /-- `f`, of type `t`, with its member at `path` set to `v`: `insertvalue`. -/
@@ -1243,9 +1246,10 @@ def Folded.insert (v : Folded) (t : Ty) (f : Folded) : (path : List Nat) → Opt
     return .agg t (ms.set i m)
 
 mutual
-/-- `f`'s constant at type `t`, its undefined members zero, and their paths and types. -/
+/-- `f`'s constant at type `t`, its undefined members (addresses among them) zero, and their paths
+and types. -/
 def Folded.toLit (t : Ty) : Folded → Option (ConstLit × List (List Nat × Ty))
-  | .undef => some (.zero t, [([], t)])
+  | .undef | .addr .. => some (.zero t, [([], t)])
   | .lit c => some (c, [])
   | .agg t ms => do
     let (cs, us) ← toLits t 0 ms
@@ -1259,13 +1263,27 @@ def Folded.toLits (t : Ty) (i : Nat) : List Folded → Option (List ConstLit × 
     return (c :: cs, us.map (fun (p, τ) => (i :: p, τ)) ++ us')
 end
 
+/-- `f`'s addresses: each member's path, the global it points into and the byte offset. -/
+partial def Folded.addrs : Folded → List (List Nat × String × Int)
+  | .addr sym off => [([], sym, off)]
+  | .agg _ ms => ms.zipIdx.flatMap fun (m, i) => m.addrs.map fun (p, a) => (i :: p, a)
+  | _ => []
+
 end Translate
 
+/-- The bit offset of the member at `path` of a `t`, as `Ty.width` lays it out. -/
+def Ty.memberOffset : Ty → List Nat → Option Nat
+  | _, [] => some 0
+  | .array _ t, i :: is => return i * t.stride + (← t.memberOffset is)
+  | .struct fs, i :: is => do
+    let t ← fs[i]?
+    return Ty.fieldOffset 0 i fs + (← t.memberOffset is)
+  | _, _ => none
+
 open Translate in
-/-- The constant `p` returns, if its one block builds it from constants, `undef`s, addresses
-(undefined) and `insertvalue`s alone and it is not all undefined: its undefined members zero, with
-their paths and types. -/
-def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
+/-- The value `p`'s one block returns, folded, and its type, if the block builds it from constants,
+`undef`s, addresses (`addressof`, a constant `getelementptr` off one) and `insertvalue`s alone. -/
+def Prog.folded? (p : Prog) : Option (Folded × Ty) := do
   let [b] := p.blocks | none
   let .ret [.val r] := b.exit | none
   -- registers start undefined, as `Env.init` starts them poison
@@ -1278,14 +1296,34 @@ def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
           return vals.set! d .undef
         | .binop (.insertvalue is t _ _) d (.val a) (.val v) =>
           return vals.set! d (← (← vals[v]?).insert t (← vals[a]?) is)
-        -- a pointer, which a global holds undefined: taking such a global's address is UB
-        | .addressof _ d =>
-          return vals.set! d .undef
+        | .addressof g d =>
+          return vals.set! d (.addr g 0)
+        -- a constant offset: as `gep` takes it, a negative one with flags (or one past `2 ^ 63`)
+        -- left undefined, less defined than LLVM
+        | .unop (.gepConst f k) d (.val a) =>
+          let .addr g o ← vals[a]? | none
+          if (0 ≤ o && 0 ≤ k && o + k < 2 ^ 63) || f == {} then return vals.set! d (.addr g (o + k))
+          else return vals.set! d .undef
         | _ =>
           none
-  let (c, us) ← (← vals[r]?).toLit (← p.Γ.vals[r]?)
+  return (← vals[r]?, ← p.Γ.vals[r]?)
+
+open Translate in
+/-- The constant `p` returns (`Prog.folded?`), if it is not all undefined: its undefined members
+zero, addresses among them, with their paths and types. -/
+def Prog.constant? (p : Prog) : Option (ConstLit × List (List Nat × Ty)) := do
+  let (f, t) ← p.folded?
+  let (c, us) ← f.toLit t
   guard (!us.any (·.1.isEmpty))
   return (c, us)
+
+open Translate in
+/-- The pointer members of the value `p` returns (`Prog.folded?`): each one's bit offset, the global
+it points into and the byte offset into it. -/
+def Prog.constantPtrs (p : Prog) : List (Nat × String × Int) :=
+  match p.folded? with
+  | some (f, t) => f.addrs.filterMap fun (path, sym, off) => (t.memberOffset path).map (·, sym, off)
+  | none => []
 
 /-! ## Building the `Func` -/
 
