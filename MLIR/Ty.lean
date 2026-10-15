@@ -1107,4 +1107,18 @@ end FlattenUnflatten
 -- importers reason about packed lanes by the lemmas, not by unfolding
 attribute [irreducible] BitVec.packLanes
 
+@[expose] public section
+
+/-- A vector `getelementptr`'s base: `n` pointers (`vector<n x ptr>`), or one for all lanes. -/
+abbrev gepBase (n : Nat) : Bool → Ty
+  | true => .array n .ptr
+  | false => .ptr
+
+/-- A vector `getelementptr`'s dynamic index: `n` `i64`s, or one for all lanes. -/
+abbrev gepIndex (n : Nat) : Bool → Ty
+  | true => .vec n 64
+  | false => .bv 64
+
+end
+
 end MLIR.Ty

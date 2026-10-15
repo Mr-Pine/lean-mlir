@@ -170,9 +170,14 @@ partial def parseTy (top : Bool) : List Char → Option (Ty × List Char)
     let (n, cs) ← takeNat (dropWs cs)
     let 'x' :: cs := dropWs cs | none
     let (t, cs) ← parseTy false (dropWs cs)
-    let .bv w := t | none
     let '>' :: cs := dropWs cs | none
-    return (.vec n w, cs)
+    match t with
+    | .bv w =>
+      return (.vec n w, cs)
+    | .ptr =>
+      return (.array n .ptr, cs)
+    | _ =>
+      none
   | 's' :: 't' :: 'r' :: 'u' :: 'c' :: 't' :: '<' :: cs => do
     -- an optional `"name", `
     let cs ←
@@ -209,6 +214,8 @@ end
 def ty : MLIRType → Except String Ty
   | .int w => return .bv w
   | .vector [n] [] (.int w) => return .vec n w
+  -- a pointer vector: `n` pointers, laid out as an array's
+  | .vector [n] [] (.undefined "llvm.ptr") => return .array n .ptr
   | .undefined "llvm.ptr" => return .ptr
   | t@(.undefined s) =>
     match parseTy true ((s.drop "llvm.".length).toString.toList) with
@@ -600,8 +607,18 @@ def checkGlobalAttrs (d : AttrDict) : Except String Unit := do
     unless s == 0 do
       throw "a global must be in address space 0"
 
+/-- The operations a pointer vector (`Ty.array n .ptr`) may meet: none reads it lane-wise but
+`getelementptr`. -/
+def ptrVecOps : List String :=
+  ["llvm.getelementptr", "llvm.load", "llvm.store", "llvm.mlir.poison", "llvm.mlir.undef",
+    "llvm.mlir.zero", "llvm.call"]
+
 def instr (E : Env) (op : Op) : Except String PInstr := do
   checkOpAttrs op
+  if
+      (op.args ++ op.res).any (·.2 matches .vector _ _ (.undefined "llvm.ptr")) &&
+        !ptrVecOps.contains op.name then
+    throw s!"pointer vectors are supported only by {", ".intercalate ptrVecOps}"
   let args ← op.args.mapM (operand E)
   let res := result E op
   -- an atomic access (`unordered` to `seq_cst`) is a plain one: the model runs one thread
@@ -988,8 +1005,15 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.getelementptr" =>
     do
       let (dst, t) ← res
-      unless t == .ptr do
-        throw "expected a pointer result"
+      -- a pointer vector's lane count
+      let lanes? ←
+        match t with
+        | .ptr =>
+          pure none
+        | .array n .ptr =>
+          pure (some n)
+        | _ =>
+          throw "expected a pointer or pointer vector result"
       let some (.type et) := op.getAttr? "elem_type" | throw "expected an `elem_type` attribute"
       let flags ← gepFlags op
       let (off, stride, first) ← gepOffset (← ty et) (← arrayInts op "rawConstantIndices")
@@ -1001,14 +1025,36 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           throw s!"offset {off} or stride out of the signed 64-bit range"
         if first < 0 && (flags.nuw || off != first || stride.isSome) then
           throw s!"negative index part {first} with other parts or `nuw`"
-      match args, stride with
-      | [(p, .ptr)], none =>
+      match lanes?, args, stride with
+      | none, [(p, .ptr)], none =>
         return .unop (.gepConst flags off) dst p
-      | [(p, .ptr), (i, .bv 64)], some stride =>
+      | none, [(p, .ptr), (i, .bv 64)], some stride =>
         unless 0 ≤ off do
           throw s!"negative offset {off} with a dynamic index"
         return .binop (.gepDyn flags off.toNat stride) dst p i
-      | _, _ =>
+      | some n, [(p, tp)], none =>
+        unless tp == .array n .ptr do
+          throw "expected a pointer vector of the result's lanes"
+        return .unop (.ptrLanes (n := n) (.gepConst flags off)) dst p
+      | some n, [(p, tp), (i, ti)], some stride =>
+        unless 0 ≤ off do
+          throw s!"negative offset {off} with a dynamic index"
+        let vb ←
+          if tp == .ptr then
+            pure false
+          else if tp == .array n .ptr then
+            pure true
+          else
+            throw "expected a pointer or a pointer vector of the result's lanes"
+        let vi ←
+          if ti == .bv 64 then
+            pure false
+          else if ti == .vec n 64 then
+            pure true
+          else
+            throw "expected an `i64` index, or a vector of the result's lanes of them"
+        return .binop (.gepVec flags off.toNat stride (n := n) vb vi) dst p i
+      | _, _, _ =>
         throw "expected a pointer, and an `i64` operand for the dynamic index"
   | "llvm.shufflevector" =>
     do

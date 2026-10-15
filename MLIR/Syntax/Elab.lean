@@ -210,6 +210,8 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
     `((.extractvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) rir_rfl%))
   | .vector op => do
     `((.vector $(← unOpStx op)))
+  | .ptrLanes op => do
+    `((.ptrLanes $(← unOpStx op)))
 
 def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .and => `(.and)
@@ -241,6 +243,9 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
     `((.ptrcmp $(← boolStx ne)))
   | .gepDyn f byteOff stride => do
     `((.gepDyn $(← gepFlagsStx f) $(num byteOff) $(num stride)))
+  | .gepVec (n := n) f byteOff stride vb vi => do
+    `((.gepVec $(← gepFlagsStx f) $(num byteOff) $(num stride) (n := $(num n)) $(← boolStx vb)
+          $(← boolStx vi)))
   | .vector op => do
     `((.vector $(← binOpStx op)))
   | .extractelement => `(.extractelement)
