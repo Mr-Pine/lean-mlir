@@ -96,6 +96,25 @@ def mlirSymbolName.formatter : Formatter :=
 def mlirSymbolName.parenthesizer : Parenthesizer :=
   pure ()
 
+/-- Consume one `>`: the inner closer of `<disable = true>>`, which the tokenizer reads as `>>`. -/
+def closeAngleFn : ParserFn := fun c s =>
+  let i := s.pos
+  if !c.atEnd i && c.get i == '>' then mkNodeToken `mlir_close_angle i true c (s.setPos (c.next i))
+  else s.mkErrorAt "'>'" i
+
+@[inherit_doc closeAngleFn]
+def closeAngle : Parser :=
+  withAntiquot (mkAntiquot "closeAngle" `mlir_close_angle)
+    { fn := closeAngleFn, info := mkAtomicInfo "closeAngle" }
+
+@[combinator_formatter closeAngle]
+def closeAngle.formatter : Formatter :=
+  pure ()
+
+@[combinator_parenthesizer closeAngle]
+def closeAngle.parenthesizer : Parenthesizer :=
+  pure ()
+
 /-- A `//` comment up to the end of the line, as `^bb1:  // 2 preds: ^bb0, ^bb1` has. -/
 def commentFn : ParserFn := fun c s =>
   let i := s.pos
@@ -164,7 +183,7 @@ syntax distinctAttr := &"distinct" "[" num "]" balancedBrackets
 `distinct[0]<>`. -/
 syntax dialectArg := (atomic(ident " = "))? (atomic(distinctAttr) <|> attrValue <|> rawIdent)
 
-syntax "#" ident "<" dialectArg,* ">" : mlir_attr_val
+syntax "#" ident "<" dialectArg,* closeAngle : mlir_attr_val
 
 syntax "dense<" attrValue ">" ":" mlir_type : mlir_attr_val
 
@@ -173,13 +192,13 @@ syntax "array<" mlir_type (":" attrValue,*)? ">" : mlir_attr_val
 syntax "[" attrValue,* "]" : mlir_attr_val
 
 /-- `<#tbaa_type_desc, 0>`, an element of a TBAA type's `members = {…}`. -/
-syntax attrTuple := "<" attrValue,* ">"
+syntax attrTuple := "<" attrValue,* closeAngle
 
-syntax namedAttr := ident " = " attrValue
+syntax namedAttr := ident " = " (atomic(distinctAttr) <|> attrValue)
 
 /-- `<id = "omnipotent char", members = {…}>`: an attribute without a dialect prefix, as an inline
 TBAA type descriptor. -/
-syntax "<" namedAttr,+ ">" : mlir_attr_val
+syntax "<" namedAttr,+ closeAngle : mlir_attr_val
 
 syntax "{" attrTuple,+ "}" : mlir_attr_val
 
@@ -315,6 +334,10 @@ def mlirStrValue (x : Syntax) : String :=
     | [] => []
   String.ofList (go ((bracketsText x).toList.drop 1).dropLast)
 
+/-- `distinct[0]<>`, as its number. -/
+def distinctVal (v : Syntax) : AttrValue :=
+  .opaque_ "distinct" (toString (v[2].isNatLit?.getD 0))
+
 mutual
 
 partial def anyAttrVal (v : TSyntax ``attrValue) : CoreM AttrValue :=
@@ -336,8 +359,7 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
     -- a word or string, `nsw`, `none`, `private`, as itself; anything else as an attribute
     let word (v : Syntax) : CoreM AttrValue := do
       if v.isIdent then return AttrValue.opaque_ dialect v.getId.toString
-      if v.getKind == ``distinctAttr then
-        return AttrValue.opaque_ "distinct" (toString (v[2].isNatLit?.getD 0))
+      if v.getKind == ``distinctAttr then return distinctVal v
       let x := v[0]
       if x.getKind == `mlir_str then return AttrValue.opaque_ dialect (mlirStrValue x)
       match leaves x with
@@ -366,9 +388,11 @@ partial def attrVal : TSyntax `mlir_attr_val → CoreM AttrValue
       | t => throwErrorAt t "malformed `<…>` tuple"
   | `(mlir_attr_val| < $es:namedAttr,* >) =>
     .dict <$> .mk <$> es.getElems.toList.mapM fun (e : TSyntax ``namedAttr) => do
-      match e with
-      | `(namedAttr| $k:ident = $v) => return AttrEntry.mk k.getId.toString (← anyAttrVal v)
-      | e => throwErrorAt e "malformed `key = value` entry"
+      let (k, v) := (e.raw[0], e.raw[2])
+      unless k.isIdent do throwErrorAt e "malformed `key = value` entry"
+      if v.getKind == ``distinctAttr then
+        return AttrEntry.mk k.getId.toString (distinctVal v)
+      return AttrEntry.mk k.getId.toString (← anyAttrVal ⟨v⟩)
   | `(mlir_attr_val| $t:mlir_type) => do
     match leaves t.raw with
     | #[x] =>
