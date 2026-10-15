@@ -56,7 +56,7 @@ mlir-translate --import-llvm module.ll \
 
 ### `import <module.mlir> <root> <target> <target_module> [mappings.json] --root-func <name>...`
 
-Writes Lean files for every `llvm.func` and constant `llvm.mlir.global`
+Writes Lean files for every `llvm.func` and `llvm.mlir.global`
 reachable from the `--root-func` symbols, following `llvm.call` callees and
 `llvm.mlir.addressof` globals.
 
@@ -67,12 +67,18 @@ reachable from the `--root-func` symbols, following `llvm.call` callees and
 | `target_module` | Default namespace, e.g. `Firedancer.Ref.Mlir`. |
 | `mappings.json` | Optional per-symbol overrides of `target` and `target_module`. |
 | `--root-func` | Entry symbol; repeatable. |
+| `--stub` | Symbol regex stubbed by hand; repeatable. |
 
 Symbol `f` lands in `<root>/<target>/f.lean` as `<target_module>.f`; a `.` in a
 symbol (a static local, `f.K`) becomes `_` in its Lean name, file and import, and
 the `@f.K` binding keeps the symbol. Its dependencies are imported as
 `<target with / as .>.<g>` and bound in the `with` clause, so `target` and
 `target_module` must name the same module path.
+
+A stub (a `--stub` match, or a declaration without a body) is neither written
+nor followed: its callers import and bind it at its mapped path, where a
+hand-written module defines it, e.g. a `Func` of axioms. A function reaching a
+stub is a `noncomputable mlir_def`. Every global is imported, mutable ones too.
 
 Mappings are tried in order; the first whose regex matches the whole symbol
 wins, and the command-line target is the fallback:

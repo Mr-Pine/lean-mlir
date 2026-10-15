@@ -37,6 +37,10 @@ pub struct Args {
     /// Root functions to import (repeatable).
     #[arg(long = "root-func")]
     root_funcs: Vec<String>,
+    /// Symbols stubbed by hand (regex, repeatable): bound by their callers as mapped, but neither
+    /// written nor followed. A declaration without a body is always one.
+    #[arg(long = "stub")]
+    stubs: Vec<String>,
 }
 
 /// Mapping: symbol regex -> alternative subpath and module.
@@ -64,12 +68,20 @@ pub fn run(args: Args) -> Result<(), Report> {
     let mut operations = HashMap::new();
     let mut op: Option<OperationRef<'_, '_>> = module.body().first_operation();
     while let Some(o) = op {
-        if let Some(name) = function_name(o)?.or(const_global_name(o)?) {
+        if let Some(name) = function_name(o)?.or(global_name(o)?) {
             operations.insert(name, o);
         }
         op = o.next_in_block();
     }
-    let reachable = find_reachable(&operations, args.root_funcs)
+    let stubs = args
+        .stubs
+        .iter()
+        .map(|reg| Regex::new(&format!("^{reg}$")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let is_stub = |name: &str, op: OperationRef<'_, '_>| -> Result<bool, Report> {
+        Ok(stubs.iter().any(|reg| reg.is_match(name)) || is_declaration(op)?)
+    };
+    let reachable = find_reachable(&operations, args.root_funcs, is_stub)
         .context("Could not collect reachable operations")?;
 
     let mut lean_names = HashMap::new();
@@ -104,9 +116,31 @@ pub fn run(args: Args) -> Result<(), Report> {
         paths
     };
 
+    // a stub is axioms, so noncomputable, and so is whatever reaches one
+    let mut noncomputable: HashSet<String> =
+        reachable.iter().filter(|e| e.stub).map(|e| e.name.clone()).collect();
+    loop {
+        let more: Vec<String> = reachable
+            .iter()
+            .filter(|e| {
+                !noncomputable.contains(&e.name)
+                    && e.references.iter().any(|r| noncomputable.contains(r))
+            })
+            .map(|e| e.name.clone())
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        noncomputable.extend(more);
+    }
+
     let files_with_content = reachable
         .into_iter()
-        .map(|entry| build_file_content(entry, &paths).context("Could not build file content"))
+        .filter(|entry| !entry.stub)
+        .map(|entry| {
+            let nc = noncomputable.contains(&entry.name);
+            build_file_content(entry, &paths, nc).context("Could not build file content")
+        })
         .collect::<Result<Vec<_>, _>>()
         .context("Could not build files")?;
 
@@ -126,6 +160,7 @@ pub fn run(args: Args) -> Result<(), Report> {
 fn build_file_content(
     entry: ReachableEntry,
     paths: &HashMap<String, (PathBuf, String)>,
+    noncomputable: bool,
 ) -> Result<(String, PathBuf), Report> {
     let dependency_bindings = entry
         .references
@@ -160,6 +195,8 @@ fn build_file_content(
         "llvm.mlir.global" => ("MLIR.Semantics.GlobalInitializer", "mlir_const_def"),
         other => Err(report!("Unexpected top-level operation").attach(format!("Op: {other}")))?,
     };
+    let def_keyword =
+        if noncomputable { format!("noncomputable {def_keyword}") } else { def_keyword.to_string() };
 
     let bindings = if dependency_bindings == "" {String::new()} else {
         format!(r#"
@@ -205,11 +242,14 @@ struct ReachableEntry<'a, 'b> {
     name: String,
     op: OperationRef<'a, 'b>,
     references: Vec<String>,
+    /// Stubbed by hand: not written, its references not followed.
+    stub: bool,
 }
 
 fn find_reachable<'a, 'b>(
     operations: &HashMap<String, OperationRef<'a, 'b>>,
     root_functions: Vec<String>,
+    is_stub: impl Fn(&str, OperationRef<'a, 'b>) -> Result<bool, Report>,
 ) -> Result<Vec<ReachableEntry<'a, 'b>>, Report> {
     let mut reachable = Vec::default();
 
@@ -223,11 +263,17 @@ fn find_reachable<'a, 'b>(
             .get(&elem_name)
             .context("Could not find element")
             .attach(format!("Name: {}", elem_name))?;
-        let referenced = get_referenced(elem).context("Could not get referenced items")?;
+        let stub = is_stub(&elem_name, elem)?;
+        let referenced = if stub {
+            Vec::new()
+        } else {
+            get_referenced(elem).context("Could not get referenced items")?
+        };
         reachable.push(ReachableEntry {
             name: elem_name,
             op: elem,
             references: referenced.clone(),
+            stub,
         });
         todo.extend(referenced.clone().into_iter().filter_map(|name| {
             if queued.contains(&name) {
@@ -276,6 +322,7 @@ fn get_referenced_inner<'a, 'b>(
             let callee_name = callee_name
                 .strip_prefix("@")
                 .context("Calle did not start with '@'")?
+                .trim_matches('"')
                 .to_string();
             collector.push(callee_name);
         }
@@ -287,6 +334,7 @@ fn get_referenced_inner<'a, 'b>(
             let global_name = global_name
                 .strip_prefix("@")
                 .context("Global name did not start with '@'")?
+                .trim_matches('"')
                 .to_string();
             collector.push(global_name);
         }
@@ -305,13 +353,19 @@ fn function_name<'a, 'b>(o: OperationRef<'a, 'b>) -> Result<Option<String>, Repo
     }
 }
 
-fn const_global_name<'a, 'b>(o: OperationRef<'a, 'b>) -> Result<Option<String>, Report> {
-    if o.name().as_string_ref().as_str()? == "llvm.mlir.global" && o.has_attribute("constant") {
+fn global_name<'a, 'b>(o: OperationRef<'a, 'b>) -> Result<Option<String>, Report> {
+    if o.name().as_string_ref().as_str()? == "llvm.mlir.global" {
         let name = StringAttribute::try_from(o.attribute("sym_name")?)?;
         Ok(Some(name.value().to_string()))
     } else {
         Ok(None)
     }
+}
+
+/// A function without a body: defined elsewhere.
+fn is_declaration<'a, 'b>(o: OperationRef<'a, 'b>) -> Result<bool, Report> {
+    Ok(o.name().as_string_ref().as_str()? == "llvm.func"
+        && o.regions().next().is_none_or(|region| region.first_block().is_none()))
 }
 
 /// A context with every dialect loaded.
