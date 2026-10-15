@@ -457,6 +457,41 @@ example (a b : BitVec 64) (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
+mlir_def addCarry :=
+{
+  ^bb0(%arg0: i64, %arg1: i64):
+    %0 = "llvm.intr.uadd.with.overflow"(%arg0, %arg1) : (i64, i64) -> !llvm.struct<(i64, i1)>
+    %1 = "llvm.extractvalue"(%0) <{position = array<i64: 0>}> : (!llvm.struct<(i64, i1)>) -> i64
+    %2 = "llvm.extractvalue"(%0) <{position = array<i64: 1>}> : (!llvm.struct<(i64, i1)>) -> i1
+    %3 = "llvm.intr.usub.with.overflow"(%arg0, %arg1) : (i64, i64) -> !llvm.struct<(i64, i1)>
+    %4 = "llvm.extractvalue"(%3) <{position = array<i64: 1>}> : (!llvm.struct<(i64, i1)>) -> i1
+    %5 = "llvm.intr.ctpop"(%arg0) : (i64) -> i64
+    "llvm.return"(%1, %2, %4, %5) : (i64, i1, i1, i64) -> ()
+}
+
+-- `uadd/usub.with.overflow`'s fields and `ctpop`, each by `step_pure`
+example (a b : BitVec 64) (s : GlobalState) (hwf : s.WF) :
+    addCarry.call (addCarry.args (.value a) (.value b)) s =
+      .value
+        (.cons (.value (a + b)) (.cons (.value (BitVec.ofBool (a.uaddOverflow b)))
+          (.cons (.value (BitVec.ofBool (a.usubOverflow b))) (.cons (.value a.cpop) .nil))),
+          s) := by
+  func_init
+  block_init
+  step_pure
+  step_pure with sum
+  guard_hyp hsum : sum = a + b
+  step_pure with c
+  guard_hyp hc : c = BitVec.ofBool (a.uaddOverflow b)
+  step_pure
+  step_pure with br
+  guard_hyp hbr : br = BitVec.ofBool (a.usubOverflow b)
+  step_pure with n
+  guard_hyp hn : n = a.cpop
+  finish_block
+  subst_vars
+  rfl
+
 mlir_def blendOr :=
 {
   ^bb0(%arg0: vector<2xi8>, %arg1: vector<2xi8>, %arg2: vector<2xi8>):

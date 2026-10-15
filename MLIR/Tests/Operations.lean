@@ -300,6 +300,41 @@ private abbrev Sbb :=
 
 #guard (subborrow (.value 0) (.value 5#64) .poison : Sbb) == (.poison, .poison)
 
+/-! ## `uadd/usub.with.overflow` — the wrapped result and the carry or borrow out -/
+
+private abbrev Ovf :=
+  PoisonOr (BitVec 64) × PoisonOr (BitVec 1)
+
+#guard (uaddWithOverflow (.value 5#64) (.value 3#64) : Ovf) == (.value 8, .value 0)
+
+#guard (uaddWithOverflow (.value (-1 : BitVec 64)) (.value 1#64) : Ovf) == (.value 0, .value 1)
+
+#guard
+  (uaddWithOverflow (.value (-1 : BitVec 64)) (.value (-1 : BitVec 64)) : Ovf) ==
+    (.value (-2), .value 1)
+
+#guard (uaddWithOverflow .poison (.value 1#64) : Ovf) == (.poison, .poison)
+
+#guard (usubWithOverflow (.value 5#64) (.value 3#64) : Ovf) == (.value 2, .value 0)
+
+#guard (usubWithOverflow (.value 5#64) (.value 5#64) : Ovf) == (.value 0, .value 0)
+
+#guard (usubWithOverflow (.value 3#64) (.value 5#64) : Ovf) == (.value (-2), .value 1)
+
+#guard (usubWithOverflow (.value 3#64) .poison : Ovf) == (.poison, .poison)
+
+/-! ## `ctpop` — the number of set bits -/
+
+#guard ctpop (.value 0#64) == PoisonOr.value 0#64
+
+#guard ctpop (.value 0b1011#64) == PoisonOr.value 3#64
+
+#guard ctpop (.value (-1 : BitVec 64)) == PoisonOr.value 64#64
+
+#guard ctpop (.value (-1 : BitVec 8)) == PoisonOr.value 8#8
+
+#guard (ctpop .poison : PoisonOr (BitVec 64)) == .poison
+
 /-! ## `extractvalue` — the member at a position, through arrays and structs -/
 
 #guard

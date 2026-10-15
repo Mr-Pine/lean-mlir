@@ -788,6 +788,30 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     arith .umax (← res) args
   | "llvm.intr.usub.sat" =>
     arith .usubSat (← res) args
+  | "llvm.intr.ctpop" =>
+    do
+      let (dst, t) ← res
+      match args with
+      | [(a, .bv w)] =>
+        unless t == .bv w do
+          throw "expected a result of the operand's type"
+        return .unop (.ctpop (w := w)) dst a
+      | [(a, .vec l w)] =>
+        unless t == .vec l w do
+          throw "expected a result of the operand's type"
+        return .unop (.vector (l := l) (.ctpop (w := w))) dst a
+      | _ =>
+        throw "expected one integer or vector operand"
+  | "llvm.intr.uadd.with.overflow" | "llvm.intr.usub.with.overflow" =>
+    do
+      let (dst, t) ← res
+      let [(a, .bv w), (b, t₂)] := args | throw "expected two integer operands"
+      unless t₂ == .bv w && t == .struct [.bv w, .bv 1] do
+        throw "expected two operands of one integer type and `!llvm.struct<(iw, i1)>`"
+      if name == "llvm.intr.uadd.with.overflow" then
+        return .binop (.uaddWithOverflow (w := w)) dst a b
+      else
+        return .binop (.usubWithOverflow (w := w)) dst a b
   | "llvm.intr.abs" =>
     do
       let (dst, t) ← res

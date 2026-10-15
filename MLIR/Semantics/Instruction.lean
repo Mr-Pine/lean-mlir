@@ -27,6 +27,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | copy => id
   | cttz isZeroPoison => Operation.cttz isZeroPoison
   | abs isIntMinPoison => Operation.abs isIntMinPoison
+  | ctpop => Operation.ctpop
   | reduceOr => Operation.reduceOr
   | reduceAnd => Operation.reduceAnd
   | reduceAdd => Operation.reduceAdd
@@ -51,6 +52,8 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | umin => Operation.umin
   | umax => Operation.umax
   | usubSat => Operation.usubSat
+  | uaddWithOverflow => Operation.uaddWithOverflow
+  | usubWithOverflow => Operation.usubWithOverflow
   | scmp => Operation.scmp
   | ucmp => Operation.ucmp
   | icmp p => Operation.icmp p

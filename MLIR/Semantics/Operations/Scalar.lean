@@ -219,6 +219,28 @@ def abs (isIntMinPoison : Bool) {w : Nat} (x : IntW w) : IntW w := do
     .poison
   return if a.msb then -a else a
 
+/-- `llvm.intr.ctpop`: the number of set bits. -/
+@[mlir_operation]
+def ctpop {w : Nat} (x : IntW w) : IntW w := do
+  let a ← x
+  return a.cpop
+
+/-- `llvm.intr.uadd.with.overflow`: `x + y` wrapped, with `1` iff it wrapped unsigned. Both poison if
+an operand is. -/
+@[mlir_operation]
+def uaddWithOverflow {w : Nat} (x y : IntW w) : ⟦.struct [.bv w, .bv 1]⟧ :=
+  match x, y with
+  | .value a, .value b => (.value (a + b), .value (BitVec.ofBool (a.uaddOverflow b)))
+  | _, _ => (.poison, .poison)
+
+/-- `llvm.intr.usub.with.overflow`: `x - y` wrapped, with `1` iff `x < y` unsigned. Both poison if
+an operand is. -/
+@[mlir_operation]
+def usubWithOverflow {w : Nat} (x y : IntW w) : ⟦.struct [.bv w, .bv 1]⟧ :=
+  match x, y with
+  | .value a, .value b => (.value (a - b), .value (BitVec.ofBool (a.usubOverflow b)))
+  | _, _ => (.poison, .poison)
+
 /-- `llvm.x86.subborrow`: `a - b - c'` for the borrow in `c' := c ≠ 0`, with the borrow out, `1` iff
 `a < b + c'` unsigned. Both poison if an operand is, where LLVM does not say. -/
 @[mlir_operation]
