@@ -464,6 +464,7 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.zext" => [("nonNeg", .modeled)]
   | "llvm.icmp" => [("predicate", .modeled)]
   | "llvm.intr.cttz" => [("is_zero_poison", .modeled)]
+  | "llvm.intr.abs" => [("is_int_min_poison", .modeled)]
   | "llvm.select" => [("fastmathFlags", .inert)]
   | "llvm.mlir.constant" => [("value", .modeled)]
   | "llvm.insertvalue" | "llvm.extractvalue" => [("position", .modeled)]
@@ -712,16 +713,19 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       let some (.bool z) := op.getAttr? "is_zero_poison"
         | throw "expected a boolean `is_zero_poison`"
       return .unop (.cttz z (w := w)) dst a
-  | "llvm.intr.vector.reduce.or" | "llvm.intr.vector.reduce.and" =>
+  | "llvm.intr.vector.reduce.or" | "llvm.intr.vector.reduce.and" | "llvm.intr.vector.reduce.add" =>
     do
       let (dst, t) ← res
       let [(v, .vec l w)] := args | throw "expected one vector operand"
       unless t == .bv w do
         throw "the result must be the vector's lane type"
-      if name == "llvm.intr.vector.reduce.or" then
+      match name with
+      | "llvm.intr.vector.reduce.or" =>
         return .unop (.reduceOr (l := l) (w := w)) dst v
-      else
+      | "llvm.intr.vector.reduce.and" =>
         return .unop (.reduceAnd (l := l) (w := w)) dst v
+      | _ =>
+        return .unop (.reduceAdd (l := l) (w := w)) dst v
   | "intrinsic llvm.x86.subborrow.32" | "intrinsic llvm.x86.subborrow.64" =>
     do
       let (dst, t) ← res
@@ -760,6 +764,24 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
     arith .umin (← res) args
   | "llvm.intr.umax" =>
     arith .umax (← res) args
+  | "llvm.intr.usub.sat" =>
+    arith .usubSat (← res) args
+  | "llvm.intr.abs" =>
+    do
+      let (dst, t) ← res
+      let some (.bool p) := op.getAttr? "is_int_min_poison"
+        | throw "expected a boolean `is_int_min_poison`"
+      match args with
+      | [(a, .bv w)] =>
+        unless t == .bv w do
+          throw "expected a result of the operand's type"
+        return .unop (.abs p (w := w)) dst a
+      | [(a, .vec l w)] =>
+        unless t == .vec l w do
+          throw "expected a result of the operand's type"
+        return .unop (.vector (l := l) (.abs p (w := w))) dst a
+      | _ =>
+        throw "expected one integer or vector operand"
   | "llvm.intr.scmp" | "llvm.intr.ucmp" =>
     do
       let (dst, t) ← res

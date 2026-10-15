@@ -245,6 +245,32 @@ open Operation
 
 #guard (reduceOr (#v[.value 0xFF, .value 1, .poison, .value 0] : ⟦Ty.vec 4 8⟧)).isPoison
 
+/-! ## `reduceAdd` — the wrapping sum, poison if one lane is -/
+
+#guard
+  reduceAdd (#v[.value 0x1, .value 0x10, .value 0x100, .value 0x1000] : ⟦Ty.vec 4 64⟧) ==
+    PoisonOr.value 0x1111#64
+
+#guard reduceAdd (#v[.value 0xFF, .value 2] : ⟦Ty.vec 2 8⟧) == PoisonOr.value 1#8
+
+#guard reduceAdd (#v[.value 5] : ⟦Ty.vec 1 8⟧) == PoisonOr.value 5#8
+
+#guard (reduceAdd (#v[.value 1, .poison, .value 2, .value 3] : ⟦Ty.vec 4 8⟧)).isPoison
+
+/-! ## `abs` and `usubSat` -/
+
+#guard abs false (.value 0xFB#8) == PoisonOr.value 5#8
+
+#guard abs false (.value 0x80#8) == PoisonOr.value 0x80#8
+
+#guard (abs true (.value 0x80#8)).isPoison
+
+#guard abs true (.value 7#8) == PoisonOr.value 7#8
+
+#guard usubSat (.value 7#8) (.value 9#8) == PoisonOr.value 0#8
+
+#guard usubSat (.value 9#8) (.value 7#8) == PoisonOr.value 2#8
+
 /-! ## `subborrow` — `(borrow out, a - b - borrow in)`; any nonzero `c` borrows -/
 
 private abbrev Sbb :=

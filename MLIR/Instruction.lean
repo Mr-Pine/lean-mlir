@@ -28,8 +28,10 @@ inductive UnOp : Ty → (out : Ty) → Type
   /-- An empty inline `asm` whose output is tied to its input: the input. -/
   | copy {t : Ty} : UnOp t t
   | cttz (isZeroPoison : Bool) {w : Nat} : UnOp (.bv w) (.bv w)
+  | abs (isIntMinPoison : Bool) {w : Nat} : UnOp (.bv w) (.bv w)
   | reduceOr {l w : Nat} : UnOp (.vec l w) (.bv w)
   | reduceAnd {l w : Nat} : UnOp (.vec l w) (.bv w)
+  | reduceAdd {l w : Nat} : UnOp (.vec l w) (.bv w)
   | bitcast {t t' : Ty} (h : t.width = t'.width) : UnOp t t'
   |
   extractvalue (indices : List Nat) (tCont tVal : Ty) (h : tCont.memberType indices == some tVal) :
@@ -50,6 +52,7 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | smax {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | umin {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   | umax {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
+  | usubSat {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
   /-- `llvm.scmp`: `-1`, `0` or `1` as `a` is less than, equal to or greater than `b`, signed. -/
   | scmp {w w' : Nat} : BinOp (.bv w) (.bv w) (.bv w')
   /-- `llvm.ucmp`: `scmp`, unsigned. -/
