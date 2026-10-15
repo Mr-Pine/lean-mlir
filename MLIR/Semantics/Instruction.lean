@@ -26,8 +26,10 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | bswap => Operation.bswap
   | copy => id
   | cttz isZeroPoison => Operation.cttz isZeroPoison
+  | abs isIntMinPoison => Operation.abs isIntMinPoison
   | reduceOr => Operation.reduceOr
   | reduceAnd => Operation.reduceAnd
+  | reduceAdd => Operation.reduceAdd
   | bitcast h => Operation.bitcast h
   | extractvalue indices tCont tVal h => Operation.extractvalue indices tCont tVal h
   | vector op => fun a => Vector.ofFn (fun i => op.compute a[i])
@@ -47,6 +49,7 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | smax => Operation.smax
   | umin => Operation.umin
   | umax => Operation.umax
+  | usubSat => Operation.usubSat
   | scmp => Operation.scmp
   | ucmp => Operation.ucmp
   | icmp p => Operation.icmp p

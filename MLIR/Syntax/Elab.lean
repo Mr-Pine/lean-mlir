@@ -199,8 +199,11 @@ def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
     `((.copy (t := $(← tyStx t))))
   | .cttz z => do
     `((.cttz $(← boolStx z)))
+  | .abs p => do
+    `((.abs $(← boolStx p)))
   | .reduceOr => `(.reduceOr)
   | .reduceAnd => `(.reduceAnd)
+  | .reduceAdd => `(.reduceAdd)
   | .bitcast (t := t) (t' := t') _ => do
     `((.bitcast (t := $(← tyStx t)) (t' := $(← tyStx t')) rfl))
   | .extractvalue indices tCont tVal _ => do
@@ -229,6 +232,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
   | .smax => `(.smax)
   | .umin => `(.umin)
   | .umax => `(.umax)
+  | .usubSat => `(.usubSat)
   | .scmp (w' := w') => `((.scmp (w' := $(num w'))))
   | .ucmp (w' := w') => `((.ucmp (w' := $(num w'))))
   | .icmp p => do

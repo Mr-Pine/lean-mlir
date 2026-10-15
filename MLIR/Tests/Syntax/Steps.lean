@@ -480,6 +480,25 @@ example (x y : Vector (BitVec 8) 2) (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
+mlir_def sumLanes :=
+{
+  ^bb0(%arg0: vector<2xi8>):
+    %0 = "llvm.intr.vector.reduce.add"(%arg0) : (vector<2xi8>) -> i8
+    "llvm.return"(%0) : (i8) -> ()
+}
+
+-- `vector.reduce.add` to its lanes' sum
+example (x : Vector (BitVec 8) 2) (s : GlobalState) (hwf : s.WF) :
+    sumLanes.call (sumLanes.args (Ty.wrap (t := .vec 2 8) x)) s =
+      .value (.cons (.value (x[0] + x[1])) .nil, s) := by
+  func_init
+  block_init
+  step_pure with r
+  guard_hyp hr : r = x[0] + x[1]
+  finish_block
+  subst_vars
+  rfl
+
 end
 
 end MLIR.Tests.Syntax.Steps

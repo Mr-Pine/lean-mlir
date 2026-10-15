@@ -134,6 +134,13 @@ def umax {w : Nat} (x y : IntW w) : IntW w := do
   let b ← y
   return if b.ult a then a else b
 
+/-- `llvm.usub.sat`: `x - y`, `0` where it would wrap. -/
+@[mlir_operation]
+def usubSat {w : Nat} (x y : IntW w) : IntW w := do
+  let a ← x
+  let b ← y
+  return if a.ult b then 0 else a - b
+
 /-- `llvm.scmp`: `-1`, `0` or `1` at width `w'` as `x` is less than, equal to or greater than `y`,
 signed. -/
 @[mlir_operation]
@@ -202,6 +209,15 @@ def cttz (isZeroPoison : Bool) {w : Nat} (x : IntW w) : IntW w := do
   if isZeroPoison ∧ a = 0 then
     .poison
   return a.ctz
+
+/-- `llvm.intr.abs`: `x`'s absolute value, the minimum itself; `isIntMinPoison`: poison for the
+minimum. -/
+@[mlir_operation]
+def abs (isIntMinPoison : Bool) {w : Nat} (x : IntW w) : IntW w := do
+  let a ← x
+  if isIntMinPoison ∧ a = BitVec.intMin w then
+    .poison
+  return if a.msb then -a else a
 
 /-- `llvm.x86.subborrow`: `a - b - c'` for the borrow in `c' := c ≠ 0`, with the borrow out, `1` iff
 `a < b + c'` unsigned. Both poison if an operand is, where LLVM does not say. -/
