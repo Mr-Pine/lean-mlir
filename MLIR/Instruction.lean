@@ -37,6 +37,8 @@ inductive UnOp : Ty → (out : Ty) → Type
   extractvalue (indices : List Nat) (tCont tVal : Ty) (h : tCont.memberType indices == some tVal) :
     UnOp tCont tVal
   | vector {l w w' : Nat} (op : UnOp (.bv w) (.bv w')) : UnOp (.vec l w) (.vec l w')
+  /-- `op` on each lane of a pointer vector, `vector<n x ptr>` as `.array n .ptr`. -/
+  | ptrLanes {n : Nat} (op : UnOp .ptr .ptr) : UnOp (.array n .ptr) (.array n .ptr)
 
 inductive BinOp : Ty → Ty → (out : Ty) → Type
   | and {w : Nat} : BinOp (.bv w) (.bv w) (.bv w)
@@ -60,6 +62,11 @@ inductive BinOp : Ty → Ty → (out : Ty) → Type
   | icmp (p : IntPred) {w : Nat} : BinOp (.bv w) (.bv w) (.bv 1)
   /-- `getelementptr` with one `i64` index: `byteOff + index * stride` bytes on. -/
   | gepDyn (flags : GepFlags) (byteOff stride : Nat) : BinOp .ptr (.bv 64) .ptr
+  /-- `getelementptr` to a pointer vector: lane `k` is `gepDyn` of the base's and the index's lane
+  `k`, a scalar one splat. -/
+  |
+  gepVec (flags : GepFlags) (byteOff stride : Nat) {n : Nat} (vecBase vecIdx : Bool) :
+    BinOp (Ty.gepBase n vecBase) (Ty.gepIndex n vecIdx) (.array n .ptr)
   /-- `icmp eq` (`ne := false`) or `icmp ne` on pointers. -/
   | ptrcmp (ne : Bool) : BinOp .ptr .ptr (.bv 1)
   |

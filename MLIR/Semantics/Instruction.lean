@@ -33,6 +33,7 @@ def UnOp.compute : UnOp t₁ t → ⟦t₁⟧ → ⟦t⟧
   | bitcast h => Operation.bitcast h
   | extractvalue indices tCont tVal h => Operation.extractvalue indices tCont tVal h
   | vector op => fun a => Vector.ofFn (fun i => op.compute a[i])
+  | ptrLanes op => fun a => Vector.ofFn (fun i => op.compute a[i])
 
 @[mlir_instr]
 def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
@@ -55,6 +56,10 @@ def BinOp.compute : BinOp t₁ t₂ t → ⟦t₁⟧ → ⟦t₂⟧ → ⟦t⟧
   | icmp p => Operation.icmp p
   | ptrcmp ne => Operation.ptrcmp ne
   | gepDyn flags byteOff stride => Operation.gepDyn flags byteOff stride
+  | gepVec flags byteOff stride vb vi => fun p i =>
+    Vector.ofFn fun k =>
+      Operation.gepDyn flags byteOff stride (Operation.gepBaseLane vb p k)
+        (Operation.gepIndexLane vi i k)
   | vector op => Vector.zipWith op.compute
   | extractelement => Operation.extractelement
   | shufflevector perm => Operation.shufflevector perm

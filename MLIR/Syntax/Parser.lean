@@ -297,7 +297,8 @@ def mlirType : TSyntax `mlir_type → CoreM MLIRType
       let text := bracketsText b
       let some (fixed, scalable, elem) := vectorDims ((text.toList.drop 1).dropLast) [] []
         | throwErrorAt b "malformed vector type 'vector{text}'"
-      let some elem := intType? elem
+      -- `vector<4x!llvm.ptr>`
+      let some elem := if elem == "!llvm.ptr" then some (.undefined "llvm.ptr") else intType? elem
         | throwErrorAt b "unsupported vector element type '{elem}'"
       return .vector fixed scalable elem
     -- only as a `dense<…>` attribute's shape: kept as text, never a register's type

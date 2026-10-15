@@ -144,6 +144,18 @@ def gepDyn (f : GepFlags) (byteOff stride : Nat) (ptr : PoisonOr Pointer) (idx :
   else
     gep f (.value (BitVec.ofNat 64 (byteOff + i.toNat * stride))) ptr
 
+/-- Lane `k` of a vector `getelementptr`'s base: pointer `k`, or the one pointer. -/
+@[mlir_instr]
+def gepBaseLane {n : Nat} : (v : Bool) → ⟦Ty.gepBase n v⟧ → Fin n → PoisonOr Pointer
+  | true, p, k => p[k]
+  | false, p, _ => p
+
+/-- Lane `k` of a vector `getelementptr`'s index: index `k`, or the one index. -/
+@[mlir_instr]
+def gepIndexLane {n : Nat} : (v : Bool) → ⟦Ty.gepIndex n v⟧ → Fin n → IntW 64
+  | true, i, k => i[k]
+  | false, i, _ => i
+
 def memset (dst : PoisonOr Pointer) (val : IntW 8) (len : IntW w) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
   let .value (dst, val, len) := do
     return (← dst, ← val, (← len).toNat) | throwUB
