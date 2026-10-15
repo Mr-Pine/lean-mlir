@@ -68,9 +68,11 @@ reachable from the `--root-func` symbols, following `llvm.call` callees and
 | `mappings.json` | Optional per-symbol overrides of `target` and `target_module`. |
 | `--root-func` | Entry symbol; repeatable. |
 
-Symbol `f` lands in `<root>/<target>/f.lean` as `<target_module>.f`. Its
-dependencies are imported as `<target with / as .>.<g>` and bound in the
-`with` clause, so `target` and `target_module` must name the same module path.
+Symbol `f` lands in `<root>/<target>/f.lean` as `<target_module>.f`; a `.` in a
+symbol (a static local, `f.K`) becomes `_` in its Lean name, file and import, and
+the `@f.K` binding keeps the symbol. Its dependencies are imported as
+`<target with / as .>.<g>` and bound in the `with` clause, so `target` and
+`target_module` must name the same module path.
 
 Mappings are tried in order; the first whose regex matches the whole symbol
 wins, and the command-line target is the fallback:

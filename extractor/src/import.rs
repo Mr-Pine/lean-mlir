@@ -72,6 +72,16 @@ pub fn run(args: Args) -> Result<(), Report> {
     let reachable = find_reachable(&operations, args.root_funcs)
         .context("Could not collect reachable operations")?;
 
+    let mut lean_names = HashMap::new();
+    for elem in &reachable {
+        if let Some(other) = lean_names.insert(lean_name(&elem.name), &elem.name)
+            && other != &elem.name
+        {
+            Err(report!("Two symbols have the same Lean name")
+                .attach(format!("Symbols: {other}, {}", elem.name)))?;
+        }
+    }
+
     let paths = {
         let names = reachable.iter().map(|elem| &elem.name);
         let mappings = mappings
@@ -122,7 +132,7 @@ fn build_file_content(
         .iter()
         .map(|reference| {
             let (_, module) = &paths[reference];
-            format!("      @{reference} := {module}.{reference}")
+            format!("      @{reference} := {module}.{}", lean_name(reference))
         })
         .collect::<Vec<_>>()
         .join(",\n");
@@ -133,12 +143,12 @@ fn build_file_content(
             let (path, _) = &paths[reference];
             path.to_str()
                 .context("Could not convert path to string")
-                .map(|str| format!("public import {}.{reference}", str.replace("/", ".")))
+                .map(|str| format!("public import {}.{}", str.replace("/", "."), lean_name(reference)))
         })
         .collect::<Result<Vec<_>, _>>()?
         .join("\n");
-    let name = entry.name;
-    let (path, module) = paths[&name].clone();
+    let (path, module) = paths[&entry.name].clone();
+    let name = lean_name(&entry.name);
     let body = entry
         .op
         .to_string_with_flags(OperationPrintingFlags::new().print_generic_operation_form().use_local_scope())
@@ -182,6 +192,12 @@ end {module}
     let path = path.join(format!("{name}.lean"));
 
     Ok((content, path))
+}
+
+/// The Lean name of a symbol: `.` (static locals, `f.K`) becomes `_`, since a dotted name would
+/// be a namespace in Lean and a subdirectory to Lake.
+fn lean_name(symbol: &str) -> String {
+    symbol.replace('.', "_")
 }
 
 #[derive(Clone)]
