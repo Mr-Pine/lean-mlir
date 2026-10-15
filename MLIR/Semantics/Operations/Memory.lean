@@ -46,6 +46,45 @@ def store (ptr : PoisonOr Pointer) (v : ⟦τ⟧) (env : ⟪Γ⟫) : EffectM ⟪
   _ ← set updated
   return env
 
+/-- Lane `i` of a `vector<l x iw>` at `p`: `i * (w / 8)` bytes on. -/
+def lanePtr (p : Pointer) (w : Nat) (i : Nat) : Pointer :=
+  p.add (BitVec.ofNat 64 (i * (w / 8)))
+
+/-- A masked access of lane `i` is in bounds: its offset does not wrap, and `w` bits fit. -/
+def LaneInBounds (m : MemoryState) (p : Pointer) (w i : Nat) : Prop :=
+  p.offset.toNat + i * (w / 8) < 2 ^ 64 ∧ InBounds m (lanePtr p w i) w
+
+instance : Decidable (LaneInBounds m p w i) :=
+  inferInstanceAs (Decidable (_ ∧ _))
+
+/-- `llvm.masked.load`: lane `i` loaded as `load` does where `mask[i]` is set, UB out of bounds,
+else `passthru[i]`, no memory read; UB for a poison pointer or mask lane, where LLVM may access
+nothing (less defined). -/
+def maskedLoad {l w : Nat} (dst : Dst Γ (.vec l w)) (ptr : PoisonOr Pointer) (mask : ⟦.vec l 1⟧)
+    (passthru : ⟦.vec l w⟧) (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  let .value p := ptr | throwUB
+  throwUBIf (mask.toList.any (·.isPoison))
+  let state ← get
+  throwUBIf (¬∀ i : Fin l, mask[i] = .value 1#1 → LaneInBounds state.mem p w i)
+  let value : ⟦.vec l w⟧ :=
+    Vector.ofFn fun i =>
+      if mask[i] = .value 1#1 then
+        (Ty.bv w).unflattenDef (state.mem.readAt (lanePtr p w i) w)
+          (state.mem.knownAt (lanePtr p w i) w)
+      else passthru[i]
+  return env.write dst value
+
+/-- `llvm.masked.store`: lane `i` stored as `store` does where `mask[i]` is set, first to last;
+UB for a poison pointer or mask lane, where LLVM may access nothing (less defined). -/
+def maskedStore {l w : Nat} (v : ⟦.vec l w⟧) (ptr : PoisonOr Pointer) (mask : ⟦.vec l 1⟧)
+    (env : ⟪Γ⟫) : EffectM ⟪Γ⟫ := do
+  let .value p := ptr | throwUB
+  throwUBIf (mask.toList.any (·.isPoison))
+  throwUBIf (¬∀ i : Fin l, mask[i] = .value 1#1 → p.offset.toNat + i * (w / 8) < 2 ^ 64)
+  (List.finRange l).foldlM (init := env) fun env (i : Fin l) =>
+      if mask[i] = .value 1#1 then store (τ := .bv w) (.value (lanePtr p w i)) v[i] env
+      else pure env
+
 /-- `icmp eq`/`ne` on pointers: the same block and offset, or not. -/
 @[mlir_operation]
 def ptrcmp (ne : Bool) (x y : PoisonOr Pointer) : IntW 1 := do
