@@ -19,15 +19,6 @@ mlir_def isNull := {
 
 end
 
-/-- error: ^bb0: %1 = "llvm.icmp"(%arg0, %0) : (!llvm.ptr, !llvm.ptr) -> i1: pointers compare only by `eq` and `ne` -/
-#guard_msgs in
-mlir_def ordered := {
-  ^bb0(%arg0: !llvm.ptr):
-    %0 = "llvm.mlir.zero"() : () -> !llvm.ptr
-    %1 = "llvm.icmp"(%arg0, %0) <{predicate = 6 : i64}> : (!llvm.ptr, !llvm.ptr) -> i1
-    "llvm.return"(%1) : (i1) -> ()
-}
-
 /-! ## Execution tests -/
 
 section Tests

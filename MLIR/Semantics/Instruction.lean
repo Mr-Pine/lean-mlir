@@ -96,6 +96,12 @@ def Instr.run (env : ⟪Γ⟫) : Instr Γ → EffectM ⟪Γ⟫
   | ptrtoaddr dst p => do
     let s ← get
     pure (env.write dst (Operation.ptrtoaddr s.mem.addr (env.read p)))
+  | ptricmp pred dst a b => do
+    let s ← get
+    pure
+        (env.write dst
+          (Operation.icmp pred (Operation.ptrtoaddr s.mem.addr (w := 64) (env.read a))
+            (Operation.ptrtoaddr s.mem.addr (env.read b))))
   | alloca dst bytes dead =>
     modifyGetThe GlobalState fun s => (env.write dst (.value s.allocaPtr), s.alloca bytes dead)
   | lifetimeStart p _ => Operation.lifetimeStart (env.read p) env

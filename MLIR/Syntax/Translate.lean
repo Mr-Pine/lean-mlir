@@ -82,6 +82,7 @@ inductive PInstr
   | memcpy (w : Nat) (dst src l : RegRef)
   | memmove (w : Nat) (dst src l : RegRef)
   | ptrtoaddr (w : Nat) (dst : Nat) (p : RegRef)
+  | ptricmp (pred : IntPred) (dst : Nat) (a b : RegRef)
   /-- `dead` until a `lifetimeStart`: an `alloca` with lifetime markers. -/
   | alloca (dst : Nat) (bytes : Nat) (dead : Bool)
   | lifetimeStart (p : RegRef) (bytes : Nat)
@@ -849,8 +850,8 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           return .binop (.ptrcmp false) dst a b
         | .ne =>
           return .binop (.ptrcmp true) dst a b
-        | _ =>
-          throw "pointers compare only by `eq` and `ne`"
+        | p =>
+          return .ptricmp p dst a b
       | t₁, _ =>
         throw s!"unsupported operand type {t₁.toMLIR}"
   | "llvm.select" =>
@@ -1506,6 +1507,8 @@ def mkInstr (callees : String → Option Callee) : PInstr → Except String (Ins
   | .memmove w dst src l =>
     return .memmove (← mkReg Γ .ptr dst) (← mkReg Γ .ptr src) (← mkReg Γ (.bv w) l)
   | .ptrtoaddr w d p => return .ptrtoaddr (← mkDst Γ (.bv w) d) (← mkReg Γ .ptr p)
+  | .ptricmp pred d a b =>
+    return .ptricmp pred (← mkDst Γ (.bv 1) d) (← mkReg Γ .ptr a) (← mkReg Γ .ptr b)
   | .alloca d n dead => return .alloca (← mkDst Γ .ptr d) n dead
   | .lifetimeStart p n => return .lifetimeStart (← mkReg Γ .ptr p) n
   | .lifetimeEnd p n => return .lifetimeEnd (← mkReg Γ .ptr p) n
