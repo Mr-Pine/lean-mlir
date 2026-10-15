@@ -501,7 +501,8 @@ def opAttrUses : String → List (String × AttrUse)
       ("has_side_effects", .inert), ("is_align_stack", .inert), ("tail_call_kind", .ignored)]
   | "llvm.call" =>
     [("callee", .modeled), ("op_bundle_sizes", .modeled), ("operandSegmentSizes", .modeled),
-      ("noreturn", .modeled), ("CConv", .inert), ("fastmathFlags", .inert), ("no_inline", .inert),
+      ("noreturn", .modeled), ("var_callee_type", .modeled), ("CConv", .inert),
+      ("fastmathFlags", .inert), ("no_inline", .inert),
       ("inline_hint", .inert), ("TailCallKind", .ignored), ("arg_attrs", .ignored),
       ("res_attrs", .ignored), ("memory_effects", .ignored), ("no_unwind", .ignored),
       ("will_return", .ignored), ("alias_scopes", .ignored), ("noalias_scopes", .ignored)]
@@ -517,15 +518,16 @@ def opAttrUses : String → List (String × AttrUse)
   | _ => []
 
 /-- A function's attributes. `ignored`: memory effects, `willreturn` and `nounwind`, parameter and
-result attributes. `inert`: size and inlining hints, and the unwinding `personality`, as the model
-has no unwinding. -/
+result attributes. `inert`: size and inlining hints, the unwinding `personality`, as the model
+has no unwinding, and `zero_call_used_regs`, as it has no registers past a return. -/
 def funcAttrUses : List (String × AttrUse) :=
   [("sym_name", .modeled), ("function_type", .modeled), ("passthrough", .modeled),
     ("CConv", .inert), ("linkage", .inert), ("visibility_", .inert), ("dso_local", .inert),
     ("unnamed_addr", .inert), ("no_inline", .inert), ("inline_hint", .inert), ("minsize", .inert),
     ("optsize", .inert), ("uwtable_kind", .inert), ("frame_pointer", .inert),
     ("personality", .inert), ("target_cpu", .inert), ("target_features", .inert),
-    ("tune_cpu", .inert), ("memory_effects", .ignored), ("will_return", .ignored),
+    ("tune_cpu", .inert), ("zero_call_used_regs", .inert), ("memory_effects", .ignored),
+    ("will_return", .ignored),
     ("no_unwind", .ignored), ("arg_attrs", .ignored), ("res_attrs", .ignored)]
 
 /-- A function's `passthrough` attributes. `ignored`: those promising progress, termination,
@@ -613,6 +615,24 @@ def ptrVecOps : List String :=
   ["llvm.getelementptr", "llvm.load", "llvm.store", "llvm.mlir.poison", "llvm.mlir.undef",
     "llvm.mlir.zero", "llvm.call"]
 
+/-- The fixed parameter count of a variadic function type, `!llvm.func<r (t₁, …, tₙ, ...)>`. -/
+def fixedParams? : AttrValue → Option Nat
+  | .type (.undefined s) => do
+    let ps := ((s.splitOn "(").drop 1 |> "(".intercalate).dropEnd 2 |>.toString
+    -- the top-level commas, before the `...`
+    let (n, _) :=
+      ps.foldl
+        (fun (n, depth) c =>
+          match c with
+          | '(' | '<' => (n, depth + 1)
+          | ')' | '>' => (n, depth - 1)
+          | ',' => if depth == 0 then (n + 1, depth) else (n, depth)
+          | _ => (n, depth))
+        (0, 0)
+    unless ps.trimAscii.toString.endsWith "..." do none
+    return n
+  | _ => none
+
 def instr (E : Env) (op : Op) : Except String PInstr := do
   checkOpAttrs op
   if
@@ -683,6 +703,9 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
           unless vs.length == n do
             throw s!"{vs.length} elements for {n} array elements"
           return .const (.array n w vs) dst
+      -- a zero splat of any other type, a nested array's `zeroinitializer`: `llvm.mlir.zero`
+      | t, some (.dense (.int 0 _) _) =>
+        return .const (.zero t) dst
       | t, _ =>
         throw s!"unsupported constant of type {t.toMLIR}"
   -- `undef` as poison: less defined, so what holds with poison holds for every undef
@@ -853,6 +876,14 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       if name == "llvm.ptrtoaddr" && w != 64 then
         throw "expected an `i64` result"
       return .ptrtoaddr w dst p
+  -- `freeze`: poison stays poison where LLVM picks some value, less defined than LLVM
+  | "llvm.freeze" =>
+    do
+      let (dst, t) ← res
+      let [(a, t₁)] := args | throw "expected one operand"
+      unless t₁ == t do
+        throw "expected a result of the operand's type"
+      return .unop (.copy (t := t)) dst a
   | "llvm.inline_asm" =>
     do
       let (dst, t) ← res
@@ -1181,6 +1212,11 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
   | "llvm.call" =>
     do
       let some (.symbol callee) := op.getAttr? "callee" | throw "expected a `callee` symbol"
+      -- a variadic callee: only its fixed arguments, as no variadic body (`va_start`) is modeled
+      if let some t := op.getAttr? "var_callee_type" then
+        let some n := fixedParams? t | throw "malformed `var_callee_type`"
+        unless args.length == n do
+          throw s!"a variadic call must pass only the {n} fixed argument(s)"
       let rets ← op.res.mapM (valIdx E ·.1)
       let us ← op.res.mapM (ty ·.2)
       return .call callee (args.map (·.2)) us (args.map (·.1)) rets (op.hasAttr "noreturn")
@@ -1268,6 +1304,21 @@ def isDropped (name : String) : Bool :=
   name == "llvm.intr.experimental.noalias.scope.decl" || name == "llvm.fence" ||
     name == "llvm.intr.prefetch"
 
+/-- An `asm` without outputs that emits nothing, empty or one assembler comment (`# …`), its
+inputs registers (`r`) and its clobbers flags or memory: a compiler barrier, which the one-thread
+model cannot observe. It is translated to nothing. -/
+def isEmptyAsm (op : Op) : Bool :=
+  let clobber (c : String) :=
+    c ∈ ["~{dirflag}", "~{fpsr}", "~{flags}", "~{memory}", "~{cc}"]
+  op.name == "llvm.inline_asm" && op.res.all (·.2 matches .undefined "llvm.void") &&
+    (match op.getAttr? "asm_string" with
+      | some (.str a) => a.isEmpty || a.startsWith "#" && !a.contains '\n' && !a.contains ';'
+      | _ => false) &&
+    match op.getAttr? "constraints" with
+    | some (.str cs) =>
+      (cs.splitOn ",").all fun c => let c := c.trimAscii.toString; c == "r" || clobber c
+    | _ => false
+
 end Translate
 
 open Translate in
@@ -1294,7 +1345,10 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
   let valBase := nums.min?.getD 0
   let mut vals : Array (Option Ty) := #[]
   for ((v, t), i) in defs.zip nums do
-    let t ← ty t |>.mapError (s!"%{v}: " ++ ·)
+    -- a `void` result (an `asm`'s without outputs) is never read: the empty struct
+    let t ←
+      if t matches .undefined "llvm.void" then pure (.struct [])
+      else ty t |>.mapError (s!"%{v}: " ++ ·)
     let i := i - valBase
     if vals.size ≤ i then
       vals := vals ++ .replicate (i + 1 - vals.size) none
@@ -1338,7 +1392,7 @@ def Prog.ofRegion (rgn : Region) : Except String Prog := do
               atOp b.name op do
                 if isTerminator op.name then
                   throw "a terminator must end its block"
-                if isDropped op.name then
+                if isDropped op.name || isEmptyAsm op then
                   checkOpAttrs op
                   return none
                 return some (← instr E op)

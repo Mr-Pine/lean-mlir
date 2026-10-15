@@ -492,6 +492,29 @@ example (a b : BitVec 64) (s : GlobalState) (hwf : s.WF) :
   subst_vars
   rfl
 
+mlir_def barrier :=
+{
+  ^bb0(%arg0: i128, %arg1: !llvm.ptr):
+    %0 = "llvm.inline_asm"() <{asm_dialect = 0 : i64, asm_string = "# FD_COMPILER_MFENCE()", constraints = "~{memory},~{dirflag},~{fpsr},~{flags}", has_side_effects, tail_call_kind = #llvm.tailcallkind<tail>}> : () -> !llvm.void
+    %1 = "llvm.freeze"(%arg0) : (i128) -> i128
+    %2 = "llvm.inline_asm"(%arg1) <{asm_dialect = 0 : i64, asm_string = "", constraints = "r,~{memory},~{dirflag},~{fpsr},~{flags}", has_side_effects, tail_call_kind = #llvm.tailcallkind<tail>}> : (!llvm.ptr) -> !llvm.void
+    "llvm.return"(%1) : (i128) -> ()
+}
+
+-- compiler barriers translate to nothing; `freeze` is its operand
+example (x : BitVec 128) (p : Pointer) (s : GlobalState) (hwf : s.WF) :
+    barrier.call (barrier.args (.value x) (.value p)) s = .value (.cons (.value x) .nil, s) := by
+  func_init
+  block_init
+  step_pure
+  finish_block
+  subst_vars
+  rfl
+
+-- a nested array's zero splat
+mlir_const_def zeroTable := "llvm.mlir.global"() <{addr_space = 0 : i32, alignment = 64 : i64, dso_local, global_type = !llvm.array<2 x array<3 x i64>>, linkage = #llvm.linkage<internal>, sym_name = "zeroTable", unnamed_addr = 0 : i64, value = dense<0> : tensor<2x3xi64>, visibility_ = 0 : i64}> ({
+}) : () -> ()
+
 mlir_def blendOr :=
 {
   ^bb0(%arg0: vector<2xi8>, %arg1: vector<2xi8>, %arg2: vector<2xi8>):
