@@ -458,7 +458,7 @@ alignment, TBAA and alias scopes, call and intrinsic parameter attributes, memor
 `willreturn`, `tail` and `nounwind` (the model has no unwinding), loop `mustProgress`; `alloca`
 alignment, as the model has no addresses; `volatile`, whose access the model makes plainly, its UB
 conditions kept (one thread, no memory-mapped I/O). `inert`: atomic and fence orderings' `syncscope`
-and a fence's ordering, as the model runs one thread. -/
+and a fence's ordering, as the model runs one thread; a `prefetch`'s hints. -/
 def opAttrUses : String → List (String × AttrUse)
   | "llvm.add" | "llvm.sub" | "llvm.mul" | "llvm.shl" | "llvm.trunc" =>
     [("overflowFlags", .modeled)]
@@ -468,6 +468,7 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.icmp" => [("predicate", .modeled)]
   | "llvm.intr.cttz" => [("is_zero_poison", .modeled)]
   | "llvm.intr.abs" => [("is_int_min_poison", .modeled)]
+  | "llvm.intr.prefetch" => [("rw", .inert), ("hint", .inert), ("cache", .inert)]
   | "llvm.select" => [("fastmathFlags", .inert)]
   | "llvm.mlir.constant" => [("value", .modeled)]
   | "llvm.insertvalue" | "llvm.extractvalue" => [("position", .modeled)]
@@ -482,8 +483,8 @@ def opAttrUses : String → List (String × AttrUse)
       ("alias_scopes", .ignored), ("noalias_scopes", .ignored), ("volatile_", .ignored)]
   | "llvm.intr.masked.load" | "llvm.intr.masked.store" => [("alignment", .ignored)]
   | "llvm.intr.memset" | "llvm.intr.memcpy" | "llvm.intr.memmove" =>
-    [("isVolatile", .ignored), ("arg_attrs", .ignored), ("alias_scopes", .ignored),
-      ("noalias_scopes", .ignored)]
+    [("isVolatile", .ignored), ("arg_attrs", .ignored), ("tbaa", .ignored),
+      ("alias_scopes", .ignored), ("noalias_scopes", .ignored)]
   | "llvm.intr.lifetime.start" | "llvm.intr.lifetime.end" => [("size", .modeled)]
   | "llvm.intr.assume" => [("op_bundle_sizes", .modeled), ("op_bundle_tags", .modeled)]
   | "llvm.intr.experimental.noalias.scope.decl" => [("scope", .inert)]
@@ -1192,9 +1193,10 @@ def isTerminator (name : String) : Bool :=
 
 /-- Operations translated to nothing: `noalias.scope.decl` only declares alias scopes, for alias
 analysis, which the model has none of; a `fence` orders memory between threads, and the model
-runs one. -/
+runs one; a `prefetch` has no effect on the program's behavior, not even UB. -/
 def isDropped (name : String) : Bool :=
-  name == "llvm.intr.experimental.noalias.scope.decl" || name == "llvm.fence"
+  name == "llvm.intr.experimental.noalias.scope.decl" || name == "llvm.fence" ||
+    name == "llvm.intr.prefetch"
 
 end Translate
 
