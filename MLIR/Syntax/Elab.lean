@@ -349,6 +349,8 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
     `(.memmove $(← regStx tys dst) $(← regStx tys src) $(← regStx tys l))
   | .ptrtoaddr _ d p => do
     `(.ptrtoaddr $(← dstStx tys d) $(← regStx tys p))
+  | .ptricmp pred d a b => do
+    `(.ptricmp $(← predStx pred) $(← dstStx tys d) $(← regStx tys a) $(← regStx tys b))
   | .alloca d n false => do
     `(.alloca $(← dstStx tys d) $(num n))
   | .alloca d n true => do

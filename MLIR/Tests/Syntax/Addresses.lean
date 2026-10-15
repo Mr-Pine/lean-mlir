@@ -26,6 +26,13 @@ mlir_def low := {
     "llvm.return"(%0) : (i32) -> ()
 }
 
+/-- Whether `p`'s address is below `q`'s, unsigned. -/
+mlir_def below := {
+  ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr):
+    %0 = "llvm.icmp"(%arg0, %arg1) <{predicate = 6 : i64}> : (!llvm.ptr, !llvm.ptr) -> i1
+    "llvm.return"(%0) : (i1) -> ()
+}
+
 end
 
 /-! ## Execution tests -/
@@ -54,6 +61,12 @@ private def distOut (s : GlobalState) (p q : ⟦Ty.ptr⟧) : Option ⟦Ty.bv 64�
   | .value (some (.cons v .nil), _) => v == .value 20
   | _ => false)
 
+-- across blocks, the addresses' order, not the blocks'
+#guard (match below.eval 1 (below.args (.value ⟨⟨3⟩, 0⟩) (.value ⟨⟨1⟩, 8⟩))
+    ⟨⟨1⟩, @MemoryState.mk ∅ spread _⟩ with
+  | .value (some (.cons v .nil), _) => v == .value 0
+  | _ => false)
+
 end Tests
 
 /-! ## Steps -/
@@ -74,6 +87,17 @@ example (p : Pointer) (s : GlobalState) (hwf : s.WF) :
   have h : ∀ a o : BitVec 64, a + (o + 8#64) - (a + o) = 8#64 := by intro a o; bv_omega
   simp only [Pointer.add, h]
   rfl
+
+-- `step_pure` compares the state's addresses
+example (p : Pointer) (s : GlobalState) (hwf : s.WF) :
+    below.call (below.args (.value p) (.value p)) s = .value (.cons (.value 0) .nil, s) := by
+  func_init
+  block_init
+  step_pure with c
+  guard_hyp hc : c = BitVec.ofBool ((S₀.mem.addr p.id + p.offset).ult (S₀.mem.addr p.id + p.offset))
+  finish_block
+  subst_vars
+  simp [BitVec.ult]
 
 end Steps
 

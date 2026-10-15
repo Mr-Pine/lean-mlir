@@ -27,8 +27,8 @@ def dsimpPureInstr (m : MVarId) : MetaM Unit := do
     return ()
 
 /-- Step a pure instruction, extending the env with the new value; a lifetime marker or an `assume`,
-effectful, as `step_lifetime` or `step_assume` does; a `ptrtoaddr`, which reads the state's
-addresses. -/
+effectful, as `step_lifetime` or `step_assume` does; a `ptrtoaddr` or ordered pointer `icmp`,
+which reads the state's addresses. -/
 def runStepPure (args : StepArgs) : TacticM Unit :=
   withMainContext do
     let saved ← saveState
@@ -42,11 +42,12 @@ def runStepPure (args : StepArgs) : TacticM Unit :=
       saved.restore
       return ← runAssumeStep args
     -- `ptrtoaddr` reads the state's addresses, and leaves the state as it is
-    if instr.isAppOf ``Instr.ptrtoaddr then
+    if instr.isAppOf ``Instr.ptrtoaddr || instr.isAppOf ``Instr.ptricmp then
       saved.restore
       let ⟨stepGoal, main⟩ ← rewriteStep (← getMainGoal) ``BasicBlock.runBodyFrom_step_of_run
-      unless (← stepGoal.apply (← mkConstWithFreshMVarLevels ``run_ptrtoaddr)).isEmpty do
-        throwError "`run_ptrtoaddr` left goals"
+      let run := if instr.isAppOf ``Instr.ptrtoaddr then ``run_ptrtoaddr else ``run_ptricmp
+      unless (← stepGoal.apply (← mkConstWithFreshMVarLevels run)).isEmpty do
+        throwError "`{run}` left goals"
       replaceMainGoal [main]
       return ← finishStep args
     -- unfolding `Instr.run` makes both sides `pure`

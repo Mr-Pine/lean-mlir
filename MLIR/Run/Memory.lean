@@ -125,6 +125,16 @@ theorem run_ptrtoaddr {dst : Dst Γ (.bv w)} {p : Reg Γ .ptr} :
       .value (env.write dst (Operation.ptrtoaddr s.mem.addr (env.read p)), s) :=
   rfl
 
+/-- `icmp` on pointers by an ordering: of the state's addresses, the state unchanged. -/
+theorem run_ptricmp {dst : Dst Γ (.bv 1)} {a b : Reg Γ .ptr} :
+    Instr.run env (.ptricmp pred dst a b) s =
+      .value
+        (env.write dst
+            (Operation.icmp pred (Operation.ptrtoaddr s.mem.addr (w := 64) (env.read a))
+              (Operation.ptrtoaddr s.mem.addr (env.read b))),
+          s) :=
+  rfl
+
 /-- `masked.load` with no poison mask lane and every set lane in bounds: the set lanes' bits, the
 others `passthru`'s, the state unchanged. -/
 theorem run_maskedLoad {dst : Dst Γ (.vec l w)} {p : Pointer} {mask : ⟦.vec l 1⟧}

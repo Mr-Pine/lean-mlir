@@ -112,6 +112,8 @@ inductive Instr (Γ : Ctx)
   | memmove (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
   /-- `ptrtoaddr`/`ptrtoint`: `p`'s address, of the state's unspecified block addresses. -/
   | ptrtoaddr (dst : Dst Γ (.bv w)) (p : Reg Γ .ptr)
+  /-- `icmp` on pointers by an ordering: their addresses (`ptrtoaddr`) compared. -/
+  | ptricmp (pred : IntPred) (dst : Dst Γ (.bv 1)) (a b : Reg Γ .ptr)
   /-- A fresh block of `bytes` undefined bytes; `dst` points to its start. `dead` until a
   `lifetimeStart`: an `alloca` with lifetime markers. -/
   | alloca (dst : Dst Γ .ptr) (bytes : Nat) (dead : Bool := false)
