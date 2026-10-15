@@ -309,13 +309,45 @@ def intPred : Int → Except String IntPred
   | 9 => return .uge
   | p => throw s!"unknown predicate {p}"
 
-/-- The integers of a `dense<…>` value: one per lane, or one for all. -/
-def denseInts : AttrValue → Except String (List Int ⊕ Int)
+/-- The `w`-bit elements of a `dense<"0x…">` blob: each little-endian in `(w + 7) / 8` bytes. -/
+def denseHex (w : Nat) (s : String) : Except String (List Int) := do
+  let digit (c : Char) : Except String Nat :=
+    if c.isDigit then pure (c.toNat - '0'.toNat)
+    else
+      if 'A' ≤ c && c ≤ 'F' then pure (c.toNat - 'A'.toNat + 10)
+      else
+        if 'a' ≤ c && c ≤ 'f' then pure (c.toNat - 'a'.toNat + 10)
+        else throw s!"`dense<\"0x…\">`: bad hex digit '{c}'"
+  let rec bytes : List Char → Except String (List Nat)
+    | h :: l :: cs => return (16 * (← digit h) + (← digit l)) :: (← bytes cs)
+    | [] => pure []
+    | _ => throw "`dense<\"0x…\">`: odd number of hex digits"
+  let k := (w + 7) / 8
+  let bs ← bytes (s.toList.drop 2)
+  unless k > 0 && bs.length % k == 0 do
+    throw s!"`dense<\"0x…\">`: {bs.length} bytes for {k}-byte elements"
+  return (List.range (bs.length / k)).map fun i =>
+      (((bs.drop (i * k)).take k).foldr (fun b v => 256 * v + b) 0 % 2 ^ w : Nat)
+
+/-- The integers of a `dense<…>` value of `w`-bit elements: one per lane, or one for all;
+`true` and `false` as `1` and `0`. -/
+def denseInts (w : Nat) : AttrValue → Except String (List Int ⊕ Int)
   | .int v _ => return .inr v
+  | .bool b => return .inr (if b then 1 else 0)
+  | .str s => do
+    unless s.startsWith "0x" do
+      throw "expected a `dense<\"0x…\">` hex blob"
+    -- a blob of one element is a splat
+    match ← denseHex w s with
+    | [v] =>
+      return .inr v
+    | vs =>
+      return .inl vs
   | .list vs =>
     .inl <$>
       vs.mapM fun
         | .int v _ => pure v
+        | .bool b => pure (if b then 1 else 0)
         | _ => throw "`dense<…>` elements must be integers"
   | _ => throw "expected integers inside `dense<…>`"
 
@@ -613,7 +645,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       | .bv 1, some (.bool b) =>
         return .const (.bv 1 (if b then 1 else 0)) dst
       | .vec l w, some (.dense v _) =>
-        match ← denseInts v with
+        match ← denseInts w v with
         | .inr v =>
           return .const (.splat l w v) dst
         | .inl vs =>
@@ -621,7 +653,7 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
             throw s!"{vs.length} elements for {l} lanes"
           return .const (.vec l w vs) dst
       | .array n (.bv w), some (.dense v _) =>
-        match ← denseInts v with
+        match ← denseInts w v with
         | .inr v =>
           return .const (.arraySplat n w v) dst
         | .inl vs =>
@@ -1085,7 +1117,7 @@ def exit (E : Env) (blockTys : List (List Ty)) (op : Op) : Except String PExit :
         | none =>
           pure []
         | some (.dense v _) =>
-          match ← denseInts v with
+          match ← denseInts w v with
           | .inl vs =>
             pure vs
           | .inr v =>
