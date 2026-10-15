@@ -55,6 +55,11 @@ syntax (name := rirTy) "rir_ty% " ident num : term
 /-- `rir_rfl%`: `rfl` at the expected type, which only the kernel checks. -/
 syntax (name := rirRfl) "rir_rfl%" : term
 
+/-- `rir_vec% α [x, …]`: the `Vector α n` of `x, …`, for a long literal: each `x` elaborated on its
+own, the list a balanced tree of `List.append`s of at most `32` elements each, and the length
+checked by the kernel alone; `#v[…]`'s elaboration and term recurse once per element. -/
+syntax (name := rirVec) "rir_vec% " term:max " [" term,* "]" : term
+
 /-- `rir_tys% [t, …]`: the `List Ty` literal of the type literals `t, …`, built without
 elaborating them. -/
 syntax (name := rirTys) "rir_tys% " "[" term,* "]" : term
@@ -165,6 +170,21 @@ def predStx : IntPred → CommandElabM (TSyntax `term)
   | .ugt => `(.ugt)
   | .uge => `(.uge)
 
+/-- The literal `#v[x, …] : Vector α n`, by `rir_vec%` when longer than `256`. -/
+def vecStx (α : TSyntax `term) (xs : Array (TSyntax `term)) : CommandElabM (TSyntax `term) :=
+  if xs.size ≤ 256 then `((#v[$xs,*] : Vector $α $(num xs.size)))
+  else `((rir_vec% $α [$xs,*] : Vector $α $(num xs.size)))
+
+/-- `xs[i:j]` as a list of `α`s (universe `u`): a balanced tree of `List.append`s of at most `32`
+elements each, `log` deep. -/
+partial def balancedList (α : Expr) (u : Level) (xs : Array Expr) (i j : Nat) : MetaM Expr := do
+  if j - i ≤ 32 then
+    Meta.mkListLit α (xs.extract i j).toList
+  else
+    let m := (i + j) / 2
+    return mkApp3 (mkConst ``List.append [u]) α (← balancedList α u xs i m)
+        (← balancedList α u xs m j)
+
 def unOpStx : UnOp t₁ t → CommandElabM (TSyntax `term)
   | .gepConst f n => do
     `((.gepConst $(← gepFlagsStx f) $(← intLit n)))
@@ -225,7 +245,7 @@ def binOpStx : BinOp t₁ t₂ t → CommandElabM (TSyntax `term)
       idx.toArray.mapM fun
           | some k => `(some $(num k.val))
           | none => `(none)
-    `((.shufflevector (#v[$lanes,*] : Vector (Option (Fin (2 * $(num l₁)))) $(num l₂))))
+    `((.shufflevector $(← vecStx (← `(Option (Fin (2 * $(num l₁))))) lanes)))
   | .insertvalue indices tCont tVal _ => do
     `((.insertvalue [$(indices.toArray.map num),*] $(← tyStx tCont) $(← tyStx tVal) rir_rfl%))
 
@@ -247,12 +267,12 @@ mutual
 partial def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .bv w v => do
     `(($(← intLit v) : BitVec $(num w)))
-  | .vec l w vs => do
-    `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num l)))
+  | .vec _ w vs => do
+    vecStx (← `(BitVec $(num w))) (← vs.toArray.mapM intLit)
   | .splat l w v => do
     `((.replicate $(num l) $(← intLit v) : Vector (BitVec $(num w)) $(num l)))
-  | .array n w vs => do
-    `((#v[$(← vs.toArray.mapM intLit),*] : Vector (BitVec $(num w)) $(num n)))
+  | .array _ w vs => do
+    vecStx (← `(BitVec $(num w))) (← vs.toArray.mapM intLit)
   | .arraySplat n w v => do
     `((.replicate $(num n) $(← intLit v) : Vector (BitVec $(num w)) $(num n)))
   | .bytes n v => do
@@ -262,16 +282,19 @@ partial def constStx : ConstLit → CommandElabM (TSyntax `term)
   | .null => `(Pointer.null)
   | .agg t ms => do
     `(($(← membersStx t ms) : Ty.denoteRaw $(← tyStx t)))
-/-- The aggregate of type `t` with members `ms`, unascribed: an array as `#v[…]`, a struct as the
-tuple of its fields. -/
+/-- The aggregate of type `t` with members `ms`, unascribed: an array as `vecStx` writes it, a
+struct as the tuple of its fields. -/
 partial def membersStx (t : Ty) (ms : List ConstLit) : CommandElabM (TSyntax `term) := do
   let ms ←
     ms.toArray.mapM fun
         | .agg t ms => membersStx t ms
         | c => constStx c
   match t, ms with
-  | .array .., ms =>
-    `(#v[$ms,*])
+  | .array _ t, ms =>
+    if ms.size ≤ 256 then
+      `(#v[$ms,*])
+    else
+      `(rir_vec% (Ty.denoteRaw $(← tyStx t)) [$ms,*])
   | .struct _, #[] =>
     `(())
   | .struct _, #[m] =>
@@ -775,6 +798,22 @@ elab_rules : term <= expectedType
     let some (_, _, b) := expectedType.eq?
       | throwError "rir_rfl%: expected an equation, not{indentExpr expectedType}"
     return Meta.mkExpectedPropHint (← Meta.mkEqRefl b) expectedType
+
+elab_rules : term
+  | `(rir_vec% $α [$xs,*]) => do
+    let α ← Term.elabType α
+    let u ← Meta.getDecLevel α
+    let xs ←
+      xs.getElems.mapM fun x => do
+          let e ← Term.elabTermEnsuringType x α
+          Term.synthesizeSyntheticMVarsNoPostponing
+          instantiateMVars e
+    let arr := mkApp2 (mkConst ``List.toArray [u]) α (← MlirDef.balancedList α u xs 0 xs.size)
+    let n := mkNatLit xs.size
+    let size :=
+      Meta.mkExpectedPropHint (mkApp2 (mkConst ``Eq.refl [1]) (mkConst ``Nat) n)
+        (← Meta.mkEq (mkApp2 (mkConst ``Array.size [u]) α arr) n)
+    return mkApp4 (mkConst ``Vector.mk [u]) α n arr size
 
 open MlirDef in
 elab_rules : term
