@@ -125,6 +125,37 @@ theorem run_ptrtoaddr {dst : Dst Γ (.bv w)} {p : Reg Γ .ptr} :
       .value (env.write dst (Operation.ptrtoaddr s.mem.addr (env.read p)), s) :=
   rfl
 
+/-- `masked.load` with no poison mask lane and every set lane in bounds: the set lanes' bits, the
+others `passthru`'s, the state unchanged. -/
+theorem run_maskedLoad {dst : Dst Γ (.vec l w)} {p : Pointer} {mask : ⟦.vec l 1⟧}
+    {passthru : ⟦.vec l w⟧} (hm : mask.toList.any (·.isPoison) = false)
+    (hb : ∀ i : Fin l, mask[i] = .value 1#1 → Operation.LaneInBounds s.mem p w i) :
+    (Operation.maskedLoad dst (.value p) mask passthru) env s =
+      .value
+        (env.write dst
+            (Vector.ofFn fun i =>
+              if mask[i] = .value 1#1 then
+                (Ty.bv w).unflattenDef (s.mem.readAt (Operation.lanePtr p w i) w)
+                  (s.mem.knownAt (Operation.lanePtr p w i) w)
+              else passthru[i]),
+          s) := by
+  have hb' : ¬∃ i : Fin l, mask[(i : Nat)] = .value 1#1 ∧ ¬Operation.LaneInBounds s.mem p w i :=
+    fun ⟨i, h, h'⟩ => h' (hb i h)
+  simp [Operation.maskedLoad, hm, hb', throwUBIf, mlir_effect]
+
+/-- `masked.store` with no poison mask lane and no set lane's offset wrapping: a `store` per set
+lane, first to last. -/
+theorem run_maskedStore {v : ⟦.vec l w⟧} {p : Pointer} {mask : ⟦.vec l 1⟧}
+    (hm : mask.toList.any (·.isPoison) = false)
+    (hw : ∀ i : Fin l, mask[i] = .value 1#1 → p.offset.toNat + i * (w / 8) < 2 ^ 64) :
+    Operation.maskedStore v (.value p) mask env (Γ := Γ) =
+      (List.finRange l).foldlM (init := env) fun env (i : Fin l) =>
+        if mask[i] = .value 1#1 then
+          Operation.store (τ := .bv w) (.value (Operation.lanePtr p w i)) v[i] env
+        else pure env := by
+  simp only [Operation.maskedStore, hm, throwUBIf, Bool.false_eq_true, ite_false, pure_bind,
+    show ¬¬∀ i : Fin l, _ from fun h => h hw]
+
 /-- `memset` of `n` bytes: a store at `src` of the repeated byte. -/
 theorem run_memset {dst : Pointer} {val : BitVec 8} {len : BitVec w} {n : Nat} (hn : len.toNat = n)
     (hfd : Room s.mem dst (8 * n)) :

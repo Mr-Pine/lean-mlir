@@ -337,6 +337,10 @@ def instrStx (tys : ValTys) (callee : String → TSyntax `term) :
     `(.load $(← dstStx tys d) $(← regStx tys p))
   | .store _ p v => do
     `(.store $(← regStx tys p) $(← regStx tys v))
+  | .maskedLoad _ _ d p m pt => do
+    `(.maskedLoad $(← dstStx tys d) $(← regStx tys p) $(← regStx tys m) $(← regStx tys pt))
+  | .maskedStore _ _ v p m => do
+    `(.maskedStore $(← regStx tys v) $(← regStx tys p) $(← regStx tys m))
   | .memset _ dst v l => do
     `(.memset $(← regStx tys dst) $(← regStx tys v) $(← regStx tys l))
   | .memcpy _ dst src l => do

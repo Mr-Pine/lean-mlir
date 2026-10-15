@@ -76,6 +76,8 @@ inductive PInstr
   | ternop {t₁ t₂ t₃ t : Ty} (op : TernOp t₁ t₂ t₃ t) (dst : Nat) (a b c : RegRef)
   | load (t : Ty) (dst : Nat) (p : RegRef)
   | store (t : Ty) (p v : RegRef)
+  | maskedLoad (l w : Nat) (dst : Nat) (p mask passthru : RegRef)
+  | maskedStore (l w : Nat) (v p mask : RegRef)
   | memset (w : Nat) (p v l : RegRef)
   | memcpy (w : Nat) (dst src l : RegRef)
   | memmove (w : Nat) (dst src l : RegRef)
@@ -477,6 +479,7 @@ def opAttrUses : String → List (String × AttrUse)
   | "llvm.load" | "llvm.store" =>
     [("ordering", .modeled), ("syncscope", .inert), ("alignment", .ignored), ("tbaa", .ignored),
       ("alias_scopes", .ignored), ("noalias_scopes", .ignored), ("volatile_", .ignored)]
+  | "llvm.intr.masked.load" | "llvm.intr.masked.store" => [("alignment", .ignored)]
   | "llvm.intr.memset" | "llvm.intr.memcpy" | "llvm.intr.memmove" =>
     [("isVolatile", .ignored), ("arg_attrs", .ignored), ("alias_scopes", .ignored),
       ("noalias_scopes", .ignored)]
@@ -908,6 +911,22 @@ def instr (E : Env) (op : Op) : Except String PInstr := do
       checkOrdering
       let [(v, t), (p, .ptr)] := args | throw "expected a value and a pointer operand"
       return .store t p v
+  | "llvm.intr.masked.load" =>
+    do
+      let (dst, t) ← res
+      let [(p, .ptr), (mask, .vec l 1), (pass, t')] := args
+        | throw "expected a pointer, an `i1` mask vector and a passthrough vector"
+      let .vec l' w := t | throw "expected a vector result"
+      unless l' == l && t' == t && w % 8 == 0 do
+        throw "expected the mask's lanes, the passthrough's type and whole-byte lanes"
+      return .maskedLoad l w dst p mask pass
+  | "llvm.intr.masked.store" =>
+    do
+      let [(v, .vec l w), (p, .ptr), (mask, t)] := args
+        | throw "expected a vector, a pointer and an `i1` mask vector"
+      unless t == .vec l 1 && w % 8 == 0 do
+        throw "expected the value's lanes in the mask, and whole-byte lanes"
+      return .maskedStore l w v p mask
   | "llvm.intr.memset" =>
     do
       let [(dst, .ptr), (val, .bv 8), (len, .bv w)] :=
@@ -1475,6 +1494,11 @@ def mkInstr (callees : String → Option Callee) : PInstr → Except String (Ins
     return .ternop op (← mkDst Γ _ d) (← mkReg Γ _ a) (← mkReg Γ _ b) (← mkReg Γ _ c)
   | .load t d p => return .load (← mkDst Γ t d) (← mkReg Γ .ptr p)
   | .store t p v => return .store (← mkReg Γ .ptr p) (← mkReg Γ t v)
+  | .maskedLoad l w d p m pt =>
+    return .maskedLoad (← mkDst Γ (.vec l w) d) (← mkReg Γ .ptr p) (← mkReg Γ (.vec l 1) m)
+      (← mkReg Γ (.vec l w) pt)
+  | .maskedStore l w v p m =>
+    return .maskedStore (← mkReg Γ (.vec l w) v) (← mkReg Γ .ptr p) (← mkReg Γ (.vec l 1) m)
   | .memset w dst v l =>
     return .memset (← mkReg Γ .ptr dst) (← mkReg Γ (.bv 8) v) (← mkReg Γ (.bv w) l)
   | .memcpy w dst src l =>

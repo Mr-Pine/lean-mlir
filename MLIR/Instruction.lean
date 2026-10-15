@@ -100,6 +100,12 @@ inductive Instr (Γ : Ctx)
   | ternop (op : TernOp t₁ t₂ t₃ t) (dst : Dst Γ t) (a : Reg Γ t₁) (b : Reg Γ t₂) (c : Reg Γ t₃)
   | load (dst : Dst Γ τ) (p : Reg Γ .ptr)
   | store (p : Reg Γ .ptr) (v : Reg Γ τ)
+  /-- `llvm.masked.load`: the lanes `mask` sets loaded, the others `passthru`'s. -/
+  |
+  maskedLoad {l w : Nat} (dst : Dst Γ (.vec l w)) (p : Reg Γ .ptr) (mask : Reg Γ (.vec l 1))
+    (passthru : Reg Γ (.vec l w))
+  /-- `llvm.masked.store`: the lanes `mask` sets stored. -/
+  | maskedStore {l w : Nat} (v : Reg Γ (.vec l w)) (p : Reg Γ .ptr) (mask : Reg Γ (.vec l 1))
   | memset (dst : Reg Γ .ptr) (val : Reg Γ (.bv 8)) (len : Reg Γ (.bv w))
   | memcpy (dst : Reg Γ .ptr) (src : Reg Γ .ptr) (count : Reg Γ (.bv w))
   /-- `memcpy` whose ranges may overlap: `src` read, then `dst` written. -/
