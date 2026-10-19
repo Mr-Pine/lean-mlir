@@ -127,19 +127,18 @@ fn build_file_content(
     entry: ReachableEntry,
     paths: &HashMap<String, (PathBuf, String)>,
 ) -> Result<(String, PathBuf), Report> {
-    let dependency_bindings = entry
-        .references
+    let references = entry.references.iter().collect::<HashSet<_>>();
+    let dependency_bindings = references
         .iter()
-        .map(|reference| {
+        .map(|&reference| {
             let (_, module) = &paths[reference];
             format!("      @{reference} := {module}.{}", lean_name(reference))
         })
         .collect::<Vec<_>>()
         .join(",\n");
-    let dependency_paths = entry
-        .references
+    let dependency_paths = references
         .iter()
-        .map(|reference| {
+        .map(|&reference| {
             let (path, _) = &paths[reference];
             path.to_str()
                 .context("Could not convert path to string")
@@ -181,8 +180,7 @@ namespace {module}
 
 @[expose] public section
 
-{def_keyword} {name} := {body}
-{bindings}
+{def_keyword} {name} := {body}{bindings}
 end
 
 end {module}
