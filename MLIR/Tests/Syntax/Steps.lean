@@ -63,6 +63,21 @@ example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits 
   finish_block
   rw [hS]
 
+/-- `p`, under another name: a fact's pointer may be an abbreviation. -/
+abbrev cell (p : Pointer) : Pointer :=
+  p
+
+-- the same `Room`, the known bits stated through an abbreviation
+example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Fits s.mem (cell p) 64)
+    (hw : Writable s.mem p) :
+    put.call (put.args (.value p) (.value x)) s =
+      .value (.nil, { s with mem := s.mem.storeAt p x }) := by
+  func_init
+  block_init
+  step_store
+  finish_block
+  rw [hS]
+
 -- an output needs only `Room`
 example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room s.mem p 64) :
     put.call (put.args (.value p) (.value x)) s =

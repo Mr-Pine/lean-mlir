@@ -411,6 +411,16 @@ partial def stripAdds (p : Expr) : Expr :=
   | some (q, _) => stripAdds q
   | none => p
 
+/-- `p'` is `p`: syntactically, or, when either names an abbreviation (`elem a i := a.add …`), up
+to unfolding it. -/
+def samePtr (p' p : Expr) : MetaM Bool := do
+  if p' == p then
+    return true
+  let abbrev? (e : Expr) := e.getUsedConstants.anyM isReducible
+  unless (← abbrev? p') || (← abbrev? p) do
+    return false
+  withNewMCtxDepth <| withReducible <| isDefEq p' p
+
 /-- `p.id.id < s.alloc.nextFreeBlock`: `p` into a `WF` state `s`'s memory, by a memory fact. -/
 def idBelowWF? (facts : Array (Expr × Expr)) (p s : Expr) : MetaM (Option Expr) := do
   let some hwf ← wfProof? facts s | return none
@@ -680,13 +690,13 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
   if w.isMVar then
     for (pf, ty) in sorted do
       let some (k, m', p', w') := memPred? ty | continue
-      if m' == m && p' == p && (← isDefEq w w') then
+      if m' == m && (← samePtr p' p) && (← isDefEq w w') then
         if let some h ← weaken? pf k then
           return some h
   let w₁ ← normWidths w
   for (pf, ty) in sorted do
     let some (k, m', p', w') := memPred? ty | continue
-    unless m' == m && p' == p do
+    unless m' == m && (← samePtr p' p) do
       continue
     if w' == w || w' == w₁ || (← normWidths w') == w₁ then
       if let some h ← weaken? pf k then
@@ -695,7 +705,7 @@ partial def memPredProof? (facts : Array (Expr × Expr)) (j : Nat) (m p w : Expr
   if let some n := w₁.nat? then
     for (pf, ty) in sorted do
       let some (k, m', p', w') := memPred? ty | continue
-      unless m' == m && p' == p do
+      unless m' == m && (← samePtr p' p) do
         continue
       let w' ← normWidths w'
       let some n' := w'.nat? | continue
