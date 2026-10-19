@@ -13,7 +13,7 @@ public theorem f.call_eq (…) (s : GlobalState) (hwf : s.WF) (…preconditions�
   block_init           -- the entry block's body
   step_…               -- one tactic per instruction, in order
   finish_block         -- the exit: a return, or one goal per jump target
-  …                    -- per jump: block_init … finish_block, or step_loop
+  …                    -- per jump: block_init … finish_block, or run_from
   <close the final equation>
 ```
 
@@ -268,10 +268,10 @@ Close impossible branches from `hbr` at once:
       omega
 ```
 
-## 9. Loops: `step_loop`
+## 9. Loops: `run_from`
 
 A loop is a lemma about the header block, by induction on the iterations left, in continuation
-form; the main proof applies it with `step_loop`.
+form; the main proof applies it with `run_from`.
 
 ```lean
 -- sum_limbs.lean
@@ -290,27 +290,27 @@ theorem sum_limbs.loop (a : Pointer) (s : GlobalState) (ha : s.mem.LimbsFit a)
     block_init
     step_pure
     finish_block
-    step_loop using hK          -- the exit: the continuation
+    run_from using hK          -- the exit: the continuation
     rfl
   | succ n ih =>
     …
     finish_block
-    step_loop using ih (k + 1) (acc + limb s.mem a k)   -- the back edge
+    run_from using ih (k + 1) (acc + limb s.mem a k)   -- the back edge
     · exact (BitVec.ofNat_add k 1).symm
     · rw [Nat.mul_succ, BitVec.ofNat_add]
     · rfl
-    step_loop using hK
+    run_from using hK
     rfl
 
 -- in sum_limbs.call_eq
   finish_block
-  step_loop using sum_limbs.loop a _ ha hend _ 5 0 0
+  run_from using sum_limbs.loop a _ ha hend _ 5 0 0
   block_init
   finish_block
 ```
 
 The env in the lemma lists exactly the registers live at the header (`E[%1 := …, %2 := …]` over a
-free `E`); `step_loop` matches it against the goal's env and leaves what it cannot read off as
+free `E`); `run_from` matches it against the goal's env and leaves what it cannot read off as
 goals (above: `BitVec.ofNat` arithmetic).
 
 Mistakes:

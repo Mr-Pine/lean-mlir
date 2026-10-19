@@ -608,7 +608,7 @@ example (x : BitVec 64) (E : ⟪jumpVal.Γ⟫) (S : GlobalState)
   block_init
   step_pure
   finish_block
-  step_loop using jumpVal.at1 x
+  run_from using jumpVal.at1 x
 
 end
 

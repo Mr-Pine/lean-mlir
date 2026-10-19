@@ -9,7 +9,7 @@ A function proof runs through three goal shapes:
 | Shape | Produced by |
 | --- | --- |
 | `f.call args s = R` | the theorem statement |
-| `f.runFrom E k S = K`, or `(f.runFrom E k S >>= g) = K` for a framed function | `func_init`, a jump in `finish_block`, `step_loop`'s continuation |
+| `f.runFrom E k S = K`, or `(f.runFrom E k S >>= g) = K` for a framed function | `func_init`, a jump in `finish_block`, `run_from`'s continuation |
 | `(do let x ← blk.runBodyFrom E pos S; …) = K` | `block_init`, every step |
 
 Between steps the context has this shape (example after three steps of `fiat_25519_add`):
@@ -307,10 +307,10 @@ pointer register `q` given a premise `p ≠ .val q.i q.h` (`decide` closes it at
 Pass implicit arguments the goal does not fix by name: `step_pattern using lem (B := 0x100000#64)`.
 `[names]` follow the arguments: `step_pattern using lem 1 0 2 3 inline` (`inline`/`named` end them).
 
-### `step_loop using h`
+### `run_from using h`
 
 Closes `f.runFrom E k S = K` (or `… >>= g = K`) with a loop lemma, a block lemma, an induction
-hypothesis or a continuation hypothesis `hK`. `h`'s env is a write chain over a free base: the base
+hypothesis or a continuation hypothesis `hK`. `step_loop` is its deprecated name. `h`'s env is a write chain over a free base: the base
 becomes `E`, each write a goal `E.read r = v`. Then:
 
 - reads, also behind an abbreviation (`abbrev Regs E := E ⊨ […]`), are closed through `E`'s
@@ -380,7 +380,7 @@ substituted by `hS`, 64 deep; a lemma's `≠`/disjointness premises also by the 
 
 ### `env_reads`
 
-Closes `E.read r = v` or `E ⊨ [r := v, …]` through `E`'s writes, as `step_loop` closes its read
+Closes `E.read r = v` or `E ⊨ [r := v, …]` through `E`'s writes, as `run_from` closes its read
 premises; what remains by `rfl`, else left open.
 
 ### Internal tactics

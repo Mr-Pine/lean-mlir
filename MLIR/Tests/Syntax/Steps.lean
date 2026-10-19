@@ -181,6 +181,28 @@ theorem jump.entry (p : Pointer) (x : BitVec 64) (S : GlobalState) (E : ⟪jump.
   block_init
   step_store
   finish_block
+  run_from using hK
+
+-- `step_loop` is `run_from`, deprecated
+/--
+warning: `step_loop` is deprecated, use `run_from`
+
+Hint: Rename it:
+  s̵t̵e̵p̵_̵l̵o̵o̵p̵r̲u̲n̲_̲f̲r̲o̲m̲
+
+Note: This linter can be disabled with `set_option linter.deprecated.syntax false`
+-/
+#guard_msgs in
+example (p : Pointer) (x : BitVec 64) (S : GlobalState) (E : ⟪jump.Γ⟫)
+    (hArgs : E.args = (jump.args (.value p) (.value x)).get) (hwf : S.WF) (hp : Room S.mem p 64)
+    (K : PoisonOr (Vals [] × GlobalState))
+    (hK :
+      ∀ (E' : ⟪jump.Γ⟫) (S' : GlobalState), E'.args = (jump.args (.value p) (.value x)).get →
+        S' = { S with mem := S.mem.storeAt p x } → jump.runFrom E' ^bb1 S' = K) :
+    jump.runFrom E ^bb0 S = K := by
+  block_init
+  step_store
+  finish_block
   step_loop using hK
 
 -- a continuation's state binder keeps its name; the args fact is `hArgs₀`
@@ -188,7 +210,7 @@ example (p : Pointer) (x : BitVec 64) (s : GlobalState) (hwf : s.WF) (hp : Room 
     jump.call (jump.args (.value p) (.value x)) s =
       .value (.nil, { s with mem := s.mem.storeAt p x }) := by
   func_init
-  step_loop using jump.entry p x
+  run_from using jump.entry p x
   guard_hyp hArgs₀ : E₀.args = (jump.args (.value p) (.value x)).get
   intro hS'
   block_init

@@ -7,6 +7,7 @@ public meta import MLIR.Run.Tactic.Env
 public meta import MLIR.Run.Tactic.Seal
 public meta import MLIR.Run.Tactic.State
 public meta import MLIR.Run.BasicBlock
+public meta import Lean.Elab.DeprecatedSyntax
 public meta import Lean.Elab.Tactic
 
 namespace MLIR
@@ -169,21 +170,24 @@ partial def isReadGoal (ty : Expr) : MetaM Bool := do
   | some (a, b) => isReadGoal a <&&> isReadGoal b
   | none => return Tactic.isEnvReadEq ty
 
-/-- `env_reads` closes `E.read r = v`, or `E ⊨ [r := v, …]`, through `E`'s writes as `step_loop`
+/-- `env_reads` closes `E.read r = v`, or `E ⊨ [r := v, …]`, through `E`'s writes as `run_from`
 closes its reads; what remains, by `rfl`. -/
 elab "env_reads" : tactic => do
   replaceMainGoal (← closeReads (← getMainGoal))
 
-/-- `step_loop using h` closes a `runFrom E k S` goal, or `runFrom E k S >>= g`, with the loop
-lemma `h` (or the induction hypothesis at a back-edge), whose env is a write chain over a base: the
-base becomes `E`, and each write a goal `E.read r = v`. Those and `h`'s premises get
-`simp [*, mlir_env]`, or `omega`; what they cannot close stays open, a run's as it was. A continuation premise is
-entered, as the last goal. -/
+/-- `run_from using h` closes a `runFrom E k S` goal, or `runFrom E k S >>= g`, with the lemma
+`h` (a loop lemma, the induction hypothesis at a back-edge, a continuation), whose env is a write
+chain over a base: the base becomes `E`, and each write a goal `E.read r = v`. Those and `h`'s
+premises get `simp [*, mlir_env]`, or `omega`; what they cannot close stays open, a run's as it
+was. A continuation premise is entered, as the last goal. -/
+syntax (name := runFrom) "run_from" " using " term : tactic
+
+/-- Deprecated: use `run_from`. -/
 syntax (name := stepLoop) "step_loop" " using " term : tactic
 
-/-- `step_loop`'s lemma application, with `S` first substituted by its definition if `subst`:
+/-- `run_from`'s lemma application, with `S` first substituted by its definition if `subst`:
 the goal's env, the env goal, and the lemma's premises. -/
-def stepLoopApply (stx : Syntax) (subst : Bool) : TacticM (Expr × MVarId × List MVarId) := do
+def runFromApply (stx : Syntax) (subst : Bool) : TacticM (Expr × MVarId × List MVarId) := do
   if subst then
     withMainContext do
         let (g, goal) ← Tactic.getGoalType
@@ -215,15 +219,15 @@ def stepLoopApply (stx : Syntax) (subst : Bool) : TacticM (Expr × MVarId × Lis
       run? := some g
     else if ty.isEq then
       he? := some g
-  let (some he, some run) := (he?, run?) | throwError "`step_loop`: no env or run goal"
+  let (some he, some run) := (he?, run?) | throwError "`run_from`: no env or run goal"
   setGoals [run]
   -- the lemma's `by` arguments elaborated now, in this context: later the env and state locals
   -- they may mention are sealed away
   Term.withSynthesize <| evalTactic (← `(tactic| apply $(⟨stx[2]⟩)))
   return (E, he, ← getGoals)
 
-/-- `step_loop` after the lemma applied: the env's reads, the premises, the continuation. -/
-def stepLoopFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM Unit := do
+/-- `run_from` after the lemma applied: the env's reads, the premises, the continuation. -/
+def runFromFinish (E : Expr) (he : MVarId) (premises : List MVarId) : TacticM Unit := do
   let reads ← matchEnv he
   let mut rest : List MVarId := []
   for g in reads do
@@ -290,13 +294,13 @@ def fixedStateLemma (stx : Syntax) : TacticM Bool :=
       catch _ =>
         return false
 
-def stepLoopAt (stx : Syntax) : TacticM Unit := do
+def runFromAt (stx : Syntax) : TacticM Unit := do
   -- keep the state `S` when the lemma applies to it: its facts stay usable; an induction
   -- hypothesis about a fixed state needs `S` substituted first
   let saved ← saveState
   let (E, he, premises) ←
     try
-      stepLoopApply stx false
+      runFromApply stx false
     catch ex =>
       saved.restore
       -- a lemma stated under a bind (a framed function's) for a bare run: the bind `pure`
@@ -304,20 +308,29 @@ def stepLoopAt (stx : Syntax) : TacticM Unit := do
         withMainContext do
             replaceMainGoal
                 (← (← getMainGoal).apply (← mkConstWithFreshMVarLevels ``Func.runFrom_of_bind_pure))
-        stepLoopApply stx false
+        runFromApply stx false
       catch _ =>
         saved.restore
         -- a warning, unless the lemma is about a fixed state, which needs `S` substituted: the
         -- steps after a loop lemma would work on `S`'s definition, not on `S`
         unless ← fixedStateLemma stx[2] do
           logWarning
-              m!"`step_loop`: the lemma does not apply to the state `S`, so `S` is \
+              m!"`run_from`: the lemma does not apply to the state `S`, so `S` is \
             substituted by its definition:{indentD ex.toMessageData}"
-        stepLoopApply stx true
-  stepLoopFinish E he premises
+        runFromApply stx true
+  runFromFinish E he premises
+
+@[tactic runFrom]
+def evalRunFrom : Tactic := fun stx => Tactic.atStepDepth (runFromAt stx)
 
 @[tactic stepLoop]
-def evalStepLoop : Tactic := fun stx => Tactic.atStepDepth (stepLoopAt stx)
+def evalStepLoop : Tactic := fun stx => do
+  let hint ←
+    MessageData.hint m!"Rename it:" #[{ suggestion := "run_from", diffGranularity := .all }]
+        (ref? := stx[0])
+  Linter.logLintIf Linter.linter.deprecated.syntax stx[0]
+    (m!"`step_loop` is deprecated, use `run_from`" ++ hint)
+  Tactic.atStepDepth (runFromAt stx)
 
 end
 

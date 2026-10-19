@@ -8,7 +8,7 @@ public import MLIR.Run.Tactic.Step.Call
 public import MLIR.Run.Tactic.Widget
 public import MLIR.Run.Tactic.Step.Alloca
 public import MLIR.Run.Tactic.Step.Addressof
-public import MLIR.Run.Tactic.Loop
+public import MLIR.Run.Tactic.RunFrom
 public import MLIR.Run.Tactic.Step.Pattern
 
 /-- A literal index's bound (`x[3]` of a `Vector _ 8`) by `decide`, before core's rules: those try

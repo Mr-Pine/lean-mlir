@@ -57,7 +57,7 @@ next instruction (infoview "Instructions" panel)
 └─ end of body → finish_block
      ├─ return → close the final equation (tactics-guide §11)
      ├─ jump to a block not yet run → block_init, continue
-     └─ jump to a loop header / shared block → step_loop using <lemma> (or the IH / hK)
+     └─ jump to a loop header / shared block → run_from using <lemma> (or the IH / hK)
 ```
 
 ## Rules
@@ -123,7 +123,7 @@ later effectful step and scanned by the memory simprocs, so a cluttered state is
    (unproved overflow flag or `gep` wrap). Fix that step, not this one.
 4. **Extra goals after a step** are facts that could not be carried to the new state. Register a
    `mlir_transport` lemma for that predicate and state shape instead of proving each by hand.
-5. **`step_loop` warns that `S` is substituted**: the lemma's state does not match `S`; restate
+5. **`run_from` warns that `S` is substituted**: the lemma's state does not match `S`; restate
    the lemma over a free state, or the shape the steps leave.
 6. **`func_init` took the framed path** although nothing is allocated: the spec's final state is
    not WF by `simp [mlir_mem, *]`; add the `mlir_mem` WF lemma for the new store function.

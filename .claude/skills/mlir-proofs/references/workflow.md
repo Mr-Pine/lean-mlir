@@ -104,7 +104,7 @@ State it (`specs.md`), then prove it with the steps (`tactics-guide.md`):
 2. step through, checking every few steps; name the C variables; keep the state clean
    (`SKILL.md`);
 3. at a branch, finish one target before the next (`case isTrue => …`);
-4. loops: state and prove the loop lemma first (`patterns.md`, P7/P8), then `step_loop` it;
+4. loops: state and prove the loop lemma first (`patterns.md`, P7/P8), then `run_from` it;
 5. close the final equation; `lean_verify` the theorem.
 
 ## 5. Mathematical meaning

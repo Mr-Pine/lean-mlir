@@ -151,7 +151,7 @@ theorem zero_path_broken {S₀ : GlobalState} {x} {i : Fin 5} (h0 : S₀.mem.rea
 
 A lemma about the loop header, in continuation form, by induction on the iterations left `n`
 with the counter `k` and `k + n = N`; the continuation premise says what the exit must give. The
-exit case closes with `step_loop using hK`, the back edge with `step_loop using ih …`:
+exit case closes with `run_from using hK`, the back edge with `run_from using ih …`:
 
 ```lean
 theorem sum_limbs.loop (a : Pointer) (s : GlobalState) (ha : s.mem.LimbsFit a)
@@ -196,7 +196,7 @@ with the store lemmas; the exit applies `hK`.
 
 State one iteration (`LoopIter`) and the whole loop (`Loop`) as `abbrev`s over the header, exit,
 envs and counts; prove `Loop` from `LoopIter` once (`loop_of_iter`, by induction); then each loop is
-a `LoopIter` instance proved by one macro. The main proof applies each loop with `step_loop` and
+a `LoopIter` instance proved by one macro. The main proof applies each loop with `run_from` and
 names the result.
 
 ```lean
@@ -211,8 +211,8 @@ local macro "iter_proof" : tactic => `(tactic| (
     uaddOverflow_ofNat_one (i := i) (by omega)]
   step_pure
   finish_block
-  · step_loop using hexit (by simp [BitVec.toNat_eq] at hbr; omega)
-  · step_loop using hback (by simp [BitVec.toNat_eq] at hbr; omega)
+  · run_from using hexit (by simp [BitVec.toNat_eq] at hbr; omega)
+  · run_from using hback (by simp [BitVec.toNat_eq] at hbr; omega)
     exact (BitVec.ofNat_add i 1).symm))
 
 theorem iter2 (t0 t1 t2 : Pointer) :
@@ -220,7 +220,7 @@ theorem iter2 (t0 t1 t2 : Pointer) :
   iter_proof
 
 -- main proof
-  loop l9 using iter2 3          -- step_loop using loop_of_iter (iter2 _ _ _) 3 1; name_limbs l9
+  loop l9 using iter2 3          -- run_from using loop_of_iter (iter2 _ _ _) 3 1; name_limbs l9
   between l10 l11 using block1
 ```
 
