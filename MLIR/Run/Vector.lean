@@ -458,7 +458,7 @@ simproc pullWrap (Vector.mk _ _) := fun e => do
     mkAppM ``mk_map_toArray #[l', val, ← sizeRfl (← mkAppM ``List.map #[val, l']), ← sizeRfl l']
   let some (_, _, rhs) := (← inferType pf).eq? | return .continue
   let wrapped ← mkAppOptM ``Ty.wrap #[mkApp2 (mkConst ``Ty.vec) n w, rhs.appArg!]
-  return .done { expr := wrapped, proof? := some (← mkExpectedTypeHint pf (← mkEq e wrapped)) }
+  return .visit { expr := wrapped, proof? := some (← mkExpectedTypeHint pf (← mkEq e wrapped)) }
 
 open Lean Meta in
 /-- `Vector.ofFn fun i => .value (g i)` to `Ty.wrap (Vector.ofFn g)`. -/
